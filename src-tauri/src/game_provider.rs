@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+
+use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 
 fn http_client() -> Client {
     Client::builder()
@@ -25,6 +28,17 @@ const FORGE_PROMOTIONS: &str =
 const FORGE_INSTALLER_BASE: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
 
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
+static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn cancel_download() {
+    CANCEL_DOWNLOAD.store(true, Ordering::SeqCst);
+}
+
+#[tauri::command]
+pub fn reset_download_cancel() {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+}
 
 #[derive(Debug, Deserialize)]
 struct VersionManifest {
@@ -77,6 +91,15 @@ struct VersionDetail {
     asset_index: Option<AssetIndexRef>,
     #[serde(default)]
     assets: Option<String>,
+    #[serde(rename = "javaVersion", default)]
+    java_version: Option<JavaVersionInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct JavaVersionInfo {
+    component: String,
+    #[serde(rename = "majorVersion")]
+    major_version: u8,
 }
 
 #[derive(Debug, Deserialize)]
@@ -220,7 +243,7 @@ pub struct DownloadProgressPayload {
     pub percent: f32,
 }
 
-//Fabric
+//Fabric / Quilt
 #[derive(Debug, Deserialize)]
 struct FabricLoaderInfo {
     version: String,
@@ -231,6 +254,18 @@ struct FabricLoaderInfo {
 #[derive(Debug, Deserialize)]
 struct FabricLoaderEntry {
     loader: FabricLoaderInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct QuiltLoaderInfo {
+    version: String,
+    #[serde(default)]
+    build: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct QuiltLoaderEntry {
+    loader: QuiltLoaderInfo,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -273,26 +308,16 @@ fn game_root_dir() -> Result<PathBuf, String> {
     Ok(base.join("16Launcher").join("game"))
 }
 
-fn launcher_data_dir() -> Result<PathBuf, String> {
+pub(crate) fn launcher_data_dir() -> Result<PathBuf, String> {
     let base = dirs::data_dir().ok_or("Не удалось получить системную папку данных")?;
     Ok(base.join("16Launcher"))
 }
 
-fn profile_path() -> Result<PathBuf, String> {
+pub(crate) fn profile_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("profile.json"))
 }
 
-//профиль и Ely
-const ELY_OAUTH_AUTH: &str = "https://account.ely.by/oauth2/v1";
-const ELY_OAUTH_TOKEN: &str = "https://account.ely.by/api/oauth2/v1/token";
-const ELY_ACCOUNT_INFO: &str = "https://account.ely.by/api/account/v1/info";
-const ELY_CLIENT_ID: &str = "16launcher3";
-const AUTHLIB_INJECTOR_RELEASES: &str =
-    "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest";
-///порт для oauth callback http://127.0.0.1:38475/callback
-const ELY_OAUTH_PORT: u16 = 38475;
-
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Profile {
     pub nickname: String,
     #[serde(default)]
@@ -305,19 +330,8 @@ pub struct Profile {
     pub ely_access_token: Option<String>,
     #[serde(default)]
     pub ely_client_token: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ElyTokenResponse {
-    access_token: String,
     #[serde(default)]
-    refresh_token: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ElyAccountInfo {
-    username: String,
-    uuid: String,
+    pub ely_refresh_token: Option<String>,
 }
 
 #[tauri::command]
@@ -344,185 +358,15 @@ pub fn set_profile(nickname: String, avatar_path: Option<String>) -> Result<(), 
     Ok(())
 }
 
-fn open_url(url: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .spawn()
-            .map_err(|e| format!("Не удалось открыть браузер: {e}"))?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open").arg(url).spawn()
-            .map_err(|e| format!("Не удалось открыть браузер: {e}"))?;
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open").arg(url).spawn()
-            .map_err(|e| format!("Не удалось открыть браузер: {e}"))?;
-    }
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubReleaseAsset {
-    #[serde(rename = "browser_download_url")]
-    url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubRelease {
-    assets: Vec<GitHubReleaseAsset>,
-}
-
-async fn ensure_authlib_injector() -> Result<PathBuf, String> {
-    let data_dir = launcher_data_dir()?;
-    let jar_path = data_dir.join("authlib-injector.jar");
-    if jar_path.exists() {
-        return Ok(jar_path);
-    }
-    std::fs::create_dir_all(&data_dir).map_err(|e| format!("Не удалось создать папку: {e}"))?;
-    let client = http_client();
-    let release: GitHubRelease = client
-        .get(AUTHLIB_INJECTOR_RELEASES)
-        .header("Accept", "application/vnd.github.v3+json")
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка запроса релиза authlib-injector: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора ответа: {e}"))?;
-    let download_url = release
-        .assets
-        .first()
-        .map(|a| a.url.as_str())
-        .ok_or("Нет файла в релизе authlib-injector")?;
-    let bytes = client
-        .get(download_url)
-        .header("Accept", "application/octet-stream")
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка загрузки authlib-injector: {e}"))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Ошибка чтения: {e}"))?;
-    tokio::fs::write(&jar_path, &bytes)
-        .await
-        .map_err(|e| format!("Не удалось сохранить authlib-injector: {e}"))?;
-    Ok(jar_path)
-}
-
-pub const EVENT_ELY_AUTH_URL: &str = "ely-auth-url";
-
-#[tauri::command]
-pub async fn ely_start_login(app: AppHandle) -> Result<Profile, String> {
-    let client_secret = std::env::var("ELY_CLIENT_SECRET")
-        .unwrap_or_else(|_| ELY_CLIENT_ID.to_string());
-
-    let listener = std::net::TcpListener::bind(format!("127.0.0.1:{}", ELY_OAUTH_PORT))
-        .map_err(|e| format!("Не удалось запустить локальный сервер (порт {}): {e}. Закройте другое приложение, использующее этот порт.", ELY_OAUTH_PORT))?;
-    let port = ELY_OAUTH_PORT;
-    let state: String = (0..16).map(|_| format!("{:02x}", rand::random::<u8>())).collect();
-    let redirect_uri = format!("http://127.0.0.1:{port}/callback");
-    let scopes = "account_info minecraft_server_session offline_access";
-    let auth_url = format!(
-        "{}?client_id={}&redirect_uri={}&response_type=code&scope={}&state={}",
-        ELY_OAUTH_AUTH,
-        ELY_CLIENT_ID,
-        urlencoding::encode(&redirect_uri),
-        scopes.replace(' ', "%20"),
-        state
-    );
-
-    let _ = app.emit(EVENT_ELY_AUTH_URL, &auth_url);
-    open_url(&auth_url)?;
-
-    let mut code: Option<String> = None;
-    if let Ok((mut stream, _)) = listener.accept() {
-        use std::io::{Read, Write};
-        let mut buf = [0u8; 4096];
-        let n = stream.read(&mut buf).map_err(|e| format!("Ошибка чтения: {e}"))?;
-        let request = String::from_utf8_lossy(&buf[..n]);
-        if let Some(path_query) = request.lines().next().and_then(|l| l.strip_prefix("GET ")).and_then(|r| r.split_whitespace().next()) {
-            if let Some(q) = path_query.strip_prefix("/callback?") {
-                for part in q.split('&') {
-                    if let Some(c) = part.strip_prefix("code=") {
-                        code = Some(c.to_string());
-                        break;
-                    }
-                }
-            }
-        }
-        let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Ely.by</title></head><body><p>Авторизация успешна. Можно закрыть эту вкладку и вернуться в лаунчер.</p></body></html>";
-        let _ = stream.write_all(response.as_bytes());
-        let _ = stream.flush();
-    }
-
-    let code = code.ok_or("Не получен код авторизации. Попробуйте войти снова.")?;
-
-    let client = http_client();
-    let token_resp = client
-        .post(ELY_OAUTH_TOKEN)
-        .form(&[
-            ("client_id", ELY_CLIENT_ID),
-            ("client_secret", &client_secret),
-            ("redirect_uri", &redirect_uri),
-            ("grant_type", "authorization_code"),
-            ("code", &code),
-        ])
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка запроса токена: {e}"))?;
-
-    if !token_resp.status().is_success() {
-        let text = token_resp.text().await.unwrap_or_default();
-        return Err(format!("Ошибка Ely.by при обмене кода на токен: {text}"));
-    }
-
-    let token_data: ElyTokenResponse = token_resp
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора ответа токена: {e}"))?;
-
-    let client_token = format!(
-        "16Launcher_{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-    );
-    let info_resp = client
-        .get(ELY_ACCOUNT_INFO)
-        .header("Authorization", format!("Bearer {}", token_data.access_token))
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка запроса профиля: {e}"))?;
-
-    if !info_resp.status().is_success() {
-        return Err("Не удалось получить данные аккаунта Ely.by.".to_string());
-    }
-
-    let info: ElyAccountInfo = info_resp.json().await.map_err(|e| format!("Ошибка разбора: {e}"))?;
-    let uuid = info.uuid.replace('-', "");
-
-    let mut profile = get_profile().unwrap_or_default();
-    profile.ely_username = Some(info.username.clone());
-    profile.ely_uuid = Some(uuid.clone());
-    profile.ely_access_token = Some(token_data.access_token);
-    profile.ely_client_token = Some(client_token);
-    if profile.nickname.is_empty() {
-        profile.nickname = info.username;
-    }
-
+pub(crate) fn save_full_profile(profile: &Profile) -> Result<(), String> {
     let path = profile_path()?;
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку: {e}"))?;
     }
-    let s = serde_json::to_string_pretty(&profile).map_err(|e| format!("{e}"))?;
+    let s =
+        serde_json::to_string_pretty(profile).map_err(|e| format!("Ошибка сериализации: {e}"))?;
     std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
-
-    Ok(profile)
+    Ok(())
 }
 
 #[tauri::command]
@@ -543,19 +387,6 @@ pub fn save_avatar(source_path: String) -> Result<String, String> {
     let s = serde_json::to_string_pretty(&profile).map_err(|e| format!("{e}"))?;
     std::fs::write(&pp, s).map_err(|e| format!("{e}"))?;
     Ok(dest_str)
-}
-
-#[tauri::command]
-pub fn ely_logout() -> Result<Profile, String> {
-    let mut profile = get_profile().unwrap_or_default();
-    profile.ely_username = None;
-    profile.ely_uuid = None;
-    profile.ely_access_token = None;
-    profile.ely_client_token = None;
-    let path = profile_path()?;
-    let s = serde_json::to_string_pretty(&profile).map_err(|e| format!("{e}"))?;
-    std::fs::write(&path, s).map_err(|e| format!("{e}"))?;
-    Ok(profile)
 }
 
 fn libraries_dir() -> Result<PathBuf, String> {
@@ -753,6 +584,9 @@ async fn download_file(
     let mut stream = resp.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            return Err("Загрузка отменена пользователем".to_string());
+        }
         let chunk = chunk.map_err(|e| format!("Ошибка чтения потока: {e}"))?;
         tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
             .await
@@ -824,6 +658,9 @@ async fn download_assets(
         .map_err(|e| format!("Ошибка разбора индекса ассетов: {e}"))?;
 
     for (_path, obj) in &index.objects {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            return Err("Загрузка отменена пользователем".to_string());
+        }
         let hash = &obj.hash;
         if hash.len() < 2 {
             continue;
@@ -1011,6 +848,40 @@ pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<String>, S
     Ok(versions)
 }
 
+async fn select_latest_quilt_loader(game_version: &str) -> Result<String, String> {
+    let url = format!("https://meta.quiltmc.org/v3/versions/loader/{game_version}");
+    let client = http_client();
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса списка Quilt: {e}"))?;
+    let list: Vec<QuiltLoaderEntry> = resp
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора списка Quilt: {e}"))?;
+    if list.is_empty() {
+        return Err(format!(
+            "Для версии Minecraft {game_version} нет доступных версий Quilt Loader"
+        ));
+    }
+    // Выбираем версию с максимальным build (как «самую свежую»).
+    // Если поле build где-то отсутствует, оно по умолчанию 0.
+    let mut best: Option<QuiltLoaderEntry> = None;
+    for entry in list {
+        match best {
+            None => best = Some(entry),
+            Some(ref current) => {
+                if entry.loader.build > current.loader.build {
+                    best = Some(entry);
+                }
+            }
+        }
+    }
+    let best = best.ok_or_else(|| "Не удалось выбрать версию Quilt Loader".to_string())?;
+    Ok(best.loader.version)
+}
+
 #[tauri::command]
 pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> {
     let client = http_client();
@@ -1026,13 +897,20 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for (key, build) in &promos.promos {
-        let mc_ver = key.strip_suffix("-latest").or_else(|| key.strip_suffix("-recommended"));
+        let mc_ver = key
+            .strip_suffix("-latest")
+            .or_else(|| key.strip_suffix("-recommended"));
         if let Some(mc) = mc_ver {
-            let id = format!("{mc}-{build}");
-            if seen.insert(id.clone()) {
-                let installer_url = format!("{FORGE_INSTALLER_BASE}/{id}/forge-{id}-installer.jar");
+            // Реальный id версии Forge, который создает инсталлятор в папке versions
+            let forge_id = format!("{mc}-forge-{build}");
+            if seen.insert(forge_id.clone()) {
+                // Отдельно формируем координату для maven-пути инсталлятора
+                let maven_id = format!("{mc}-{build}");
+                let installer_url = format!(
+                    "{FORGE_INSTALLER_BASE}/{maven_id}/forge-{maven_id}-installer.jar"
+                );
                 out.push(ForgeVersionSummary {
-                    id: id.clone(),
+                    id: forge_id.clone(),
                     mc_version: mc.to_string(),
                     forge_build: build.clone(),
                     installer_url,
@@ -1064,7 +942,37 @@ pub fn get_installed_fabric_profile_id(game_version: String) -> Result<Option<St
             .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
         let profile: FabricProfile = serde_json::from_str(&s)
             .map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
-        if profile.inherits_from == game_version {
+        if profile.id.starts_with("fabric-loader-") && profile.inherits_from == game_version {
+            let id = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            if !id.is_empty() {
+                return Ok(Some(id));
+            }
+        }
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub fn get_installed_quilt_profile_id(game_version: String) -> Result<Option<String>, String> {
+    let vers_root = versions_dir()?;
+    if !vers_root.exists() {
+        return Ok(None);
+    }
+    for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
+        let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
+        let path = e.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let profile_path = path.join("profile.json");
+        if !profile_path.exists() {
+            continue;
+        }
+        let s = std::fs::read_to_string(&profile_path)
+            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
+        let profile: FabricProfile = serde_json::from_str(&s)
+            .map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        if profile.id.starts_with("quilt-loader-") && profile.inherits_from == game_version {
             let id = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
             if !id.is_empty() {
                 return Ok(Some(id));
@@ -1115,6 +1023,7 @@ pub async fn install_fabric(
     game_version: String,
     loader_version: String,
 ) -> Result<String, String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client();
     let profile_url = format!(
         "{FABRIC_META_PROFILE}/{game_version}/{loader_version}/profile/json"
@@ -1348,14 +1257,261 @@ pub async fn install_fabric(
 }
 
 #[tauri::command]
+pub async fn install_quilt(
+    app: AppHandle,
+    game_version: String,
+) -> Result<String, String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+    let client = http_client();
+
+    let loader_version = select_latest_quilt_loader(&game_version).await?;
+
+    let profile_url = format!(
+        "https://meta.quiltmc.org/v3/versions/loader/{game_version}/{loader_version}/profile/json"
+    );
+
+    let profile: FabricProfile = client
+        .get(&profile_url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка загрузки профиля Quilt: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора профиля Quilt: {e}"))?;
+
+    let mojang_url = get_mojang_version_url(&profile.inherits_from).await?;
+    let mojang_detail: VersionDetail = client
+        .get(&mojang_url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка загрузки версии Mojang: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора версии Mojang: {e}"))?;
+
+    let root = game_root_dir()?;
+    let libs_root = libraries_dir()?;
+    let vers_root = versions_dir()?;
+    tokio::fs::create_dir_all(&root).await.map_err(|e| format!("Папка игры: {e}"))?;
+    tokio::fs::create_dir_all(&libs_root).await.map_err(|e| format!("Папка библиотек: {e}"))?;
+    tokio::fs::create_dir_all(&vers_root).await.map_err(|e| format!("Папка версий: {e}"))?;
+
+    let profile_id = profile.id.clone();
+    let os_name = current_os_name();
+    let mojang_dl = mojang_detail
+        .downloads
+        .as_ref()
+        .ok_or("Версия Mojang без downloads")?;
+
+    let mut total_size = mojang_dl.client.size
+        + profile
+            .libraries
+            .iter()
+            .map(|l| l.size)
+            .fold(0u64, |a, b| a.saturating_add(b));
+    for lib in &mojang_detail.libraries {
+        if !library_applies(lib, os_name) {
+            continue;
+        }
+        if let Some(ref a) = lib.downloads.artifact {
+            total_size = total_size.saturating_add(a.size);
+        }
+        let native_classifier = match os_name {
+            "windows" => "natives-windows",
+            "osx" => "natives-macos",
+            _ => "natives-linux",
+        };
+        if let Some(ref classifiers) = lib.downloads.classifiers {
+            if let Some(ref nat) = classifiers.get(native_classifier) {
+                total_size = total_size.saturating_add(nat.size);
+            }
+        }
+    }
+    if let Some(ref ai) = mojang_detail.asset_index {
+        if let Some(s) = ai.total_size {
+            total_size = total_size.saturating_add(s);
+        }
+    }
+    let mut total_downloaded: u64 = 0;
+
+    let client_jar = root.join(format!("{profile_id}.jar"));
+    let _ = download_file(
+        &client,
+        &mojang_dl.client.url,
+        &client_jar,
+        &app,
+        &profile_id,
+        total_size,
+        total_downloaded,
+    )
+    .await?;
+    total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+
+    let natives_dir = vers_root.join(&profile_id).join("natives");
+    tokio::fs::create_dir_all(&natives_dir)
+        .await
+        .map_err(|e| format!("Не удалось создать папку natives: {e}"))?;
+    let native_classifier = match os_name {
+        "windows" => "natives-windows",
+        "osx" => "natives-macos",
+        _ => "natives-linux",
+    };
+
+    for lib in &mojang_detail.libraries {
+        if !library_applies(lib, os_name) {
+            continue;
+        }
+        if let Some(ref artifact) = lib.downloads.artifact {
+            let path = libs_root.join(&artifact.path);
+            if path.exists() {
+                total_downloaded = total_downloaded.saturating_add(artifact.size);
+                if total_size > 0 {
+                    let percent = total_downloaded as f32 / total_size as f32 * 100.0;
+                    let _ = app.emit(
+                        EVENT_DOWNLOAD_PROGRESS,
+                        DownloadProgressPayload {
+                            version_id: profile_id.clone(),
+                            downloaded: total_downloaded,
+                            total: total_size,
+                            percent,
+                        },
+                    );
+                }
+                continue;
+            }
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+            }
+            let _ = download_file(
+                &client,
+                &artifact.url,
+                &path,
+                &app,
+                &profile_id,
+                total_size,
+                total_downloaded,
+            )
+            .await?;
+            total_downloaded = total_downloaded.saturating_add(artifact.size);
+        }
+        if let Some(ref classifiers) = lib.downloads.classifiers {
+            if let Some(nat) = classifiers.get(native_classifier) {
+                let path = libs_root.join(&nat.path);
+                if path.exists() {
+                    total_downloaded = total_downloaded.saturating_add(nat.size);
+                    if total_size > 0 {
+                        let percent = total_downloaded as f32 / total_size as f32 * 100.0;
+                        let _ = app.emit(
+                            EVENT_DOWNLOAD_PROGRESS,
+                            DownloadProgressPayload {
+                                version_id: profile_id.clone(),
+                                downloaded: total_downloaded,
+                                total: total_size,
+                                percent,
+                            },
+                        );
+                    }
+                    let _ = extract_natives_jar(&path, &natives_dir);
+                    continue;
+                }
+                if let Some(parent) = path.parent() {
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+                }
+                let _ = download_file(
+                    &client,
+                    &nat.url,
+                    &path,
+                    &app,
+                    &profile_id,
+                    total_size,
+                    total_downloaded,
+                )
+                .await?;
+                total_downloaded = total_downloaded.saturating_add(nat.size);
+                let _ = extract_natives_jar(&path, &natives_dir);
+            }
+        }
+    }
+
+    let base_url = "https://maven.quiltmc.org/repository/release/";
+    for lib in &profile.libraries {
+        let path = fabric_library_path(&lib.name);
+        let url = lib
+            .url
+            .as_deref()
+            .unwrap_or(base_url)
+            .trim_end_matches('/');
+        let lib_url = format!("{url}/{path}");
+        let dest = libs_root.join(&path);
+        if dest.exists() {
+            total_downloaded = total_downloaded.saturating_add(lib.size);
+            if total_size > 0 {
+                let percent = total_downloaded as f32 / total_size as f32 * 100.0;
+                let _ = app.emit(
+                    EVENT_DOWNLOAD_PROGRESS,
+                    DownloadProgressPayload {
+                        version_id: profile_id.clone(),
+                        downloaded: total_downloaded,
+                        total: total_size,
+                        percent,
+                    },
+                );
+            }
+            continue;
+        }
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+        }
+        let _ = download_file(
+            &client,
+            &lib_url,
+            &dest,
+            &app,
+            &profile_id,
+            total_size,
+            total_downloaded,
+        )
+        .await?;
+        total_downloaded = total_downloaded.saturating_add(lib.size);
+    }
+
+    if let Some(ref asset_index) = mojang_detail.asset_index {
+        download_assets(
+            &client,
+            asset_index,
+            &root,
+            &app,
+            &profile_id,
+            total_size,
+            total_downloaded,
+        )
+        .await?;
+    }
+
+    let profile_dir = vers_root.join(&profile_id);
+    tokio::fs::create_dir_all(&profile_dir).await.map_err(|e| format!("{e}"))?;
+    let profile_path = profile_dir.join("profile.json");
+    let profile_json =
+        serde_json::to_string(&profile).map_err(|e| format!("Ошибка сериализации: {e}"))?;
+    tokio::fs::write(&profile_path, profile_json)
+        .await
+        .map_err(|e| format!("Ошибка записи профиля: {e}"))?;
+
+    Ok(profile_id)
+}
+
+#[tauri::command]
 pub async fn install_forge(
     app: AppHandle,
     version_id: String,
     installer_url: String,
 ) -> Result<(), String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client();
     let root = game_root_dir()?;
-    tokio::fs::create_dir_all(&root).await.map_err(|e| format!("Папка игры: {e}"))?;
+    tokio::fs::create_dir_all(&root)
+        .await
+        .map_err(|e| format!("Папка игры: {e}"))?;
 
     let installer_jar = root.join("forge-installer.jar");
     let resp = client
@@ -1403,8 +1559,28 @@ pub async fn install_forge(
         );
     }
 
-    let root_str = root.to_str().ok_or("Путь к папке игры не в UTF-8")?;
-    let status = std::process::Command::new("java")
+    let root_str = root
+        .to_str()
+        .ok_or("Путь к папке игры не в UTF-8")?;
+    let mc_version = version_id.split('-').next().unwrap_or(&version_id);
+    let mojang_url = get_mojang_version_url(mc_version).await?;
+    let mojang_client = http_client();
+    let mojang_detail: VersionDetail = mojang_client
+        .get(&mojang_url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка загрузки описания версии Minecraft для Forge: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора описания версии Minecraft для Forge: {e}"))?;
+    let (java_major, java_component) = if let Some(jv) = mojang_detail.java_version {
+        (jv.major_version, jv.component)
+    } else {
+        (8, "jre-legacy".to_string())
+    };
+    let java_path = crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+
+    let status = std::process::Command::new(&java_path)
         .args([
             "-jar",
             installer_jar.to_str().unwrap(),
@@ -1420,6 +1596,26 @@ pub async fn install_forge(
     if !status.success() {
         return Err("Установщик Forge завершился с ошибкой.".to_string());
     }
+
+    // Forge устанавливает версию в папку versions/<version_id>/<version_id>.jar.
+    // Для совместимости с остальной логикой лаунчера копируем jar в корень,
+    // чтобы launch_game смог его найти как <game_root>/<version_id>.jar.
+    let vers_root = versions_dir()?;
+    let src_jar = vers_root
+        .join(&version_id)
+        .join(format!("{version_id}.jar"));
+    let dest_jar = root.join(format!("{version_id}.jar"));
+    if src_jar.exists() && !dest_jar.exists() {
+        if let Some(parent) = dest_jar.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Не удалось создать папку для Forge jar: {e}"))?;
+            }
+        }
+        std::fs::copy(&src_jar, &dest_jar)
+            .map_err(|e| format!("Не удалось скопировать Forge jar: {e}"))?;
+    }
+
     Ok(())
 }
 
@@ -1429,6 +1625,7 @@ pub async fn install_version(
     version_id: String,
     version_url: String,
 ) -> Result<(), String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client();
     let os_name = current_os_name();
 
@@ -1678,6 +1875,7 @@ pub async fn launch_game(
                 minecraft_arguments: mojang_detail.minecraft_arguments,
                 asset_index: mojang_detail.asset_index,
                 assets: mojang_detail.assets.clone(),
+                java_version: mojang_detail.java_version.clone(),
             };
             for lib in &profile.libraries {
                 let path = fabric_library_path(&lib.name);
@@ -1745,6 +1943,7 @@ pub async fn launch_game(
         "osx" => "natives-macos",
         _ => "natives-linux",
     };
+    // 1. Пытаемся распаковать нативы из уже скачанных jar'ов
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
@@ -1758,10 +1957,78 @@ pub async fn launch_game(
             }
         }
     }
+    // 2. Если после этого папка пустая или почти пустая — докачиваем нативы сами
+    let mut has_natives_files = false;
+    if let Ok(entries) = std::fs::read_dir(&natives_dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let p = entry.path();
+                if p.is_file() {
+                    has_natives_files = true;
+                    break;
+                }
+                if p.is_dir() {
+                    if std::fs::read_dir(&p).map(|mut it| it.next().is_some()).unwrap_or(false) {
+                        has_natives_files = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if !has_natives_files {
+        let client = http_client();
+        for lib in &detail.libraries {
+            if !library_applies(lib, os_name) {
+                continue;
+            }
+            if let Some(ref classifiers) = lib.downloads.classifiers {
+                if let Some(nat) = classifiers.get(native_classifier) {
+                    let path = libs_root.join(&nat.path);
+                    if !path.exists() {
+                        if let Some(parent) = path.parent() {
+                            std::fs::create_dir_all(parent).map_err(|e| {
+                                format!("Не удалось создать папку для natives '{}': {e}", parent.display())
+                            })?;
+                        }
+                        let mut resp = client
+                            .get(&nat.url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
+                        if !resp.status().is_success() {
+                            return Err(format!(
+                                "Сервер вернул ошибку {} при загрузке natives '{}'",
+                                resp.status(),
+                                nat.url
+                            ));
+                        }
+                        let mut file = std::fs::File::create(&path)
+                            .map_err(|e| format!("Ошибка создания файла natives '{}': {e}", path.display()))?;
+                        while let Some(chunk) = resp
+                            .chunk()
+                            .await
+                            .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat.url))?
+                        {
+                            use std::io::Write;
+                            file.write_all(&chunk)
+                                .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
+                        }
+                    }
+                    let _ = extract_natives_jar(&path, &natives_dir);
+                }
+            }
+        }
+    }
     let natives_str = natives_dir.to_str().unwrap_or("");
     let assets_root = root.join("assets");
     let assets_str = assets_root.to_str().unwrap_or("");
     let _ = std::fs::create_dir_all(&assets_root);
+
+    // Перед запуском игры пытаемся обновить Ely.by сессию, если она есть
+    if let Err(e) = refresh_ely_session_internal().await {
+        return Err(e);
+    }
 
     let profile = get_profile().unwrap_or_default();
     let is_offline = profile
@@ -1825,6 +2092,14 @@ pub async fn launch_game(
             .replace("${launcher_version}", "1.0.4")
     };
 
+    let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
+        (jv.major_version, jv.component.clone())
+    } else {
+        // Старые версии без javaVersion всегда запускались на Java 8
+        (8, "jre-legacy".to_string())
+    };
+    let java_path = crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+
     let mut jvm_args = if detail.arguments.game.is_empty() && detail.minecraft_arguments.is_some() {
         vec![
             "-Xms1G".to_string(),
@@ -1855,9 +2130,18 @@ pub async fn launch_game(
     };
 
     if auth_token != "offline" && !auth_token.is_empty() {
-        if let Ok(path) = ensure_authlib_injector().await {
-            let agent_path = path.to_string_lossy().replace('\\', "/");
-            jvm_args.insert(0, format!("-javaagent:{}=ely.by", agent_path));
+        match ensure_authlib_injector().await {
+            Ok(path) => {
+                let agent_path = path.to_string_lossy().replace('\\', "/");
+                eprintln!(
+                    "[ElyAuth] Используется authlib-injector: {}",
+                    agent_path
+                );
+                jvm_args.insert(0, format!("-javaagent:{}=ely.by", agent_path));
+            }
+            Err(e) => {
+                eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
+            }
         }
     }
 
@@ -1905,7 +2189,7 @@ pub async fn launch_game(
 
     let _jar_path_str = jar_path.to_str().ok_or("Путь к jar не в UTF-8")?;
 
-    let mut cmd = std::process::Command::new("java");
+    let mut cmd = std::process::Command::new(&java_path);
     cmd.args(&jvm_args)
         .arg(&detail.main_class)
         .args(&game_args)
