@@ -1,5 +1,4 @@
 <p align="center">
-  <a href="README.ru.md">Русская версия README</a>
   <a href="https://16luncher.ru"><img src="assets/readme.png" alt="16Launcher"></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
@@ -14,6 +13,8 @@
 </p>
 
 ---
+
+**RU Readme**: [RU] (README.ru.md)
 
 **Source Code**: [https://github.com/launcherdev11/rust-launcher](https://github.com/launcherdev11/rust-launcher)
 

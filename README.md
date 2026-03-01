@@ -14,6 +14,8 @@
 
 ---
 
+**RU Readme**: [RU] (README.ru.md)
+
 **Source Code**: [https://github.com/launcherdev11/rust-launcher](https://github.com/launcherdev11/rust-launcher)
 
 **Website**: [https://16luncher.ru](https://16luncher.ru)
