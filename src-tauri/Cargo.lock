@@ -2207,10 +2207,12 @@ version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "futures-util",
+ "once_cell",
  "rand 0.8.5",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha1",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

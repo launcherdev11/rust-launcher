@@ -3,7 +3,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openFile } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
 type Profile = {
@@ -14,7 +15,7 @@ type Profile = {
 };
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
-type LoaderId = "vanilla" | "fabric" | "forge";
+type LoaderId = "vanilla" | "fabric" | "forge" | "quilt";
 
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
@@ -55,6 +56,14 @@ type DownloadProgressPayload = {
   percent: number;
 };
 
+type NotificationKind = "info" | "success" | "error" | "warning";
+
+type Notification = {
+  id: number;
+  kind: NotificationKind;
+  message: string;
+};
+
 const sidebarItems: { id: SidebarItemId; label: string }[] = [
   { id: "play", label: "Играть" },
   { id: "settings", label: "Настройки" },
@@ -66,7 +75,7 @@ function PlayIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-5 w-5 fill-current"
+      className="h-7 w-7 fill-current"
       aria-hidden="true"
     >
       <path d="M8 6.5v11l9-5.5-9-5.5z" />
@@ -78,7 +87,7 @@ function SettingsIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-5 w-5 fill-current"
+      className="h-7 w-7 fill-current"
       aria-hidden="true"
     >
       <path d="M12 8.5a3.5 3.5 0 1 0 .001 7.001A3.5 3.5 0 0 0 12 8.5Zm9 3.25-1.8-1.04.16-2.08-2.12-.84-.84-2.12-2.08.16L12 2.75l-1.32 1.88-2.08-.16-.84 2.12-2.12.84.16 2.08L3 11.75v2.5l1.8 1.04-.16 2.08 2.12.84.84 2.12 2.08-.16L12 21.25l1.32-1.88 2.08.16.84-2.12 2.12-.84-.16-2.08L21 14.25v-2.5Z" />
@@ -90,7 +99,7 @@ function ModsIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-5 w-5 fill-current"
+      className="h-7 w-7 fill-current"
       aria-hidden="true"
     >
       <path d="M11.2 3.1a2 2 0 0 1 1.6 0l6.1 2.7a1.5 1.5 0 0 1 .9 1.37V16.8a1.5 1.5 0 0 1-.9 1.37l-6.1 2.73a2 2 0 0 1-1.6 0L5.1 18.17A1.5 1.5 0 0 1 4.2 16.8V7.17A1.5 1.5 0 0 1 5.1 5.8l6.1-2.7Z" />
@@ -102,7 +111,7 @@ function ModpackIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-5 w-5 fill-current"
+      className="h-7 w-7 fill-current"
       aria-hidden="true"
     >
       <path d="M4 4h16v4h-2V6H6v12h4v2H4V4zm14 6v10H8V10h10zm-2 2h-6v6h6v-6z" />
@@ -114,7 +123,7 @@ function AccountsIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-5 w-5 fill-current"
+      className="h-7 w-7 fill-current"
       aria-hidden="true"
     >
       <path d="M9 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.23 0-6 1.12-6 3.33V19h9v-2.67C20 14.12 16.23 13 17 13Zm-8 1c-2.67 0-8 1.34-8 4v2h10v-2c0-2.66-5.33-4-8-4Z" />
@@ -126,7 +135,7 @@ function ProfileIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-6 w-6 fill-current"
+      className="h-8 w-8 fill-current"
       aria-hidden="true"
     >
       <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3 0-8 1.5-8 4.5V21h16v-2.5C20 15.5 15 14 12 14Z" />
@@ -161,18 +170,6 @@ function ElyByIcon() {
   );
 }
 
-function FolderIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-5 w-5 fill-current"
-      aria-hidden="true"
-    >
-      <path d="M10 4 8.59 5.41 10.17 7H4a2 2 0 0 0-2 2v7.5A2.5 2.5 0 0 0 4.5 19h15a2.5 2.5 0 0 0 2.5-2.5V9a2 2 0 0 0-2-2h-8L10 4Z" />
-    </svg>
-  );
-}
-
 function MinimizeIcon() {
   return (
     <svg
@@ -197,10 +194,32 @@ function CloseIcon() {
   );
 }
 
+function MaximizeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <rect
+        x="5"
+        y="5"
+        width="14"
+        height="14"
+        rx="1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
 const loaderLabels: Record<LoaderId, string> = {
   vanilla: "Vanilla",
   fabric: "Fabric",
   forge: "Forge",
+  quilt: "Quilt",
 };
 
 function App() {
@@ -215,11 +234,22 @@ function App() {
   const [progress, setProgress] = useState<DownloadProgressPayload | null>(null);
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [fabricProfileId, setFabricProfileId] = useState<string | null>(null);
+  const [quiltProfileId, setQuiltProfileId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile>({ nickname: "", avatar_path: null, ely_username: null, ely_uuid: null });
   const [elyLoading, setElyLoading] = useState(false);
   const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [installPaused, setInstallPaused] = useState(false);
   const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  const showNotification = useCallback((kind: NotificationKind, message: string) => {
+    const id = Date.now() + Math.random();
+    setNotifications((prev) => [...prev, { id, kind, message }]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 4500);
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -265,18 +295,33 @@ function App() {
   }, [loader]);
 
   useEffect(() => {
-    if (loader !== "fabric" || !selectedVersion || isForgeVersion(selectedVersion)) {
+    if (
+      (loader !== "fabric" && loader !== "quilt") ||
+      !selectedVersion ||
+      isForgeVersion(selectedVersion)
+    ) {
       setFabricProfileId(null);
+      setQuiltProfileId(null);
       return;
     }
     (async () => {
       try {
-        const id = await invoke<string | null>("get_installed_fabric_profile_id", {
-          gameVersion: selectedVersion.id,
-        });
-        setFabricProfileId(id);
+        if (loader === "fabric") {
+          const id = await invoke<string | null>("get_installed_fabric_profile_id", {
+            gameVersion: selectedVersion.id,
+          });
+          setFabricProfileId(id);
+          setQuiltProfileId(null);
+        } else if (loader === "quilt") {
+          const id = await invoke<string | null>("get_installed_quilt_profile_id", {
+            gameVersion: selectedVersion.id,
+          });
+          setQuiltProfileId(id);
+          setFabricProfileId(null);
+        }
       } catch {
         setFabricProfileId(null);
+        setQuiltProfileId(null);
       }
     })();
   }, [loader, selectedVersion]);
@@ -332,7 +377,7 @@ function App() {
       setProfile((prev) => ({ ...prev, nickname }));
     } catch (e) {
       console.error(e);
-      alert("Не удалось сохранить никнейм.");
+      showNotification("error", "Не удалось сохранить никнейм.");
     } finally {
       setProfileSaving(false);
     }
@@ -340,7 +385,7 @@ function App() {
 
   const handleChooseAvatar = async () => {
     try {
-      const path = await open({
+      const path = await openFile({
         multiple: false,
         directory: false,
         filters: [{ name: "Изображения", extensions: ["png", "jpg", "jpeg", "webp"] }],
@@ -351,7 +396,7 @@ function App() {
       }
     } catch (e) {
       console.error(e);
-      alert("Не удалось загрузить аватар.");
+      showNotification("error", "Не удалось загрузить аватар.");
     }
   };
 
@@ -359,23 +404,29 @@ function App() {
     setElyLoading(true);
     setElyAuthUrl(null);
     try {
-      const unlisten = await listen<string>("ely-auth-url", (e) => setElyAuthUrl(e.payload ?? null));
-      try {
-        const p = await invoke<Profile>("ely_start_login");
-        setElyAuthUrl(null);
+      const unlisten = await listen<Profile>("ely-login-complete", (e) => {
+        const p = e.payload;
         setProfile({
           nickname: p.nickname ?? "",
           avatar_path: p.avatar_path ?? null,
           ely_username: p.ely_username ?? null,
           ely_uuid: p.ely_uuid ?? null,
         });
-      } finally {
+        setElyLoading(false);
+        setElyAuthUrl(null);
         unlisten();
+      });
+
+      const url = await invoke<string>("start_ely_oauth");
+      setElyAuthUrl(url);
+      try {
+        await openUrl(url);
+      } catch (e) {
+        console.error("Не удалось открыть браузер для Ely.by OAuth:", e);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      alert(msg);
-    } finally {
+      showNotification("error", msg);
       setElyLoading(false);
       setElyAuthUrl(null);
     }
@@ -383,13 +434,8 @@ function App() {
 
   const handleElyLogout = async () => {
     try {
-      const p = await invoke<Profile>("ely_logout");
-      setProfile({
-        nickname: p.nickname ?? "",
-        avatar_path: p.avatar_path ?? null,
-        ely_username: null,
-        ely_uuid: null,
-      });
+      await invoke("ely_logout");
+      await loadProfile();
     } catch (e) {
       console.error(e);
     }
@@ -398,23 +444,17 @@ function App() {
   const isInstalled = useMemo(() => {
     if (!selectedVersion) return false;
     if (loader === "fabric" && !isForgeVersion(selectedVersion)) return !!fabricProfileId;
+    if (loader === "quilt" && !isForgeVersion(selectedVersion)) return !!quiltProfileId;
     return installedIds.has(selectedVersion.id);
-  }, [installedIds, selectedVersion, loader, fabricProfileId]);
+  }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId]);
 
   const primaryColorClasses = isInstalled
     ? "bg-accentGreen hover:bg-emerald-500"
     : "bg-accentBlue hover:bg-sky-500";
 
   const primaryLabel = useMemo(() => {
-    if (isInstalling) {
-      const percentText =
-        progress && progress.total > 0
-          ? ` (${Math.round(progress.percent)}%)`
-          : "";
-      return `Устанавливаем${percentText}`;
-    }
     return isInstalled ? "ИГРАТЬ" : "Установить";
-  }, [isInstalled, isInstalling, progress]);
+  }, [isInstalled]);
 
   const handleOpenGameFolder = async () => {
     try {
@@ -422,7 +462,7 @@ function App() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("Не удалось открыть папку игры:", error);
-      alert(`Не удалось открыть папку: ${msg}`);
+      showNotification("error", `Не удалось открыть папку: ${msg}`);
     }
   };
 
@@ -430,8 +470,48 @@ function App() {
     getCurrentWindow().minimize();
   };
 
+  const handleToggleMaximize = () => {
+    getCurrentWindow().toggleMaximize();
+  };
+
+  const handleTitleBarMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-no-drag]")) return;
+    getCurrentWindow().startDragging().catch(() => {});
+  };
+
   const handleClose = () => {
     getCurrentWindow().close();
+  };
+
+  const handlePauseInstall = async () => {
+    if (!isInstalling) return;
+    setInstallPaused(true);
+    setIsInstalling(false);
+    try {
+      await invoke("cancel_download");
+    } catch (error) {
+      console.error("Не удалось поставить загрузку на паузу:", error);
+    }
+  };
+
+  const handleCancelInstall = async () => {
+    setInstallPaused(false);
+    setIsInstalling(false);
+    try {
+      await invoke("cancel_download");
+    } catch (error) {
+      console.error("Не удалось отменить загрузку:", error);
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const handleResumeInstall = () => {
+    if (isInstalled || !selectedVersion) return;
+    setInstallPaused(false);
+    void handlePrimaryClick();
   };
 
   const handlePrimaryClick = async () => {
@@ -448,7 +528,11 @@ function App() {
             ? (selectedVersion as VersionSummary).url
             : undefined;
         const versionId =
-          loader === "fabric" && fabricProfileId ? fabricProfileId : selectedVersion.id;
+          loader === "fabric" && fabricProfileId
+            ? fabricProfileId
+            : loader === "quilt" && quiltProfileId
+              ? quiltProfileId
+              : selectedVersion.id;
         await invoke("launch_game", {
           versionId,
           versionUrl: versionUrl ?? null,
@@ -456,14 +540,20 @@ function App() {
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Ошибка запуска игры:", error);
-        alert(`Ошибка запуска: ${msg}`);
+        showNotification("error", `Ошибка запуска: ${msg}`);
       }
       return;
     }
 
+    setInstallPaused(false);
     setIsInstalling(true);
     setProgress(null);
     try {
+      try {
+        await invoke("reset_download_cancel");
+      } catch (e) {
+        console.error("Не удалось сбросить состояние загрузки:", e);
+      }
       if (loader === "vanilla" && !isForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
         await invoke("install_version", {
@@ -485,6 +575,15 @@ function App() {
         setFabricProfileId(profileId);
         setIsInstalling(false);
         return;
+      } else if (loader === "quilt" && !isForgeVersion(selectedVersion)) {
+        const v = selectedVersion as VersionSummary;
+        const profileId = await invoke<string>("install_quilt", {
+          gameVersion: v.id,
+        });
+        setInstalledIds((prev) => new Set(prev).add(profileId));
+        setQuiltProfileId(profileId);
+        setIsInstalling(false);
+        return;
       } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
         await invoke("install_forge", {
           versionId: selectedVersion.id,
@@ -502,7 +601,7 @@ function App() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("Ошибка установки версии:", error);
-      alert(`Ошибка установки: ${msg}`);
+      showNotification("error", `Ошибка установки: ${msg}`);
     } finally {
       setIsInstalling(false);
     }
@@ -516,7 +615,45 @@ function App() {
       />
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
 
-      <div className="relative z-20 flex h-9 items-center justify-between px-4">
+      <div className="pointer-events-none absolute top-4 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4">
+        {notifications.map((n) => {
+          const baseClasses =
+            "pointer-events-auto flex max-w-xl items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium shadow-soft";
+          let bgClasses = "";
+          let iconSrc = "";
+
+          if (n.kind === "info") {
+            bgClasses = "bg-white/10 border border-white/25 text-white";
+            iconSrc = "/launcher-assets/info.png";
+          } else if (n.kind === "success") {
+            bgClasses = "bg-emerald-600/95 border border-emerald-300/60 text-white";
+            iconSrc = "/launcher-assets/success.png";
+          } else if (n.kind === "error") {
+            bgClasses = "bg-red-700/95 border border-red-400/70 text-white";
+            iconSrc = "/launcher-assets/errorIcon.png";
+          } else {
+            bgClasses = "bg-amber-500/95 border border-amber-300/70 text-black";
+            iconSrc = "/launcher-assets/warn.png";
+          }
+
+          return (
+            <div
+              key={n.id}
+              className={`${baseClasses} ${bgClasses} animate-notification-slide`}
+            >
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/15">
+                <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
+              </div>
+              <span className="whitespace-pre-line">{n.message}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div
+        className="relative z-20 flex h-9 items-center justify-between px-4 select-none"
+        onMouseDown={handleTitleBarMouseDown}
+      >
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/40 select-none">
           <span>16Launcher</span>
         </div>
@@ -525,13 +662,23 @@ function App() {
             type="button"
             onClick={handleMinimize}
             className="flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
+            data-no-drag
           >
             <MinimizeIcon />
           </button>
           <button
             type="button"
+            onClick={handleToggleMaximize}
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
+            data-no-drag
+          >
+            <MaximizeIcon />
+          </button>
+          <button
+            type="button"
             onClick={handleClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-[#e74c3c] text-white hover:bg-[#ff6b5a]"
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
+            data-no-drag
           >
             <CloseIcon />
           </button>
@@ -560,7 +707,7 @@ function App() {
                     <img
                       src={SIDEBAR_ICON_PATHS[item.id]}
                       alt=""
-                      className="h-5 w-5 object-contain"
+                      className="h-7 w-7 object-contain"
                     />
                   ) : (
                     <>
@@ -692,14 +839,14 @@ function App() {
             </div>
           ) : (
             <>
-              <div className="glass-panel flex h-[260px] w-full max-w-3xl items-center justify-center">
+              <div className="glass-panel flex h-[260px] w-full max-w-1xl items-center justify-center">
                 <span className="text-sm font-medium tracking-wide text-white/70">
                   Новости лаунчера и баннер игры
                 </span>
               </div>
 
-              <div className="pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2">
-            <div className="pointer-events-auto relative w-full max-w-3xl">
+      <div className="pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2">
+      <div className="pointer-events-auto relative w-full max-w-2xl">
               <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8">
                 <div className="relative flex flex-col text-left">
                   <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
@@ -724,7 +871,7 @@ function App() {
                   </button>
 
                   {isVersionDropdownOpen && versions.length > 0 && (
-                    <div className="absolute left-0 z-30 mt-2 max-h-[min(70vh,320px)] w-56 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                    <div className="absolute left-0 bottom-full mb-2 z-30 max-h-[min(70vh,320px)] w-56 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
                       {versions.map((v) => (
                         <button
                           key={v.id}
@@ -751,43 +898,70 @@ function App() {
                   )}
                 </div>
 
-                <div className="flex flex-1 flex-col items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handlePrimaryClick}
-                    className={`rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses}`}
-                  >
-                    {primaryLabel}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenGameFolder}
-                    title="Открыть папку игры"
-                    className="flex items-center gap-2 rounded-full border border-white/20 bg-black/40 px-4 py-2 text-xs font-medium text-gray-300 hover:border-white/40 hover:bg-black/60 hover:text-white"
-                  >
-                    <FolderIcon />
-                    <span>Открыть папку игры</span>
-                  </button>
+                <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                  {isInstalling || installPaused ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={installPaused ? handleResumeInstall : handlePauseInstall}
+                          className="rounded-xl bg-accentBlue px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
+                        >
+                          {installPaused ? "Продолжить" : "Пауза"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelInstall}
+                          className="rounded-xl bg-red-600 px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-red-500"
+                        >
+                          Отменить
+                        </button>
+                      </div>
+                      <div className="mt-1 w-full max-w-md">
+                        <div className="h-3 w-full overflow-hidden rounded-full bg-black/40">
+                          <div
+                            className="h-full rounded-full bg-accentGreen transition-[width] duration-200"
+                            style={{ width: `${Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)))}%` }}
+                          />
+                        </div>
+                        <div className="mt-1 text-center text-xs text-white/70">
+                          {progress && progress.total > 0
+                            ? `${Math.round(progress.percent)}%`
+                            : "Подготовка файлов..."}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handlePrimaryClick}
+                      className={`rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses}`}
+                    >
+                      {primaryLabel}
+                    </button>
+                  )}
                 </div>
 
                 <div className="relative flex flex-col items-end text-right">
                   <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
                     Загрузчик
                   </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setIsLoaderDropdownOpen((current) => !current)
-                    }
-                    className="mt-1 inline-flex items-center gap-2 rounded-full bg-white/6 px-3 py-1 text-xs font-semibold text-white/90 hover:bg-white/15"
-                  >
-                    {loaderLabels[loader]}
-                    <span className="text-[10px] text-gray-400">▾</span>
-                  </button>
+                  <div className="mt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIsLoaderDropdownOpen((current) => !current)
+                      }
+                      className="inline-flex items-center gap-2 rounded-full bg-white/6 px-3 py-1 text-xs font-semibold text-white/90 hover:bg-white/15"
+                    >
+                      {loaderLabels[loader]}
+                      <span className="text-[10px] text-gray-400">▾</span>
+                    </button>
+                  </div>
 
                   {isLoaderDropdownOpen && (
-                    <div className="absolute right-0 top-12 z-30 max-h-[min(50vh,240px)] overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-                      {(["vanilla", "fabric", "forge"] as LoaderId[]).map((id) => {
+                    <div className="absolute right-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                      {(["vanilla", "fabric", "forge", "quilt"] as LoaderId[]).map((id) => {
                         const isActive = loader === id;
                         return (
                           <button
@@ -811,6 +985,18 @@ function App() {
                   )}
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={handleOpenGameFolder}
+                title="Открыть папку игры"
+                className="pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
+              >
+                <img
+                  src="/launcher-assets/folder.png"
+                  alt="Папка игры"
+                  className="h-6 w-6 object-contain"
+                />
+              </button>
             </div>
               </div>
           </>
