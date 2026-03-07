@@ -1,4 +1,5 @@
 import { check } from "@tauri-apps/plugin-updater";
+import { useEffect, useRef, useState } from "react";
 
 type SettingsTabId = "directories" | "game" | "versions" | "notifications" | "updates";
 
@@ -41,6 +42,72 @@ export function SettingsTab({
   SettingsSlider,
   SettingsToggle,
 }: SettingsTabProps) {
+  const [isRamEditing, setIsRamEditing] = useState(false);
+  const [ramInputMb, setRamInputMb] = useState("");
+  const ramInputRef = useRef<HTMLInputElement | null>(null);
+
+  const settingsTabRefs = useRef<
+    Partial<Record<SettingsTabId, HTMLButtonElement | null>>
+  >({});
+  const [settingsIndicator, setSettingsIndicator] = useState<{
+    left: number;
+    width: number;
+  }>({ left: 0, width: 0 });
+
+  const currentRamMb = settings?.ram_mb ?? 4096;
+  const currentRamGbRounded = Math.max(1, Math.round(currentRamMb / 1024));
+  const ramMinMb = 1024;
+  const ramMaxMb = 64 * 1024;
+  const ramSliderMaxGb = Math.max(64, systemMemoryGb);
+
+  useEffect(() => {
+    const updateIndicator = () => {
+      const el = settingsTabRefs.current[settingsTab];
+      if (el) {
+        setSettingsIndicator({
+          left: el.offsetLeft,
+          width: el.offsetWidth,
+        });
+      }
+    };
+
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [settingsTab]);
+
+  useEffect(() => {
+    if (!isRamEditing) {
+      setRamInputMb(String(currentRamMb));
+    }
+  }, [currentRamMb, isRamEditing]);
+
+  useEffect(() => {
+    if (isRamEditing) {
+      ramInputRef.current?.focus();
+      ramInputRef.current?.select();
+    }
+  }, [isRamEditing]);
+
+  const commitRamMb = (raw: string) => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      setRamInputMb(String(currentRamMb));
+      setIsRamEditing(false);
+      return;
+    }
+    const rounded = Math.round(parsed);
+    const clamped = Math.min(ramMaxMb, Math.max(ramMinMb, rounded));
+    updateSettings({ ram_mb: clamped });
+    setRamInputMb(String(clamped));
+    setIsRamEditing(false);
+  };
+
+  const cancelRamEditing = () => {
+    setRamInputMb(String(currentRamMb));
+    setIsRamEditing(false);
+  };
+
   const handleManualUpdateCheck = async () => {
     try {
       const update = await check();
@@ -72,10 +139,41 @@ export function SettingsTab({
               <SettingsSlider
                 label="Оперативная память:"
                 min={1}
-                max={systemMemoryGb}
-                value={Math.round((settings?.ram_mb ?? 4096) / 1024)}
+                max={ramSliderMaxGb}
+                value={currentRamGbRounded}
                 onChange={(value: number) =>
                   updateSettings({ ram_mb: Math.max(1, value) * 1024 })
+                }
+                right={
+                  isRamEditing ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={ramInputRef}
+                        type="number"
+                        inputMode="numeric"
+                        min={ramMinMb}
+                        max={ramMaxMb}
+                        value={ramInputMb}
+                        onChange={(e) => setRamInputMb(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRamMb(ramInputMb);
+                          if (e.key === "Escape") cancelRamEditing();
+                        }}
+                        onBlur={() => commitRamMb(ramInputMb)}
+                        className="no-number-spin h-7 w-28 rounded-lg border border-white/15 bg-black/25 px-2 text-right text-sm font-semibold text-white/90 outline-none focus:border-white/30"
+                      />
+                      <span className="text-xs font-semibold text-white/70">МБ</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsRamEditing(true)}
+                      className="interactive-press text-sm font-semibold text-white/90 hover:text-white"
+                      title="Нажмите, чтобы ввести в МБ"
+                    >
+                      {currentRamGbRounded}ГБ
+                    </button>
+                  )
                 }
               />
               <SettingsToggle
@@ -171,62 +269,44 @@ export function SettingsTab({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-center gap-3">
-        <button
-          type="button"
-          onClick={() => setSettingsTab("directories")}
-          className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-            settingsTab === "directories"
-              ? "bg-white/80 text-black"
-              : "bg-white/5 text-white/70 hover:bg-white/10"
-          }`}
-        >
-          Директории
-        </button>
-        <button
-          type="button"
-          onClick={() => setSettingsTab("game")}
-          className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-            settingsTab === "game"
-              ? "bg-white/80 text-black"
-              : "bg-white/5 text-white/70 hover:bg-white/10"
-          }`}
-        >
-          Игра
-        </button>
-        <button
-          type="button"
-          onClick={() => setSettingsTab("versions")}
-          className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-            settingsTab === "versions"
-              ? "bg-white/80 text-black"
-              : "bg-white/5 text-white/70 hover:bg-white/10"
-          }`}
-        >
-          Версии
-        </button>
-        <button
-          type="button"
-          onClick={() => setSettingsTab("notifications")}
-          className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-            settingsTab === "notifications"
-              ? "bg-white/80 text-black"
-              : "bg-white/5 text-white/70 hover:bg-white/10"
-          }`}
-        >
-          Уведомления
-        </button>
-        <button
-          type="button"
-          onClick={() => setSettingsTab("updates")}
-          className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-            settingsTab === "updates"
-              ? "bg-white/80 text-black"
-              : "bg-white/5 text-white/70 hover:bg-white/10"
-          }`}
-        >
-          Обновления
-        </button>
+      <div className="mt-4 flex items-center justify-center">
+        <div className="relative flex items-center gap-0 rounded-full border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
+          <div
+            className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
+            style={{
+              left: `${settingsIndicator.left}px`,
+              width: `${settingsIndicator.width}px`,
+            }}
+          />
+          {(
+            [
+              { id: "directories", label: "Директории" },
+              { id: "game", label: "Игра" },
+              { id: "versions", label: "Версии" },
+              { id: "notifications", label: "Уведомления" },
+              { id: "updates", label: "Обновления" },
+            ] as { id: SettingsTabId; label: string }[]
+          ).map((tab) => {
+            const active = settingsTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                ref={(el) => {
+                  settingsTabRefs.current[tab.id] = el;
+                }}
+                onClick={() => setSettingsTab(tab.id)}
+                className={`interactive-press relative z-10 rounded-full px-4 py-1.5 text-xs font-semibold text-center transition-colors ${
+                  active
+                    ? "text-black"
+                    : "text-white/70 hover:text-white"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

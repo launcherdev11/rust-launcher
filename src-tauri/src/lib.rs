@@ -11,7 +11,7 @@ use game_provider::{
     get_installed_quilt_profile_id, get_profile, install_fabric, install_forge, install_quilt,
     install_version, launch_game, list_installed_versions, open_game_folder, reset_download_cancel,
     save_avatar, set_profile, get_settings, set_settings, is_game_running_now, get_system_memory_gb,
-    download_modrinth_file,
+    download_modrinth_file, import_modpack_files,
 };
 use ely_auth::{
     ely_login_with_password, ely_logout, handle_oauth_callback, refresh_ely_session,
@@ -69,7 +69,8 @@ pub fn run() {
             refresh_ely_session,
             cancel_download,
             reset_download_cancel,
-            download_modrinth_file
+            download_modrinth_file,
+            import_modpack_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

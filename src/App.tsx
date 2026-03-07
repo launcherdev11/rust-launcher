@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -13,6 +20,9 @@ import {
   SettingsCard,
 } from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
+import { SettingsTab } from "./tabs/SettingsTab";
+import ModpackTab from "./tabs/ModpackTab";
+import { PlayTab } from "./tabs/PlayTab";
 
 type Profile = {
   nickname: string;
@@ -22,7 +32,7 @@ type Profile = {
 };
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
-type LoaderId = "vanilla" | "fabric" | "forge" | "quilt";
+type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "directories" | "game" | "versions" | "notifications" | "updates";
 
@@ -85,6 +95,7 @@ type Notification = {
   id: number;
   kind: NotificationKind;
   message: string;
+  leaving?: boolean;
 };
 
 const sidebarItems: { id: SidebarItemId; label: string }[] = [
@@ -226,7 +237,7 @@ function MaximizeIcon() {
   );
 }
 
-const loaderLabels: Record<LoaderId, string> = {
+const loaderLabels: Partial<Record<LoaderId, string>> = {
   vanilla: "Vanilla",
   fabric: "Fabric",
   forge: "Forge",
@@ -235,6 +246,37 @@ const loaderLabels: Record<LoaderId, string> = {
 
 function App() {
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const sidebarButtonRefs = useRef<
+    Partial<Record<SidebarItemId, HTMLButtonElement | null>>
+  >({});
+  const [sidebarIndicator, setSidebarIndicator] = useState<{
+    top: number;
+    height: number;
+    ready: boolean;
+  }>({ top: 0, height: 32, ready: false });
+
+  const updateSidebarIndicator = useCallback(() => {
+    const container = sidebarRef.current;
+    const btn = sidebarButtonRefs.current[activeItem];
+    if (!container || !btn) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const height = 32;
+    const top = btnRect.top - containerRect.top + (btnRect.height - height) / 2;
+
+    setSidebarIndicator({ top, height, ready: true });
+  }, [activeItem]);
+
+  useLayoutEffect(() => {
+    updateSidebarIndicator();
+  }, [updateSidebarIndicator]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateSidebarIndicator);
+    return () => window.removeEventListener("resize", updateSidebarIndicator);
+  }, [updateSidebarIndicator]);
   const [loader, setLoader] = useState<LoaderId>("vanilla");
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<VersionItem | null>(null);
@@ -260,10 +302,26 @@ function App() {
   const showNotification = useCallback((kind: NotificationKind, message: string) => {
     const id = Date.now() + Math.random();
     setNotifications((prev) => [...prev, { id, kind, message }]);
+
+    // Анимация ухода вверх перед удалением
     setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, 4500);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),
+      );
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+      }, 200);
+    }, 4300);
   }, []);
+
+  const showSettingsSavedNotification = useCallback(() => {
+    setNotifications((prev) =>
+      prev.filter(
+        (n) => !(n.kind === "success" && n.message === "Настройки сохранены!"),
+      ),
+    );
+    showNotification("success", "Настройки сохранены!");
+  }, [showNotification]);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -306,13 +364,17 @@ function App() {
             auto_install_updates: false,
           } satisfies Settings);
         const next: Settings = { ...current, ...patch };
-        invoke("set_settings", { settings: next }).catch((e) =>
-          console.error("Не удалось сохранить настройки:", e),
-        );
+        invoke("set_settings", { settings: next })
+          .then(() => {
+            showSettingsSavedNotification();
+          })
+          .catch((e) => {
+            console.error("Не удалось сохранить настройки:", e);
+          });
         return next;
       });
     },
-    [],
+    [showSettingsSavedNotification],
   );
 
   useEffect(() => {
@@ -336,28 +398,6 @@ function App() {
       void refreshSettings();
     }
   }, [activeItem, refreshSettings]);
-
-  const handleManualUpdateCheck = useCallback(async () => {
-    try {
-      const update = await check();
-      if (!update) {
-        showNotification("info", "Новых обновлений не найдено.");
-        return;
-      }
-      if (settings?.auto_install_updates) {
-        await update.downloadAndInstall();
-        showNotification("success", "Обновление установлено. Перезапустите лаунчер.");
-      } else {
-        showNotification(
-          "info",
-          `Доступна новая версия лаунчера: ${update.version}. Установка будет предложена при следующем запуске.`,
-        );
-      }
-    } catch (e) {
-      console.error("Ошибка проверки обновлений:", e);
-      showNotification("error", "Не удалось проверить обновления.");
-    }
-  }, [settings?.auto_install_updates, showNotification]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -744,7 +784,7 @@ function App() {
           let iconSrc = "";
 
           if (n.kind === "info") {
-            bgClasses = "bg-white/10 border border-white/25 text-white";
+            bgClasses = "bg-neutral-800/90 border border-white/35 text-white";
             iconSrc = "/launcher-assets/info.png";
           } else if (n.kind === "success") {
             bgClasses = "bg-emerald-600/95 border border-emerald-300/60 text-white";
@@ -760,7 +800,11 @@ function App() {
           return (
             <div
               key={n.id}
-              className={`${baseClasses} ${bgClasses} animate-notification-slide-in`}
+              className={`${baseClasses} ${bgClasses} ${
+                n.leaving
+                  ? "animate-notification-slide-out"
+                  : "animate-notification-slide-in"
+              }`}
             >
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/15">
                 <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
@@ -807,18 +851,30 @@ function App() {
       </div>
 
       <div className="relative z-10 flex h-[calc(100vh-2.25rem)]">
-        <aside className="flex w-20 flex-col justify-between bg-black/40 px-3 py-6 backdrop-blur-lg">
+        <aside
+          ref={sidebarRef}
+          className="relative flex w-20 flex-col justify-between bg-black/40 px-3 py-6 backdrop-blur-lg"
+        >
+          <span
+            className="pointer-events-none absolute left-3 top-0 w-1 rounded-full bg-accentGreen transition-transform duration-200 ease-out"
+            style={{
+              height: `${sidebarIndicator.height}px`,
+              transform: `translateY(${sidebarIndicator.top}px)`,
+              opacity: sidebarIndicator.ready ? 1 : 0,
+              willChange: "transform",
+            }}
+          />
           <div className="flex flex-col gap-3">
             {sidebarItems.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItem(item.id)}
+                ref={(el) => {
+                  sidebarButtonRefs.current[item.id] = el;
+                }}
                 className="interactive-press group relative flex items-center"
               >
-                {activeItem === item.id && (
-                  <span className="absolute left-0 h-8 w-1 rounded-full bg-accentGreen" />
-                )}
                 <div
                   className={`sidebar-icon ml-2 flex items-center justify-center ${
                     activeItem === item.id ? "sidebar-icon-active" : ""
@@ -847,11 +903,11 @@ function App() {
             <button
               type="button"
               onClick={() => setActiveItem("accounts")}
+              ref={(el) => {
+                sidebarButtonRefs.current.accounts = el;
+              }}
               className="interactive-press group relative flex items-center justify-center w-full"
             >
-              {activeItem === "accounts" && (
-                <span className="absolute left-0 h-8 w-1 rounded-full bg-accentGreen" />
-              )}
               <div
                 className={`sidebar-icon ml-2 flex items-center justify-center rounded-full ${
                   activeItem === "accounts" ? "sidebar-icon-active" : "bg-black/40 hover:bg-black/70"
@@ -863,7 +919,7 @@ function App() {
           </div>
         </aside>
 
-        <main className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
+        <main key={activeItem} className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
           {activeItem === "accounts" ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-6">
               <div
@@ -963,372 +1019,44 @@ function App() {
               <ModsTab showNotification={showNotification} />
             </div>
           ) : activeItem === "modpacks" ? (
-            <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-4 py-12">
-              <div className="glass-panel w-full px-8 py-10 text-center">
-                <p className="text-base font-medium text-white/90">Сборки (модпаки)</p>
-                <p className="mt-2 text-sm text-white/60">Раздел в разработке. Скоро здесь можно будет устанавливать готовые сборки модов.</p>
-              </div>
+            <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
+              <ModpackTab />
             </div>
           ) : activeItem === "settings" ? (
-            <div className="flex w-full max-w-3xl flex-col gap-5">
-              <div className="glass-panel w-full px-6 py-5">
-                <h2 className="mb-4 text-base font-semibold text-white/90">
-                  Настройки лаунчера
-                </h2>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSettingsTab("directories")}
-                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      settingsTab === "directories"
-                        ? "bg-white/80 text-black"
-                        : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    Директории
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsTab("game")}
-                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      settingsTab === "game"
-                        ? "bg-white/80 text-black"
-                        : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    Игра
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsTab("versions")}
-                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      settingsTab === "versions"
-                        ? "bg-white/80 text-black"
-                        : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    Версии
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsTab("notifications")}
-                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      settingsTab === "notifications"
-                        ? "bg-white/80 text-black"
-                        : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    Уведомления
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsTab("updates")}
-                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      settingsTab === "updates"
-                        ? "bg-white/80 text-black"
-                        : "bg-white/5 text-white/70 hover:bg-white/10"
-                    }`}
-                  >
-                    Обновления
-                  </button>
-                </div>
-              </div>
-
-              <div className="glass-panel w-full px-6 py-5">
-                {settingsTab === "game" && (
-                  <>
-                    <SettingsCard title="Игра">
-                      <SettingsSlider
-                        label="Оперативная память:"
-                        min={1}
-                        max={systemMemoryGb}
-                        value={Math.round((settings?.ram_mb ?? 4096) / 1024)}
-                        onChange={(value) =>
-                          updateSettings({ ram_mb: Math.max(1, value) * 1024 })
-                        }
-                      />
-                      <SettingsToggle
-                        label="Консоль при запуске:"
-                        value={settings?.show_console_on_launch ?? false}
-                        onChange={(value) => updateSettings({ show_console_on_launch: value })}
-                      />
-                      <SettingsToggle
-                        label="Закрывать лаунчер при запуске игры:"
-                        value={settings?.close_launcher_on_game_start ?? false}
-                        onChange={(value) =>
-                          updateSettings({ close_launcher_on_game_start: value })
-                        }
-                      />
-                      <SettingsToggle
-                        label="Проверять запущенные процессы игры:"
-                        value={settings?.check_game_processes ?? true}
-                        onChange={(value) =>
-                          updateSettings({ check_game_processes: value })
-                        }
-                      />
-                    </SettingsCard>
-                  </>
-                )}
-
-                {settingsTab === "versions" && (
-                  <SettingsCard title="Версии Minecraft">
-                    <SettingsToggle
-                      label="Показывать снапшоты:"
-                      value={settings?.show_snapshots ?? false}
-                      onChange={(value) => updateSettings({ show_snapshots: value })}
-                    />
-                    <SettingsToggle
-                      label="Показывать Alpha версии:"
-                      value={settings?.show_alpha_versions ?? false}
-                      onChange={(value) => updateSettings({ show_alpha_versions: value })}
-                    />
-                  </SettingsCard>
-                )}
-
-                {settingsTab === "notifications" && (
-                  <SettingsCard title="Уведомления">
-                    <SettingsToggle
-                      label="Новое обновление:"
-                      value={settings?.notify_new_update ?? true}
-                      onChange={(value) => updateSettings({ notify_new_update: value })}
-                    />
-                    <SettingsToggle
-                      label="Новое сообщение:"
-                      value={settings?.notify_new_message ?? true}
-                      onChange={(value) => updateSettings({ notify_new_message: value })}
-                    />
-                    <SettingsToggle
-                      label="Системное сообщение:"
-                      value={settings?.notify_system_message ?? true}
-                      onChange={(value) => updateSettings({ notify_system_message: value })}
-                    />
-                  </SettingsCard>
-                )}
-
-                {settingsTab === "updates" && (
-                  <>
-                    <SettingsCard title="Обновления лаунчера">
-                      <SettingsToggle
-                        label="Проверять обновления при запуске:"
-                        value={settings?.check_updates_on_start ?? true}
-                        onChange={(value) => updateSettings({ check_updates_on_start: value })}
-                      />
-                      <SettingsToggle
-                        label="Автоматически устанавливать обновления:"
-                        value={settings?.auto_install_updates ?? false}
-                        onChange={(value) =>
-                          updateSettings({ auto_install_updates: value })
-                        }
-                      />
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={handleManualUpdateCheck}
-                          className="interactive-press mt-1 inline-flex w-full items-center justify-center rounded-2xl bg-accentBlue px-6 py-3 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
-                        >
-                          Проверить обновления
-                        </button>
-                      </div>
-                    </SettingsCard>
-                  </>
-                )}
-
-                {settingsTab === "directories" && (
-                  <SettingsCard title="Директории">
-                    <p className="text-sm text-white/70">
-                      Настройки директорий будут добавлены позже.
-                    </p>
-                  </SettingsCard>
-                )}
-              </div>
-
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="flex flex-1 justify-center gap-3">
-                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
-                    Директории
-                  </span>
-                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
-                    Игра
-                  </span>
-                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
-                    Версии
-                  </span>
-                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
-                    Уведомления
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSettingsTab("updates")}
-                  className="interactive-press flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
-                >
-                  <span className="text-lg">➜</span>
-                </button>
-              </div>
-            </div>
+            <SettingsTab
+              settings={settings}
+              settingsTab={settingsTab}
+              setSettingsTab={setSettingsTab}
+              systemMemoryGb={systemMemoryGb}
+              updateSettings={updateSettings}
+              showNotification={showNotification}
+              SettingsCard={SettingsCard}
+              SettingsSlider={SettingsSlider}
+              SettingsToggle={SettingsToggle}
+            />
           ) : (
-            <>
-              <div className="glass-panel flex h-[260px] w-full max-w-1xl items-center justify-center">
-                <span className="text-sm font-medium tracking-wide text-white/70">
-                  Новости лаунчера и баннер игры
-                </span>
-              </div>
-
-      <div className="pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2">
-      <div className="pointer-events-auto relative w-full max-w-2xl">
-              <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8">
-                <div className="relative flex flex-col text-left">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
-                    Версия
-                  </span>
-                  <button
-                    type="button"
-                    disabled={versions.length === 0 || versionsLoading}
-                    onClick={() =>
-                      setIsVersionDropdownOpen((current) => !current)
-                    }
-                    className="interactive-press mt-1 inline-flex max-w-[200px] items-center gap-2 truncate text-left text-sm font-semibold text-white/90 disabled:cursor-not-allowed disabled:text-white/40 sm:max-w-[240px]"
-                  >
-                    <span className="min-w-0 truncate">
-                      {selectedVersion
-                        ? versionDisplayName(selectedVersion)
-                        : versionsLoading
-                          ? "Загрузка..."
-                          : "Выберите версию"}
-                    </span>
-                    <span className="shrink-0 text-xs text-gray-400">▾</span>
-                  </button>
-
-                  {isVersionDropdownOpen && versions.length > 0 && (
-                    <div className="absolute left-0 bottom-full mb-2 z-30 max-h-[min(70vh,320px)] w-56 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-                      {versions.map((v) => (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedVersion(v);
-                            setIsVersionDropdownOpen(false);
-                          }}
-                          className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
-                            selectedVersion && selectedVersion.id === v.id
-                              ? "bg-white/90 text-black"
-                              : "text-white/80 hover:bg-white/10"
-                          }`}
-                        >
-                          <span>{versionDisplayName(v)}</span>
-                          {!isForgeVersion(v) && (
-                            <span className="ml-2 text-[10px] uppercase text-gray-400">
-                              {(v as VersionSummary).version_type}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                  {isInstalling || installPaused ? (
-                    <>
-                      <div className="flex flex-wrap items-center justify-center gap-3">
-                        <button
-                          type="button"
-                          onClick={installPaused ? handleResumeInstall : handlePauseInstall}
-                          className="interactive-press rounded-xl bg-accentBlue px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
-                        >
-                          {installPaused ? "Продолжить" : "Пауза"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelInstall}
-                          className="interactive-press rounded-xl bg-red-600 px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-red-500"
-                        >
-                          Отменить
-                        </button>
-                      </div>
-                      <div className="mt-1 w-full max-w-md">
-                        <div className="h-3 w-full overflow-hidden rounded-full bg-black/40">
-                          <div
-                            className="h-full rounded-full bg-accentGreen transition-[width] duration-200"
-                            style={{ width: `${Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)))}%` }}
-                          />
-                        </div>
-                        <div className="mt-1 text-center text-xs text-white/70">
-                          {progress && progress.total > 0
-                            ? `${Math.round(progress.percent)}%`
-                            : "Подготовка файлов..."}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handlePrimaryClick}
-                      className={`interactive-press rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses}`}
-                    >
-                      {primaryLabel}
-                    </button>
-                  )}
-                </div>
-
-                <div className="relative flex flex-col items-end text-right">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
-                    Загрузчик
-                  </span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setIsLoaderDropdownOpen((current) => !current)
-                      }
-                      className="interactive-press inline-flex items-center gap-2 rounded-full bg-white/6 px-3 py-1 text-xs font-semibold text-white/90 hover:bg-white/15"
-                    >
-                      {loaderLabels[loader]}
-                      <span className="text-[10px] text-gray-400">▾</span>
-                    </button>
-                  </div>
-
-                  {isLoaderDropdownOpen && (
-                    <div className="absolute right-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-                      {(["vanilla", "fabric", "forge", "quilt"] as LoaderId[]).map((id) => {
-                        const isActive = loader === id;
-                        return (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => {
-                              setLoader(id);
-                              setIsLoaderDropdownOpen(false);
-                            }}
-                            className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
-                              isActive
-                                ? "bg-white/90 text-black"
-                                : "text-white/80 hover:bg-white/10"
-                            }`}
-                          >
-                            <span>{loaderLabels[id]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleOpenGameFolder}
-                title="Открыть папку игры"
-                className="interactive-press pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
-              >
-                <img
-                  src="/launcher-assets/folder.png"
-                  alt="Папка игры"
-                  className="h-6 w-6 object-contain"
-                />
-              </button>
-            </div>
-              </div>
-          </>
+            <PlayTab
+              versions={versions}
+              selectedVersion={selectedVersion}
+              setSelectedVersion={setSelectedVersion}
+              versionsLoading={versionsLoading}
+              isVersionDropdownOpen={isVersionDropdownOpen}
+              setIsVersionDropdownOpen={setIsVersionDropdownOpen}
+              installPaused={installPaused}
+              isInstalling={isInstalling}
+              handleResumeInstall={handleResumeInstall}
+              handlePauseInstall={handlePauseInstall}
+              handleCancelInstall={handleCancelInstall}
+              handlePrimaryClick={handlePrimaryClick}
+              primaryColorClasses={primaryColorClasses}
+              primaryLabel={primaryLabel}
+              progress={progress}
+              loader={loader}
+              setLoader={(l) => setLoader(l)}
+              isLoaderDropdownOpen={isLoaderDropdownOpen}
+              setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
+              handleOpenGameFolder={handleOpenGameFolder}
+            />
           )}
         </main>
 

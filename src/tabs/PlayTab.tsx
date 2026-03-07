@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type VersionSummary = {
@@ -26,6 +28,18 @@ type DownloadProgressPayload = {
   total: number;
   percent: number;
 };
+
+type LauncherBannerData = {
+  imageUrl: string;
+  title?: string;
+  subtitle?: string;
+  link?: string;
+};
+
+type LauncherBannerResponse =
+  | LauncherBannerData
+  | LauncherBannerData[]
+  | { banners: LauncherBannerData[] };
 
 type PlayTabProps = {
   versions: VersionItem[];
@@ -80,6 +94,102 @@ export function PlayTab({
   setIsLoaderDropdownOpen,
   handleOpenGameFolder,
 }: PlayTabProps) {
+  const [banners, setBanners] = useState<LauncherBannerData[]>([]);
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+  const [bannerLoading, setBannerLoading] = useState(true);
+  const [bannerError, setBannerError] = useState(false);
+
+  const currentBanner =
+    banners.length > 0 &&
+    activeBannerIndex >= 0 &&
+    activeBannerIndex < banners.length
+      ? banners[activeBannerIndex]
+      : null;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function fetchBanner() {
+      try {
+        setBannerError(false);
+
+        const urls = [
+          // CDN, обычно меньше проблем с блокировками/CORS
+          "https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json",
+          // Прямой raw GitHub как запасной вариант
+          "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/banner.json",
+        ];
+
+        let lastError: unknown = null;
+
+        for (const url of urls) {
+          try {
+            const response = await fetch(url, {
+              signal: controller.signal,
+              cache: "no-store",
+            });
+
+            if (!response.ok) {
+              throw new Error(`Failed to load banner: ${response.status}`);
+            }
+
+            const raw = (await response.json()) as LauncherBannerResponse;
+
+            let parsed: LauncherBannerData[] = [];
+
+            if (Array.isArray(raw)) {
+              parsed = raw;
+            } else if (raw && "banners" in raw && Array.isArray((raw as any).banners)) {
+              parsed = (raw as { banners: LauncherBannerData[] }).banners;
+            } else if (raw && typeof raw === "object" && "imageUrl" in raw) {
+              parsed = [raw as LauncherBannerData];
+            }
+
+            parsed = parsed.filter(
+              (b) => typeof b.imageUrl === "string" && b.imageUrl.trim().length > 0,
+            );
+
+            if (parsed.length > 0) {
+              setBanners(parsed);
+              setActiveBannerIndex(0);
+              return;
+            }
+
+            throw new Error("Invalid banner format");
+          } catch (err) {
+            // если запрос отменили при размонтировании — выходим
+            if (controller.signal.aborted) return;
+            lastError = err;
+          }
+        }
+
+        // если ни один из URL не сработал
+        throw lastError ?? new Error("Failed to load banner from all sources");
+      } catch (error) {
+        console.error(error);
+        setBannerError(true);
+      } finally {
+        setBannerLoading(false);
+      }
+    }
+
+    fetchBanner();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setActiveBannerIndex((prev) => (prev + 1) % banners.length);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [banners.length]);
+
   const versionDisplayName = (v: VersionItem): string => {
     if (isForgeVersion(v)) return `${v.mc_version} (Forge ${v.forge_build})`;
     return v.id;
@@ -87,10 +197,64 @@ export function PlayTab({
 
   return (
     <>
-      <div className="glass-panel flex h-[260px] w-full max-w-1xl items-center justify-center">
-        <span className="text-sm font-medium tracking-wide text-white/70">
-          Новости лаунчера и баннер игры
-        </span>
+      <div className="glass-panel relative flex h-[260px] w-full max-w-1xl overflow-hidden rounded-3xl">
+        {bannerLoading ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="text-sm font-medium tracking-wide text-white/70">
+              Загрузка новостей лаунчера...
+            </span>
+          </div>
+        ) : bannerError ? (
+          <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
+            <span className="text-sm font-medium tracking-wide text-red-300">
+              Не удалось загрузить баннер лаунчера.
+            </span>
+            <span className="mt-1 text-xs text-white/60">
+              Проверь подключение к интернету или доступ к GitHub.
+            </span>
+          </div>
+        ) : currentBanner ? (
+          <>
+            <img
+              src={currentBanner.imageUrl}
+              alt={currentBanner.title ?? "Баннер лаунчера"}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
+
+            <div className="relative z-10 flex w-full flex-col justify-center px-8 py-6">
+              {currentBanner.title && (
+                <h2 className="mb-2 text-xl font-semibold tracking-wide text-white">
+                  {currentBanner.title}
+                </h2>
+              )}
+              {currentBanner.subtitle && (
+                <p className="max-w-xl text-sm text-white/80">
+                  {currentBanner.subtitle}
+                </p>
+              )}
+              {currentBanner.link && (
+                <div className="mt-4">
+                  <a
+                    href={currentBanner.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20"
+                  >
+                    Подробнее
+                    <span className="ml-1 text-[10px]">↗</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="text-sm font-medium tracking-wide text-white/70">
+              Новости лаунчера и баннер игры
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2">
