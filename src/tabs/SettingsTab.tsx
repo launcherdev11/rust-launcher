@@ -1,7 +1,9 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useRef, useState } from "react";
 
-type SettingsTabId = "directories" | "game" | "versions" | "notifications" | "updates";
+type SettingsTabId = "directories" | "game" | "versions" | "launcher" | "updates";
+
+type Language = "ru" | "en";
 
 type Settings = {
   ram_mb: number;
@@ -29,6 +31,8 @@ type SettingsTabProps = {
   SettingsCard: typeof import("../settings-ui/SettingsComponents").SettingsCard;
   SettingsSlider: typeof import("../settings-ui/SettingsComponents").SettingsSlider;
   SettingsToggle: typeof import("../settings-ui/SettingsComponents").SettingsToggle;
+  language: Language;
+  setLanguage: (lang: Language) => void;
 };
 
 export function SettingsTab({
@@ -41,6 +45,8 @@ export function SettingsTab({
   SettingsCard,
   SettingsSlider,
   SettingsToggle,
+  language,
+  setLanguage,
 }: SettingsTabProps) {
   const [isRamEditing, setIsRamEditing] = useState(false);
   const [ramInputMb, setRamInputMb] = useState("");
@@ -112,21 +118,38 @@ export function SettingsTab({
     try {
       const update = await check();
       if (!update) {
-        showNotification("info", "Новых обновлений не найдено.");
+        showNotification(
+          "info",
+          language === "ru"
+            ? "Новых обновлений не найдено."
+            : "No new updates were found.",
+        );
         return;
       }
       if (settings?.auto_install_updates) {
         await update.downloadAndInstall();
-        showNotification("success", "Обновление установлено. Перезапустите лаунчер.");
+        showNotification(
+          "success",
+          language === "ru"
+            ? "Обновление установлено. Перезапустите лаунчер."
+            : "Update installed. Please restart the launcher.",
+        );
       } else {
         showNotification(
           "info",
-          `Доступна новая версия лаунчера: ${update.version}. Установка будет предложена при следующем запуске.`,
+          language === "ru"
+            ? `Доступна новая версия лаунчера: ${update.version}. Установка будет предложена при следующем запуске.`
+            : `A new launcher version is available: ${update.version}. Installation will be offered on the next start.`,
         );
       }
     } catch (e) {
       console.error("Ошибка проверки обновлений:", e);
-      showNotification("error", "Не удалось проверить обновления.");
+      showNotification(
+        "error",
+        language === "ru"
+          ? "Не удалось проверить обновления."
+          : "Failed to check for updates.",
+      );
     }
   };
 
@@ -135,9 +158,9 @@ export function SettingsTab({
       <div className="flex flex-1 items-center justify-center">
         <div className="glass-panel w-full px-6 py-5">
           {settingsTab === "game" && (
-            <SettingsCard title="Игра">
+            <SettingsCard title={language === "ru" ? "Игра" : "Game"}>
               <SettingsSlider
-                label="Оперативная память:"
+                label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
                 min={1}
                 max={ramSliderMaxGb}
                 value={currentRamGbRounded}
@@ -177,19 +200,37 @@ export function SettingsTab({
                 }
               />
               <SettingsToggle
-                label="Консоль при запуске:"
+                label={
+                  language === "ru"
+                    ? "Консоль при запуске:"
+                    : "Show console on game start:"
+                }
+                yesLabel={language === "ru" ? "Да" : "On"}
+                noLabel={language === "ru" ? "Нет" : "Off"}
                 value={settings?.show_console_on_launch ?? false}
                 onChange={(value: boolean) => updateSettings({ show_console_on_launch: value })}
               />
               <SettingsToggle
-                label="Закрывать лаунчер при запуске игры:"
+                label={
+                  language === "ru"
+                    ? "Закрывать лаунчер при запуске игры:"
+                    : "Close launcher when game starts:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.close_launcher_on_game_start ?? false}
                 onChange={(value: boolean) =>
                   updateSettings({ close_launcher_on_game_start: value })
                 }
               />
               <SettingsToggle
-                label="Проверять запущенные процессы игры:"
+                label={
+                  language === "ru"
+                    ? "Проверять запущенные процессы игры:"
+                    : "Check running game processes:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.check_game_processes ?? true}
                 onChange={(value: boolean) =>
                   updateSettings({ check_game_processes: value })
@@ -199,49 +240,122 @@ export function SettingsTab({
           )}
 
           {settingsTab === "versions" && (
-            <SettingsCard title="Версии Minecraft">
+            <SettingsCard title={language === "ru" ? "Версии Minecraft" : "Minecraft versions"}>
               <SettingsToggle
-                label="Показывать снапшоты:"
+                label={
+                  language === "ru"
+                    ? "Показывать снапшоты:"
+                    : "Show snapshot versions:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.show_snapshots ?? false}
                 onChange={(value: boolean) => updateSettings({ show_snapshots: value })}
               />
               <SettingsToggle
-                label="Показывать Alpha версии:"
+                label={
+                  language === "ru"
+                    ? "Показывать Alpha версии:"
+                    : "Show Alpha versions:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.show_alpha_versions ?? false}
                 onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
               />
             </SettingsCard>
           )}
 
-          {settingsTab === "notifications" && (
-            <SettingsCard title="Уведомления">
+          {settingsTab === "launcher" && (
+            <SettingsCard title={language === "ru" ? "Лаунчер" : "Launcher"}>
               <SettingsToggle
-                label="Новое обновление:"
+                label={
+                  language === "ru"
+                    ? "Новое обновление:"
+                    : "Notify about new launcher updates:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.notify_new_update ?? true}
                 onChange={(value: boolean) => updateSettings({ notify_new_update: value })}
               />
               <SettingsToggle
-                label="Новое сообщение:"
+                label={
+                  language === "ru"
+                    ? "Новое сообщение:"
+                    : "Notify about new messages:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.notify_new_message ?? true}
                 onChange={(value: boolean) => updateSettings({ notify_new_message: value })}
               />
               <SettingsToggle
-                label="Системное сообщение:"
+                label={
+                  language === "ru"
+                    ? "Системное сообщение:"
+                    : "Notify about system messages:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.notify_system_message ?? true}
                 onChange={(value: boolean) => updateSettings({ notify_system_message: value })}
               />
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <span className="text-sm text-white/90">
+                  {language === "ru" ? "Язык интерфейса:" : "Interface language:"}
+                </span>
+                <div className="flex rounded-full bg-white/10 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setLanguage("ru")}
+                    className={`interactive-press min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      language === "ru"
+                        ? "bg-white text-black shadow-soft"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    Русский
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLanguage("en")}
+                    className={`interactive-press min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      language === "en"
+                        ? "bg-white text-black shadow-soft"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    English
+                  </button>
+                </div>
+              </div>
             </SettingsCard>
           )}
 
           {settingsTab === "updates" && (
-            <SettingsCard title="Обновления лаунчера">
+            <SettingsCard
+              title={language === "ru" ? "Обновления лаунчера" : "Launcher updates"}
+            >
               <SettingsToggle
-                label="Проверять обновления при запуске:"
+                label={
+                  language === "ru"
+                    ? "Проверять обновления при запуске:"
+                    : "Check for updates on start:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.check_updates_on_start ?? true}
                 onChange={(value: boolean) => updateSettings({ check_updates_on_start: value })}
               />
               <SettingsToggle
-                label="Автоматически устанавливать обновления:"
+                label={
+                  language === "ru"
+                    ? "Автоматически устанавливать обновления:"
+                    : "Automatically install updates:"
+                }
+                yesLabel={language === "ru" ? "Да" : "Yes"}
+                noLabel={language === "ru" ? "Нет" : "No"}
                 value={settings?.auto_install_updates ?? false}
                 onChange={(value: boolean) =>
                   updateSettings({ auto_install_updates: value })
@@ -253,16 +367,18 @@ export function SettingsTab({
                   onClick={handleManualUpdateCheck}
                   className="interactive-press mt-1 inline-flex w-full items-center justify-center rounded-2xl bg-accentBlue px-6 py-3 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
                 >
-                  Проверить обновления
+                  {language === "ru" ? "Проверить обновления" : "Check for updates"}
                 </button>
               </div>
             </SettingsCard>
           )}
 
           {settingsTab === "directories" && (
-            <SettingsCard title="Директории">
+            <SettingsCard title={language === "ru" ? "Директории" : "Directories"}>
               <p className="text-sm text-white/70">
-                Настройки директорий будут добавлены позже.
+                {language === "ru"
+                  ? "Настройки директорий будут добавлены позже."
+                  : "Directory settings will be added later."}
               </p>
             </SettingsCard>
           )}
@@ -280,11 +396,23 @@ export function SettingsTab({
           />
           {(
             [
-              { id: "directories", label: "Директории" },
-              { id: "game", label: "Игра" },
-              { id: "versions", label: "Версии" },
-              { id: "notifications", label: "Уведомления" },
-              { id: "updates", label: "Обновления" },
+              {
+                id: "directories",
+                label: language === "ru" ? "Директории" : "Directories",
+              },
+              { id: "game", label: language === "ru" ? "Игра" : "Game" },
+              {
+                id: "versions",
+                label: language === "ru" ? "Версии" : "Versions",
+              },
+              {
+                id: "launcher",
+                label: language === "ru" ? "Лаунчер" : "Launcher",
+              },
+              {
+                id: "updates",
+                label: language === "ru" ? "Обновления" : "Updates",
+              },
             ] as { id: SettingsTabId; label: string }[]
           ).map((tab) => {
             const active = settingsTab === tab.id;

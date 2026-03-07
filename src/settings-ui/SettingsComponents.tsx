@@ -4,12 +4,16 @@ export type SettingsToggleProps = {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  yesLabel?: string;
+  noLabel?: string;
 };
 
 export const SettingsToggle: React.FC<SettingsToggleProps> = ({
   label,
   value,
   onChange,
+  yesLabel = "Да",
+  noLabel = "Нет",
 }) => {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -24,7 +28,7 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
               : "text-white/60 hover:text-white"
           }`}
         >
-          Да
+          {yesLabel}
         </button>
         <button
           type="button"
@@ -35,7 +39,7 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
               : "text-white/60 hover:text-white"
           }`}
         >
-          Нет
+          {noLabel}
         </button>
       </div>
     </div>

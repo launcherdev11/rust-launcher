@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 type ModrinthContentType = "mod" | "resourcepack" | "shader";
+type Language = "ru" | "en";
 
 type ModrinthProjectType = "mod" | "modpack" | "resourcepack" | "shader";
 
@@ -47,6 +48,7 @@ type NotificationKind = "info" | "success" | "error" | "warning";
 
 type ModsTabProps = {
   showNotification: (kind: NotificationKind, message: string) => void;
+  language: Language;
 };
 
 function DownloadStatIcon() {
@@ -71,7 +73,7 @@ function HeartStatIcon() {
   );
 }
 
-export function ModsTab({ showNotification }: ModsTabProps) {
+export function ModsTab({ showNotification, language }: ModsTabProps) {
   const [modrinthContentType, setModrinthContentType] =
     useState<ModrinthContentType>("mod");
   const [modrinthSearch, setModrinthSearch] = useState("");
@@ -292,7 +294,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
           </svg>
           <input
             type="text"
-            placeholder="Поиск..."
+            placeholder={language === "ru" ? "Поиск..." : "Search..."}
             value={modrinthSearch}
             onChange={(e) => setModrinthSearch(e.target.value)}
             className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
@@ -300,7 +302,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
         </div>
         <div className="relative flex items-center gap-2 rounded-2xl border border-white/12 bg-black/40 px-3 py-2 shadow-soft backdrop-blur-xl">
           <span className="mr-1 text-[11px] uppercase tracking-[0.16em] text-gray-400">
-            Версия
+            {language === "ru" ? "Версия" : "Version"}
           </span>
           <div className="relative">
             <button
@@ -347,7 +349,9 @@ export function ModsTab({ showNotification }: ModsTabProps) {
             >
               <span>
                 {modrinthLoader === "any"
-                  ? "Любой"
+                  ? language === "ru"
+                    ? "Любой"
+                    : "Any"
                   : modrinthLoader === "forge"
                     ? "Forge"
                     : modrinthLoader === "fabric"
@@ -365,7 +369,10 @@ export function ModsTab({ showNotification }: ModsTabProps) {
                   { id: "fabric", label: "Fabric" },
                   { id: "quilt", label: "Quilt" },
                   { id: "neoforge", label: "NeoForge" },
-                  { id: "any", label: "Все" },
+                  {
+                    id: "any",
+                    label: language === "ru" ? "Все" : "All",
+                  },
                 ].map((opt) => (
                   <button
                     key={opt.id}
@@ -406,10 +413,16 @@ export function ModsTab({ showNotification }: ModsTabProps) {
             (kind) => {
               const label =
                 kind === "mod"
-                  ? "Моды"
+                  ? language === "ru"
+                    ? "Моды"
+                    : "Mods"
                   : kind === "resourcepack"
-                    ? "Ресурсы"
-                    : "Шейдеры";
+                    ? language === "ru"
+                      ? "Ресурсы"
+                      : "Resources"
+                    : language === "ru"
+                      ? "Шейдеры"
+                      : "Shaders";
               const active = modrinthContentType === kind;
               return (
                 <button
@@ -436,11 +449,13 @@ export function ModsTab({ showNotification }: ModsTabProps) {
       <div className="relative z-10 flex min-h-0 flex-1 gap-4 pb-4">
         <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="mb-2 flex items-center justify-between text-xs text-white/60">
-            <span className="ml-1.5">
-              {modrinthLoading
-                ? "Загрузка популярных проектов…"
-                : ""}
-            </span>
+              <span className="ml-1.5">
+                {modrinthLoading
+                  ? language === "ru"
+                    ? "Загрузка популярных проектов…"
+                    : "Loading popular projects…"
+                  : ""}
+              </span>
             {modrinthError && (
               <span className="text-rose-300">{modrinthError}</span>
             )}
@@ -509,7 +524,9 @@ export function ModsTab({ showNotification }: ModsTabProps) {
             })}
             {!modrinthLoading && modrinthProjects.length === 0 && (
               <div className="rounded-2xl border border-dashed border-white/15 bg-black/30 px-4 py-6 text-center text-xs text-white/60">
-                Ничего не найдено для выбранных фильтров Modrinth.
+                {language === "ru"
+                  ? "Ничего не найдено для выбранных фильтров Modrinth."
+                  : "Nothing found for the selected Modrinth filters."}
               </div>
             )}
           </div>
@@ -519,7 +536,9 @@ export function ModsTab({ showNotification }: ModsTabProps) {
           <div className="mb-2 text-xs text-white/60">
             {modrinthSelectedProject
               ? ``
-              : "Выберите проект слева, чтобы посмотреть версии"}
+              : language === "ru"
+                ? "Выберите проект слева, чтобы посмотреть версии"
+                : "Select a project on the left to see versions"}
           </div>
           <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
             {modrinthVersionsLoading && (
@@ -569,21 +588,31 @@ export function ModsTab({ showNotification }: ModsTabProps) {
                             url: primaryFile.url,
                             filename: primaryFile.filename,
                           });
-                          showNotification(
-                            "success",
-                            `Файл ${primaryFile.filename} сохранён в папку ${
-                              modrinthContentType === "mod"
-                                ? "mods"
-                                : modrinthContentType === "resourcepack"
-                                  ? "resourcepacks"
-                                  : "shaderpacks"
-                            }.`,
-                          );
+                        showNotification(
+                          "success",
+                          language === "ru"
+                            ? `Файл ${primaryFile.filename} сохранён в папку ${
+                                modrinthContentType === "mod"
+                                  ? "mods"
+                                  : modrinthContentType === "resourcepack"
+                                    ? "resourcepacks"
+                                    : "shaderpacks"
+                              }.`
+                            : `File ${primaryFile.filename} saved to folder ${
+                                modrinthContentType === "mod"
+                                  ? "mods"
+                                  : modrinthContentType === "resourcepack"
+                                    ? "resourcepacks"
+                                    : "shaderpacks"
+                              }.`,
+                        );
                         } catch (e) {
                           const msg =
                             e instanceof Error
                               ? e.message
-                              : "Не удалось скачать файл Modrinth.";
+                              : language === "ru"
+                                ? "Не удалось скачать файл Modrinth."
+                                : "Failed to download Modrinth file.";
                           console.error(e);
                           showNotification("error", msg);
                         }
@@ -591,7 +620,9 @@ export function ModsTab({ showNotification }: ModsTabProps) {
                       className="interactive-press ml-2 inline-flex items-center justify-center rounded-full bg-accentBlue px-3 py-1 text-[11px] font-semibold text-white shadow-soft hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
                     >
                       <DownloadStatIcon />
-                      <span className="ml-1">Скачать</span>
+                      <span className="ml-1">
+                        {language === "ru" ? "Скачать" : "Download"}
+                      </span>
                     </button>
                   </div>
                 );
@@ -600,7 +631,9 @@ export function ModsTab({ showNotification }: ModsTabProps) {
               modrinthSelectedProject &&
               filteredModrinthVersions.length === 0 && (
                 <div className="py-8 text-center text-xs text-white/60">
-                  Для этого проекта нет доступных версий.
+                  {language === "ru"
+                    ? "Для этого проекта нет доступных версий."
+                    : "There are no available versions for this project."}
                 </div>
               )}
           </div>

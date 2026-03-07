@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
+type Language = "ru" | "en";
 
 type VersionSummary = {
   id: string;
@@ -41,6 +42,15 @@ type LauncherBannerResponse =
   | LauncherBannerData[]
   | { banners: LauncherBannerData[] };
 
+const BANNER_BASE_URL =
+  "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/";
+
+function resolveBannerImageUrl(url: string): string {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${BANNER_BASE_URL}${url.replace(/^\.?\//, "")}`;
+}
+
 type PlayTabProps = {
   versions: VersionItem[];
   selectedVersion: VersionItem | null;
@@ -62,6 +72,7 @@ type PlayTabProps = {
   isLoaderDropdownOpen: boolean;
   setIsLoaderDropdownOpen: (v: boolean) => void;
   handleOpenGameFolder: () => void;
+  language: Language;
 };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -93,6 +104,7 @@ export function PlayTab({
   isLoaderDropdownOpen,
   setIsLoaderDropdownOpen,
   handleOpenGameFolder,
+  language,
 }: PlayTabProps) {
   const [banners, setBanners] = useState<LauncherBannerData[]>([]);
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
@@ -114,10 +126,10 @@ export function PlayTab({
         setBannerError(false);
 
         const urls = [
-          // CDN, обычно меньше проблем с блокировками/CORS
-          "https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json",
-          // Прямой raw GitHub как запасной вариант
+          // Прямой raw GitHub — всегда свежий banner.json
           "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/banner.json",
+          // CDN как запасной вариант
+          "https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json",
         ];
 
         let lastError: unknown = null;
@@ -201,23 +213,32 @@ export function PlayTab({
         {bannerLoading ? (
           <div className="flex h-full w-full items-center justify-center">
             <span className="text-sm font-medium tracking-wide text-white/70">
-              Загрузка новостей лаунчера...
+              {language === "ru"
+                ? "Загрузка новостей лаунчера..."
+                : "Loading launcher news..."}
             </span>
           </div>
         ) : bannerError ? (
           <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
             <span className="text-sm font-medium tracking-wide text-red-300">
-              Не удалось загрузить баннер лаунчера.
+              {language === "ru"
+                ? "Не удалось загрузить баннер лаунчера."
+                : "Failed to load launcher banner."}
             </span>
             <span className="mt-1 text-xs text-white/60">
-              Проверь подключение к интернету или доступ к GitHub.
+              {language === "ru"
+                ? "Проверь подключение к интернету или доступ к GitHub."
+                : "Check your internet connection or access to GitHub."}
             </span>
           </div>
         ) : currentBanner ? (
           <>
             <img
-              src={currentBanner.imageUrl}
-              alt={currentBanner.title ?? "Баннер лаунчера"}
+              src={resolveBannerImageUrl(currentBanner.imageUrl)}
+              alt={
+                currentBanner.title ??
+                (language === "ru" ? "Баннер лаунчера" : "Launcher banner")
+              }
               className="absolute inset-0 h-full w-full object-cover"
             />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
@@ -241,7 +262,7 @@ export function PlayTab({
                     rel="noreferrer"
                     className="inline-flex items-center rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20"
                   >
-                    Подробнее
+                    {language === "ru" ? "Подробнее" : "Learn more"}
                     <span className="ml-1 text-[10px]">↗</span>
                   </a>
                 </div>
@@ -251,7 +272,9 @@ export function PlayTab({
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <span className="text-sm font-medium tracking-wide text-white/70">
-              Новости лаунчера и баннер игры
+              {language === "ru"
+                ? "Новости лаунчера и баннер игры"
+                : "Launcher news and game banner"}
             </span>
           </div>
         )}
@@ -262,7 +285,7 @@ export function PlayTab({
           <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8">
             <div className="relative flex flex-col text-left">
               <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
-                Версия
+                {language === "ru" ? "Версия" : "Version"}
               </span>
               <button
                 type="button"
@@ -276,8 +299,12 @@ export function PlayTab({
                   {selectedVersion
                     ? versionDisplayName(selectedVersion)
                     : versionsLoading
-                      ? "Загрузка..."
-                      : "Выберите версию"}
+                      ? language === "ru"
+                        ? "Загрузка..."
+                        : "Loading..."
+                      : language === "ru"
+                        ? "Выберите версию"
+                        : "Select version"}
                 </span>
                 <span className="shrink-0 text-xs text-gray-400">▾</span>
               </button>
@@ -319,14 +346,20 @@ export function PlayTab({
                       onClick={installPaused ? handleResumeInstall : handlePauseInstall}
                       className="interactive-press rounded-xl bg-accentBlue px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
                     >
-                      {installPaused ? "Продолжить" : "Пауза"}
+                      {installPaused
+                        ? language === "ru"
+                          ? "Продолжить"
+                          : "Resume"
+                        : language === "ru"
+                          ? "Пауза"
+                          : "Pause"}
                     </button>
                     <button
                       type="button"
                       onClick={handleCancelInstall}
                       className="interactive-press rounded-xl bg-red-600 px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-red-500"
                     >
-                      Отменить
+                      {language === "ru" ? "Отменить" : "Cancel"}
                     </button>
                   </div>
                   <div className="mt-1 w-full max-w-md">
@@ -347,7 +380,9 @@ export function PlayTab({
                     <div className="mt-1 text-center text-xs text-white/70">
                       {progress && progress.total > 0
                         ? `${Math.round(progress.percent)}%`
-                        : "Подготовка файлов..."}
+                        : language === "ru"
+                          ? "Подготовка файлов..."
+                          : "Preparing files..."}
                     </div>
                   </div>
                 </>
@@ -364,7 +399,7 @@ export function PlayTab({
 
             <div className="relative flex flex-col items-end text-right">
               <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
-                Загрузчик
+                {language === "ru" ? "Загрузчик" : "Loader"}
               </span>
               <div className="mt-1 flex items-center gap-2">
                 <button
@@ -408,12 +443,12 @@ export function PlayTab({
           <button
             type="button"
             onClick={handleOpenGameFolder}
-            title="Открыть папку игры"
+            title={language === "ru" ? "Открыть папку игры" : "Open game folder"}
             className="interactive-press pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
           >
             <img
               src="/launcher-assets/folder.png"
-              alt="Папка игры"
+              alt={language === "ru" ? "Папка игры" : "Game folder"}
               className="h-6 w-6 object-contain"
             />
           </button>
