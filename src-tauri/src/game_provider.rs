@@ -7,6 +7,7 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+use sysinfo::{System, ProcessesToUpdate};
 
 use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 
@@ -29,6 +30,121 @@ const FORGE_INSTALLER_BASE: &str = "https://maven.minecraftforge.net/net/minecra
 
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
 static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
+
+// ------------------------ Settings ------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    /// Объём ОЗУ для игры в мегабайтах.
+    pub ram_mb: u32,
+    /// Показывать консоль Java при запуске.
+    pub show_console_on_launch: bool,
+    /// Скрывать/закрывать лаунчер после успешного запуска игры.
+    pub close_launcher_on_game_start: bool,
+    /// Проверять запущенные процессы игры (javaw.exe) в фоне.
+    pub check_game_processes: bool,
+
+    /// Показывать снапшоты в списке версий.
+    pub show_snapshots: bool,
+    /// Показывать старые alpha‑версии в списке версий.
+    pub show_alpha_versions: bool,
+
+    /// Всплывающее уведомление о новом обновлении лаунчера.
+    pub notify_new_update: bool,
+    /// Всплывающее уведомление о новом сообщении.
+    pub notify_new_message: bool,
+    /// Всплывающее уведомление о системных событиях.
+    pub notify_system_message: bool,
+
+    /// Проверять обновления лаунчера при запуске.
+    pub check_updates_on_start: bool,
+    /// Автоматически устанавливать найденные обновления.
+    pub auto_install_updates: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            ram_mb: 4096,
+            show_console_on_launch: false,
+            close_launcher_on_game_start: false,
+            check_game_processes: true,
+            show_snapshots: false,
+            show_alpha_versions: false,
+            notify_new_update: true,
+            notify_new_message: true,
+            notify_system_message: true,
+            check_updates_on_start: true,
+            auto_install_updates: false,
+        }
+    }
+}
+
+fn settings_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("settings.json"))
+}
+
+pub(crate) fn load_settings_from_disk() -> Settings {
+    match settings_path()
+        .ok()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+    {
+        Some(text) => serde_json::from_str::<Settings>(&text).unwrap_or_default(),
+        None => Settings::default(),
+    }
+}
+
+#[tauri::command]
+pub fn get_system_memory_gb() -> Result<u64, String> {
+    let mut sys = System::new_all();
+    sys.refresh_memory();
+    let total_bytes = sys.total_memory();
+    if total_bytes == 0 {
+        return Err("Не удалось определить объём памяти системы".to_string());
+    }
+    let gb = total_bytes / (1024 * 1024 * 1024);
+    Ok(gb.max(1))
+}
+
+fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
+    let path = settings_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку настроек: {e}"))?;
+    }
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|e| format!("Ошибка сериализации настроек: {e}"))?;
+    std::fs::write(&path, text).map_err(|e| format!("Не удалось записать файл настроек: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_settings() -> Result<Settings, String> {
+    Ok(load_settings_from_disk())
+}
+
+#[tauri::command]
+pub fn set_settings(settings: Settings) -> Result<(), String> {
+    save_settings_to_disk(&settings)
+}
+
+fn is_javaw_process_running() -> bool {
+    let mut sys = System::new_all();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    for (_pid, process) in sys.processes() {
+        let name = process.name().to_string_lossy().to_ascii_lowercase();
+        if name.contains("javaw.exe") || name == "javaw" || name == "javaw.exe" {
+            return true;
+        }
+    }
+    false
+}
+
+#[tauri::command]
+pub fn is_game_running_now() -> Result<bool, String> {
+    Ok(is_javaw_process_running())
+}
 
 #[tauri::command]
 pub fn cancel_download() {
@@ -817,12 +933,65 @@ pub async fn open_game_folder() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn download_modrinth_file(
+    category: String,
+    url: String,
+    filename: String,
+) -> Result<(), String> {
+    let root = game_root_dir()?;
+    let subdir = match category.as_str() {
+        "mod" | "mods" => "mods",
+        "resourcepack" | "resourcepacks" => "resourcepacks",
+        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
+        other => {
+            return Err(format!(
+                "Неизвестный тип контента Modrinth: {other}. Ожидается mod, resourcepack или shader."
+            ))
+        }
+    };
+
+    let target_dir = root.join(subdir);
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|e| format!("Не удалось создать папку '{subdir}': {e}"))?;
+
+    let dest_path = target_dir.join(&filename);
+
+    let client = http_client();
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка загрузки файла Modrinth: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Сервер Modrinth вернул ошибку {} при скачивании файла.",
+            resp.status()
+        ));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+
+    tokio::fs::write(&dest_path, &bytes)
+        .await
+        .map_err(|e| format!("Не удалось сохранить файл в {:?}: {e}", dest_path))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn fetch_all_versions() -> Result<Vec<VersionSummary>, String> {
     load_all_versions().await
 }
 
 #[tauri::command]
 pub async fn fetch_vanilla_releases() -> Result<Vec<VersionSummary>, String> {
+    // Оставляем команду для совместимости, но теперь фильтруем
+    // только релизы, так как снапшоты/альфы обрабатываются на фронтенде.
     let mut versions = load_all_versions().await?;
     versions.retain(|v| v.version_type == "release");
     Ok(versions)
@@ -1819,6 +1988,7 @@ pub async fn install_version(
 
 #[tauri::command]
 pub async fn launch_game(
+    app: AppHandle,
     version_id: String,
     version_url: Option<String>,
 ) -> Result<(), String> {
@@ -2098,20 +2268,39 @@ pub async fn launch_game(
         // Старые версии без javaVersion всегда запускались на Java 8
         (8, "jre-legacy".to_string())
     };
-    let java_path = crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+    let mut java_path =
+        crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+
+    // Настройки запуска (память, консоль, поведение лаунчера).
+    let settings = load_settings_from_disk();
+
+    #[cfg(target_os = "windows")]
+    if settings.show_console_on_launch {
+        // Пытаемся заменить javaw.exe на java.exe, чтобы показать консоль.
+        if let Some(parent) = java_path.parent() {
+            let candidate = parent.join("java.exe");
+            if candidate.exists() {
+                java_path = candidate;
+            }
+        }
+    }
+
+    let ram_mb = settings.ram_mb.max(1024);
+    let xms = (ram_mb / 2).max(512);
+    let xmx = ram_mb;
 
     let mut jvm_args = if detail.arguments.game.is_empty() && detail.minecraft_arguments.is_some() {
         vec![
-            "-Xms1G".to_string(),
-            "-Xmx2G".to_string(),
+            format!("-Xms{}M", xms),
+            format!("-Xmx{}M", xmx),
             "-Djava.library.path=".to_string() + natives_str,
             "-cp".to_string(),
             classpath_str.clone(),
         ]
     } else if is_fabric {
         let mut base = vec![
-            "-Xms1G".to_string(),
-            "-Xmx2G".to_string(),
+            format!("-Xms{}M", xms),
+            format!("-Xmx{}M", xmx),
             "-Djava.library.path=".to_string() + natives_str,
             "-cp".to_string(),
             classpath_str.clone(),
@@ -2195,8 +2384,12 @@ pub async fn launch_game(
         .args(&game_args)
         .current_dir(game_dir_str);
 
-    cmd.spawn()
+    let _spawn_result = cmd.spawn()
         .map_err(|e| format!("Не удалось запустить игру (установите Java): {e}"))?;
+
+    if settings.close_launcher_on_game_start {
+        app.exit(0);
+    }
 
     Ok(())
 }

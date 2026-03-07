@@ -42,6 +42,41 @@ body {
   @apply text-accentGreen;
 }
 
+/* Лёгкая анимация нажатия для интерактивных элементов */
+.interactive-press {
+  transition:
+    transform 120ms ease-out,
+    box-shadow 140ms ease-out,
+    background-color 150ms ease-out,
+    color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.interactive-press:hover {
+  transform: translateY(-0.5px);
+}
+
+.interactive-press:active {
+  transform: scale(0.97) translateY(0.5px);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+/* Плавное появление содержимого вкладок / основных экранов */
+@keyframes tab-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tab-animate {
+  animation: tab-fade-in 180ms ease-out;
+}
+
 @keyframes notification-slide-down {
   from {
     opacity: 0;
@@ -53,7 +88,22 @@ body {
   }
 }
 
-.animate-notification-slide {
-  animation: notification-slide-down 0.2s ease-out;
+@keyframes notification-slide-up {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+.animate-notification-slide-in {
+  animation: notification-slide-down 0.18s ease-out forwards;
+}
+
+.animate-notification-slide-out {
+  animation: notification-slide-up 0.18s ease-in forwards;
 }
 
