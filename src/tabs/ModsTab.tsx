@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 type ModrinthContentType = "mod" | "resourcepack" | "shader";
@@ -142,9 +142,18 @@ export function ModsTab({ showNotification }: ModsTabProps) {
       setModrinthVersionsLoading(true);
       setModrinthError(null);
       try {
-        const response = await fetch(
-          `https://api.modrinth.com/v2/project/${projectId}/version`,
-        );
+        const params = new URLSearchParams();
+        if (modrinthGameVersion) {
+          params.set("game_versions", JSON.stringify([modrinthGameVersion]));
+        }
+        if (modrinthContentType === "mod" && modrinthLoader !== "any") {
+          params.set("loaders", JSON.stringify([modrinthLoader]));
+        }
+        const url = `https://api.modrinth.com/v2/project/${projectId}/version${
+          params.size > 0 ? `?${params.toString()}` : ""
+        }`;
+
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error(
             `Modrinth вернул ошибку ${response.status} при загрузке версий`,
@@ -162,7 +171,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
         setModrinthVersionsLoading(false);
       }
     },
-    [showNotification],
+    [modrinthContentType, modrinthGameVersion, modrinthLoader, showNotification],
   );
 
   useEffect(() => {
@@ -199,11 +208,15 @@ export function ModsTab({ showNotification }: ModsTabProps) {
         }
         const data: ModrinthSearchResponse = await response.json();
         setModrinthProjects(data.hits);
-        if (data.hits.length > 0) {
-          setModrinthSelectedProject(data.hits[0]);
-          void loadModrinthVersions(data.hits[0].project_id);
+
+        const nextSelected =
+          data.hits.find(
+            (p) => p.project_id === modrinthSelectedProject?.project_id,
+          ) ?? data.hits[0] ?? null;
+        setModrinthSelectedProject(nextSelected);
+        if (nextSelected) {
+          void loadModrinthVersions(nextSelected.project_id);
         } else {
-          setModrinthSelectedProject(null);
           setModrinthVersions([]);
         }
       } catch (e) {
@@ -228,6 +241,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
     modrinthGameVersion,
     modrinthLoader,
     modrinthSearch,
+    modrinthSelectedProject?.project_id,
     loadModrinthVersions,
     showNotification,
   ]);
@@ -247,6 +261,20 @@ export function ModsTab({ showNotification }: ModsTabProps) {
     window.addEventListener("resize", updateIndicator);
     return () => window.removeEventListener("resize", updateIndicator);
   }, [modrinthContentType]);
+
+  const filteredModrinthVersions = modrinthVersions.filter((v) => {
+    if (modrinthGameVersion && !v.game_versions.includes(modrinthGameVersion)) {
+      return false;
+    }
+    if (
+      modrinthContentType === "mod" &&
+      modrinthLoader !== "any" &&
+      !v.loaders.includes(modrinthLoader)
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div className="flex h-full w-full max-w-5xl flex-col">
@@ -368,7 +396,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
         </div>
         <div className="relative flex items-center gap-0 rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
           <div
-            className="pointer-events-none absolute top-1 bottom-1 rounded-lg bg-white/90 transition-all duration-200 ease-out"
+            className="pointer-events-none absolute top-1.5 bottom-1.5 rounded-lg bg-white/90 transition-all duration-200 ease-out"
             style={{
               left: `${modrinthIndicator.left}px`,
               width: `${modrinthIndicator.width}px`,
@@ -490,7 +518,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
         <div className="glass-panel relative z-0 flex w-80 min-h-0 flex-shrink-0 flex-col">
           <div className="mb-2 text-xs text-white/60">
             {modrinthSelectedProject
-              ? `Версии проекта ${modrinthSelectedProject.title}`
+              ? ``
               : "Выберите проект слева, чтобы посмотреть версии"}
           </div>
           <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
@@ -501,7 +529,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
             )}
             {!modrinthVersionsLoading &&
               modrinthSelectedProject &&
-              modrinthVersions.map((v) => {
+              filteredModrinthVersions.map((v) => {
                 const primaryFile =
                   v.files.find((f) => f.primary) ?? v.files[0];
                 return (
@@ -514,8 +542,14 @@ export function ModsTab({ showNotification }: ModsTabProps) {
                         {v.version_number}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-white/55">
-                        {v.game_versions.length > 0 && (
-                          <span>{v.game_versions.join(", ")}</span>
+                        {modrinthGameVersion ? (
+                          <span className="rounded-full bg-white/10 px-2 py-0.5">
+                            MC {modrinthGameVersion}
+                          </span>
+                        ) : (
+                          v.game_versions.length > 0 && (
+                            <span>{v.game_versions.join(", ")}</span>
+                          )
                         )}
                         {v.loaders.length > 0 && (
                           <span className="rounded-full bg-white/10 px-2 py-0.5">
@@ -564,7 +598,7 @@ export function ModsTab({ showNotification }: ModsTabProps) {
               })}
             {!modrinthVersionsLoading &&
               modrinthSelectedProject &&
-              modrinthVersions.length === 0 && (
+              filteredModrinthVersions.length === 0 && (
                 <div className="py-8 text-center text-xs text-white/60">
                   Для этого проекта нет доступных версий.
                 </div>

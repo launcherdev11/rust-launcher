@@ -49,6 +49,7 @@ export type SettingsSliderProps = {
   value: number;
   onChange: (value: number) => void;
   suffix?: string;
+  right?: React.ReactNode;
 };
 
 export const SettingsSlider: React.FC<SettingsSliderProps> = ({
@@ -58,17 +59,22 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
   value,
   onChange,
   suffix = "ГБ",
+  right,
 }) => {
   const normalized = Math.min(max, Math.max(min, value || min));
+  const percent =
+    max === min ? 100 : Math.min(100, Math.max(0, ((normalized - min) / (max - min)) * 100));
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-sm text-white/90">{label}</span>
-        <span className="text-sm font-semibold text-white/90">
-          {normalized}
-          {suffix}
-        </span>
+        {right ?? (
+          <span className="text-sm font-semibold text-white/90">
+            {normalized}
+            {suffix}
+          </span>
+        )}
       </div>
       <input
         type="range"
@@ -76,7 +82,10 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
         max={max}
         value={normalized}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-black/40 accent-[#2f7adf]"
+        style={{
+          background: `linear-gradient(to right, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.28) ${percent}%, rgba(0,0,0,0.40) ${percent}%, rgba(0,0,0,0.40) 100%)`,
+        }}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full accent-[#2f7adf]"
       />
     </div>
   );

@@ -984,6 +984,58 @@ pub async fn download_modrinth_file(
 }
 
 #[tauri::command]
+pub async fn import_modpack_files(
+    modpack_id: String,
+    category: String,
+    files: Vec<String>,
+) -> Result<(), String> {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let root = game_root_dir()?;
+    let modpacks_root = root.join("modpacks").join(&modpack_id);
+
+    let subdir = match category.as_str() {
+        "mod" | "mods" => "mods",
+        "resourcepack" | "resourcepacks" => "resourcepacks",
+        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
+        other => {
+            return Err(format!(
+                "Неизвестный тип контента сборки: {other}. Ожидается mod, resourcepack или shader."
+            ))
+        }
+    };
+
+    let target_dir = modpacks_root.join(subdir);
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|e| format!("Не удалось создать папку сборки '{subdir}': {e}"))?;
+
+    for src in files {
+        let src_path = PathBuf::from(&src);
+        if !src_path.exists() {
+            continue;
+        }
+        let file_name = match src_path.file_name().and_then(|n| n.to_str()) {
+            Some(name) if !name.is_empty() => name.to_string(),
+            _ => continue,
+        };
+        let dest_path = target_dir.join(&file_name);
+        if let Some(parent) = dest_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| format!("Не удалось создать папку для файла сборки: {e}"))?;
+        }
+        tokio::fs::copy(&src_path, &dest_path)
+            .await
+            .map_err(|e| format!("Не удалось скопировать файл сборки {:?}: {e}", src_path))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn fetch_all_versions() -> Result<Vec<VersionSummary>, String> {
     load_all_versions().await
 }
