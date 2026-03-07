@@ -5,7 +5,14 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+//import { check } from "@tauri-apps/plugin-updater";
 import "./App.css";
+import {
+  SettingsToggle,
+  SettingsSlider,
+  SettingsCard,
+} from "./settings-ui/SettingsComponents";
+import { ModsTab } from "./tabs/ModsTab";
 
 type Profile = {
   nickname: string;
@@ -16,6 +23,22 @@ type Profile = {
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt";
+
+type SettingsTabId = "directories" | "game" | "versions" | "notifications" | "updates";
+
+type Settings = {
+  ram_mb: number;
+  show_console_on_launch: boolean;
+  close_launcher_on_game_start: boolean;
+  check_game_processes: boolean;
+  show_snapshots: boolean;
+  show_alpha_versions: boolean;
+  notify_new_update: boolean;
+  notify_new_message: boolean;
+  notify_system_message: boolean;
+  check_updates_on_start: boolean;
+  auto_install_updates: boolean;
+};
 
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
@@ -115,18 +138,6 @@ function ModpackIcon() {
       aria-hidden="true"
     >
       <path d="M4 4h16v4h-2V6H6v12h4v2H4V4zm14 6v10H8V10h10zm-2 2h-6v6h6v-6z" />
-    </svg>
-  );
-}
-
-function AccountsIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-7 w-7 fill-current"
-      aria-hidden="true"
-    >
-      <path d="M9 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.23 0-6 1.12-6 3.33V19h9v-2.67C20 14.12 16.23 13 17 13Zm-8 1c-2.67 0-8 1.34-8 4v2h10v-2c0-2.66-5.33-4-8-4Z" />
     </svg>
   );
 }
@@ -242,6 +253,9 @@ function App() {
   const [installPaused, setInstallPaused] = useState(false);
   const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
+  const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
 
   const showNotification = useCallback((kind: NotificationKind, message: string) => {
     const id = Date.now() + Math.random();
@@ -250,6 +264,100 @@ function App() {
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     }, 4500);
   }, []);
+
+  const refreshSettings = useCallback(async () => {
+    try {
+      const s = await invoke<Settings>("get_settings");
+      setSettings(s);
+    } catch (e) {
+      console.error("Не удалось загрузить настройки:", e);
+      setSettings({
+        ram_mb: 4096,
+        show_console_on_launch: false,
+        close_launcher_on_game_start: false,
+        check_game_processes: true,
+        show_snapshots: false,
+        show_alpha_versions: false,
+        notify_new_update: true,
+        notify_new_message: true,
+        notify_system_message: true,
+        check_updates_on_start: true,
+        auto_install_updates: false,
+      });
+    }
+  }, []);
+
+  const updateSettings = useCallback(
+    async (patch: Partial<Settings>) => {
+      setSettings((prev) => {
+        const current =
+          prev ??
+          ({
+            ram_mb: 4096,
+            show_console_on_launch: false,
+            close_launcher_on_game_start: false,
+            check_game_processes: true,
+            show_snapshots: false,
+            show_alpha_versions: false,
+            notify_new_update: true,
+            notify_new_message: true,
+            notify_system_message: true,
+            check_updates_on_start: true,
+            auto_install_updates: false,
+          } satisfies Settings);
+        const next: Settings = { ...current, ...patch };
+        invoke("set_settings", { settings: next }).catch((e) =>
+          console.error("Не удалось сохранить настройки:", e),
+        );
+        return next;
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    (async () => {
+      await refreshSettings();
+      try {
+        const totalGb = await invoke<number>("get_system_memory_gb");
+        if (typeof totalGb === "number" && Number.isFinite(totalGb) && totalGb >= 1) {
+          setSystemMemoryGb(Math.max(1, Math.min(64, Math.round(totalGb))));
+        } else {
+          setSystemMemoryGb(16);
+        }
+      } catch {
+        setSystemMemoryGb(16);
+      }
+    })();
+  }, [refreshSettings]);
+
+  useEffect(() => {
+    if (activeItem === "settings") {
+      void refreshSettings();
+    }
+  }, [activeItem, refreshSettings]);
+
+  const handleManualUpdateCheck = useCallback(async () => {
+    try {
+      const update = await check();
+      if (!update) {
+        showNotification("info", "Новых обновлений не найдено.");
+        return;
+      }
+      if (settings?.auto_install_updates) {
+        await update.downloadAndInstall();
+        showNotification("success", "Обновление установлено. Перезапустите лаунчер.");
+      } else {
+        showNotification(
+          "info",
+          `Доступна новая версия лаунчера: ${update.version}. Установка будет предложена при следующем запуске.`,
+        );
+      }
+    } catch (e) {
+      console.error("Ошибка проверки обновлений:", e);
+      showNotification("error", "Не удалось проверить обновления.");
+    }
+  }, [settings?.auto_install_updates, showNotification]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -265,9 +373,17 @@ function App() {
           setVersions(result);
           setSelectedVersion(result.length > 0 ? result[0] : null);
         } else {
-          const result = await invoke<VersionSummary[]>("fetch_vanilla_releases");
-          setVersions(result);
-          setSelectedVersion(result.length > 0 ? result[0] : null);
+          const all = await invoke<VersionSummary[]>("fetch_all_versions");
+          const showSnapshots = settings?.show_snapshots ?? false;
+          const showAlpha = settings?.show_alpha_versions ?? false;
+          const filtered = all.filter((v) => {
+            if (v.version_type === "release") return true;
+            if (v.version_type === "snapshot") return showSnapshots;
+            if (v.version_type === "old_alpha" || v.version_type === "alpha") return showAlpha;
+            return false;
+          });
+          setVersions(filtered);
+          setSelectedVersion(filtered.length > 0 ? filtered[0] : null);
         }
       } catch (error) {
         console.error("Не удалось загрузить список версий:", error);
@@ -292,7 +408,7 @@ function App() {
         unlisten();
       }
     };
-  }, [loader]);
+  }, [loader, settings?.show_snapshots, settings?.show_alpha_versions]);
 
   useEffect(() => {
     if (
@@ -346,7 +462,6 @@ function App() {
     }
   }, [activeItem, loadProfile]);
 
-  // Сохраняем никнейм при уходе с вкладки «Аккаунты», чтобы не потерять ввод при переключении вкладки
   useEffect(() => {
     const prev = prevActiveItemRef.current;
     prevActiveItemRef.current = activeItem;
@@ -355,7 +470,6 @@ function App() {
     }
   }, [activeItem, profile.nickname, profile.avatar_path]);
 
-  // Автосохранение никнейма с задержкой, чтобы отображался в игре и не пропадал при смене вкладки
   useEffect(() => {
     const t = setTimeout(() => {
       const nick = profile.nickname.trim();
@@ -375,6 +489,7 @@ function App() {
     try {
       await invoke("set_profile", { nickname, avatar_path: profile.avatar_path });
       setProfile((prev) => ({ ...prev, nickname }));
+      showNotification("success", "Изменения сохранены!");
     } catch (e) {
       console.error(e);
       showNotification("error", "Не удалось сохранить никнейм.");
@@ -436,8 +551,10 @@ function App() {
     try {
       await invoke("ely_logout");
       await loadProfile();
+      showNotification("info", "Вы вышли из аккаунта Ely.by.");
     } catch (e) {
       console.error(e);
+      showNotification("error", "Не удалось выйти из аккаунта Ely.by.");
     }
   };
 
@@ -548,6 +665,7 @@ function App() {
     setInstallPaused(false);
     setIsInstalling(true);
     setProgress(null);
+    showNotification("info", "Загрузка началась!");
     try {
       try {
         await invoke("reset_download_cancel");
@@ -573,6 +691,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setFabricProfileId(profileId);
+        showNotification("success", "Загрузка завершена!");
         setIsInstalling(false);
         return;
       } else if (loader === "quilt" && !isForgeVersion(selectedVersion)) {
@@ -582,6 +701,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setQuiltProfileId(profileId);
+        showNotification("success", "Загрузка завершена!");
         setIsInstalling(false);
         return;
       } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
@@ -593,6 +713,7 @@ function App() {
         throw new Error("Неизвестный тип версии");
       }
 
+      showNotification("success", "Загрузка завершена!");
       setInstalledIds((prev) => {
         const next = new Set(prev);
         next.add(selectedVersion.id);
@@ -618,7 +739,7 @@ function App() {
       <div className="pointer-events-none absolute top-4 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4">
         {notifications.map((n) => {
           const baseClasses =
-            "pointer-events-auto flex max-w-xl items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium shadow-soft";
+            "pointer-events-auto flex max-w-xl items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-soft";
           let bgClasses = "";
           let iconSrc = "";
 
@@ -639,7 +760,7 @@ function App() {
           return (
             <div
               key={n.id}
-              className={`${baseClasses} ${bgClasses} animate-notification-slide`}
+              className={`${baseClasses} ${bgClasses} animate-notification-slide-in`}
             >
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/15">
                 <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
@@ -661,7 +782,7 @@ function App() {
           <button
             type="button"
             onClick={handleMinimize}
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
+            className="interactive-press flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
             data-no-drag
           >
             <MinimizeIcon />
@@ -669,7 +790,7 @@ function App() {
           <button
             type="button"
             onClick={handleToggleMaximize}
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
+            className="interactive-press flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
             data-no-drag
           >
             <MaximizeIcon />
@@ -677,7 +798,7 @@ function App() {
           <button
             type="button"
             onClick={handleClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
+            className="interactive-press flex h-7 w-7 items-center justify-center rounded-md bg-black/30 text-gray-300 hover:bg-black/50 hover:text-white"
             data-no-drag
           >
             <CloseIcon />
@@ -693,7 +814,7 @@ function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItem(item.id)}
-                className="group relative flex items-center"
+                className="interactive-press group relative flex items-center"
               >
                 {activeItem === item.id && (
                   <span className="absolute left-0 h-8 w-1 rounded-full bg-accentGreen" />
@@ -726,7 +847,7 @@ function App() {
             <button
               type="button"
               onClick={() => setActiveItem("accounts")}
-              className="group relative flex items-center justify-center w-full"
+              className="interactive-press group relative flex items-center justify-center w-full"
             >
               {activeItem === "accounts" && (
                 <span className="absolute left-0 h-8 w-1 rounded-full bg-accentGreen" />
@@ -742,7 +863,7 @@ function App() {
           </div>
         </aside>
 
-        <main className="flex flex-1 flex-col items-center justify-center px-6">
+        <main className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
           {activeItem === "accounts" ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-6">
               <div
@@ -752,7 +873,7 @@ function App() {
                 <button
                   type="button"
                   onClick={handleChooseAvatar}
-                  className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
+                  className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
                   title="Выбрать аватар"
                 >
                   {profile.avatar_path ? (
@@ -796,7 +917,7 @@ function App() {
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe]"
+                  className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe]"
                   title="Скоро"
                 >
                   <MicrosoftIcon />
@@ -806,7 +927,7 @@ function App() {
                   <button
                     type="button"
                     onClick={handleElyLogout}
-                    className="flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
+                    className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
                   >
                     <ElyByIcon />
                     <span>Выйти из Ely.by</span>
@@ -816,7 +937,7 @@ function App() {
                     type="button"
                     onClick={handleElyLogin}
                     disabled={elyLoading}
-                    className="flex items-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+                    className="interactive-press flex items-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
                   >
                     <ElyByIcon />
                     <span>{elyLoading ? "Ожидание входа…" : "Ely.by"}</span>
@@ -836,6 +957,214 @@ function App() {
                   </p>
                 </div>
               )}
+            </div>
+          ) : activeItem === "mods" ? (
+            <div className="flex w-full max-w-4xl flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
+              <ModsTab showNotification={showNotification} />
+            </div>
+          ) : activeItem === "modpacks" ? (
+            <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-4 py-12">
+              <div className="glass-panel w-full px-8 py-10 text-center">
+                <p className="text-base font-medium text-white/90">Сборки (модпаки)</p>
+                <p className="mt-2 text-sm text-white/60">Раздел в разработке. Скоро здесь можно будет устанавливать готовые сборки модов.</p>
+              </div>
+            </div>
+          ) : activeItem === "settings" ? (
+            <div className="flex w-full max-w-3xl flex-col gap-5">
+              <div className="glass-panel w-full px-6 py-5">
+                <h2 className="mb-4 text-base font-semibold text-white/90">
+                  Настройки лаунчера
+                </h2>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("directories")}
+                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      settingsTab === "directories"
+                        ? "bg-white/80 text-black"
+                        : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Директории
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("game")}
+                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      settingsTab === "game"
+                        ? "bg-white/80 text-black"
+                        : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Игра
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("versions")}
+                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      settingsTab === "versions"
+                        ? "bg-white/80 text-black"
+                        : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Версии
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("notifications")}
+                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      settingsTab === "notifications"
+                        ? "bg-white/80 text-black"
+                        : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Уведомления
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("updates")}
+                    className={`interactive-press rounded-full px-4 py-1.5 text-xs font-semibold ${
+                      settingsTab === "updates"
+                        ? "bg-white/80 text-black"
+                        : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Обновления
+                  </button>
+                </div>
+              </div>
+
+              <div className="glass-panel w-full px-6 py-5">
+                {settingsTab === "game" && (
+                  <>
+                    <SettingsCard title="Игра">
+                      <SettingsSlider
+                        label="Оперативная память:"
+                        min={1}
+                        max={systemMemoryGb}
+                        value={Math.round((settings?.ram_mb ?? 4096) / 1024)}
+                        onChange={(value) =>
+                          updateSettings({ ram_mb: Math.max(1, value) * 1024 })
+                        }
+                      />
+                      <SettingsToggle
+                        label="Консоль при запуске:"
+                        value={settings?.show_console_on_launch ?? false}
+                        onChange={(value) => updateSettings({ show_console_on_launch: value })}
+                      />
+                      <SettingsToggle
+                        label="Закрывать лаунчер при запуске игры:"
+                        value={settings?.close_launcher_on_game_start ?? false}
+                        onChange={(value) =>
+                          updateSettings({ close_launcher_on_game_start: value })
+                        }
+                      />
+                      <SettingsToggle
+                        label="Проверять запущенные процессы игры:"
+                        value={settings?.check_game_processes ?? true}
+                        onChange={(value) =>
+                          updateSettings({ check_game_processes: value })
+                        }
+                      />
+                    </SettingsCard>
+                  </>
+                )}
+
+                {settingsTab === "versions" && (
+                  <SettingsCard title="Версии Minecraft">
+                    <SettingsToggle
+                      label="Показывать снапшоты:"
+                      value={settings?.show_snapshots ?? false}
+                      onChange={(value) => updateSettings({ show_snapshots: value })}
+                    />
+                    <SettingsToggle
+                      label="Показывать Alpha версии:"
+                      value={settings?.show_alpha_versions ?? false}
+                      onChange={(value) => updateSettings({ show_alpha_versions: value })}
+                    />
+                  </SettingsCard>
+                )}
+
+                {settingsTab === "notifications" && (
+                  <SettingsCard title="Уведомления">
+                    <SettingsToggle
+                      label="Новое обновление:"
+                      value={settings?.notify_new_update ?? true}
+                      onChange={(value) => updateSettings({ notify_new_update: value })}
+                    />
+                    <SettingsToggle
+                      label="Новое сообщение:"
+                      value={settings?.notify_new_message ?? true}
+                      onChange={(value) => updateSettings({ notify_new_message: value })}
+                    />
+                    <SettingsToggle
+                      label="Системное сообщение:"
+                      value={settings?.notify_system_message ?? true}
+                      onChange={(value) => updateSettings({ notify_system_message: value })}
+                    />
+                  </SettingsCard>
+                )}
+
+                {settingsTab === "updates" && (
+                  <>
+                    <SettingsCard title="Обновления лаунчера">
+                      <SettingsToggle
+                        label="Проверять обновления при запуске:"
+                        value={settings?.check_updates_on_start ?? true}
+                        onChange={(value) => updateSettings({ check_updates_on_start: value })}
+                      />
+                      <SettingsToggle
+                        label="Автоматически устанавливать обновления:"
+                        value={settings?.auto_install_updates ?? false}
+                        onChange={(value) =>
+                          updateSettings({ auto_install_updates: value })
+                        }
+                      />
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleManualUpdateCheck}
+                          className="interactive-press mt-1 inline-flex w-full items-center justify-center rounded-2xl bg-accentBlue px-6 py-3 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
+                        >
+                          Проверить обновления
+                        </button>
+                      </div>
+                    </SettingsCard>
+                  </>
+                )}
+
+                {settingsTab === "directories" && (
+                  <SettingsCard title="Директории">
+                    <p className="text-sm text-white/70">
+                      Настройки директорий будут добавлены позже.
+                    </p>
+                  </SettingsCard>
+                )}
+              </div>
+
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="flex flex-1 justify-center gap-3">
+                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
+                    Директории
+                  </span>
+                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
+                    Игра
+                  </span>
+                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
+                    Версии
+                  </span>
+                  <span className="rounded-full bg-white/5 px-4 py-1 text-xs text-white/60">
+                    Уведомления
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSettingsTab("updates")}
+                  className="interactive-press flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+                >
+                  <span className="text-lg">➜</span>
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -858,7 +1187,7 @@ function App() {
                     onClick={() =>
                       setIsVersionDropdownOpen((current) => !current)
                     }
-                    className="mt-1 inline-flex max-w-[200px] items-center gap-2 truncate text-left text-sm font-semibold text-white/90 disabled:cursor-not-allowed disabled:text-white/40 sm:max-w-[240px]"
+                    className="interactive-press mt-1 inline-flex max-w-[200px] items-center gap-2 truncate text-left text-sm font-semibold text-white/90 disabled:cursor-not-allowed disabled:text-white/40 sm:max-w-[240px]"
                   >
                     <span className="min-w-0 truncate">
                       {selectedVersion
@@ -880,7 +1209,7 @@ function App() {
                             setSelectedVersion(v);
                             setIsVersionDropdownOpen(false);
                           }}
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                          className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
                             selectedVersion && selectedVersion.id === v.id
                               ? "bg-white/90 text-black"
                               : "text-white/80 hover:bg-white/10"
@@ -905,14 +1234,14 @@ function App() {
                         <button
                           type="button"
                           onClick={installPaused ? handleResumeInstall : handlePauseInstall}
-                          className="rounded-xl bg-accentBlue px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
+                          className="interactive-press rounded-xl bg-accentBlue px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
                         >
                           {installPaused ? "Продолжить" : "Пауза"}
                         </button>
                         <button
                           type="button"
                           onClick={handleCancelInstall}
-                          className="rounded-xl bg-red-600 px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-red-500"
+                          className="interactive-press rounded-xl bg-red-600 px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-red-500"
                         >
                           Отменить
                         </button>
@@ -935,7 +1264,7 @@ function App() {
                     <button
                       type="button"
                       onClick={handlePrimaryClick}
-                      className={`rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses}`}
+                      className={`interactive-press rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses}`}
                     >
                       {primaryLabel}
                     </button>
@@ -952,7 +1281,7 @@ function App() {
                       onClick={() =>
                         setIsLoaderDropdownOpen((current) => !current)
                       }
-                      className="inline-flex items-center gap-2 rounded-full bg-white/6 px-3 py-1 text-xs font-semibold text-white/90 hover:bg-white/15"
+                      className="interactive-press inline-flex items-center gap-2 rounded-full bg-white/6 px-3 py-1 text-xs font-semibold text-white/90 hover:bg-white/15"
                     >
                       {loaderLabels[loader]}
                       <span className="text-[10px] text-gray-400">▾</span>
@@ -971,7 +1300,7 @@ function App() {
                               setLoader(id);
                               setIsLoaderDropdownOpen(false);
                             }}
-                            className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                            className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
                               isActive
                                 ? "bg-white/90 text-black"
                                 : "text-white/80 hover:bg-white/10"
@@ -989,7 +1318,7 @@ function App() {
                 type="button"
                 onClick={handleOpenGameFolder}
                 title="Открыть папку игры"
-                className="pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
+                className="interactive-press pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
               >
                 <img
                   src="/launcher-assets/folder.png"
