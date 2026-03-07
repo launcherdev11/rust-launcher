@@ -34,7 +34,9 @@ type Profile = {
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
-type SettingsTabId = "directories" | "game" | "versions" | "notifications" | "updates";
+type SettingsTabId = "directories" | "game" | "versions" | "launcher" | "updates";
+
+type Language = "ru" | "en";
 
 type Settings = {
   ram_mb: number;
@@ -75,11 +77,6 @@ type VersionItem = VersionSummary | ForgeVersionSummary;
 
 function isForgeVersion(v: VersionItem): v is ForgeVersionSummary {
   return "forge_build" in v && "installer_url" in v;
-}
-
-function versionDisplayName(v: VersionItem): string {
-  if (isForgeVersion(v)) return `${v.mc_version} (Forge ${v.forge_build})`;
-  return v.id;
 }
 
 type DownloadProgressPayload = {
@@ -237,13 +234,6 @@ function MaximizeIcon() {
   );
 }
 
-const loaderLabels: Partial<Record<LoaderId, string>> = {
-  vanilla: "Vanilla",
-  fabric: "Fabric",
-  forge: "Forge",
-  quilt: "Quilt",
-};
-
 function App() {
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
   const sidebarRef = useRef<HTMLElement | null>(null);
@@ -298,6 +288,34 @@ function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
+  const [language, setLanguage] = useState<Language>("ru");
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("launcher_language");
+      if (saved === "ru" || saved === "en") {
+        setLanguage(saved);
+        return;
+      }
+      const browserLang =
+        typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "ru";
+      if (browserLang.startsWith("en")) {
+        setLanguage("en");
+      } else {
+        setLanguage("ru");
+      }
+    } catch {
+      setLanguage("ru");
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("launcher_language", language);
+    } catch {
+      // ignore
+    }
+  }, [language]);
 
   const showNotification = useCallback((kind: NotificationKind, message: string) => {
     const id = Date.now() + Math.random();
@@ -317,11 +335,14 @@ function App() {
   const showSettingsSavedNotification = useCallback(() => {
     setNotifications((prev) =>
       prev.filter(
-        (n) => !(n.kind === "success" && n.message === "Настройки сохранены!"),
+        (n) => !(n.kind === "success"),
       ),
     );
-    showNotification("success", "Настройки сохранены!");
-  }, [showNotification]);
+    showNotification(
+      "success",
+      language === "ru" ? "Настройки сохранены!" : "Settings saved!",
+    );
+  }, [language, showNotification]);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -529,10 +550,16 @@ function App() {
     try {
       await invoke("set_profile", { nickname, avatar_path: profile.avatar_path });
       setProfile((prev) => ({ ...prev, nickname }));
-      showNotification("success", "Изменения сохранены!");
+      showNotification(
+        "success",
+        language === "ru" ? "Изменения сохранены!" : "Changes saved!",
+      );
     } catch (e) {
       console.error(e);
-      showNotification("error", "Не удалось сохранить никнейм.");
+      showNotification(
+        "error",
+        language === "ru" ? "Не удалось сохранить никнейм." : "Failed to save nickname.",
+      );
     } finally {
       setProfileSaving(false);
     }
@@ -551,7 +578,10 @@ function App() {
       }
     } catch (e) {
       console.error(e);
-      showNotification("error", "Не удалось загрузить аватар.");
+      showNotification(
+        "error",
+        language === "ru" ? "Не удалось загрузить аватар." : "Failed to upload avatar.",
+      );
     }
   };
 
@@ -591,10 +621,16 @@ function App() {
     try {
       await invoke("ely_logout");
       await loadProfile();
-      showNotification("info", "Вы вышли из аккаунта Ely.by.");
+      showNotification(
+        "info",
+        language === "ru" ? "Вы вышли из аккаунта Ely.by." : "You have logged out of Ely.by.",
+      );
     } catch (e) {
       console.error(e);
-      showNotification("error", "Не удалось выйти из аккаунта Ely.by.");
+      showNotification(
+        "error",
+        language === "ru" ? "Не удалось выйти из аккаунта Ely.by." : "Failed to log out from Ely.by.",
+      );
     }
   };
 
@@ -610,8 +646,11 @@ function App() {
     : "bg-accentBlue hover:bg-sky-500";
 
   const primaryLabel = useMemo(() => {
-    return isInstalled ? "ИГРАТЬ" : "Установить";
-  }, [isInstalled]);
+    if (isInstalled) {
+      return language === "ru" ? "ИГРАТЬ" : "PLAY";
+    }
+    return language === "ru" ? "Установить" : "Install";
+  }, [isInstalled, language]);
 
   const handleOpenGameFolder = async () => {
     try {
@@ -619,7 +658,12 @@ function App() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("Не удалось открыть папку игры:", error);
-      showNotification("error", `Не удалось открыть папку: ${msg}`);
+      showNotification(
+        "error",
+        language === "ru"
+          ? `Не удалось открыть папку: ${msg}`
+          : `Failed to open folder: ${msg}`,
+      );
     }
   };
 
@@ -697,7 +741,10 @@ function App() {
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Ошибка запуска игры:", error);
-        showNotification("error", `Ошибка запуска: ${msg}`);
+        showNotification(
+          "error",
+          language === "ru" ? `Ошибка запуска: ${msg}` : `Launch error: ${msg}`,
+        );
       }
       return;
     }
@@ -762,7 +809,10 @@ function App() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("Ошибка установки версии:", error);
-      showNotification("error", `Ошибка установки: ${msg}`);
+        showNotification(
+          "error",
+          language === "ru" ? `Ошибка установки: ${msg}` : `Installation error: ${msg}`,
+        );
     } finally {
       setIsInstalling(false);
     }
@@ -930,7 +980,7 @@ function App() {
                   type="button"
                   onClick={handleChooseAvatar}
                   className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
-                  title="Выбрать аватар"
+                  title={language === "ru" ? "Выбрать аватар" : "Choose avatar"}
                 >
                   {profile.avatar_path ? (
                     <img
@@ -962,19 +1012,22 @@ function App() {
                   </div>
                   {profile.ely_username && (
                     <p className="mt-0.5 text-xs text-white/60">
-                      Вход: {profile.ely_username}
+                    {(language === "ru" ? "Вход: " : "Signed in as: ") +
+                      profile.ely_username}
                     </p>
                   )}
                 </div>
               </div>
               <p className="text-center text-sm text-white/80">
-                Настройте профиль и внешний вид под себя, войдя в систему.
+                {language === "ru"
+                  ? "Настройте профиль и внешний вид под себя, войдя в систему."
+                  : "Configure your profile and appearance after you sign in."}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
                   className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe]"
-                  title="Скоро"
+                  title={language === "ru" ? "Скоро" : "Coming soon"}
                 >
                   <MicrosoftIcon />
                   <span>Microsoft</span>
@@ -986,7 +1039,7 @@ function App() {
                     className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
                   >
                     <ElyByIcon />
-                    <span>Выйти из Ely.by</span>
+                    <span>{language === "ru" ? "Выйти из Ely.by" : "Log out of Ely.by"}</span>
                   </button>
                 ) : (
                   <button
@@ -996,27 +1049,37 @@ function App() {
                     className="interactive-press flex items-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
                   >
                     <ElyByIcon />
-                    <span>{elyLoading ? "Ожидание входа…" : "Ely.by"}</span>
+                    <span>
+                      {elyLoading
+                        ? language === "ru"
+                          ? "Ожидание входа…"
+                          : "Waiting for login…"
+                        : "Ely.by"}
+                    </span>
                   </button>
                 )}
               </div>
               {elyAuthUrl && (
                 <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
                   <p className="mb-1.5 text-xs font-medium text-amber-200">
-                    Если страница в браузере бесконечно грузится:
+                    {language === "ru"
+                      ? "Если страница в браузере бесконечно грузится:"
+                      : "If the page in your browser is loading forever:"}
                   </p>
                   <p className="break-all text-xs text-white/90">
                     {elyAuthUrl}
                   </p>
                   <p className="mt-1.5 text-[11px] text-white/60">
-                    Лучше открыть в новой вкладке того же браузера. В другом браузере Ely.by может показать «Invalid request».
+                    {language === "ru"
+                      ? "Лучше открыть в новой вкладке того же браузера. В другом браузере Ely.by может показать «Invalid request»."
+                      : "It is better to open it in a new tab of the same browser. In another browser Ely.by may show “Invalid request”."}
                   </p>
                 </div>
               )}
             </div>
           ) : activeItem === "mods" ? (
             <div className="flex w-full max-w-4xl flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
-              <ModsTab showNotification={showNotification} />
+              <ModsTab showNotification={showNotification} language={language} />
             </div>
           ) : activeItem === "modpacks" ? (
             <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
@@ -1033,6 +1096,8 @@ function App() {
               SettingsCard={SettingsCard}
               SettingsSlider={SettingsSlider}
               SettingsToggle={SettingsToggle}
+              language={language}
+              setLanguage={setLanguage}
             />
           ) : (
             <PlayTab
@@ -1056,6 +1121,7 @@ function App() {
               isLoaderDropdownOpen={isLoaderDropdownOpen}
               setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
               handleOpenGameFolder={handleOpenGameFolder}
+              language={language}
             />
           )}
         </main>
