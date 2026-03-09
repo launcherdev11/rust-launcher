@@ -1,13 +1,17 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
-use sysinfo::{System, ProcessesToUpdate};
+use sysinfo::{ProcessesToUpdate, System};
+use tauri::{AppHandle, Emitter, Manager};
+use std::env;
 
 use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 
@@ -30,6 +34,505 @@ const FORGE_INSTALLER_BASE: &str = "https://maven.minecraftforge.net/net/minecra
 
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
 static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
+
+pub const EVENT_GAME_CONSOLE_LINE: &str = "game-console-line";
+
+pub const EVENT_MRPACK_IMPORT_PROGRESS: &str = "mrpack-import-progress";
+
+// ------------------------ Microsoft / Minecraft (официальный аккаунт) ------------------------
+
+#[derive(Debug, Serialize)]
+struct XblUserAuthProperties {
+    #[serde(rename = "AuthMethod")]
+    auth_method: String,
+    #[serde(rename = "SiteName")]
+    site_name: String,
+    #[serde(rename = "RpsTicket")]
+    rps_ticket: String,
+}
+
+#[derive(Debug, Serialize)]
+struct XblUserAuthRequest {
+    #[serde(rename = "RelyingParty")]
+    relying_party: String,
+    #[serde(rename = "TokenType")]
+    token_type: String,
+    #[serde(rename = "Properties")]
+    properties: XblUserAuthProperties,
+}
+
+#[derive(Debug, Deserialize)]
+struct XblDisplayClaims {
+    xui: Vec<XblXuiEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct XblXuiEntry {
+    uhs: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct XblUserAuthResponse {
+    Token: String,
+    DisplayClaims: XblDisplayClaims,
+}
+
+#[derive(Debug, Serialize)]
+struct XstsProperties {
+    #[serde(rename = "SandboxId")]
+    sandbox_id: String,
+    #[serde(rename = "UserTokens")]
+    user_tokens: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct XstsAuthRequest {
+    #[serde(rename = "RelyingParty")]
+    relying_party: String,
+    #[serde(rename = "TokenType")]
+    token_type: String,
+    #[serde(rename = "Properties")]
+    properties: XstsProperties,
+}
+
+#[derive(Debug, Deserialize)]
+struct XstsAuthResponse {
+    Token: String,
+    DisplayClaims: XblDisplayClaims,
+}
+
+#[derive(Debug, Serialize)]
+struct McLoginWithXboxRequest {
+    identityToken: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct McLoginWithXboxResponse {
+    access_token: String,
+    expires_in: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct McProfile {
+    id: String,
+    name: String,
+}
+
+/// Пытаемся получить официальный Minecraft‑профиль через Microsoft / Xbox Live.
+/// Возвращает Some((name, uuid, access_token)) если всё успешно, иначе None.
+async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)>, String> {
+    let profile = get_profile().unwrap_or_default();
+    let msa_token = match profile.ms_access_token.clone() {
+        Some(t) if !t.is_empty() => t,
+        _ => return Ok(None),
+    };
+
+    let client = http_client();
+
+    // 1. Входим в Xbox Live с MSA токеном
+    let xbl_req = XblUserAuthRequest {
+        relying_party: "http://auth.xboxlive.com".to_string(),
+        token_type: "JWT".to_string(),
+        properties: XblUserAuthProperties {
+            auth_method: "RPS".to_string(),
+            site_name: "user.auth.xboxlive.com".to_string(),
+            rps_ticket: format!("d={}", msa_token),
+        },
+    };
+
+    let xbl_resp = client
+        .post("https://user.auth.xboxlive.com/user/authenticate")
+        .json(&xbl_req)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса Xbox Live user/authenticate: {e}"))?;
+
+    if !xbl_resp.status().is_success() {
+        let status = xbl_resp.status();
+        let text = xbl_resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
+        return Err(format!(
+            "Xbox Live user/authenticate вернул ошибку {}: {}",
+            status, text
+        ));
+    }
+
+    let xbl_body: XblUserAuthResponse = xbl_resp
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора ответа Xbox Live user/authenticate: {e}"))?;
+
+    let xbl_token = xbl_body.Token;
+    let uhs = xbl_body
+        .DisplayClaims
+        .xui
+        .get(0)
+        .map(|x| x.uhs.clone())
+        .ok_or_else(|| "Xbox Live ответ не содержит DisplayClaims.xui[0].uhs".to_string())?;
+
+    // 2. Получаем XSTS токен
+    let xsts_req = XstsAuthRequest {
+        relying_party: "rp://api.minecraftservices.com/".to_string(),
+        token_type: "JWT".to_string(),
+        properties: XstsProperties {
+            sandbox_id: "RETAIL".to_string(),
+            user_tokens: vec![xbl_token],
+        },
+    };
+
+    let xsts_resp = client
+        .post("https://xsts.auth.xboxlive.com/xsts/authorize")
+        .json(&xsts_req)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса XSTS authorize: {e}"))?;
+
+    if !xsts_resp.status().is_success() {
+        let status = xsts_resp.status();
+        let text = xsts_resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
+        return Err(format!("XSTS authorize вернул ошибку {}: {}", status, text));
+    }
+
+    let xsts_body: XstsAuthResponse = xsts_resp
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора ответа XSTS authorize: {e}"))?;
+
+    let xsts_token = xsts_body.Token;
+
+    // 3. Логинимся в Minecraft Services
+    let identity_token = format!("XBL3.0 x={};{}", uhs, xsts_token);
+    let mc_login_req = McLoginWithXboxRequest { identityToken: identity_token };
+
+    let mc_login_resp = client
+        .post("https://api.minecraftservices.com/authentication/login_with_xbox")
+        .json(&mc_login_req)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса Minecraft login_with_xbox: {e}"))?;
+
+    if !mc_login_resp.status().is_success() {
+        let status = mc_login_resp.status();
+        let text = mc_login_resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
+        return Err(format!(
+            "Minecraft login_with_xbox вернул ошибку {}: {}",
+            status, text
+        ));
+    }
+
+    let mc_login_body: McLoginWithXboxResponse = mc_login_resp
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора ответа Minecraft login_with_xbox: {e}"))?;
+
+    let mc_access_token = mc_login_body.access_token;
+
+    // (опционально можно проверить entitlements, здесь пропускаем)
+
+    // 4. Получаем Minecraft профиль
+    let mc_profile_resp = client
+        .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(&mc_access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса Minecraft profile: {e}"))?;
+
+    if !mc_profile_resp.status().is_success() {
+        let status = mc_profile_resp.status();
+        let text = mc_profile_resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
+        return Err(format!(
+            "Minecraft profile вернул ошибку {}: {}",
+            status, text
+        ));
+    }
+
+    let mc_profile: McProfile = mc_profile_resp
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора ответа Minecraft profile: {e}"))?;
+
+    Ok(Some((mc_profile.name, mc_profile.id, mc_access_token)))
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MrpackImportProgressPayload {
+    pub phase: String,
+    pub current: Option<u32>,
+    pub total: Option<u32>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct GameConsoleLinePayload {
+    pub line: String,
+    pub source: String,
+}
+
+// ------------------------ Java settings (launcher-level) ------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JavaSettings {
+    /// Включить использование пользовательских JVM‑аргументов из лаунчера.
+    pub use_custom_jvm_args: bool,
+    /// Явный путь к java/javaw. Если не задан, используется встроенный runtime Mojang.
+    pub java_path: Option<String>,
+    /// Минимальный объём памяти Xms (например, "1G" или "1024M").
+    pub xms: Option<String>,
+    /// Максимальный объём памяти Xmx (например, "4G" или "4096M").
+    pub xmx: Option<String>,
+    /// Дополнительные JVM‑аргументы (одна строка или несколько строк).
+    pub jvm_args: Option<String>,
+    /// Имя пресета ("balanced", "performance", "low_memory" и т.п.).
+    pub preset: Option<String>,
+}
+
+impl Default for JavaSettings {
+    fn default() -> Self {
+        Self {
+            use_custom_jvm_args: false,
+            java_path: None,
+            xms: None,
+            xmx: None,
+            jvm_args: None,
+            preset: Some("balanced".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JavaRuntimeInfo {
+    /// Полный путь к java/javaw.
+    pub path: String,
+    /// Строка с версией из `java -version`.
+    pub version: String,
+    /// Краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.).
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JavaArgsValidationResult {
+    pub ok: bool,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub output: String,
+}
+
+fn replace_basic_placeholders(
+    s: &str,
+    classpath_str: &str,
+    natives_str: &str,
+    game_dir_str: &str,
+    assets_str: &str,
+    version_id: &str,
+) -> String {
+    s.replace("${classpath}", classpath_str)
+        .replace("${natives}", natives_str)
+        .replace("${gameDir}", game_dir_str)
+        .replace("${assetsDir}", assets_str)
+        .replace("${version}", version_id)
+}
+
+fn parse_memory_spec_to_mb(raw: &str) -> Option<u32> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let (num_part, suffix) = s
+        .chars()
+        .partition::<String, _>(|c| c.is_ascii_digit());
+    if num_part.is_empty() {
+        return None;
+    }
+    let value: u64 = num_part.parse().ok()?;
+    let mb = match suffix.to_ascii_lowercase().as_str() {
+        "g" | "gb" => value.saturating_mul(1024),
+        "m" | "mb" | "" => value,
+        _ => return None,
+    };
+    if mb == 0 || mb > u32::MAX as u64 {
+        return None;
+    }
+    Some(mb as u32)
+}
+
+fn format_mb_to_spec(mb: u32) -> String {
+    if mb % 1024 == 0 {
+        format!("{}G", mb / 1024)
+    } else {
+        format!("{mb}M")
+    }
+}
+
+fn build_java_command(
+    default_java_path: PathBuf,
+    settings: &Settings,
+    instance_settings_for_launch: Option<&InstanceSettings>,
+    java_settings: &JavaSettings,
+    game_dir_str: &str,
+    natives_str: &str,
+    assets_str: &str,
+    version_id: &str,
+    classpath_str: &str,
+    mut jvm_args: Vec<String>,
+) -> Result<(PathBuf, Vec<String>), String> {
+    let mut java_path = if let Some(custom) = java_settings
+        .java_path
+        .as_ref()
+        .and_then(|s| if s.trim().is_empty() { None } else { Some(s) })
+    {
+        PathBuf::from(custom)
+    } else {
+        default_java_path
+    };
+
+    #[cfg(target_os = "windows")]
+    if settings.show_console_on_launch {
+        if let Some(parent) = java_path.parent() {
+            let candidate = parent.join("java.exe");
+            if candidate.exists() {
+                java_path = candidate;
+            }
+        }
+    }
+
+    // Базовые значения памяти по настройкам лаунчера.
+    let base_ram_mb = settings.ram_mb.max(1024);
+    let mut xms_mb = (base_ram_mb / 2).max(512);
+    let mut xmx_mb = base_ram_mb;
+
+    // Переопределение Xms/Xmx из JavaSettings (если указаны).
+    if let Some(ref xms_str) = java_settings.xms {
+        if let Some(mb) = parse_memory_spec_to_mb(xms_str) {
+            xms_mb = mb;
+        }
+    }
+    if let Some(ref xmx_str) = java_settings.xmx {
+        if let Some(mb) = parse_memory_spec_to_mb(xmx_str) {
+            xmx_mb = mb;
+        }
+    }
+
+    if xms_mb > xmx_mb {
+        std::mem::swap(&mut xms_mb, &mut xmx_mb);
+    }
+
+    // Ограничение по физической памяти: не больше total_ram - 2ГБ.
+    let mut sys = System::new_all();
+    sys.refresh_memory();
+    let total_mb: u64 = sys.total_memory() / 1024;
+    if total_mb > 0 {
+        let reserve_mb: u64 = 2048;
+        let hard_max = total_mb.saturating_sub(reserve_mb).max(1024);
+        if (xmx_mb as u64) > hard_max {
+            xmx_mb = hard_max as u32;
+            if xms_mb > xmx_mb {
+                xms_mb = xmx_mb;
+            }
+        }
+    }
+
+    let xms_flag = format!("-Xms{}", format_mb_to_spec(xms_mb));
+    let xmx_flag = format!("-Xmx{}", format_mb_to_spec(xmx_mb));
+
+    // Удаляем уже имеющиеся -Xms/-Xmx и подставляем новые в начало списка.
+    jvm_args.retain(|a| !a.starts_with("-Xms") && !a.starts_with("-Xmx"));
+    jvm_args.insert(0, xmx_flag.clone());
+    jvm_args.insert(0, xms_flag.clone());
+
+    let replace_basic = |s: &str| -> String {
+        replace_basic_placeholders(
+            s,
+            classpath_str,
+            natives_str,
+            game_dir_str,
+            assets_str,
+            version_id,
+        )
+    };
+
+    // Фильтрация пользовательских флагов (безопасность + защита обязательных аргументов).
+    let filter_tokens = |tokens: Vec<String>| -> Vec<String> {
+        const FORBIDDEN_PREFIXES: &[&str] = &["-agentlib:", "-agentpath:", "-Xrun", "-Xdebug"];
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < tokens.len() {
+            let a = tokens[i].trim().to_string();
+            if a.is_empty() {
+                i += 1;
+                continue;
+            }
+
+            if FORBIDDEN_PREFIXES.iter().any(|p| a.starts_with(p)) {
+                eprintln!("[JavaSettings] Запрещённый флаг пропущен: {}", a);
+                i += 1;
+                continue;
+            }
+
+            // Защита обязательных аргументов: -cp/-classpath и -Djava.library.path
+            if a == "-cp" || a == "-classpath" {
+                eprintln!("[JavaSettings] Пользовательский -cp/-classpath игнорирован (обязательный classpath задаётся лаунчером).");
+                i += 1;
+                if i < tokens.len() {
+                    i += 1; // пропускаем и значение
+                }
+                continue;
+            }
+            if a == "-Djava.library.path" {
+                eprintln!("[JavaSettings] Пользовательский -Djava.library.path игнорирован (обязательный natives задаётся лаунчером).");
+                i += 1;
+                if i < tokens.len() {
+                    i += 1;
+                }
+                continue;
+            }
+            if a.starts_with("-Djava.library.path=") {
+                eprintln!("[JavaSettings] Пользовательский -Djava.library.path=... игнорирован (обязательный natives задаётся лаунчером).");
+                i += 1;
+                continue;
+            }
+
+            out.push(replace_basic(&a));
+            i += 1;
+        }
+        out
+    };
+
+    // Дополнительные JVM‑аргументы профиля (instances).
+    if let Some(inst) = instance_settings_for_launch {
+        if let Some(extra) = &inst.jvm_args {
+            let parts: Vec<String> = extra
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
+            jvm_args.extend(filter_tokens(parts));
+        }
+    }
+
+    // Пользовательские JVM‑аргументы уровня лаунчера.
+    if java_settings.use_custom_jvm_args {
+        if let Some(extra) = &java_settings.jvm_args {
+            let parts: Vec<String> = extra
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
+            jvm_args.extend(filter_tokens(parts));
+        }
+    }
+
+    Ok((java_path, jvm_args))
+}
 
 // ------------------------ Settings ------------------------
 
@@ -85,6 +588,44 @@ fn settings_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("settings.json"))
 }
 
+fn java_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    match app.path().app_config_dir() {
+        Ok(base) => Ok(base.join("16Launcher").join("java-settings.json")),
+        Err(_) => Ok(launcher_data_dir()?.join("java-settings.json")),
+    }
+}
+
+fn load_java_settings_from_path(path: &Path) -> JavaSettings {
+    match std::fs::read_to_string(path).ok() {
+        Some(text) => serde_json::from_str::<JavaSettings>(&text).unwrap_or_default(),
+        None => JavaSettings::default(),
+    }
+}
+
+fn save_java_settings_to_path(path: &Path, settings: &JavaSettings) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку настроек Java: {e}"))?;
+    }
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|e| format!("Ошибка сериализации настроек Java: {e}"))?;
+    std::fs::write(path, text)
+        .map_err(|e| format!("Не удалось записать файл настроек Java: {e}"))?;
+    Ok(())
+}
+
+fn load_java_settings_internal(app: &AppHandle) -> JavaSettings {
+    match java_settings_path(app) {
+        Ok(path) => load_java_settings_from_path(&path),
+        Err(_) => JavaSettings::default(),
+    }
+}
+
+fn save_java_settings_internal(app: &AppHandle, settings: &JavaSettings) -> Result<(), String> {
+    let path = java_settings_path(app)?;
+    save_java_settings_to_path(&path, settings)
+}
+
 pub(crate) fn load_settings_from_disk() -> Settings {
     match settings_path()
         .ok()
@@ -129,12 +670,34 @@ pub fn set_settings(settings: Settings) -> Result<(), String> {
     save_settings_to_disk(&settings)
 }
 
+#[tauri::command]
+pub fn get_java_settings(app: AppHandle) -> Result<JavaSettings, String> {
+    Ok(load_java_settings_internal(&app))
+}
+
+#[tauri::command]
+pub fn set_java_settings(app: AppHandle, settings: JavaSettings) -> Result<(), String> {
+    save_java_settings_internal(&app, &settings)
+}
+
+/// Возвращает настройки с учётом переопределений конкретного профиля (блок «Игра»).
+#[tauri::command]
+pub fn get_effective_settings(profile_id: Option<String>) -> Result<Settings, String> {
+    Ok(effective_settings_for_profile_internal(profile_id))
+}
+
 fn is_javaw_process_running() -> bool {
     let mut sys = System::new_all();
     sys.refresh_processes(ProcessesToUpdate::All, true);
     for (_pid, process) in sys.processes() {
         let name = process.name().to_string_lossy().to_ascii_lowercase();
-        if name.contains("javaw.exe") || name == "javaw" || name == "javaw.exe" {
+        if name.contains("javaw.exe")
+            || name == "javaw"
+            || name == "javaw.exe"
+            || name.contains("java.exe")
+            || name == "java"
+            || name == "java.exe"
+        {
             return true;
         }
     }
@@ -154,6 +717,312 @@ pub fn cancel_download() {
 #[tauri::command]
 pub fn reset_download_cancel() {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+}
+
+/// Проверка java и пользовательских JVM‑аргументов через короткий запуск `java -XshowSettings:vm -version`.
+#[tauri::command]
+pub async fn validate_java_args(
+    java_path: Option<String>,
+    args: String,
+) -> Result<JavaArgsValidationResult, String> {
+    let mut warnings = Vec::new();
+    let mut errors = Vec::new();
+
+    let java_exe = java_path
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "java".to_string());
+
+    let mut cmd = std::process::Command::new(&java_exe);
+    cmd.arg("-XshowSettings:vm");
+    cmd.arg("-version");
+
+    // Простейший парсер: разбиваем по пробелам и переносам строк.
+    let user_args: Vec<String> = args
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
+    // Чёрный список опасных флагов, которые мы не передаём в java.
+    const FORBIDDEN_PREFIXES: &[&str] = &[
+        "-agentlib:",
+        "-agentpath:",
+        "-Xrun",
+        "-Xdebug",
+    ];
+    const FORBIDDEN_EQUALS: &[&str] = &[
+        "-XX:+DisableAttachMechanism",
+    ];
+
+    const EXPERIMENTAL_FLAGS: &[&str] = &[
+        "-XX:+AggressiveOpts",
+        "-XX:+UnlockExperimentalVMOptions",
+    ];
+
+    let mut filtered_args = Vec::new();
+    for a in &user_args {
+        let mut blocked = false;
+        for p in FORBIDDEN_PREFIXES {
+            if a.starts_with(p) {
+                blocked = true;
+                errors.push(format!("Флаг \"{a}\" не может быть использован по соображениям безопасности."));
+                break;
+            }
+        }
+        if blocked {
+            continue;
+        }
+        for eq in FORBIDDEN_EQUALS {
+            if a == eq {
+                blocked = true;
+                errors.push(format!("Флаг \"{a}\" не может быть использован по соображениям безопасности."));
+                break;
+            }
+        }
+        if blocked {
+            continue;
+        }
+
+        for exp in EXPERIMENTAL_FLAGS {
+            if a == exp {
+                warnings.push(format!(
+                    "Флаг \"{a}\" является экспериментальным и может вызывать нестабильность JVM."
+                ));
+            }
+        }
+
+        // Простое предупреждение для очень большого Xmx.
+        if let Some(rest) = a.strip_prefix("-Xmx") {
+            if let Some(mb) = parse_memory_spec_to_mb(rest) {
+                if mb > 64 * 1024 {
+                    warnings.push("Указан очень большой Xmx (более 64ГБ). Убедитесь, что это соответствует объёму вашей ОЗУ.".to_string());
+                }
+            }
+        }
+
+        filtered_args.push(a.clone());
+    }
+
+    cmd.args(&filtered_args);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Не удалось запустить Java для проверки: {e}"))?;
+
+    let mut combined = String::new();
+    combined.push_str(&String::from_utf8_lossy(&output.stdout));
+    if !output.stderr.is_empty() {
+        if !combined.is_empty() {
+            combined.push('\n');
+        }
+        combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
+
+    let ok = output.status.success() && errors.is_empty();
+    if !output.status.success() {
+        errors.push(format!("Команда Java завершилась с кодом: {}", output.status));
+    }
+
+    Ok(JavaArgsValidationResult {
+        ok,
+        warnings,
+        errors,
+        output: combined,
+    })
+}
+
+fn detect_java_version(path: &str, source: &str) -> Option<JavaRuntimeInfo> {
+    let mut cmd = std::process::Command::new(path);
+    cmd.arg("-version");
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let output = cmd.output().ok()?;
+    let text = if !output.stderr.is_empty() {
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    } else {
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+    let version_line = text.lines().next().unwrap_or("").trim();
+    if version_line.is_empty() {
+        return None;
+    }
+    Some(JavaRuntimeInfo {
+        path: path.to_string(),
+        version: version_line.to_string(),
+        source: source.to_string(),
+    })
+}
+
+/// Поиск доступных Java‑runtime на машине пользователя.
+#[tauri::command]
+pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut result = Vec::new();
+
+    // JAVA_HOME
+    if let Ok(home) = env::var("JAVA_HOME") {
+        let base = PathBuf::from(&home);
+        let cand_javaw = base.join("bin").join(if cfg!(target_os = "windows") {
+            "javaw.exe"
+        } else {
+            "java"
+        });
+        if cand_javaw.exists() {
+            if let Some(info) =
+                detect_java_version(cand_javaw.to_string_lossy().as_ref(), "JAVA_HOME")
+            {
+                if seen.insert(info.path.clone()) {
+                    result.push(info);
+                }
+            }
+        }
+    }
+
+    // Системная Java из PATH.
+    if let Some(info) = detect_java_version("java", "PATH") {
+        if seen.insert(info.path.clone()) {
+            result.push(info);
+        }
+    }
+
+    // На Windows попробуем напрямую javaw.exe.
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(info) = detect_java_version("javaw", "PATH") {
+            if seen.insert(info.path.clone()) {
+                result.push(info);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_spec_parsing_and_formatting() {
+        assert_eq!(parse_memory_spec_to_mb("1024M"), Some(1024));
+        assert_eq!(parse_memory_spec_to_mb("1G"), Some(1024));
+        assert_eq!(parse_memory_spec_to_mb("2g"), Some(2048));
+        assert_eq!(parse_memory_spec_to_mb(""), None);
+        assert_eq!(parse_memory_spec_to_mb("abc"), None);
+
+        assert_eq!(format_mb_to_spec(1024), "1G");
+        assert_eq!(format_mb_to_spec(1536), "1536M");
+    }
+
+    #[test]
+    fn placeholder_replacement_basic() {
+        let s = "-Dcp=${classpath} -Dn=${natives} -Dg=${gameDir} -Da=${assetsDir} -Dv=${version}";
+        let out = replace_basic_placeholders(
+            s,
+            "CP",
+            "NAT",
+            "GD",
+            "AS",
+            "1.20.1",
+        );
+        assert!(out.contains("CP"));
+        assert!(out.contains("NAT"));
+        assert!(out.contains("GD"));
+        assert!(out.contains("AS"));
+        assert!(out.contains("1.20.1"));
+    }
+
+    #[test]
+    fn save_and_load_java_settings_roundtrip() {
+        let tmp = std::env::temp_dir().join(format!(
+            "java-settings-test-{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        let s = JavaSettings {
+            use_custom_jvm_args: true,
+            java_path: Some("C:\\Java\\bin\\javaw.exe".to_string()),
+            xms: Some("1G".to_string()),
+            xmx: Some("4G".to_string()),
+            jvm_args: Some("-XX:+UseG1GC".to_string()),
+            preset: Some("balanced".to_string()),
+        };
+
+        save_java_settings_to_path(&tmp, &s).unwrap();
+        let loaded = load_java_settings_from_path(&tmp);
+        assert_eq!(loaded.use_custom_jvm_args, true);
+        assert_eq!(loaded.java_path.as_deref(), Some("C:\\Java\\bin\\javaw.exe"));
+        assert_eq!(loaded.xms.as_deref(), Some("1G"));
+        assert_eq!(loaded.xmx.as_deref(), Some("4G"));
+        assert_eq!(loaded.jvm_args.as_deref(), Some("-XX:+UseG1GC"));
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn build_java_command_filters_dangerous_and_required_overrides() {
+        let settings = Settings {
+            ram_mb: 4096,
+            show_console_on_launch: false,
+            close_launcher_on_game_start: false,
+            check_game_processes: true,
+            show_snapshots: false,
+            show_alpha_versions: false,
+            notify_new_update: true,
+            notify_new_message: true,
+            notify_system_message: true,
+            check_updates_on_start: true,
+            auto_install_updates: false,
+        };
+
+        let java_settings = JavaSettings {
+            use_custom_jvm_args: true,
+            java_path: None,
+            xms: Some("4G".to_string()),
+            xmx: Some("2G".to_string()), // намеренно наоборот
+            jvm_args: Some("-agentlib:jdwp=transport=dt_socket -cp HACK -Djava.library.path=HACK -Dg=${gameDir}".to_string()),
+            preset: None,
+        };
+
+        let base_jvm_args = vec![
+            "-Djava.library.path=C:\\natives".to_string(),
+            "-cp".to_string(),
+            "CP".to_string(),
+        ];
+
+        let (_java, args) = build_java_command(
+            PathBuf::from("java"),
+            &settings,
+            None,
+            &java_settings,
+            "C:\\game",
+            "C:\\natives",
+            "C:\\assets",
+            "1.20.1",
+            "CP",
+            base_jvm_args,
+        )
+        .unwrap();
+
+        // Xms/Xmx должны быть выставлены и нормализованы (Xms <= Xmx)
+        assert!(args[0].starts_with("-Xms"));
+        assert!(args[1].starts_with("-Xmx"));
+
+        // Запрещённые/опасные флаги должны быть удалены
+        assert!(!args.iter().any(|a| a.starts_with("-agentlib:")));
+
+        // Пользовательский -cp и -Djava.library.path не должны переопределять обязательные
+        let cp_count = args.iter().filter(|a| a.as_str() == "-cp").count();
+        assert_eq!(cp_count, 1);
+        assert!(args.iter().any(|a| a.starts_with("-Djava.library.path=")));
+
+        // Плейсхолдер gameDir должен заменяться
+        assert!(args.iter().any(|a| a.contains("C:\\game")));
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -448,6 +1317,20 @@ pub struct Profile {
     pub ely_client_token: Option<String>,
     #[serde(default)]
     pub ely_refresh_token: Option<String>,
+    // Данные сессии Microsoft (Azure / Xbox Live OAuth)
+    #[serde(default)]
+    pub ms_access_token: Option<String>,
+    #[serde(default)]
+    pub ms_refresh_token: Option<String>,
+    #[serde(default)]
+    pub ms_id_token: Option<String>,
+    // Официальные Minecraft‑данные, полученные через Microsoft / Xbox Live
+    #[serde(default)]
+    pub mc_uuid: Option<String>,
+    #[serde(default)]
+    pub mc_username: Option<String>,
+    #[serde(default)]
+    pub mc_access_token: Option<String>,
 }
 
 #[tauri::command]
@@ -503,6 +1386,1000 @@ pub fn save_avatar(source_path: String) -> Result<String, String> {
     let s = serde_json::to_string_pretty(&profile).map_err(|e| format!("{e}"))?;
     std::fs::write(&pp, s).map_err(|e| format!("{e}"))?;
     Ok(dest_str)
+}
+
+// ------------------------ Instances (Сборки профилей) ------------------------
+
+fn instances_root_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("instances"))
+}
+
+fn instance_dir(id: &str) -> Result<PathBuf, String> {
+    Ok(instances_root_dir()?.join(id))
+}
+
+fn instance_config_path(id: &str) -> Result<PathBuf, String> {
+    Ok(instance_dir(id)?.join("config.json"))
+}
+
+fn instance_settings_path(id: &str) -> Result<PathBuf, String> {
+    Ok(instance_dir(id)?.join("settings.json"))
+}
+
+fn selected_profile_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("selected_profile.json"))
+}
+
+fn generate_instance_id() -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(12)
+        .map(char::from)
+        .collect()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InstanceConfig {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub icon_path: Option<String>,
+    pub game_version: String,
+    /// vanilla | forge | fabric | quilt | neoforge
+    pub loader: String,
+    /// Unix‑timestamp (UTC seconds)
+    pub created_at: u64,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct InstanceSettings {
+    /// Переопределение объёма ОЗУ для конкретной сборки (в МБ).
+    pub ram_mb: Option<u32>,
+    /// Дополнительные JVM‑аргументы (одна строка, разделённая пробелами).
+    pub jvm_args: Option<String>,
+    /// Разрешение окна игры.
+    pub resolution_width: Option<u32>,
+    pub resolution_height: Option<u32>,
+    /// Показывать консоль при запуске.
+    pub show_console_on_launch: Option<bool>,
+    /// Закрывать лаунчер при запуске игры.
+    pub close_launcher_on_game_start: Option<bool>,
+    /// Проверять запущенные процессы игры.
+    pub check_game_processes: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct InstanceProfileSummary {
+    pub id: String,
+    pub name: String,
+    pub icon_path: Option<String>,
+    pub game_version: String,
+    pub loader: String,
+    pub created_at: u64,
+    pub mods_count: u32,
+    pub resourcepacks_count: u32,
+    pub shaderpacks_count: u32,
+    pub total_size_bytes: u64,
+    /// Абсолютный путь к папке сборки.
+    pub directory: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SelectedProfileFile {
+    pub id: String,
+}
+
+fn dir_size_and_count(root: &Path) -> (u64, u32) {
+    if !root.exists() {
+        return (0, 0);
+    }
+    let mut total_bytes = 0u64;
+    let mut files_count = 0u32;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(path) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&path) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_file() {
+                        total_bytes = total_bytes.saturating_add(meta.len());
+                        files_count = files_count.saturating_add(1);
+                    } else if meta.is_dir() {
+                        stack.push(p);
+                    }
+                }
+            }
+        }
+    }
+    (total_bytes, files_count)
+}
+
+fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, String> {
+    let root = instances_root_dir()?;
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&root)
+        .map_err(|e| format!("Ошибка чтения папки instances: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Ошибка чтения entry: {e}"))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let id = match path.file_name().and_then(|n| n.to_str()) {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => continue,
+        };
+        let config_path = path.join("config.json");
+        if !config_path.exists() {
+            continue;
+        }
+        let cfg_text = match std::fs::read_to_string(&config_path) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let cfg: InstanceConfig = match serde_json::from_str(&cfg_text) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let mods_dir = path.join("mods");
+        let res_dir = path.join("resourcepacks");
+        let shader_dir = path.join("shaderpacks");
+
+        let (mods_size, mods_count) = dir_size_and_count(&mods_dir);
+        let (res_size, res_count) = dir_size_and_count(&res_dir);
+        let (shader_size, shader_count) = dir_size_and_count(&shader_dir);
+
+        let total_size_bytes = mods_size
+            .saturating_add(res_size)
+            .saturating_add(shader_size);
+
+        let directory = match path.to_str() {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+
+        out.push(InstanceProfileSummary {
+            id: cfg.id,
+            name: cfg.name,
+            icon_path: cfg.icon_path,
+            game_version: cfg.game_version,
+            loader: cfg.loader,
+            created_at: cfg.created_at,
+            mods_count,
+            resourcepacks_count: res_count,
+            shaderpacks_count: shader_count,
+            total_size_bytes,
+            directory,
+        });
+    }
+
+    out.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    Ok(out)
+}
+
+fn read_selected_profile_id_internal() -> Option<String> {
+    let path = selected_profile_path().ok()?;
+    let text = std::fs::read_to_string(path).ok()?;
+    let obj: SelectedProfileFile = serde_json::from_str(&text).ok()?;
+    if obj.id.trim().is_empty() {
+        None
+    } else {
+        Some(obj.id)
+    }
+}
+
+fn load_selected_instance_settings_internal() -> Result<Option<(String, InstanceSettings)>, String> {
+    let id = match read_selected_profile_id_internal() {
+        Some(id) => id,
+        None => return Ok(None),
+    };
+    let path = instance_settings_path(&id)?;
+    let settings = if path.exists() {
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения настроек сборки: {e}"))?;
+        serde_json::from_str::<InstanceSettings>(&text)
+            .map_err(|e| format!("Ошибка разбора настроек сборки: {e}"))?
+    } else {
+        InstanceSettings::default()
+    };
+    Ok(Some((id, settings)))
+}
+
+fn effective_settings_for_launch() -> Settings {
+    effective_settings_for_profile_internal(read_selected_profile_id_internal())
+}
+
+fn effective_settings_for_profile_internal(profile_id: Option<String>) -> Settings {
+    let base = load_settings_from_disk();
+    let id = match profile_id {
+        Some(id) if !id.trim().is_empty() => id,
+        _ => return base,
+    };
+    let path = match instance_settings_path(&id) {
+        Ok(p) => p,
+        Err(_) => return base,
+    };
+    let inst: InstanceSettings = if path.exists() {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(_) => return base,
+        };
+        match serde_json::from_str(&text) {
+            Ok(s) => s,
+            Err(_) => return base,
+        }
+    } else {
+        return base;
+    };
+    let mut s = base;
+    if let Some(ram) = inst.ram_mb {
+        s.ram_mb = ram.max(512);
+    }
+    if let Some(v) = inst.show_console_on_launch {
+        s.show_console_on_launch = v;
+    }
+    if let Some(v) = inst.close_launcher_on_game_start {
+        s.close_launcher_on_game_start = v;
+    }
+    if let Some(v) = inst.check_game_processes {
+        s.check_game_processes = v;
+    }
+    s
+}
+
+fn selected_instance_dir_internal() -> Option<PathBuf> {
+    let id = read_selected_profile_id_internal()?;
+    let dir = instance_dir(&id).ok()?;
+    if dir.exists() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+pub fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
+    load_all_instance_profiles_internal()
+}
+
+fn create_profile_internal(
+    name: String,
+    game_version: String,
+    loader: String,
+    icon_source_path: Option<String>,
+) -> Result<InstanceProfileSummary, String> {
+    let root = instances_root_dir()?;
+    std::fs::create_dir_all(&root)
+        .map_err(|e| format!("Не удалось создать папку instances: {e}"))?;
+
+    let mut id = generate_instance_id();
+    while instance_dir(&id)?.exists() {
+        id = generate_instance_id();
+    }
+    let dir = instance_dir(&id)?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Не удалось создать папку сборки: {e}"))?;
+
+    for sub in ["mods", "resourcepacks", "shaderpacks"] {
+        let subdir = dir.join(sub);
+        std::fs::create_dir_all(&subdir)
+            .map_err(|e| format!("Не удалось создать папку '{sub}': {e}"))?;
+    }
+
+    let mut icon_path: Option<String> = None;
+    if let Some(src) = icon_source_path {
+        let src_path = PathBuf::from(&src);
+        if src_path.exists() {
+            let ext = src_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("png");
+            let dest = dir.join(format!("icon.{ext}"));
+            std::fs::copy(&src_path, &dest)
+                .map_err(|e| format!("Не удалось скопировать иконку сборки: {e}"))?;
+            icon_path = dest
+                .to_str()
+                .map(|s| s.to_string())
+                .or(icon_path);
+        }
+    }
+
+    let created_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| Duration::from_secs(0))
+        .as_secs();
+
+    let cfg = InstanceConfig {
+        id: id.clone(),
+        name: name.clone(),
+        icon_path: icon_path.clone(),
+        game_version: game_version.clone(),
+        loader: loader.clone(),
+        created_at,
+    };
+
+    let cfg_path = instance_config_path(&id)?;
+    let cfg_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json сборки: {e}"))?;
+    if let Some(parent) = cfg_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для config.json: {e}"))?;
+    }
+    std::fs::write(&cfg_path, cfg_text)
+        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+
+    let settings_path = instance_settings_path(&id)?;
+    if let Some(parent) = settings_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
+    }
+    let settings = InstanceSettings::default();
+    let settings_text = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
+    std::fs::write(&settings_path, settings_text)
+        .map_err(|e| format!("Не удалось записать settings.json сборки: {e}"))?;
+
+    let (mods_size, mods_count) = dir_size_and_count(&dir.join("mods"));
+    let (res_size, res_count) = dir_size_and_count(&dir.join("resourcepacks"));
+    let (shader_size, shader_count) = dir_size_and_count(&dir.join("shaderpacks"));
+    let total_size_bytes = mods_size
+        .saturating_add(res_size)
+        .saturating_add(shader_size);
+
+    let directory = dir
+        .to_str()
+        .ok_or("Путь к папке сборки не в UTF-8")?
+        .to_string();
+
+    Ok(InstanceProfileSummary {
+        id,
+        name,
+        icon_path,
+        game_version,
+        loader,
+        created_at,
+        mods_count,
+        resourcepacks_count: res_count,
+        shaderpacks_count: shader_count,
+        total_size_bytes,
+        directory,
+    })
+}
+
+#[tauri::command]
+pub fn create_profile(
+    name: String,
+    game_version: String,
+    loader: String,
+    icon_source_path: Option<String>,
+) -> Result<InstanceProfileSummary, String> {
+    create_profile_internal(name, game_version, loader, icon_source_path)
+}
+
+#[tauri::command]
+pub fn set_selected_profile(id: Option<String>) -> Result<(), String> {
+    let path = selected_profile_path()?;
+    if let Some(id) = id {
+        if id.trim().is_empty() {
+            if path.exists() {
+                std::fs::remove_file(&path)
+                    .map_err(|e| format!("Не удалось удалить selected_profile.json: {e}"))?;
+            }
+            return Ok(());
+        }
+        let obj = SelectedProfileFile { id };
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Не удалось создать папку для selected_profile.json: {e}"))?;
+        }
+        let text = serde_json::to_string_pretty(&obj)
+            .map_err(|e| format!("Ошибка сериализации selected_profile.json: {e}"))?;
+        std::fs::write(&path, text)
+            .map_err(|e| format!("Не удалось записать selected_profile.json: {e}"))?;
+    } else if path.exists() {
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Не удалось удалить selected_profile.json: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_profile(id: String) -> Result<(), String> {
+    let dir = instance_dir(&id)?;
+    if !dir.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+
+    if let Some(selected_id) = read_selected_profile_id_internal() {
+        if selected_id == id {
+            set_selected_profile(None)?;
+        }
+    }
+
+    std::fs::remove_dir_all(&dir)
+        .map_err(|e| format!("Не удалось удалить папку сборки {:?}: {e}", dir))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_selected_profile() -> Result<Option<InstanceProfileSummary>, String> {
+    let selected_id = match read_selected_profile_id_internal() {
+        Some(id) => id,
+        None => return Ok(None),
+    };
+    let all = load_all_instance_profiles_internal()?;
+    Ok(all.into_iter().find(|p| p.id == selected_id))
+}
+
+#[tauri::command]
+pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<(), String> {
+    let path = instance_settings_path(&id)?;
+    let mut current = if path.exists() {
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
+        serde_json::from_str::<InstanceSettings>(&text)
+            .map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
+    } else {
+        InstanceSettings::default()
+    };
+
+    if let Some(v) = patch.ram_mb {
+        current.ram_mb = Some(v);
+    }
+    if let Some(v) = patch.jvm_args {
+        current.jvm_args = Some(v);
+    }
+    if let Some(v) = patch.resolution_width {
+        current.resolution_width = Some(v);
+    }
+    if let Some(v) = patch.resolution_height {
+        current.resolution_height = Some(v);
+    }
+    if let Some(v) = patch.show_console_on_launch {
+        current.show_console_on_launch = Some(v);
+    }
+    if let Some(v) = patch.close_launcher_on_game_start {
+        current.close_launcher_on_game_start = Some(v);
+    }
+    if let Some(v) = patch.check_game_processes {
+        current.check_game_processes = Some(v);
+    }
+
+    let text = serde_json::to_string_pretty(&current)
+        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
+    }
+    std::fs::write(&path, text)
+        .map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rename_profile(id: String, name: String) -> Result<(), String> {
+    let cfg_path = instance_config_path(&id)?;
+    if !cfg_path.exists() {
+        return Err("config.json сборки не найден".to_string());
+    }
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json сборки: {e}"))?;
+    let mut cfg: InstanceConfig =
+        serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+    cfg.name = name;
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_item(id: String, category: String, filename: String) -> Result<(), String> {
+    let dir = instance_dir(&id)?;
+    if !dir.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+    let subdir = match category.as_str() {
+        "mod" | "mods" => "mods",
+        "resourcepack" | "resourcepacks" => "resourcepacks",
+        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
+        other => {
+            return Err(format!(
+                "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
+            ))
+        }
+    };
+    let target = dir.join(subdir).join(&filename);
+    if target.exists() {
+        std::fs::remove_file(&target)
+            .map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_profile_items(id: String, category: String) -> Result<Vec<String>, String> {
+    let dir = instance_dir(&id)?;
+    if !dir.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+    let subdir = match category.as_str() {
+        "mod" | "mods" => "mods",
+        "resourcepack" | "resourcepacks" => "resourcepacks",
+        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
+        other => {
+            return Err(format!(
+                "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
+            ))
+        }
+    };
+    let target_dir = dir.join(subdir);
+    if !target_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&target_dir)
+        .map_err(|e| format!("Ошибка чтения папки сборки: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Ошибка чтения файла сборки: {e}"))?;
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                files.push(name.to_string());
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+#[tauri::command]
+pub async fn add_profile_files(
+    id: String,
+    category: String,
+    files: Vec<String>,
+) -> Result<(), String> {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let root = instance_dir(&id)?;
+    if !root.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+
+    let subdir = match category.as_str() {
+        "mod" | "mods" => "mods",
+        "resourcepack" | "resourcepacks" => "resourcepacks",
+        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
+        other => {
+            return Err(format!(
+                "Неизвестная категория контента сборки: {other}. Ожидается mod, resourcepack или shader."
+            ))
+        }
+    };
+
+    let target_dir = root.join(subdir);
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|e| format!("Не удалось создать папку '{subdir}' для сборки: {e}"))?;
+
+    for src in files {
+        let src_path = PathBuf::from(&src);
+        if !src_path.exists() {
+            continue;
+        }
+        let file_name = match src_path.file_name().and_then(|n| n.to_str()) {
+            Some(name) if !name.is_empty() => name.to_string(),
+            _ => continue,
+        };
+        let dest_path = target_dir.join(&file_name);
+        if let Some(parent) = dest_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| format!("Не удалось создать папку для файла сборки: {e}"))?;
+        }
+        tokio::fs::copy(&src_path, &dest_path)
+            .await
+            .map_err(|e| format!("Не удалось скопировать файл сборки {:?}: {e}", src_path))?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct MrpackFileEntry {
+    path: String,
+    #[serde(default)]
+    downloads: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MrpackIndex {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    dependencies: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    files: Vec<MrpackFileEntry>,
+}
+
+fn mrpack_game_version_and_loader(deps: &std::collections::HashMap<String, String>) -> (String, String) {
+    let game = deps
+        .get("minecraft")
+        .map(String::as_str)
+        .unwrap_or("1.20.1");
+    let loader = if deps.contains_key("fabric-loader") {
+        "fabric"
+    } else if deps.contains_key("quilt-loader") {
+        "quilt"
+    } else if deps.contains_key("neoforge") || deps.contains_key("neo-forge") {
+        "neoforge"
+    } else if deps.contains_key("forge") {
+        "forge"
+    } else {
+        "vanilla"
+    };
+    (game.to_string(), loader.to_string())
+}
+
+fn resolve_file_path(path_or_uri: &str) -> PathBuf {
+    let s = path_or_uri.trim();
+    if s.starts_with("file:///") {
+        let path_part = s.strip_prefix("file:///").unwrap_or(s);
+        PathBuf::from(path_part.replace('/', std::path::MAIN_SEPARATOR_STR))
+    } else if s.starts_with("file://") {
+        let path_part = s.strip_prefix("file://").unwrap_or(s);
+        PathBuf::from(path_part.replace('/', std::path::MAIN_SEPARATOR_STR))
+    } else {
+        PathBuf::from(s)
+    }
+}
+
+#[tauri::command]
+pub async fn import_mrpack(
+    app: AppHandle,
+    profile_id: String,
+    mrpack_path: String,
+) -> Result<(), String> {
+    let _ = app.emit(
+        EVENT_MRPACK_IMPORT_PROGRESS,
+        MrpackImportProgressPayload {
+            phase: "start".to_string(),
+            current: None,
+            total: None,
+            message: None,
+        },
+    );
+
+    let dir = instance_dir(&profile_id)?;
+    if !dir.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+
+    let pack_path = resolve_file_path(&mrpack_path);
+    if !pack_path.exists() {
+        return Err("Файл .mrpack не найден".to_string());
+    }
+
+    let file = std::fs::File::open(&pack_path)
+        .map_err(|e| format!("Не удалось открыть .mrpack: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Ошибка чтения .mrpack: {e}"))?;
+
+    let _ = app.emit(
+        EVENT_MRPACK_IMPORT_PROGRESS,
+        MrpackImportProgressPayload {
+            phase: "overrides".to_string(),
+            current: None,
+            total: None,
+            message: None,
+        },
+    );
+
+    let mut index_json = None;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Ошибка чтения entry .mrpack: {e}"))?;
+        let name = entry.name().to_string();
+        if name == "modrinth.index.json" {
+            let mut buf = String::new();
+            use std::io::Read;
+            entry
+                .read_to_string(&mut buf)
+                .map_err(|e| format!("Ошибка чтения modrinth.index.json: {e}"))?;
+            index_json = Some(buf);
+        } else if name.starts_with("overrides/") && !name.ends_with('/') {
+            let rel = &name["overrides/".len()..];
+            if rel.is_empty() {
+                continue;
+            }
+            let dest = dir.join(rel);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Не удалось создать папку override: {e}"))?;
+            }
+            let mut out =
+                std::fs::File::create(&dest).map_err(|e| format!("Не удалось создать файл override: {e}"))?;
+            use std::io::Write;
+            std::io::copy(&mut entry, &mut out)
+                .map_err(|e| format!("Ошибка распаковки override: {e}"))?;
+        }
+    }
+
+    let Some(index_text) = index_json else {
+        // Пакет может не иметь modrinth.index.json — в этом случае просто распаковали overrides.
+        return Ok(());
+    };
+
+    let index: MrpackIndex =
+        serde_json::from_str(&index_text).map_err(|e| format!("Ошибка разбора modrinth.index.json: {e}"))?;
+
+    let files_to_download: Vec<_> = index
+        .files
+        .iter()
+        .filter(|f| !f.downloads.is_empty() && !f.downloads[0].is_empty())
+        .collect();
+    let total = files_to_download.len() as u32;
+
+    let _ = app.emit(
+        EVENT_MRPACK_IMPORT_PROGRESS,
+        MrpackImportProgressPayload {
+            phase: "files".to_string(),
+            current: Some(0),
+            total: Some(total),
+            message: None,
+        },
+    );
+
+    let client = http_client();
+
+    let mut current_file: u32 = 0;
+    for f in index.files.iter() {
+        if f.downloads.is_empty() {
+            continue;
+        }
+        let url = &f.downloads[0];
+        if url.is_empty() {
+            continue;
+        }
+        current_file += 1;
+        let filename = f.path.rsplit('/').next().unwrap_or(&f.path).to_string();
+        let _ = app.emit(
+            EVENT_MRPACK_IMPORT_PROGRESS,
+            MrpackImportProgressPayload {
+                phase: "files".to_string(),
+                current: Some(current_file),
+                total: Some(total),
+                message: Some(filename),
+            },
+        );
+        let dest = dir.join(&f.path);
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| format!("Не удалось создать папку для файла сборки: {e}"))?;
+        }
+        let resp = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("Ошибка скачивания файла из Modrinth: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!(
+                "Modrinth вернул ошибку {} при скачивании {}",
+                resp.status(),
+                url
+            ));
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+        tokio::fs::write(&dest, &bytes)
+            .await
+            .map_err(|e| format!("Не удалось сохранить файл сборки: {e}"))?;
+    }
+
+    Ok(())
+}
+
+/// Импортирует .mrpack в новую сборку: парсит версию игры и лоадер из пакета,
+/// создаёт сборку с именем пакета и подходящей версией, распаковывает туда пакет.
+#[tauri::command]
+pub async fn import_mrpack_as_new_profile(
+    app: AppHandle,
+    mrpack_path: String,
+) -> Result<InstanceProfileSummary, String> {
+    let _ = app.emit(
+        EVENT_MRPACK_IMPORT_PROGRESS,
+        MrpackImportProgressPayload {
+            phase: "start".to_string(),
+            current: None,
+            total: None,
+            message: None,
+        },
+    );
+
+    let pack_path = resolve_file_path(&mrpack_path);
+    if !pack_path.exists() {
+        return Err("Файл .mrpack не найден".to_string());
+    }
+
+    let file = std::fs::File::open(&pack_path)
+        .map_err(|e| format!("Не удалось открыть .mrpack: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Ошибка чтения .mrpack: {e}"))?;
+
+    let mut index_json = None;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Ошибка чтения entry .mrpack: {e}"))?;
+        if entry.name() == "modrinth.index.json" {
+            let mut buf = String::new();
+            use std::io::Read;
+            entry
+                .read_to_string(&mut buf)
+                .map_err(|e| format!("Ошибка чтения modrinth.index.json: {e}"))?;
+            index_json = Some(buf);
+            break;
+        }
+    }
+
+    let index_text = index_json.ok_or("В .mrpack нет modrinth.index.json".to_string())?;
+    let index: MrpackIndex =
+        serde_json::from_str(&index_text).map_err(|e| format!("Ошибка разбора modrinth.index.json: {e}"))?;
+
+    let (game_version, loader) = mrpack_game_version_and_loader(&index.dependencies);
+    let name = index
+        .name
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| {
+            pack_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Modpack")
+                .to_string()
+        });
+
+    let profile = create_profile_internal(name, game_version, loader, None)?;
+    let dir = instance_dir(&profile.id)?;
+
+    let _ = app.emit(
+        EVENT_MRPACK_IMPORT_PROGRESS,
+        MrpackImportProgressPayload {
+            phase: "overrides".to_string(),
+            current: None,
+            total: None,
+            message: None,
+        },
+    );
+
+    let file2 = std::fs::File::open(&pack_path)
+        .map_err(|e| format!("Не удалось открыть .mrpack: {e}"))?;
+    let mut archive2 =
+        zip::ZipArchive::new(file2).map_err(|e| format!("Ошибка чтения .mrpack: {e}"))?;
+
+    for i in 0..archive2.len() {
+        let mut entry = archive2
+            .by_index(i)
+            .map_err(|e| format!("Ошибка чтения entry .mrpack: {e}"))?;
+        let name_entry = entry.name().to_string();
+        if name_entry.starts_with("overrides/") && !name_entry.ends_with('/') {
+            let rel = &name_entry["overrides/".len()..];
+            if rel.is_empty() {
+                continue;
+            }
+            let dest = dir.join(rel);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Не удалось создать папку override: {e}"))?;
+            }
+            let mut out =
+                std::fs::File::create(&dest).map_err(|e| format!("Не удалось создать файл override: {e}"))?;
+            use std::io::Read;
+            std::io::copy(&mut entry, &mut out)
+                .map_err(|e| format!("Ошибка распаковки override: {e}"))?;
+        }
+    }
+
+    let files_to_download: Vec<_> = index
+        .files
+        .iter()
+        .filter(|f| !f.downloads.is_empty() && !f.downloads[0].is_empty())
+        .collect();
+    let total = files_to_download.len() as u32;
+
+    let _ = app.emit(
+        EVENT_MRPACK_IMPORT_PROGRESS,
+        MrpackImportProgressPayload {
+            phase: "files".to_string(),
+            current: Some(0),
+            total: Some(total),
+            message: None,
+        },
+    );
+
+    let client = http_client();
+    let mut current_file: u32 = 0;
+    for f in index.files.iter() {
+        if f.downloads.is_empty() || f.downloads[0].is_empty() {
+            continue;
+        }
+        current_file += 1;
+        let url = &f.downloads[0];
+        let filename = f.path.rsplit('/').next().unwrap_or(&f.path).to_string();
+        let _ = app.emit(
+            EVENT_MRPACK_IMPORT_PROGRESS,
+            MrpackImportProgressPayload {
+                phase: "files".to_string(),
+                current: Some(current_file),
+                total: Some(total),
+                message: Some(filename),
+            },
+        );
+        let dest = dir.join(&f.path);
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| format!("Не удалось создать папку для файла сборки: {e}"))?;
+        }
+        let resp = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("Ошибка скачивания файла из Modrinth: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!(
+                "Modrinth вернул ошибку {} при скачивании {}",
+                resp.status(),
+                url
+            ));
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+        tokio::fs::write(&dest, &bytes)
+            .await
+            .map_err(|e| format!("Не удалось сохранить файл сборки: {e}"))?;
+    }
+
+    let (mods_size, mods_count) = dir_size_and_count(&dir.join("mods"));
+    let (res_size, res_count) = dir_size_and_count(&dir.join("resourcepacks"));
+    let (shader_size, shader_count) = dir_size_and_count(&dir.join("shaderpacks"));
+    let total_size_bytes = mods_size
+        .saturating_add(res_size)
+        .saturating_add(shader_size);
+    let directory = dir
+        .to_str()
+        .ok_or("Путь к папке сборки не в UTF-8")?
+        .to_string();
+
+    Ok(InstanceProfileSummary {
+        id: profile.id,
+        name: profile.name,
+        icon_path: profile.icon_path,
+        game_version: profile.game_version,
+        loader: profile.loader,
+        created_at: profile.created_at,
+        mods_count,
+        resourcepacks_count: res_count,
+        shaderpacks_count: shader_count,
+        total_size_bytes,
+        directory,
+    })
 }
 
 fn libraries_dir() -> Result<PathBuf, String> {
@@ -2047,6 +3924,7 @@ pub async fn launch_game(
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
     let vers_root = versions_dir()?;
+    let game_dir = selected_instance_dir_internal().unwrap_or_else(|| root.clone());
 
     let (detail, is_fabric) = if let Some(ref url) = version_url {
         let client = http_client();
@@ -2156,8 +4034,10 @@ pub async fn launch_game(
         .collect::<Vec<_>>()
         .join(if os_name == "windows" { ";" } else { ":" });
 
-    let game_dir_str = root.to_str().ok_or("Путь к папке игры не в UTF-8")?;
-    let natives_dir = versions_dir()?.join(&version_id).join("natives");
+    let game_dir_str = game_dir
+        .to_str()
+        .ok_or("Путь к папке игры не в UTF-8")?;
+    let natives_dir = vers_root.join(&version_id).join("natives");
     std::fs::create_dir_all(&natives_dir)
         .map_err(|e| format!("Не удалось создать папку natives при запуске: {e}"))?;
     let native_classifier = match os_name {
@@ -2253,24 +4133,27 @@ pub async fn launch_game(
     }
 
     let profile = get_profile().unwrap_or_default();
-    let is_offline = profile
+
+    // Сначала считаем, что мы оффлайн / Ely.by (как раньше)
+    let mut is_offline = profile
         .ely_access_token
         .as_deref()
         .map(|s| s.is_empty() || s == "0")
         .unwrap_or(true);
-
-    let auth_name = profile
+    // Базово берём Ely.by / оффлайн данные
+    let mut auth_name: String = profile
         .ely_username
         .as_deref()
         .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
         .unwrap_or_else(|| {
             if profile.nickname.is_empty() {
-                "Player"
+                "Player".to_string()
             } else {
-                profile.nickname.as_str()
+                profile.nickname.clone()
             }
         });
-    let auth_uuid = profile
+    let mut auth_uuid: String = profile
         .ely_uuid
         .as_deref()
         .map(|u| {
@@ -2282,32 +4165,98 @@ pub async fn launch_game(
         })
         .unwrap_or_else(|| {
             if is_offline {
-                offline_uuid_from_username(auth_name)
+                offline_uuid_from_username(&auth_name)
             } else {
                 "00000000-0000-0000-0000-000000000000".to_string()
             }
         });
-    let auth_token = profile
+    let mut auth_token: String = profile
         .ely_access_token
         .as_deref()
         .filter(|s| !s.is_empty() && *s != "0")
-        .unwrap_or("offline");
-    let user_type = if is_offline { "legacy" } else { "msa" };
+        .unwrap_or("offline")
+        .to_string();
+    let mut user_type: String = if is_offline {
+        "legacy".to_string()
+    } else {
+        "msa".to_string()
+    };
+
+    // Если уже сохранены официальные Minecraft‑данные, используем их в приоритете
+    if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
+        profile.mc_username.as_ref(),
+        profile.mc_uuid.as_ref(),
+        profile.mc_access_token.as_ref(),
+    ) {
+        if !mc_access_token.is_empty() {
+            auth_name = mc_name.clone();
+            auth_uuid = if mc_uuid.contains('-') {
+                mc_uuid.clone()
+            } else if mc_uuid.len() == 32 {
+                format!(
+                    "{}-{}-{}-{}-{}",
+                    &mc_uuid[0..8],
+                    &mc_uuid[8..12],
+                    &mc_uuid[12..16],
+                    &mc_uuid[16..20],
+                    &mc_uuid[20..32]
+                )
+            } else {
+                mc_uuid.clone()
+            };
+            auth_token = mc_access_token.clone();
+            user_type = "msa".to_string();
+            is_offline = false;
+        }
+    }
+
+    // Если Minecraft‑данных ещё нет, но есть Microsoft‑аккаунт, пытаемся получить официальный профиль
+    if profile
+        .mc_access_token
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .is_none()
+        && profile.ms_access_token.is_some()
+    {
+        if let Ok(Some((mc_name, mc_uuid, mc_access_token))) = ensure_ms_minecraft_session().await {
+            auth_name = mc_name;
+            if mc_uuid.contains('-') {
+                auth_uuid = mc_uuid;
+            } else if mc_uuid.len() == 32 {
+                auth_uuid = format!(
+                    "{}-{}-{}-{}-{}",
+                    &mc_uuid[0..8],
+                    &mc_uuid[8..12],
+                    &mc_uuid[12..16],
+                    &mc_uuid[16..20],
+                    &mc_uuid[20..32]
+                );
+            } else {
+                auth_uuid = mc_uuid;
+            }
+            auth_token = mc_access_token;
+            user_type = "msa".to_string();
+            is_offline = false;
+        }
+    }
 
     let replace = |s: &str| -> String {
         s.replace("${game_directory}", game_dir_str)
             .replace("${gameDir}", game_dir_str)
+            .replace("${natives}", natives_str)
             .replace("${natives_directory}", natives_str)
             .replace("${classpath}", &classpath_str)
+            .replace("${assetsDir}", assets_str)
             .replace("${assets_root}", assets_str)
             .replace("${assets_index_name}", detail.assets.as_deref().unwrap_or(""))
             .replace("${version_name}", &version_id)
-            .replace("${auth_player_name}", auth_name)
+            .replace("${version}", &version_id)
+            .replace("${auth_player_name}", &auth_name)
             .replace("${auth_uuid}", &auth_uuid)
-            .replace("${auth_access_token}", auth_token)
+            .replace("${auth_access_token}", &auth_token)
             .replace("${clientid}", ELY_CLIENT_ID)
             .replace("${auth_xuid}", "")
-            .replace("${user_type}", user_type)
+            .replace("${user_type}", &user_type)
             .replace("${version_type}", "release")
             .replace("${is_demo_user}", "false")
             .replace("${launcher_name}", "16Launcher")
@@ -2320,80 +4269,87 @@ pub async fn launch_game(
         // Старые версии без javaVersion всегда запускались на Java 8
         (8, "jre-legacy".to_string())
     };
-    let mut java_path =
+    let default_java_path =
         crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
 
     // Настройки запуска (память, консоль, поведение лаунчера).
-    let settings = load_settings_from_disk();
+    let settings = effective_settings_for_launch();
+    let instance_settings_for_launch =
+        load_selected_instance_settings_internal()
+            .ok()
+            .flatten()
+            .map(|(_, s)| s);
 
-    #[cfg(target_os = "windows")]
-    if settings.show_console_on_launch {
-        // Пытаемся заменить javaw.exe на java.exe, чтобы показать консоль.
-        if let Some(parent) = java_path.parent() {
-            let candidate = parent.join("java.exe");
-            if candidate.exists() {
-                java_path = candidate;
-            }
-        }
-    }
-
-    let ram_mb = settings.ram_mb.max(1024);
-    let xms = (ram_mb / 2).max(512);
-    let xmx = ram_mb;
-
-    let mut jvm_args = if detail.arguments.game.is_empty() && detail.minecraft_arguments.is_some() {
-        vec![
-            format!("-Xms{}M", xms),
-            format!("-Xmx{}M", xmx),
-            "-Djava.library.path=".to_string() + natives_str,
-            "-cp".to_string(),
-            classpath_str.clone(),
-        ]
-    } else if is_fabric {
-        let mut base = vec![
-            format!("-Xms{}M", xms),
-            format!("-Xmx{}M", xmx),
-            "-Djava.library.path=".to_string() + natives_str,
-            "-cp".to_string(),
-            classpath_str.clone(),
-        ];
-        base.extend(
-            resolve_arguments(&detail.arguments.jvm, &features, &os_info)
-                .into_iter()
-                .map(|s| replace(&s)),
-        );
-        base
-    } else {
-        resolve_arguments(&detail.arguments.jvm, &features, &os_info)
-            .into_iter()
-            .map(|s| replace(&s))
-            .collect::<Vec<_>>()
+    // Функция подстановки плейсхолдеров в аргументах.
+    let replace = |s: &str| -> String {
+        s.replace("${game_directory}", game_dir_str)
+            .replace("${gameDir}", game_dir_str)
+            .replace("${natives_directory}", natives_str)
+            .replace("${classpath}", &classpath_str)
+            .replace("${assets_root}", assets_str)
+            .replace("${assets_index_name}", detail.assets.as_deref().unwrap_or(""))
+            .replace("${version_name}", &version_id)
+            .replace("${auth_player_name}", &auth_name)
+            .replace("${auth_uuid}", &auth_uuid)
+            .replace("${auth_access_token}", &auth_token)
+            .replace("${clientid}", ELY_CLIENT_ID)
+            .replace("${auth_xuid}", "")
+            .replace("${user_type}", &user_type)
+            .replace("${version_type}", "release")
+            .replace("${is_demo_user}", "false")
+            .replace("${launcher_name}", "16Launcher")
+            .replace("${launcher_version}", "1.0.4")
     };
 
-    if auth_token != "offline" && !auth_token.is_empty() {
-        match ensure_authlib_injector().await {
-            Ok(path) => {
-                let agent_path = path.to_string_lossy().replace('\\', "/");
-                eprintln!(
-                    "[ElyAuth] Используется authlib-injector: {}",
-                    agent_path
-                );
-                jvm_args.insert(0, format!("-javaagent:{}=ely.by", agent_path));
-            }
-            Err(e) => {
-                eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
-            }
-        }
-    }
+    // Базовые JVM‑аргументы Mojang/loader.
+    let mut jvm_args: Vec<String> =
+        if detail.arguments.game.is_empty() && detail.minecraft_arguments.is_some() {
+            vec![
+                "-Djava.library.path=".to_string() + natives_str,
+                "-cp".to_string(),
+                classpath_str.clone(),
+            ]
+        } else if is_fabric {
+            let mut base = vec![
+                "-Djava.library.path=".to_string() + natives_str,
+                "-cp".to_string(),
+                classpath_str.clone(),
+            ];
+            base.extend(
+                resolve_arguments(&detail.arguments.jvm, &features, &os_info)
+                    .into_iter()
+                    .map(|s| replace(&s)),
+            );
+            base
+        } else {
+            resolve_arguments(&detail.arguments.jvm, &features, &os_info)
+                .into_iter()
+                .map(|s| replace(&s))
+                .collect::<Vec<String>>()
+        };
 
-    let mut game_args = if let Some(ref legacy) = detail.minecraft_arguments {
-        legacy.split_whitespace().map(|s| replace(s).to_string()).collect::<Vec<_>>()
+    // Базовые игровые аргументы.
+    let mut game_args: Vec<String> = if let Some(ref legacy) = detail.minecraft_arguments {
+        legacy
+            .split_whitespace()
+            .map(|s| replace(s).to_string())
+            .collect::<Vec<String>>()
     } else {
         resolve_arguments(&detail.arguments.game, &features, &os_info)
             .into_iter()
             .map(|s| replace(&s))
-            .collect::<Vec<_>>()
+            .collect::<Vec<String>>()
     };
+
+    // Переопределение/расширение аргументов профиля (разрешение окна).
+    if let Some(inst) = &instance_settings_for_launch {
+        if let (Some(w), Some(h)) = (inst.resolution_width, inst.resolution_height) {
+            game_args.push("--width".to_string());
+            game_args.push(w.to_string());
+            game_args.push("--height".to_string());
+            game_args.push(h.to_string());
+        }
+    }
 
     if !features.is_demo_user {
         game_args.retain(|a| a != "--demo");
@@ -2425,6 +4381,39 @@ pub async fn launch_game(
         game_args = filtered;
     }
 
+    let java_settings = load_java_settings_internal(&app);
+
+    // Применяем настройки памяти/доп. аргументов Java.
+    let (java_path, mut jvm_args) = build_java_command(
+        default_java_path,
+        &settings,
+        instance_settings_for_launch.as_ref(),
+        &java_settings,
+        game_dir_str,
+        natives_str,
+        assets_str,
+        &version_id,
+        &classpath_str,
+        jvm_args,
+    )?;
+
+    // Ely.by / официальный Minecraft — при наличии токена добавляем authlib‑injector.
+    if auth_token != "offline" && !auth_token.is_empty() {
+        match ensure_authlib_injector().await {
+            Ok(path) => {
+                let agent_path = path.to_string_lossy().replace('\\', "/");
+                eprintln!(
+                    "[ElyAuth] Используется authlib-injector: {}",
+                    agent_path
+                );
+                jvm_args.insert(0, format!("-javaagent:{}=ely.by", agent_path));
+            }
+            Err(e) => {
+                eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
+            }
+        }
+    }
+
     eprintln!("[Launch] JVM args: {:?}", jvm_args);
     eprintln!("[Launch] Game args: {:?}", game_args);
 
@@ -2434,10 +4423,51 @@ pub async fn launch_game(
     cmd.args(&jvm_args)
         .arg(&detail.main_class)
         .args(&game_args)
-        .current_dir(game_dir_str);
+        .current_dir(game_dir_str)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
 
-    let _spawn_result = cmd.spawn()
+    let mut child = cmd
+        .spawn()
         .map_err(|e| format!("Не удалось запустить игру (установите Java): {e}"))?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                match line {
+                    Ok(text) => {
+                        let payload = GameConsoleLinePayload {
+                            line: text,
+                            source: "stdout".to_string(),
+                        };
+                        let _ = app_clone.emit(EVENT_GAME_CONSOLE_LINE, payload);
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+
+    if let Some(stderr) = child.stderr.take() {
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(text) => {
+                        let payload = GameConsoleLinePayload {
+                            line: text,
+                            source: "stderr".to_string(),
+                        };
+                        let _ = app_clone.emit(EVENT_GAME_CONSOLE_LINE, payload);
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
 
     if settings.close_launcher_on_game_start {
         app.exit(0);
