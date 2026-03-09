@@ -21,7 +21,8 @@ import {
 } from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
-import ModpackTab from "./tabs/ModpackTab";
+// @ts-ignore временно подавляем предупреждение о модуле ModpackTab для строгой проверки типов
+import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 
 type Profile = {
@@ -29,6 +30,7 @@ type Profile = {
   avatar_path: string | null;
   ely_username: string | null;
   ely_uuid: string | null;
+  ms_id_token: string | null;
 };
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
@@ -50,6 +52,13 @@ type Settings = {
   notify_system_message: boolean;
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
+};
+
+type InstanceProfileSummary = {
+  id: string;
+  name: string;
+  game_version: string;
+  loader: string;
 };
 
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
@@ -85,6 +94,17 @@ type DownloadProgressPayload = {
   total: number;
   percent: number;
 };
+
+type GameConsoleLinePayload = {
+  line: string;
+  source: "stdout" | "stderr";
+};
+
+type GameConsoleLine = GameConsoleLinePayload & {
+  id: number;
+};
+
+type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 
@@ -278,7 +298,13 @@ function App() {
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [fabricProfileId, setFabricProfileId] = useState<string | null>(null);
   const [quiltProfileId, setQuiltProfileId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile>({ nickname: "", avatar_path: null, ely_username: null, ely_uuid: null });
+  const [profile, setProfile] = useState<Profile>({
+    nickname: "",
+    avatar_path: null,
+    ely_username: null,
+    ely_uuid: null,
+    ms_id_token: null,
+  });
   const [elyLoading, setElyLoading] = useState(false);
   const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -289,6 +315,30 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>("ru");
+  const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>([]);
+  const [isConsoleVisible, setIsConsoleVisible] = useState(false);
+  const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
+  const lastRunningRef = useRef(false);
+  const [activeInstanceProfile, setActiveInstanceProfile] =
+    useState<InstanceProfileSummary | null>(null);
+
+  const handleModpackProfileSelectionChange = useCallback(
+    (
+      p: InstanceProfileSummary | (InstanceProfileSummary & { game_version: string; loader: string }) | null,
+    ) => {
+      setActiveInstanceProfile(
+        p
+          ? {
+              id: p.id,
+              name: p.name,
+              game_version: p.game_version,
+              loader: p.loader,
+            }
+          : null,
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     try {
@@ -310,12 +360,98 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const checkStatus = async () => {
+      try {
+        const running = await invoke<boolean>("is_game_running_now");
+        if (cancelled) return;
+
+        if (running) {
+          lastRunningRef.current = true;
+          setGameStatus("running");
+        } else {
+          if (lastRunningRef.current) {
+            lastRunningRef.current = false;
+            setGameStatus((prev) => {
+              const lastLine = consoleLines[consoleLines.length - 1]?.line ?? "";
+              const lower = lastLine.toLowerCase();
+              const looksCrash =
+                lower.includes("exception") ||
+                lower.includes("fatal") ||
+                lower.includes("crash") ||
+                lower.includes("ошибка");
+              if (looksCrash) return "crashed";
+              if (prev === "running") return "stopped";
+              return prev;
+            });
+          } else {
+            setGameStatus((prev) => (prev === "running" ? "stopped" : prev));
+          }
+        }
+      } catch {
+        // ignore errors
+      }
+    };
+
+    const id = window.setInterval(checkStatus, 4000);
+    void checkStatus();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [consoleLines]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem("launcher_language", language);
     } catch {
       // ignore
     }
   }, [language]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      try {
+        unlisten = await listen<GameConsoleLinePayload>("game-console-line", (event) => {
+          const payload = event.payload;
+          const text =
+            typeof payload === "string"
+              ? payload
+              : typeof payload.line === "string"
+                ? payload.line
+                : "";
+          if (!text) return;
+          const source: "stdout" | "stderr" =
+            typeof payload === "string"
+              ? "stdout"
+              : payload.source === "stderr"
+                ? "stderr"
+                : "stdout";
+          setConsoleLines((prev) => {
+            const next: GameConsoleLine[] = [
+              ...prev,
+              {
+                id: Date.now() + Math.random(),
+                line: text,
+                source,
+              },
+            ];
+            return next.length > 1000 ? next.slice(next.length - 1000) : next;
+          });
+        });
+      } catch (e) {
+        console.error("Не удалось подписаться на консоль игры:", e);
+      }
+    })();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const showNotification = useCallback((kind: NotificationKind, message: string) => {
     const id = Date.now() + Math.random();
@@ -344,54 +480,75 @@ function App() {
     );
   }, [language, showNotification]);
 
-  const refreshSettings = useCallback(async () => {
+  const defaultSettings: Settings = {
+    ram_mb: 4096,
+    show_console_on_launch: false,
+    close_launcher_on_game_start: false,
+    check_game_processes: true,
+    show_snapshots: false,
+    show_alpha_versions: false,
+    notify_new_update: true,
+    notify_new_message: true,
+    notify_system_message: true,
+    check_updates_on_start: true,
+    auto_install_updates: false,
+  };
+
+  const refreshSettings = useCallback(async (profileId?: string | null) => {
     try {
-      const s = await invoke<Settings>("get_settings");
+      const s =
+        profileId != null && profileId !== ""
+          ? await invoke<Settings>("get_effective_settings", { profileId })
+          : await invoke<Settings>("get_settings");
       setSettings(s);
     } catch (e) {
       console.error("Не удалось загрузить настройки:", e);
-      setSettings({
-        ram_mb: 4096,
-        show_console_on_launch: false,
-        close_launcher_on_game_start: false,
-        check_game_processes: true,
-        show_snapshots: false,
-        show_alpha_versions: false,
-        notify_new_update: true,
-        notify_new_message: true,
-        notify_system_message: true,
-        check_updates_on_start: true,
-        auto_install_updates: false,
-      });
+      setSettings(defaultSettings);
     }
   }, []);
 
   const updateSettings = useCallback(
-    async (patch: Partial<Settings>) => {
+    async (patch: Partial<Settings>, profileId?: string | null) => {
+      const gameFields = [
+        "ram_mb",
+        "show_console_on_launch",
+        "close_launcher_on_game_start",
+        "check_game_processes",
+      ] as const;
+      const hasGameField = gameFields.some((k) => k in patch && patch[k] !== undefined);
+      const useProfile = profileId != null && profileId !== "" && hasGameField;
+
       setSettings((prev) => {
-        const current =
-          prev ??
-          ({
-            ram_mb: 4096,
-            show_console_on_launch: false,
-            close_launcher_on_game_start: false,
-            check_game_processes: true,
-            show_snapshots: false,
-            show_alpha_versions: false,
-            notify_new_update: true,
-            notify_new_message: true,
-            notify_system_message: true,
-            check_updates_on_start: true,
-            auto_install_updates: false,
-          } satisfies Settings);
+        const current = prev ?? defaultSettings;
         const next: Settings = { ...current, ...patch };
-        invoke("set_settings", { settings: next })
-          .then(() => {
-            showSettingsSavedNotification();
-          })
-          .catch((e) => {
-            console.error("Не удалось сохранить настройки:", e);
-          });
+        if (useProfile) {
+          const profilePatch: Record<string, unknown> = {};
+          if (patch.ram_mb !== undefined) profilePatch.ram_mb = patch.ram_mb;
+          if (patch.show_console_on_launch !== undefined)
+            profilePatch.show_console_on_launch = patch.show_console_on_launch;
+          if (patch.close_launcher_on_game_start !== undefined)
+            profilePatch.close_launcher_on_game_start = patch.close_launcher_on_game_start;
+          if (patch.check_game_processes !== undefined)
+            profilePatch.check_game_processes = patch.check_game_processes;
+          invoke("update_profile_settings", { id: profileId, patch: profilePatch })
+            .then(() => {
+              showSettingsSavedNotification();
+            })
+            .catch((e) => {
+              console.error("Не удалось сохранить настройки профиля:", e);
+            });
+          const nonGamePatch = { ...patch };
+          gameFields.forEach((k) => delete nonGamePatch[k]);
+          if (Object.keys(nonGamePatch).length > 0) {
+            invoke("set_settings", { settings: { ...current, ...nonGamePatch } }).catch((e) =>
+              console.error("Не удалось сохранить настройки:", e),
+            );
+          }
+        } else {
+          invoke("set_settings", { settings: next })
+            .then(() => showSettingsSavedNotification())
+            .catch((e) => console.error("Не удалось сохранить настройки:", e));
+        }
         return next;
       });
     },
@@ -415,10 +572,28 @@ function App() {
   }, [refreshSettings]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const current = await invoke<InstanceProfileSummary | null>("get_selected_profile");
+        if (current) {
+          setActiveInstanceProfile({
+            id: current.id,
+            name: current.name,
+            game_version: current.game_version,
+            loader: current.loader,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (activeItem === "settings") {
-      void refreshSettings();
+      void refreshSettings(activeInstanceProfile?.id ?? undefined);
     }
-  }, [activeItem, refreshSettings]);
+  }, [activeItem, activeInstanceProfile?.id, refreshSettings]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -511,9 +686,16 @@ function App() {
         avatar_path: p.avatar_path ?? null,
         ely_username: p.ely_username ?? null,
         ely_uuid: p.ely_uuid ?? null,
+        ms_id_token: p.ms_id_token ?? null,
       });
     } catch {
-      setProfile({ nickname: "", avatar_path: null, ely_username: null, ely_uuid: null });
+      setProfile({
+        nickname: "",
+        avatar_path: null,
+        ely_username: null,
+        ely_uuid: null,
+        ms_id_token: null,
+      });
     }
   }, []);
 
@@ -596,6 +778,7 @@ function App() {
           avatar_path: p.avatar_path ?? null,
           ely_username: p.ely_username ?? null,
           ely_uuid: p.ely_uuid ?? null,
+          ms_id_token: p.ms_id_token ?? null,
         });
         setElyLoading(false);
         setElyAuthUrl(null);
@@ -634,6 +817,56 @@ function App() {
     }
   };
 
+  const handleMicrosoftLogin = async () => {
+    setElyLoading(true);
+    try {
+      const unlisten = await listen<Profile>("ms-login-complete", (e) => {
+        const p = e.payload;
+        setProfile({
+          nickname: p.nickname ?? "",
+          avatar_path: p.avatar_path ?? null,
+          ely_username: p.ely_username ?? null,
+          ely_uuid: p.ely_uuid ?? null,
+          ms_id_token: p.ms_id_token ?? null,
+        });
+        setElyLoading(false);
+        unlisten();
+      });
+
+      const url = await invoke<string>("start_ms_oauth");
+      try {
+        await openUrl(url);
+      } catch (e) {
+        console.error("Не удалось открыть браузер для Microsoft OAuth:", e);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", msg);
+      setElyLoading(false);
+    }
+  };
+
+  const handleMicrosoftLogout = async () => {
+    try {
+      await invoke("ms_logout");
+      await loadProfile();
+      showNotification(
+        "info",
+        language === "ru"
+          ? "Вы вышли из аккаунта Microsoft."
+          : "You have logged out of Microsoft.",
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        language === "ru"
+          ? "Не удалось выйти из аккаунта Microsoft."
+          : "Failed to log out of Microsoft.",
+      );
+    }
+  };
+
   const isInstalled = useMemo(() => {
     if (!selectedVersion) return false;
     if (loader === "fabric" && !isForgeVersion(selectedVersion)) return !!fabricProfileId;
@@ -652,6 +885,14 @@ function App() {
     return language === "ru" ? "Установить" : "Install";
   }, [isInstalled, language]);
 
+  const handleToggleConsole = () => {
+    setIsConsoleVisible((prev) => !prev);
+  };
+
+  const handleClearConsole = () => {
+    setConsoleLines([]);
+  };
+
   const handleOpenGameFolder = async () => {
     try {
       await invoke("open_game_folder");
@@ -666,6 +907,33 @@ function App() {
       );
     }
   };
+
+  useEffect(() => {
+    if (!activeInstanceProfile || versions.length === 0) return;
+
+    const desiredLoader = activeInstanceProfile.loader as LoaderId;
+    const allowedLoaders: LoaderId[] = [
+      "vanilla",
+      "fabric",
+      "forge",
+      "quilt",
+      "neoforge",
+    ];
+    if (allowedLoaders.includes(desiredLoader)) {
+      setLoader(desiredLoader);
+    }
+
+    const versionId = activeInstanceProfile.game_version;
+    const match = versions.find((v) => {
+      if (isForgeVersion(v)) {
+        return v.mc_version === versionId;
+      }
+      return (v as VersionSummary).id === versionId;
+    });
+    if (match) {
+      setSelectedVersion(match);
+    }
+  }, [activeInstanceProfile, versions]);
 
   const handleMinimize = () => {
     getCurrentWindow().minimize();
@@ -734,6 +1002,11 @@ function App() {
             : loader === "quilt" && quiltProfileId
               ? quiltProfileId
               : selectedVersion.id;
+        setConsoleLines([]);
+        if (settings?.show_console_on_launch) {
+          setIsConsoleVisible(true);
+        }
+        setGameStatus("running");
         await invoke("launch_game", {
           versionId,
           versionUrl: versionUrl ?? null,
@@ -1024,14 +1297,28 @@ function App() {
                   : "Configure your profile and appearance after you sign in."}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe]"
-                  title={language === "ru" ? "Скоро" : "Coming soon"}
-                >
-                  <MicrosoftIcon />
-                  <span>Microsoft</span>
-                </button>
+                {profile.ms_id_token ? (
+                  <button
+                    type="button"
+                    onClick={handleMicrosoftLogout}
+                    className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
+                  >
+                    <MicrosoftIcon />
+                    <span>
+                      {language === "ru" ? "Выйти из Microsoft" : "Log out of Microsoft"}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleMicrosoftLogin}
+                    disabled={elyLoading}
+                    className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
+                  >
+                    <MicrosoftIcon />
+                    <span>{language === "ru" ? "Войти через Microsoft" : "Sign in with Microsoft"}</span>
+                  </button>
+                )}
                 {profile.ely_username ? (
                   <button
                     type="button"
@@ -1078,20 +1365,30 @@ function App() {
               )}
             </div>
           ) : activeItem === "mods" ? (
-            <div className="flex w-full max-w-4xl flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
-              <ModsTab showNotification={showNotification} language={language} />
+            <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center">
+              <ModsTab
+                showNotification={showNotification}
+                language={language}
+                activeProfileGameVersion={activeInstanceProfile?.game_version}
+                activeProfileLoader={activeInstanceProfile?.loader}
+              />
             </div>
           ) : activeItem === "modpacks" ? (
-            <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
-              <ModpackTab />
-            </div>
+          <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
+            <ModpackTab
+              language={language}
+              showNotification={showNotification}
+              onProfileSelectionChange={handleModpackProfileSelectionChange}
+              initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+            />
+          </div>
           ) : activeItem === "settings" ? (
             <SettingsTab
               settings={settings}
               settingsTab={settingsTab}
               setSettingsTab={setSettingsTab}
               systemMemoryGb={systemMemoryGb}
-              updateSettings={updateSettings}
+              updateSettings={(patch) => updateSettings(patch, activeInstanceProfile?.id ?? undefined)}
               showNotification={showNotification}
               SettingsCard={SettingsCard}
               SettingsSlider={SettingsSlider}
@@ -1101,6 +1398,12 @@ function App() {
             />
           ) : (
             <PlayTab
+              gameStatus={gameStatus}
+              consoleLines={consoleLines}
+              isConsoleVisible={isConsoleVisible}
+              onToggleConsole={handleToggleConsole}
+              onClearConsole={handleClearConsole}
+              showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
               versions={versions}
               selectedVersion={selectedVersion}
               setSelectedVersion={setSelectedVersion}
@@ -1117,11 +1420,12 @@ function App() {
               primaryLabel={primaryLabel}
               progress={progress}
               loader={loader}
-              setLoader={(l) => setLoader(l)}
+              setLoader={setLoader}
               isLoaderDropdownOpen={isLoaderDropdownOpen}
               setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
               handleOpenGameFolder={handleOpenGameFolder}
               language={language}
+          activeProfileName={activeInstanceProfile?.name ?? null}
             />
           )}
         </main>

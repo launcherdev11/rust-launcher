@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JavaSettings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "use_custom_jvm_args": {
+      "type": "boolean",
+      "description": "Включить использование пользовательских JVM-аргументов из лаунчера."
+    },
+    "java_path": {
+      "type": ["string", "null"],
+      "description": "Полный путь к java/javaw. Если null или пустая строка, используется встроенный runtime Mojang."
+    },
+    "xms": {
+      "type": ["string", "null"],
+      "description": "Минимальный объём памяти Xms. Формат: число + суффикс M или G (например, \"1024M\", \"2G\")."
+    },
+    "xmx": {
+      "type": ["string", "null"],
+      "description": "Максимальный объём памяти Xmx. Формат: число + суффикс M или G (например, \"4096M\", \"4G\")."
+    },
+    "jvm_args": {
+      "type": ["string", "null"],
+      "description": "Дополнительные JVM-аргументы (одна строка или многострочно). Флаги разделяются пробелами или переводами строк."
+    },
+    "preset": {
+      "type": ["string", "null"],
+      "enum": ["balanced", "performance", "low_memory", null],
+      "description": "Имя пресета настроек памяти и JVM-флагов."
+    }
+  },
+  "required": ["use_custom_jvm_args"]
+}
+

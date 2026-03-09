@@ -49,6 +49,8 @@ type NotificationKind = "info" | "success" | "error" | "warning";
 type ModsTabProps = {
   showNotification: (kind: NotificationKind, message: string) => void;
   language: Language;
+  activeProfileGameVersion?: string | null;
+  activeProfileLoader?: string | null;
 };
 
 function DownloadStatIcon() {
@@ -73,7 +75,12 @@ function HeartStatIcon() {
   );
 }
 
-export function ModsTab({ showNotification, language }: ModsTabProps) {
+export function ModsTab({
+  showNotification,
+  language,
+  activeProfileGameVersion,
+  activeProfileLoader,
+}: ModsTabProps) {
   const [modrinthContentType, setModrinthContentType] =
     useState<ModrinthContentType>("mod");
   const [modrinthSearch, setModrinthSearch] = useState("");
@@ -99,6 +106,18 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
   );
   const [modrinthVersionsLoading, setModrinthVersionsLoading] =
     useState(false);
+  const [modsLayout, setModsLayout] = useState<"list" | "grid">(() => {
+    if (typeof window === "undefined") return "list";
+    try {
+      const saved = window.localStorage.getItem("mods_layout");
+      return saved === "grid" || saved === "list" ? saved : "list";
+    } catch {
+      return "list";
+    }
+  });
+  const MODRINTH_PAGE_SIZE = 30;
+  const [modrinthPage, setModrinthPage] = useState(0);
+  const [modrinthTotalHits, setModrinthTotalHits] = useState(0);
 
   const modrinthTabRefs = useRef<
     Partial<Record<ModrinthContentType, HTMLButtonElement | null>>
@@ -107,6 +126,31 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
     left: number;
     width: number;
   }>({ left: 0, width: 0 });
+
+  useEffect(() => {
+    if (activeProfileGameVersion) {
+      setModrinthGameVersion((prev) =>
+        prev === activeProfileGameVersion ? prev : activeProfileGameVersion,
+      );
+    }
+  }, [activeProfileGameVersion]);
+
+  useEffect(() => {
+    if (!activeProfileLoader) return;
+    const normalized = activeProfileLoader.toLowerCase();
+    if (
+      normalized === "forge" ||
+      normalized === "fabric" ||
+      normalized === "quilt" ||
+      normalized === "neoforge"
+    ) {
+      setModrinthLoader(
+        normalized as "forge" | "fabric" | "quilt" | "neoforge" | "any",
+      );
+    } else if (normalized === "vanilla") {
+      setModrinthLoader("any");
+    }
+  }, [activeProfileLoader]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -193,8 +237,9 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
         }
 
         const params = new URLSearchParams({
-          limit: "30",
+          limit: String(MODRINTH_PAGE_SIZE),
           index: "downloads",
+          offset: String(modrinthPage * MODRINTH_PAGE_SIZE),
         });
         if (modrinthSearch.trim().length > 0) {
           params.set("query", modrinthSearch.trim());
@@ -210,6 +255,7 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
         }
         const data: ModrinthSearchResponse = await response.json();
         setModrinthProjects(data.hits);
+        setModrinthTotalHits(data.total_hits ?? data.hits.length);
 
         const nextSelected =
           data.hits.find(
@@ -244,9 +290,15 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
     modrinthLoader,
     modrinthSearch,
     modrinthSelectedProject?.project_id,
+    modrinthPage,
+    MODRINTH_PAGE_SIZE,
     loadModrinthVersions,
     showNotification,
   ]);
+
+  useEffect(() => {
+    setModrinthPage(0);
+  }, [modrinthContentType, modrinthGameVersion, modrinthLoader]);
 
   useEffect(() => {
     const updateIndicator = () => {
@@ -278,25 +330,31 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
     return true;
   });
 
+  const totalPages =
+    modrinthTotalHits > 0
+      ? Math.max(1, Math.ceil(modrinthTotalHits / MODRINTH_PAGE_SIZE))
+      : 1;
+  const currentPage = modrinthPage + 1;
+  const canPrevPage = currentPage > 1;
+  const canNextPage = currentPage < totalPages;
+
   return (
-    <div className="flex h-full w-full max-w-5xl flex-col">
+    <div className="flex h-full w-full max-w-4xl flex-col">
       <div className="relative z-[80] mb-4 mt-2 flex items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 py-2 shadow-soft backdrop-blur-xl">
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5 text-white/50"
-            aria-hidden="true"
-          >
-            <path
-              fill="currentColor"
-              d="M11 4a7 7 0 0 1 5.6 11.2l3.6 3.6a1 1 0 0 1-1.4 1.4l-3.6-3.6A7 7 0 1 1 11 4Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"
-            />
-          </svg>
+          <img
+            src="/launcher-assets/search.png"
+            alt=""
+            className="h-5 w-5 shrink-0 object-contain"
+          />
           <input
             type="text"
             placeholder={language === "ru" ? "Поиск..." : "Search..."}
             value={modrinthSearch}
-            onChange={(e) => setModrinthSearch(e.target.value)}
+            onChange={(e) => {
+              setModrinthSearch(e.target.value);
+              setModrinthPage(0);
+            }}
             className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
           />
         </div>
@@ -431,7 +489,10 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
                   ref={(el) => {
                     modrinthTabRefs.current[kind] = el;
                   }}
-                  onClick={() => setModrinthContentType(kind)}
+                  onClick={() => {
+                    setModrinthContentType(kind);
+                    setModrinthPage(0);
+                  }}
                   className={`interactive-press relative z-10 flex-1 rounded-xl px-3 py-1 text-xs font-semibold text-center transition-colors ${
                     active
                       ? "text-black"
@@ -444,11 +505,72 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
             },
           )}
         </div>
+        <div className="flex items-center gap-1 rounded-2xl border border-white/20 bg-black/40 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setModsLayout("list");
+              try {
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem("mods_layout", "list");
+                }
+              } catch {
+                // ignore
+              }
+            }}
+            className={`interactive-press rounded-xl p-1.5 ${
+              modsLayout === "list"
+                ? "bg-white text-black shadow-soft"
+                : "text-white/70 hover:bg-white/10"
+            }`}
+            title={language === "ru" ? "Список" : "List"}
+          >
+            <img
+              src={
+                modsLayout === "list"
+                  ? "/launcher-assets/list-black.png"
+                  : "/launcher-assets/list.png"
+              }
+              alt=""
+              className="h-4 w-4 object-contain"
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setModsLayout("grid");
+              try {
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem("mods_layout", "grid");
+                }
+              } catch {
+                // ignore
+              }
+            }}
+            className={`interactive-press rounded-xl p-1.5 ${
+              modsLayout === "grid"
+                ? "bg-white text-black shadow-soft"
+                : "text-white/70 hover:bg-white/10"
+            }`}
+            title={language === "ru" ? "Сетка" : "Grid"}
+          >
+            <img
+              src={
+                modsLayout === "grid"
+                  ? "/launcher-assets/grid-black.png"
+                  : "/launcher-assets/grid.png"
+              }
+              alt=""
+              className="h-4 w-4 object-contain"
+            />
+          </button>
+        </div>
       </div>
 
       <div className="relative z-10 flex min-h-0 flex-1 gap-4 pb-4">
         <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="mb-2 flex items-center justify-between text-xs text-white/60">
+            <div className="flex items-center gap-2">
               <span className="ml-1.5">
                 {modrinthLoading
                   ? language === "ru"
@@ -456,72 +578,89 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
                     : "Loading popular projects…"
                   : ""}
               </span>
-            {modrinthError && (
-              <span className="text-rose-300">{modrinthError}</span>
-            )}
+              {modrinthError && (
+                <span className="text-rose-300">{modrinthError}</span>
+              )}
+            </div>
           </div>
-          <div className="custom-scrollbar -mr-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-2">
-            {modrinthProjects.map((p) => {
-              const isActive =
-                modrinthSelectedProject?.project_id === p.project_id;
-              return (
-                <button
-                  key={p.project_id}
-                  type="button"
-                  onClick={() => {
-                    setModrinthSelectedProject(p);
-                    void loadModrinthVersions(p.project_id);
-                  }}
-                  className={`interactive-press flex w-full items-stretch rounded-2xl border px-3 py-3 text-left transition ${
-                    isActive
-                      ? "border-white/60 bg-white/12"
-                      : "border-white/10 bg-black/35 hover:border-white/40 hover:bg-black/55"
-                  }`}
-                >
-                  <div className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-                    {p.icon_url ? (
-                      <img
-                        src={p.icon_url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs text-white/50">Нет иконки</span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 pr-3">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-white">
-                        {p.title}
-                      </span>
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-300">
-                        {p.project_type}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-white/70">
-                      {p.description}
-                    </p>
-                    <p className="mt-1 text-[11px] text-white/50">
-                      by {p.author}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end justify-between text-right text-[11px] text-white/70">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1">
-                        <DownloadStatIcon />
-                        <span>
-                          {p.downloads.toLocaleString("ru-RU")}
-                        </span>
+          <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
+            {modrinthProjects.length > 0 && (
+              <div
+                className={
+                  modsLayout === "grid"
+                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+                    : "flex flex-col gap-2"
+                }
+              >
+                {modrinthProjects.map((p) => {
+                  const isActive =
+                    modrinthSelectedProject?.project_id === p.project_id;
+                  return (
+                    <button
+                      key={p.project_id}
+                      type="button"
+                      onClick={() => {
+                        setModrinthSelectedProject(p);
+                        void loadModrinthVersions(p.project_id);
+                      }}
+                      className={`interactive-press w-full rounded-2xl border px-3 py-3 text-left transition ${
+                        modsLayout === "grid"
+                          ? "flex flex-col"
+                          : "flex items-stretch"
+                      } ${
+                        isActive
+                          ? "border-white/60 bg-white/12"
+                          : "border-white/10 bg-black/35 hover:border-white/40 hover:bg-black/55"
+                      }`}
+                    >
+                      <div className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5">
+                        {p.icon_url ? (
+                          <img
+                            src={p.icon_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs text-white/50">
+                            Нет иконки
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <HeartStatIcon />
-                        <span>{p.follows.toLocaleString("ru-RU")}</span>
+                      <div className="min-w-0 flex-1 pr-3">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-white">
+                            {p.title}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-300">
+                            {p.project_type}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-white/70">
+                          {p.description}
+                        </p>
+                        <p className="mt-1 text-[11px] text-white/50">
+                          by {p.author}
+                        </p>
                       </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                      <div className="flex flex-col items-end justify-between text-right text-[11px] text-white/70">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1">
+                            <DownloadStatIcon />
+                            <span>
+                              {p.downloads.toLocaleString("ru-RU")}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <HeartStatIcon />
+                            <span>{p.follows.toLocaleString("ru-RU")}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {!modrinthLoading && modrinthProjects.length === 0 && (
               <div className="rounded-2xl border border-dashed border-white/15 bg-black/30 px-4 py-6 text-center text-xs text-white/60">
                 {language === "ru"
@@ -530,6 +669,35 @@ export function ModsTab({ showNotification, language }: ModsTabProps) {
               </div>
             )}
           </div>
+          {modrinthTotalHits > MODRINTH_PAGE_SIZE && (
+            <div className="mt-2 flex items-center justify-between rounded-2xl bg-black/40 px-3 py-2 text-[11px] text-white/70">
+              <span>
+                {language === "ru"
+                  ? `Страница ${currentPage} из ${totalPages}`
+                  : `Page ${currentPage} of ${totalPages}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!canPrevPage || modrinthLoading}
+                  onClick={() =>
+                    setModrinthPage((prev) => Math.max(0, prev - 1))
+                  }
+                  className="interactive-press rounded-full bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {language === "ru" ? "Назад" : "Prev"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canNextPage || modrinthLoading}
+                  onClick={() => setModrinthPage((prev) => prev + 1)}
+                  className="interactive-press rounded-full bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {language === "ru" ? "Вперёд" : "Next"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="glass-panel relative z-0 flex w-80 min-h-0 flex-shrink-0 flex-col">

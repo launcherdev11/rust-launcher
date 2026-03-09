@@ -1,5 +1,6 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useRef, useState } from "react";
+import { JavaSettingsTab } from "./JavaSettings";
 
 type SettingsTabId = "directories" | "game" | "versions" | "launcher" | "updates";
 
@@ -48,6 +49,7 @@ export function SettingsTab({
   language,
   setLanguage,
 }: SettingsTabProps) {
+  const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
   const [isRamEditing, setIsRamEditing] = useState(false);
   const [ramInputMb, setRamInputMb] = useState("");
   const ramInputRef = useRef<HTMLInputElement | null>(null);
@@ -159,83 +161,124 @@ export function SettingsTab({
         <div className="glass-panel w-full px-6 py-5">
           {settingsTab === "game" && (
             <SettingsCard title={language === "ru" ? "Игра" : "Game"}>
-              <SettingsSlider
-                label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
-                min={1}
-                max={ramSliderMaxGb}
-                value={currentRamGbRounded}
-                onChange={(value: number) =>
-                  updateSettings({ ram_mb: Math.max(1, value) * 1024 })
-                }
-                right={
-                  isRamEditing ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={ramInputRef}
-                        type="number"
-                        inputMode="numeric"
-                        min={ramMinMb}
-                        max={ramMaxMb}
-                        value={ramInputMb}
-                        onChange={(e) => setRamInputMb(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") commitRamMb(ramInputMb);
-                          if (e.key === "Escape") cancelRamEditing();
-                        }}
-                        onBlur={() => commitRamMb(ramInputMb)}
-                        className="no-number-spin h-7 w-28 rounded-lg border border-white/15 bg-black/25 px-2 text-right text-sm font-semibold text-white/90 outline-none focus:border-white/30"
-                      />
-                      <span className="text-xs font-semibold text-white/70">МБ</span>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setIsRamEditing(true)}
-                      className="interactive-press text-sm font-semibold text-white/90 hover:text-white"
-                      title="Нажмите, чтобы ввести в МБ"
-                    >
-                      {currentRamGbRounded}ГБ
-                    </button>
-                  )
-                }
-              />
-              <SettingsToggle
-                label={
-                  language === "ru"
-                    ? "Консоль при запуске:"
-                    : "Show console on game start:"
-                }
-                yesLabel={language === "ru" ? "Да" : "On"}
-                noLabel={language === "ru" ? "Нет" : "Off"}
-                value={settings?.show_console_on_launch ?? false}
-                onChange={(value: boolean) => updateSettings({ show_console_on_launch: value })}
-              />
-              <SettingsToggle
-                label={
-                  language === "ru"
-                    ? "Закрывать лаунчер при запуске игры:"
-                    : "Close launcher when game starts:"
-                }
-                yesLabel={language === "ru" ? "Да" : "Yes"}
-                noLabel={language === "ru" ? "Нет" : "No"}
-                value={settings?.close_launcher_on_game_start ?? false}
-                onChange={(value: boolean) =>
-                  updateSettings({ close_launcher_on_game_start: value })
-                }
-              />
-              <SettingsToggle
-                label={
-                  language === "ru"
-                    ? "Проверять запущенные процессы игры:"
-                    : "Check running game processes:"
-                }
-                yesLabel={language === "ru" ? "Да" : "Yes"}
-                noLabel={language === "ru" ? "Нет" : "No"}
-                value={settings?.check_game_processes ?? true}
-                onChange={(value: boolean) =>
-                  updateSettings({ check_game_processes: value })
-                }
-              />
+              <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1">
+                <button
+                  type="button"
+                  onClick={() => setGameSubTab("general")}
+                  className={`interactive-press flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                    gameSubTab === "general"
+                      ? "bg-white text-black shadow-soft"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  {language === "ru" ? "Общие" : "General"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGameSubTab("java")}
+                  className={`interactive-press flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                    gameSubTab === "java"
+                      ? "bg-white text-black shadow-soft"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Java
+                </button>
+              </div>
+
+              {gameSubTab === "general" ? (
+                <>
+                  <SettingsToggle
+                    label={
+                      language === "ru"
+                        ? "Консоль при запуске:"
+                        : "Show console on game start:"
+                    }
+                    yesLabel={language === "ru" ? "Да" : "On"}
+                    noLabel={language === "ru" ? "Нет" : "Off"}
+                    value={settings?.show_console_on_launch ?? false}
+                    onChange={(value: boolean) => updateSettings({ show_console_on_launch: value })}
+                  />
+                  <SettingsToggle
+                    label={
+                      language === "ru"
+                        ? "Закрывать лаунчер при запуске игры:"
+                        : "Close launcher when game starts:"
+                    }
+                    yesLabel={language === "ru" ? "Да" : "Yes"}
+                    noLabel={language === "ru" ? "Нет" : "No"}
+                    value={settings?.close_launcher_on_game_start ?? false}
+                    onChange={(value: boolean) =>
+                      updateSettings({ close_launcher_on_game_start: value })
+                    }
+                  />
+                  <SettingsToggle
+                    label={
+                      language === "ru"
+                        ? "Проверять запущенные процессы игры:"
+                        : "Check running game processes:"
+                    }
+                    yesLabel={language === "ru" ? "Да" : "Yes"}
+                    noLabel={language === "ru" ? "Нет" : "No"}
+                    value={settings?.check_game_processes ?? true}
+                    onChange={(value: boolean) =>
+                      updateSettings({ check_game_processes: value })
+                    }
+                  />
+                </>
+              ) : (
+                <>
+                  <SettingsSlider
+                    label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
+                    min={1}
+                    max={ramSliderMaxGb}
+                    value={currentRamGbRounded}
+                    onChange={(value: number) =>
+                      updateSettings({ ram_mb: Math.max(1, value) * 1024 })
+                    }
+                    right={
+                      isRamEditing ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={ramInputRef}
+                            type="number"
+                            inputMode="numeric"
+                            min={ramMinMb}
+                            max={ramMaxMb}
+                            value={ramInputMb}
+                            onChange={(e) => setRamInputMb(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRamMb(ramInputMb);
+                              if (e.key === "Escape") cancelRamEditing();
+                            }}
+                            onBlur={() => commitRamMb(ramInputMb)}
+                            className="no-number-spin h-7 w-28 rounded-lg border border-white/15 bg-black/25 px-2 text-right text-sm font-semibold text-white/90 outline-none focus:border-white/30"
+                          />
+                          <span className="text-xs font-semibold text-white/70">МБ</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsRamEditing(true)}
+                          className="interactive-press text-sm font-semibold text-white/90 hover:text-white"
+                          title={
+                            language === "ru"
+                              ? "Нажмите, чтобы ввести в МБ"
+                              : "Click to edit in MB"
+                          }
+                        >
+                          {currentRamGbRounded}ГБ
+                        </button>
+                      )
+                    }
+                  />
+                  <JavaSettingsTab
+                    language={language}
+                    systemMemoryGb={systemMemoryGb}
+                    showNotification={showNotification}
+                  />
+                </>
+              )}
             </SettingsCard>
           )}
 

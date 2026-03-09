@@ -51,7 +51,15 @@ function resolveBannerImageUrl(url: string): string {
   return `${BANNER_BASE_URL}${url.replace(/^\.?\//, "")}`;
 }
 
+type GameStatus = "idle" | "running" | "stopped" | "crashed";
+
 type PlayTabProps = {
+  gameStatus: GameStatus;
+  consoleLines: { id: number; line: string; source: "stdout" | "stderr" }[];
+  isConsoleVisible: boolean;
+  onToggleConsole: () => void;
+  onClearConsole: () => void;
+  showConsoleOnLaunch: boolean;
   versions: VersionItem[];
   selectedVersion: VersionItem | null;
   setSelectedVersion: (v: VersionItem) => void;
@@ -73,6 +81,7 @@ type PlayTabProps = {
   setIsLoaderDropdownOpen: (v: boolean) => void;
   handleOpenGameFolder: () => void;
   language: Language;
+  activeProfileName: string | null;
 };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -84,6 +93,12 @@ const loaderLabels: Record<LoaderId, string> = {
 };
 
 export function PlayTab({
+  gameStatus,
+  consoleLines,
+  isConsoleVisible,
+  onToggleConsole,
+  onClearConsole,
+  showConsoleOnLaunch,
   versions,
   selectedVersion,
   setSelectedVersion,
@@ -105,6 +120,7 @@ export function PlayTab({
   setIsLoaderDropdownOpen,
   handleOpenGameFolder,
   language,
+  activeProfileName,
 }: PlayTabProps) {
   const [banners, setBanners] = useState<LauncherBannerData[]>([]);
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
@@ -206,6 +222,15 @@ export function PlayTab({
     if (isForgeVersion(v)) return `${v.mc_version} (Forge ${v.forge_build})`;
     return v.id;
   };
+
+  const statusDotClass =
+    gameStatus === "running"
+      ? "bg-emerald-400"
+      : gameStatus === "crashed"
+        ? "bg-red-500"
+        : gameStatus === "stopped"
+          ? "bg-sky-400"
+          : "bg-gray-500";
 
   return (
     <>
@@ -444,7 +469,7 @@ export function PlayTab({
             type="button"
             onClick={handleOpenGameFolder}
             title={language === "ru" ? "Открыть папку игры" : "Open game folder"}
-            className="interactive-press pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
+            className="interactive-press no-shift pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
           >
             <img
               src="/launcher-assets/folder.png"
@@ -454,6 +479,84 @@ export function PlayTab({
           </button>
         </div>
       </div>
+
+      {activeProfileName && (
+        <div className="mt-2 flex w-full max-w-[95vw] justify-center px-2">
+          <div className="rounded-full bg-black/60 px-4 py-1.5 text-xs text-white/85 shadow-soft backdrop-blur-md">
+            {language === "ru"
+              ? `Выбран профиль: ${activeProfileName}`
+              : `Selected profile: ${activeProfileName}`}
+          </div>
+        </div>
+      )}
+
+      {showConsoleOnLaunch && (
+        <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
+          <div className="glass-panel pointer-events-auto w-full max-w-3xl rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`} />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                  {language === "ru" ? "Консоль игры" : "Game console"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClearConsole}
+                  className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+                >
+                  {language === "ru" ? "Очистить" : "Clear"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleConsole}
+                  className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+                >
+                  {isConsoleVisible
+                    ? language === "ru"
+                      ? "Свернуть"
+                      : "Hide"
+                    : language === "ru"
+                      ? "Показать"
+                      : "Show"}
+                </button>
+              </div>
+            </div>
+
+            {isConsoleVisible && (
+              <>
+                {consoleLines.length > 0 ? (
+                  <div className="mt-2 h-44 w-full overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80">
+                    {consoleLines.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`whitespace-pre break-all ${
+                          entry.source === "stderr" ? "text-red-300" : "text-emerald-200"
+                        }`}
+                      >
+                        {entry.line}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60">
+                    {language === "ru"
+                      ? "Логи появятся после запуска игры."
+                      : "Logs will appear after the game starts."}
+                  </div>
+                )}
+
+                <p className="mt-2 text-[10px] text-white/40">
+                  {language === "ru"
+                    ? "Управляется настройкой «Консоль при запуске» в разделе игры."
+                    : "Controlled by the “Show console on game start” setting in the game section."}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

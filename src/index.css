@@ -75,6 +75,11 @@ body {
   box-shadow: 0 0 0 rgba(0, 0, 0, 0);
 }
 
+/* Кнопки, которые не должны смещаться при наведении */
+.interactive-press.no-shift:hover {
+  transform: none;
+}
+
 /* Плавное появление содержимого вкладок / основных экранов */
 @keyframes tab-fade-in {
   from {
