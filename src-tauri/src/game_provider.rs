@@ -39,7 +39,6 @@ pub const EVENT_GAME_CONSOLE_LINE: &str = "game-console-line";
 
 pub const EVENT_MRPACK_IMPORT_PROGRESS: &str = "mrpack-import-progress";
 
-// ------------------------ Microsoft / Minecraft (официальный аккаунт) ------------------------
 
 #[derive(Debug, Serialize)]
 struct XblUserAuthProperties {
@@ -118,8 +117,7 @@ struct McProfile {
     name: String,
 }
 
-/// Пытаемся получить официальный Minecraft‑профиль через Microsoft / Xbox Live.
-/// Возвращает Some((name, uuid, access_token)) если всё успешно, иначе None.
+
 async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)>, String> {
     let profile = get_profile().unwrap_or_default();
     let msa_token = match profile.ms_access_token.clone() {
@@ -129,7 +127,6 @@ async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)
 
     let client = http_client();
 
-    // 1. Входим в Xbox Live с MSA токеном
     let xbl_req = XblUserAuthRequest {
         relying_party: "http://auth.xboxlive.com".to_string(),
         token_type: "JWT".to_string(),
@@ -172,7 +169,6 @@ async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)
         .map(|x| x.uhs.clone())
         .ok_or_else(|| "Xbox Live ответ не содержит DisplayClaims.xui[0].uhs".to_string())?;
 
-    // 2. Получаем XSTS токен
     let xsts_req = XstsAuthRequest {
         relying_party: "rp://api.minecraftservices.com/".to_string(),
         token_type: "JWT".to_string(),
@@ -205,7 +201,6 @@ async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)
 
     let xsts_token = xsts_body.Token;
 
-    // 3. Логинимся в Minecraft Services
     let identity_token = format!("XBL3.0 x={};{}", uhs, xsts_token);
     let mc_login_req = McLoginWithXboxRequest { identityToken: identity_token };
 
@@ -235,9 +230,6 @@ async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)
 
     let mc_access_token = mc_login_body.access_token;
 
-    // (опционально можно проверить entitlements, здесь пропускаем)
-
-    // 4. Получаем Minecraft профиль
     let mc_profile_resp = client
         .get("https://api.minecraftservices.com/minecraft/profile")
         .bearer_auth(&mc_access_token)
@@ -279,22 +271,20 @@ pub struct GameConsoleLinePayload {
     pub source: String,
 }
 
-// ------------------------ Java settings (launcher-level) ------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct JavaSettings {
-    /// Включить использование пользовательских JVM‑аргументов из лаунчера.
     pub use_custom_jvm_args: bool,
-    /// Явный путь к java/javaw. Если не задан, используется встроенный runtime Mojang.
+    ///явный путь к java/javaw.по дефолту офиц runtime Mojang.
     pub java_path: Option<String>,
-    /// Минимальный объём памяти Xms (например, "1G" или "1024M").
+    ///мин. объем памяти xms (1G\1024M).
     pub xms: Option<String>,
-    /// Максимальный объём памяти Xmx (например, "4G" или "4096M").
+    ///макс объем памяти xmx (4G\4096M).
     pub xmx: Option<String>,
-    /// Дополнительные JVM‑аргументы (одна строка или несколько строк).
+    ///доп JVM аргументы
     pub jvm_args: Option<String>,
-    /// Имя пресета ("balanced", "performance", "low_memory" и т.п.).
+    ///имя пресета ("balanced", "performance", "low_memory").
     pub preset: Option<String>,
 }
 
@@ -313,11 +303,11 @@ impl Default for JavaSettings {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JavaRuntimeInfo {
-    /// Полный путь к java/javaw.
+    ///полный путь к java/javaw.
     pub path: String,
-    /// Строка с версией из `java -version`.
+    ///строка с версией из `java -version`.
     pub version: String,
-    /// Краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.).
+    ///краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.).
     pub source: String,
 }
 
@@ -407,12 +397,10 @@ fn build_java_command(
         }
     }
 
-    // Базовые значения памяти по настройкам лаунчера.
     let base_ram_mb = settings.ram_mb.max(1024);
     let mut xms_mb = (base_ram_mb / 2).max(512);
     let mut xmx_mb = base_ram_mb;
 
-    // Переопределение Xms/Xmx из JavaSettings (если указаны).
     if let Some(ref xms_str) = java_settings.xms {
         if let Some(mb) = parse_memory_spec_to_mb(xms_str) {
             xms_mb = mb;
@@ -428,7 +416,7 @@ fn build_java_command(
         std::mem::swap(&mut xms_mb, &mut xmx_mb);
     }
 
-    // Ограничение по физической памяти: не больше total_ram - 2ГБ.
+    //ограничение по физической памяти, не больше total_ram-2ГБ.
     let mut sys = System::new_all();
     sys.refresh_memory();
     let total_mb: u64 = sys.total_memory() / 1024;
@@ -446,7 +434,6 @@ fn build_java_command(
     let xms_flag = format!("-Xms{}", format_mb_to_spec(xms_mb));
     let xmx_flag = format!("-Xmx{}", format_mb_to_spec(xmx_mb));
 
-    // Удаляем уже имеющиеся -Xms/-Xmx и подставляем новые в начало списка.
     jvm_args.retain(|a| !a.starts_with("-Xms") && !a.starts_with("-Xmx"));
     jvm_args.insert(0, xmx_flag.clone());
     jvm_args.insert(0, xms_flag.clone());
@@ -462,7 +449,6 @@ fn build_java_command(
         )
     };
 
-    // Фильтрация пользовательских флагов (безопасность + защита обязательных аргументов).
     let filter_tokens = |tokens: Vec<String>| -> Vec<String> {
         const FORBIDDEN_PREFIXES: &[&str] = &["-agentlib:", "-agentpath:", "-Xrun", "-Xdebug"];
         let mut out = Vec::new();
@@ -480,12 +466,11 @@ fn build_java_command(
                 continue;
             }
 
-            // Защита обязательных аргументов: -cp/-classpath и -Djava.library.path
             if a == "-cp" || a == "-classpath" {
                 eprintln!("[JavaSettings] Пользовательский -cp/-classpath игнорирован (обязательный classpath задаётся лаунчером).");
                 i += 1;
                 if i < tokens.len() {
-                    i += 1; // пропускаем и значение
+                    i += 1;
                 }
                 continue;
             }
@@ -509,7 +494,6 @@ fn build_java_command(
         out
     };
 
-    // Дополнительные JVM‑аргументы профиля (instances).
     if let Some(inst) = instance_settings_for_launch {
         if let Some(extra) = &inst.jvm_args {
             let parts: Vec<String> = extra
@@ -520,7 +504,6 @@ fn build_java_command(
         }
     }
 
-    // Пользовательские JVM‑аргументы уровня лаунчера.
     if java_settings.use_custom_jvm_args {
         if let Some(extra) = &java_settings.jvm_args {
             let parts: Vec<String> = extra
@@ -534,35 +517,23 @@ fn build_java_command(
     Ok((java_path, jvm_args))
 }
 
-// ------------------------ Settings ------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Объём ОЗУ для игры в мегабайтах.
     pub ram_mb: u32,
-    /// Показывать консоль Java при запуске.
     pub show_console_on_launch: bool,
-    /// Скрывать/закрывать лаунчер после успешного запуска игры.
     pub close_launcher_on_game_start: bool,
-    /// Проверять запущенные процессы игры (javaw.exe) в фоне.
     pub check_game_processes: bool,
 
-    /// Показывать снапшоты в списке версий.
     pub show_snapshots: bool,
-    /// Показывать старые alpha‑версии в списке версий.
     pub show_alpha_versions: bool,
 
-    /// Всплывающее уведомление о новом обновлении лаунчера.
     pub notify_new_update: bool,
-    /// Всплывающее уведомление о новом сообщении.
     pub notify_new_message: bool,
-    /// Всплывающее уведомление о системных событиях.
     pub notify_system_message: bool,
 
-    /// Проверять обновления лаунчера при запуске.
     pub check_updates_on_start: bool,
-    /// Автоматически устанавливать найденные обновления.
     pub auto_install_updates: bool,
 }
 
@@ -680,7 +651,64 @@ pub fn set_java_settings(app: AppHandle, settings: JavaSettings) -> Result<(), S
     save_java_settings_internal(&app, &settings)
 }
 
-/// Возвращает настройки с учётом переопределений конкретного профиля (блок «Игра»).
+fn effective_java_settings_for_profile_internal(
+    app: &AppHandle,
+    profile_id: Option<String>,
+) -> JavaSettings {
+    let id = match profile_id {
+        Some(id) if !id.trim().is_empty() => id,
+        _ => return load_java_settings_internal(app),
+    };
+    let path = match instance_settings_path(&id) {
+        Ok(p) => p,
+        Err(_) => return load_java_settings_internal(app),
+    };
+    if !path.exists() {
+        return load_java_settings_internal(app);
+    }
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return load_java_settings_internal(app),
+    };
+    let inst: InstanceSettings = match serde_json::from_str(&text) {
+        Ok(s) => s,
+        Err(_) => return load_java_settings_internal(app),
+    };
+    inst.java_settings
+        .unwrap_or_else(|| load_java_settings_internal(app))
+}
+
+#[tauri::command]
+pub fn get_profile_java_settings(app: AppHandle, id: String) -> Result<JavaSettings, String> {
+    Ok(effective_java_settings_for_profile_internal(&app, Some(id)))
+}
+
+#[tauri::command]
+pub fn set_profile_java_settings(
+    id: String,
+    settings: JavaSettings,
+) -> Result<(), String> {
+    let path = instance_settings_path(&id)?;
+    let mut current = if path.exists() {
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
+        serde_json::from_str::<InstanceSettings>(&text)
+            .map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
+    } else {
+        InstanceSettings::default()
+    };
+    current.java_settings = Some(settings);
+    let text = serde_json::to_string_pretty(&current)
+        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
+    }
+    std::fs::write(&path, text)
+        .map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_effective_settings(profile_id: Option<String>) -> Result<Settings, String> {
     Ok(effective_settings_for_profile_internal(profile_id))
@@ -719,7 +747,6 @@ pub fn reset_download_cancel() {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 }
 
-/// Проверка java и пользовательских JVM‑аргументов через короткий запуск `java -XshowSettings:vm -version`.
 #[tauri::command]
 pub async fn validate_java_args(
     java_path: Option<String>,
@@ -736,13 +763,11 @@ pub async fn validate_java_args(
     cmd.arg("-XshowSettings:vm");
     cmd.arg("-version");
 
-    // Простейший парсер: разбиваем по пробелам и переносам строк.
     let user_args: Vec<String> = args
         .split_whitespace()
         .map(|s| s.to_string())
         .collect();
 
-    // Чёрный список опасных флагов, которые мы не передаём в java.
     const FORBIDDEN_PREFIXES: &[&str] = &[
         "-agentlib:",
         "-agentpath:",
@@ -790,7 +815,6 @@ pub async fn validate_java_args(
             }
         }
 
-        // Простое предупреждение для очень большого Xmx.
         if let Some(rest) = a.strip_prefix("-Xmx") {
             if let Some(mb) = parse_memory_spec_to_mb(rest) {
                 if mb > 64 * 1024 {
@@ -855,13 +879,11 @@ fn detect_java_version(path: &str, source: &str) -> Option<JavaRuntimeInfo> {
     })
 }
 
-/// Поиск доступных Java‑runtime на машине пользователя.
 #[tauri::command]
 pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut result = Vec::new();
 
-    // JAVA_HOME
     if let Ok(home) = env::var("JAVA_HOME") {
         let base = PathBuf::from(&home);
         let cand_javaw = base.join("bin").join(if cfg!(target_os = "windows") {
@@ -880,14 +902,12 @@ pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
         }
     }
 
-    // Системная Java из PATH.
     if let Some(info) = detect_java_version("java", "PATH") {
         if seen.insert(info.path.clone()) {
             result.push(info);
         }
     }
 
-    // На Windows попробуем напрямую javaw.exe.
     #[cfg(target_os = "windows")]
     {
         if let Some(info) = detect_java_version("javaw", "PATH") {
@@ -983,7 +1003,7 @@ mod tests {
             use_custom_jvm_args: true,
             java_path: None,
             xms: Some("4G".to_string()),
-            xmx: Some("2G".to_string()), // намеренно наоборот
+            xmx: Some("2G".to_string()),
             jvm_args: Some("-agentlib:jdwp=transport=dt_socket -cp HACK -Djava.library.path=HACK -Dg=${gameDir}".to_string()),
             preset: None,
         };
@@ -1008,19 +1028,15 @@ mod tests {
         )
         .unwrap();
 
-        // Xms/Xmx должны быть выставлены и нормализованы (Xms <= Xmx)
         assert!(args[0].starts_with("-Xms"));
         assert!(args[1].starts_with("-Xmx"));
 
-        // Запрещённые/опасные флаги должны быть удалены
         assert!(!args.iter().any(|a| a.starts_with("-agentlib:")));
 
-        // Пользовательский -cp и -Djava.library.path не должны переопределять обязательные
         let cp_count = args.iter().filter(|a| a.as_str() == "-cp").count();
         assert_eq!(cp_count, 1);
         assert!(args.iter().any(|a| a.starts_with("-Djava.library.path=")));
 
-        // Плейсхолдер gameDir должен заменяться
         assert!(args.iter().any(|a| a.contains("C:\\game")));
     }
 }
@@ -1133,14 +1149,12 @@ struct OsRule {
     arch: Option<String>,
 }
 
-///инфа об ос для правил аргументов (mojang version.json)
 #[derive(Debug, Clone)]
 pub struct OsInfo {
     pub name: String,
     pub arch: String,
 }
 
-///флаги возможностей лаунчера для rules (is_demo_user тд)
 #[derive(Debug, Clone, Default)]
 pub struct GameFeatures {
     pub is_demo_user: bool,
@@ -1228,7 +1242,6 @@ pub struct DownloadProgressPayload {
     pub percent: f32,
 }
 
-//Fabric / Quilt
 #[derive(Debug, Deserialize)]
 struct FabricLoaderInfo {
     version: String,
@@ -1274,7 +1287,6 @@ struct FabricProfileLibrary {
     size: u64,
 }
 
-//Forge
 #[derive(Debug, Deserialize)]
 struct ForgePromotions {
     promos: HashMap<String, String>,
@@ -1317,14 +1329,12 @@ pub struct Profile {
     pub ely_client_token: Option<String>,
     #[serde(default)]
     pub ely_refresh_token: Option<String>,
-    // Данные сессии Microsoft (Azure / Xbox Live OAuth)
     #[serde(default)]
     pub ms_access_token: Option<String>,
     #[serde(default)]
     pub ms_refresh_token: Option<String>,
     #[serde(default)]
     pub ms_id_token: Option<String>,
-    // Официальные Minecraft‑данные, полученные через Microsoft / Xbox Live
     #[serde(default)]
     pub mc_uuid: Option<String>,
     #[serde(default)]
@@ -1388,7 +1398,6 @@ pub fn save_avatar(source_path: String) -> Result<String, String> {
     Ok(dest_str)
 }
 
-// ------------------------ Instances (Сборки профилей) ------------------------
 
 fn instances_root_dir() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("instances"))
@@ -1396,6 +1405,10 @@ fn instances_root_dir() -> Result<PathBuf, String> {
 
 fn instance_dir(id: &str) -> Result<PathBuf, String> {
     Ok(instances_root_dir()?.join(id))
+}
+
+pub(crate) fn instance_dir_for_id(id: &str) -> Result<PathBuf, String> {
+    instance_dir(id)
 }
 
 fn instance_config_path(id: &str) -> Result<PathBuf, String> {
@@ -1425,27 +1438,20 @@ pub struct InstanceConfig {
     #[serde(default)]
     pub icon_path: Option<String>,
     pub game_version: String,
-    /// vanilla | forge | fabric | quilt | neoforge
     pub loader: String,
-    /// Unix‑timestamp (UTC seconds)
     pub created_at: u64,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct InstanceSettings {
-    /// Переопределение объёма ОЗУ для конкретной сборки (в МБ).
     pub ram_mb: Option<u32>,
-    /// Дополнительные JVM‑аргументы (одна строка, разделённая пробелами).
     pub jvm_args: Option<String>,
-    /// Разрешение окна игры.
+    pub java_settings: Option<JavaSettings>,
     pub resolution_width: Option<u32>,
     pub resolution_height: Option<u32>,
-    /// Показывать консоль при запуске.
     pub show_console_on_launch: Option<bool>,
-    /// Закрывать лаунчер при запуске игры.
     pub close_launcher_on_game_start: Option<bool>,
-    /// Проверять запущенные процессы игры.
     pub check_game_processes: Option<bool>,
 }
 
@@ -1461,7 +1467,6 @@ pub struct InstanceProfileSummary {
     pub resourcepacks_count: u32,
     pub shaderpacks_count: u32,
     pub total_size_bytes: u64,
-    /// Абсолютный путь к папке сборки.
     pub directory: String,
 }
 
@@ -1836,6 +1841,9 @@ pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<()
     if let Some(v) = patch.jvm_args {
         current.jvm_args = Some(v);
     }
+    if let Some(v) = patch.java_settings {
+        current.java_settings = Some(v);
+    }
     if let Some(v) = patch.resolution_width {
         current.resolution_width = Some(v);
     }
@@ -2118,7 +2126,6 @@ pub async fn import_mrpack(
     }
 
     let Some(index_text) = index_json else {
-        // Пакет может не иметь modrinth.index.json — в этом случае просто распаковали overrides.
         return Ok(());
     };
 
@@ -2194,8 +2201,6 @@ pub async fn import_mrpack(
     Ok(())
 }
 
-/// Импортирует .mrpack в новую сборку: парсит версию игры и лоадер из пакета,
-/// создаёт сборку с именем пакета и подходящей версией, распаковывает туда пакет.
 #[tauri::command]
 pub async fn import_mrpack_as_new_profile(
     app: AppHandle,
@@ -2919,8 +2924,6 @@ pub async fn fetch_all_versions() -> Result<Vec<VersionSummary>, String> {
 
 #[tauri::command]
 pub async fn fetch_vanilla_releases() -> Result<Vec<VersionSummary>, String> {
-    // Оставляем команду для совместимости, но теперь фильтруем
-    // только релизы, так как снапшоты/альфы обрабатываются на фронтенде.
     let mut versions = load_all_versions().await?;
     versions.retain(|v| v.version_type == "release");
     Ok(versions)
@@ -2963,8 +2966,7 @@ async fn select_latest_quilt_loader(game_version: &str) -> Result<String, String
             "Для версии Minecraft {game_version} нет доступных версий Quilt Loader"
         ));
     }
-    // Выбираем версию с максимальным build (как «самую свежую»).
-    // Если поле build где-то отсутствует, оно по умолчанию 0.
+
     let mut best: Option<QuiltLoaderEntry> = None;
     for entry in list {
         match best {
@@ -2999,10 +3001,8 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
             .strip_suffix("-latest")
             .or_else(|| key.strip_suffix("-recommended"));
         if let Some(mc) = mc_ver {
-            // Реальный id версии Forge, который создает инсталлятор в папке versions
             let forge_id = format!("{mc}-forge-{build}");
             if seen.insert(forge_id.clone()) {
-                // Отдельно формируем координату для maven-пути инсталлятора
                 let maven_id = format!("{mc}-{build}");
                 let installer_url = format!(
                     "{FORGE_INSTALLER_BASE}/{maven_id}/forge-{maven_id}-installer.jar"
@@ -3695,9 +3695,6 @@ pub async fn install_forge(
         return Err("Установщик Forge завершился с ошибкой.".to_string());
     }
 
-    // Forge устанавливает версию в папку versions/<version_id>/<version_id>.jar.
-    // Для совместимости с остальной логикой лаунчера копируем jar в корень,
-    // чтобы launch_game смог его найти как <game_root>/<version_id>.jar.
     let vers_root = versions_dir()?;
     let src_jar = vers_root
         .join(&version_id)
@@ -4045,7 +4042,6 @@ pub async fn launch_game(
         "osx" => "natives-macos",
         _ => "natives-linux",
     };
-    // 1. Пытаемся распаковать нативы из уже скачанных jar'ов
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
@@ -4059,7 +4055,6 @@ pub async fn launch_game(
             }
         }
     }
-    // 2. Если после этого папка пустая или почти пустая — докачиваем нативы сами
     let mut has_natives_files = false;
     if let Ok(entries) = std::fs::read_dir(&natives_dir) {
         for entry in entries {
@@ -4127,20 +4122,17 @@ pub async fn launch_game(
     let assets_str = assets_root.to_str().unwrap_or("");
     let _ = std::fs::create_dir_all(&assets_root);
 
-    // Перед запуском игры пытаемся обновить Ely.by сессию, если она есть
     if let Err(e) = refresh_ely_session_internal().await {
         return Err(e);
     }
 
     let profile = get_profile().unwrap_or_default();
 
-    // Сначала считаем, что мы оффлайн / Ely.by (как раньше)
     let mut is_offline = profile
         .ely_access_token
         .as_deref()
         .map(|s| s.is_empty() || s == "0")
         .unwrap_or(true);
-    // Базово берём Ely.by / оффлайн данные
     let mut auth_name: String = profile
         .ely_username
         .as_deref()
@@ -4182,7 +4174,6 @@ pub async fn launch_game(
         "msa".to_string()
     };
 
-    // Если уже сохранены официальные Minecraft‑данные, используем их в приоритете
     if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
         profile.mc_username.as_ref(),
         profile.mc_uuid.as_ref(),
@@ -4210,7 +4201,6 @@ pub async fn launch_game(
         }
     }
 
-    // Если Minecraft‑данных ещё нет, но есть Microsoft‑аккаунт, пытаемся получить официальный профиль
     if profile
         .mc_access_token
         .as_deref()
@@ -4260,19 +4250,17 @@ pub async fn launch_game(
             .replace("${version_type}", "release")
             .replace("${is_demo_user}", "false")
             .replace("${launcher_name}", "16Launcher")
-            .replace("${launcher_version}", "1.0.4")
+            .replace("${launcher_version}", "2.0.0")
     };
 
     let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
         (jv.major_version, jv.component.clone())
     } else {
-        // Старые версии без javaVersion всегда запускались на Java 8
         (8, "jre-legacy".to_string())
     };
     let default_java_path =
         crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
 
-    // Настройки запуска (память, консоль, поведение лаунчера).
     let settings = effective_settings_for_launch();
     let instance_settings_for_launch =
         load_selected_instance_settings_internal()
@@ -4280,7 +4268,6 @@ pub async fn launch_game(
             .flatten()
             .map(|(_, s)| s);
 
-    // Функция подстановки плейсхолдеров в аргументах.
     let replace = |s: &str| -> String {
         s.replace("${game_directory}", game_dir_str)
             .replace("${gameDir}", game_dir_str)
@@ -4298,10 +4285,9 @@ pub async fn launch_game(
             .replace("${version_type}", "release")
             .replace("${is_demo_user}", "false")
             .replace("${launcher_name}", "16Launcher")
-            .replace("${launcher_version}", "1.0.4")
+            .replace("${launcher_version}", "2.0.0")
     };
 
-    // Базовые JVM‑аргументы Mojang/loader.
     let mut jvm_args: Vec<String> =
         if detail.arguments.game.is_empty() && detail.minecraft_arguments.is_some() {
             vec![
@@ -4328,7 +4314,6 @@ pub async fn launch_game(
                 .collect::<Vec<String>>()
         };
 
-    // Базовые игровые аргументы.
     let mut game_args: Vec<String> = if let Some(ref legacy) = detail.minecraft_arguments {
         legacy
             .split_whitespace()
@@ -4341,7 +4326,6 @@ pub async fn launch_game(
             .collect::<Vec<String>>()
     };
 
-    // Переопределение/расширение аргументов профиля (разрешение окна).
     if let Some(inst) = &instance_settings_for_launch {
         if let (Some(w), Some(h)) = (inst.resolution_width, inst.resolution_height) {
             game_args.push("--width".to_string());
@@ -4381,9 +4365,11 @@ pub async fn launch_game(
         game_args = filtered;
     }
 
-    let java_settings = load_java_settings_internal(&app);
+    let java_settings = instance_settings_for_launch
+        .as_ref()
+        .and_then(|s| s.java_settings.clone())
+        .unwrap_or_else(|| load_java_settings_internal(&app));
 
-    // Применяем настройки памяти/доп. аргументов Java.
     let (java_path, mut jvm_args) = build_java_command(
         default_java_path,
         &settings,
@@ -4397,7 +4383,6 @@ pub async fn launch_game(
         jvm_args,
     )?;
 
-    // Ely.by / официальный Minecraft — при наличии токена добавляем authlib‑injector.
     if auth_token != "offline" && !auth_token.is_empty() {
         match ensure_authlib_injector().await {
             Ok(path) => {

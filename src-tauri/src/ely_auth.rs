@@ -32,7 +32,6 @@ pub const YGGDRASIL_INVALIDATE_URL: &str = "https://authserver.ely.by/auth/inval
 
 pub const REDIRECT_URI: &str = "http://localhost:25568/callback";
 
-// Ссылка на проект authlib-injector (GitHub)
 const AUTHLIB_INJECTOR_GITHUB_URL: &str = "https://github.com/yushijinhun/authlib-injector";
 const AUTHLIB_INJECTOR_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest";
@@ -528,7 +527,6 @@ pub async fn ensure_authlib_injector() -> Result<std::path::PathBuf, String> {
     let jar_path = dir.join("authlib-injector.jar");
 
     if jar_path.exists() {
-        // Проверяем, что это реально JAR (zip), а не HTML/ошибка/обрывок
         let ok = std::fs::File::open(&jar_path)
             .and_then(|mut f| {
                 let mut sig = [0u8; 2];

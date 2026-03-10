@@ -24,6 +24,7 @@ type JavaSettingsProps = {
   language: Language;
   systemMemoryGb: number;
   showNotification: (kind: NotificationKind, message: string) => void;
+  profileId?: string | null;
 };
 
 type ValidationState = {
@@ -54,6 +55,7 @@ export function JavaSettingsTab({
   language,
   systemMemoryGb,
   showNotification,
+  profileId,
 }: JavaSettingsProps) {
   const [settings, setSettings] = useState<JavaSettings | null>(null);
   const [initialSettings, setInitialSettings] = useState<JavaSettings | null>(null);
@@ -91,7 +93,9 @@ export function JavaSettingsTab({
     (async () => {
       setLoading(true);
       try {
-        const data = await invoke<JavaSettings>("get_java_settings");
+        const data = profileId
+          ? await invoke<JavaSettings>("get_profile_java_settings", { id: profileId })
+          : await invoke<JavaSettings>("get_java_settings");
         if (cancelled) return;
         setSettings(data);
         setInitialSettings(data);
@@ -204,7 +208,11 @@ export function JavaSettingsTab({
     if (!settings) return;
     setSaving(true);
     try {
-      await invoke("set_java_settings", { settings });
+      if (profileId) {
+        await invoke("set_profile_java_settings", { id: profileId, settings });
+      } else {
+        await invoke("set_java_settings", { settings });
+      }
       setInitialSettings(settings);
       showNotification(
         "success",

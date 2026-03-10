@@ -1,14 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ChevronDown, Download, UploadCloud } from "lucide-react";
+import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
+import { JavaSettingsTab } from "./JavaSettings";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
+type Settings = {
+  ram_mb: number;
+  show_console_on_launch: boolean;
+  close_launcher_on_game_start: boolean;
+  check_game_processes: boolean;
+  show_snapshots: boolean;
+  show_alpha_versions: boolean;
+  notify_new_update: boolean;
+  notify_new_message: boolean;
+  notify_system_message: boolean;
+  check_updates_on_start: boolean;
+  auto_install_updates: boolean;
+};
 
 type InstanceProfile = {
   id: string;
@@ -40,6 +55,20 @@ type ModpackTabProps = {
 
 type ViewId = "list" | "create" | "import" | "manage";
 type ContentTab = "mods" | "resourcepacks" | "shaderpacks";
+
+type FileNode = {
+  path: string;
+  name: string;
+  is_dir: boolean;
+  size: number;
+  children?: FileNode[] | null;
+};
+
+type PreviewFile = { path: string; size: number };
+type PreviewResult = { files: PreviewFile[]; total_bytes: number };
+type ExportProgressPayload = { bytes_written: number; total_bytes: number; current_file: string };
+type ExportFinishedPayload = { path: string; skipped_files: string[] };
+type ExportErrorPayload = { message: string };
 
 const loaderLabels: Record<LoaderId, string> = {
   vanilla: "Vanilla",
@@ -76,12 +105,20 @@ function FolderIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/folder.png" className={className} />;
 }
 
+function FileIcon({ className }: IconProps) {
+  return <ImageIcon src="/launcher-assets/file.png" className={className} />;
+}
+
 function EditIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/edit.png" className={className} />;
 }
 
 function DeleteIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/delete.png" className={className} />;
+}
+
+function ExportIcon({ className }: IconProps) {
+  return <ImageIcon src="/launcher-assets/export.png" className={className} />;
 }
 
 function PlusIcon({ className }: IconProps) {
@@ -94,6 +131,10 @@ function RefreshIcon({ className }: IconProps) {
 
 function ModsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/mods.png" className={className} />;
+}
+
+function SettingsIcon({ className }: IconProps) {
+  return <ImageIcon src="/launcher-assets/settings.png" className={className} />;
 }
 
 function SearchIcon({ className }: IconProps) {
@@ -158,7 +199,6 @@ export function ModpackTab({
         return saved;
       }
     } catch {
-      // ignore
     }
     return initialSelectedProfileId ?? null;
   });
@@ -205,11 +245,320 @@ export function ModpackTab({
   const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
     null,
   );
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
+  const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
+  const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
+  const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
+
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
+  const [exportTree, setExportTree] = useState<FileNode[] | null>(null);
+  const [exportTreeLoading, setExportTreeLoading] = useState(false);
+  const [selectedExportPaths, setSelectedExportPaths] = useState<Set<string>>(new Set());
+  const [ignorePatternsText, setIgnorePatternsText] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressPayload | null>(null);
+  const [exportResultPath, setExportResultPath] = useState<string | null>(null);
+  const [exportSkippedFiles, setExportSkippedFiles] = useState<string[]>([]);
+  const [exportSpeedLabel, setExportSpeedLabel] = useState<string>("");
+  const [collapsedExportPaths, setCollapsedExportPaths] = useState<Set<string>>(new Set());
+  const lastProgressRef = useRef<{ t: number; bytes: number } | null>(null);
+  const exportFormatTabRefs = useRef<
+    Partial<Record<"mrpack" | "zip", HTMLButtonElement | null>>
+  >({});
+  const [exportFormatIndicator, setExportFormatIndicator] = useState<{
+    left: number;
+    width: number;
+  }>({ left: 0, width: 0 });
+  const manageContentTabRefs = useRef<
+    Partial<Record<ContentTab, HTMLButtonElement | null>>
+  >({});
+  const [manageContentIndicator, setManageContentIndicator] = useState<{
+    left: number;
+    width: number;
+  }>({ left: 0, width: 0 });
 
   const selectedProfile = useMemo(
     () => profiles.find((p) => p.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+
+  function parseIgnorePatterns(text: string): string[] {
+    return text
+      .split(/\r?\n/g)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith("#"));
+  }
+
+  function flattenTreePaths(nodes: FileNode[] | null): string[] {
+    if (!nodes) return [];
+    const out: string[] = [];
+    const stack: FileNode[] = [...nodes];
+    while (stack.length) {
+      const n = stack.pop();
+      if (!n) continue;
+      out.push(n.path);
+      if (n.children && n.children.length) {
+        for (const c of n.children) stack.push(c);
+      }
+    }
+    return out;
+  }
+
+  function getDefaultSelectedPaths(tree: FileNode[] | null): Set<string> {
+    const next = new Set<string>();
+    if (!tree) return next;
+    for (const n of tree) {
+      next.add(n.path);
+    }
+    return next;
+  }
+
+  async function openExportModal() {
+    if (!selectedProfile) return;
+    setIsExportOpen(true);
+    setExportResultPath(null);
+    setExportProgress(null);
+    setExportSkippedFiles([]);
+    setExportSpeedLabel("");
+    lastProgressRef.current = null;
+    setPreviewResult(null);
+    if (exportTree || exportTreeLoading) return;
+    setExportTreeLoading(true);
+    try {
+      const tree = await invoke<FileNode[]>("list_build_files", { buildId: selectedProfile.id });
+      setExportTree(tree);
+      setSelectedExportPaths(getDefaultSelectedPaths(tree));
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        language === "ru" ? "Не удалось прочитать файлы сборки." : "Failed to read build files.",
+      );
+      setExportTree(null);
+    } finally {
+      setExportTreeLoading(false);
+    }
+  }
+
+  async function handlePreviewExport() {
+    if (!selectedProfile) return;
+    const selected = Array.from(selectedExportPaths);
+    if (selected.length === 0) {
+      showNotification(
+        "warning",
+        language === "ru" ? "Выберите хотя бы один путь." : "Select at least one path.",
+      );
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewResult(null);
+    try {
+      const res = await invoke<PreviewResult>("preview_export", {
+        buildId: selectedProfile.id,
+        selectedPaths: selected,
+        ignorePatterns: parseIgnorePatterns(ignorePatternsText),
+      });
+      setPreviewResult(res);
+      showNotification(
+        "info",
+        language === "ru" ? "Предпросмотр обновлён." : "Preview updated.",
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        language === "ru" ? "Не удалось сделать предпросмотр." : "Failed to preview export.",
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function handleStartExport() {
+    if (!selectedProfile) return;
+    const selected = Array.from(selectedExportPaths);
+    if (selected.length === 0) {
+      showNotification(
+        "warning",
+        language === "ru" ? "Выберите хотя бы один путь." : "Select at least one path.",
+      );
+      return;
+    }
+
+    let outPath: string | null = null;
+    try {
+      const ext = exportFormat === "mrpack" ? "mrpack" : "zip";
+      const suggested = `${selectedProfile.name}-${selectedProfile.id}.${ext}`;
+      const chosen = await saveFileDialog({
+        defaultPath: suggested,
+        filters: [
+          exportFormat === "mrpack"
+            ? { name: "Modrinth pack", extensions: ["mrpack"] }
+            : { name: "Zip archive", extensions: ["zip"] },
+        ],
+      });
+      if (typeof chosen === "string" && chosen.trim()) {
+        outPath = chosen;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    if (!outPath) return;
+
+    setExportBusy(true);
+    setExportProgress({ bytes_written: 0, total_bytes: 0, current_file: "" });
+    setExportResultPath(null);
+    setExportSkippedFiles([]);
+    setExportSpeedLabel("");
+    lastProgressRef.current = null;
+
+    try {
+      await invoke("export_build", {
+        buildId: selectedProfile.id,
+        selectedPaths: selected,
+        ignorePatterns: parseIgnorePatterns(ignorePatternsText),
+        format: exportFormat,
+        outPath,
+      });
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      showNotification(
+        "error",
+        language === "ru" ? `Экспорт не удался: ${msg}` : `Export failed: ${msg}`,
+      );
+      setExportBusy(false);
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (!isExportOpen) return;
+    let unlistenProgress: (() => void) | undefined;
+    let unlistenFinished: (() => void) | undefined;
+    let unlistenError: (() => void) | undefined;
+
+    (async () => {
+      try {
+        unlistenProgress = await listen<ExportProgressPayload>("export-progress", (event) => {
+          const p = event.payload;
+          setExportProgress(p);
+          const now = Date.now();
+          const prev = lastProgressRef.current;
+          if (prev && p.bytes_written >= prev.bytes) {
+            const dt = Math.max(1, now - prev.t);
+            const db = p.bytes_written - prev.bytes;
+            const bps = (db * 1000) / dt;
+            if (Number.isFinite(bps)) {
+              setExportSpeedLabel(
+                language === "ru"
+                  ? `${formatBytes(bps, language)}/с`
+                  : `${formatBytes(bps, language)}/s`,
+              );
+            }
+          }
+          lastProgressRef.current = { t: now, bytes: p.bytes_written };
+        });
+      } catch (e) {
+        console.error(e);
+      }
+
+      try {
+        unlistenFinished = await listen<ExportFinishedPayload>("export-finished", (event) => {
+          const p = event.payload;
+          setExportResultPath(p.path);
+          setExportSkippedFiles(Array.isArray(p.skipped_files) ? p.skipped_files : []);
+          setExportBusy(false);
+          setExportProgress(null);
+          showNotification(
+            "success",
+            language === "ru" ? "Экспорт завершён." : "Export finished.",
+          );
+        });
+      } catch (e) {
+        console.error(e);
+      }
+
+      try {
+        unlistenError = await listen<ExportErrorPayload>("export-error", (event) => {
+          const p = event.payload;
+          const msg =
+            typeof p === "string"
+              ? p
+              : p && typeof p.message === "string"
+                ? p.message
+                : "Export error";
+          setExportBusy(false);
+          showNotification("error", msg);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+
+    return () => {
+      unlistenProgress?.();
+      unlistenFinished?.();
+      unlistenError?.();
+    };
+  }, [isExportOpen, language, showNotification]);
+
+  async function openProfileSettings(profileId: string) {
+    setSelectedProfileId(profileId);
+    setActiveView("manage");
+    setProfileSettingsTab("general");
+    setIsProfileSettingsOpen(true);
+    try {
+      void invoke("set_selected_profile", { id: profileId });
+    } catch {
+      // ignore
+    }
+    try {
+      const totalGb = await invoke<number>("get_system_memory_gb");
+      if (typeof totalGb === "number" && Number.isFinite(totalGb) && totalGb >= 1) {
+        setSystemMemoryGb(Math.max(1, Math.min(64, Math.round(totalGb))));
+      }
+    } catch {
+      setSystemMemoryGb(16);
+    }
+    try {
+      const s = await invoke<Settings>("get_effective_settings", { profileId });
+      setProfileEffectiveSettings(s);
+    } catch (e) {
+      console.error(e);
+      setProfileEffectiveSettings(null);
+    }
+  }
+
+  async function patchProfileGameSettings(profileId: string, patch: Partial<Settings>) {
+    setProfileEffectiveSettings((prev) => (prev ? { ...prev, ...patch } : prev));
+    const profilePatch: Record<string, unknown> = {};
+    if (patch.ram_mb !== undefined) profilePatch.ram_mb = patch.ram_mb;
+    if (patch.show_console_on_launch !== undefined)
+      profilePatch.show_console_on_launch = patch.show_console_on_launch;
+    if (patch.close_launcher_on_game_start !== undefined)
+      profilePatch.close_launcher_on_game_start = patch.close_launcher_on_game_start;
+    if (patch.check_game_processes !== undefined)
+      profilePatch.check_game_processes = patch.check_game_processes;
+    try {
+      await invoke("update_profile_settings", { id: profileId, patch: profilePatch });
+      showNotification(
+        "success",
+        language === "ru" ? "Настройки сборки сохранены." : "Profile settings saved.",
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        language === "ru"
+          ? "Не удалось сохранить настройки сборки."
+          : "Failed to save profile settings.",
+      );
+    }
+  }
 
   // Если `App` уже знает выбранный профиль (например, после рестарта лаунчера),
   // синхронизируем локальное состояние при первом монтировании или смене id.
@@ -244,6 +593,37 @@ export function ModpackTab({
       void refreshItems(selectedProfileId, contentTab);
     }
   }, [selectedProfileId, contentTab, activeView]);
+
+  useEffect(() => {
+    if (!isExportOpen) return;
+    const updateIndicator = () => {
+      const el = exportFormatTabRefs.current[exportFormat];
+      if (el) {
+        setExportFormatIndicator({
+          left: el.offsetLeft,
+          width: el.offsetWidth,
+        });
+      }
+    };
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [isExportOpen, exportFormat]);
+
+  useLayoutEffect(() => {
+    const updateIndicator = () => {
+      const el = manageContentTabRefs.current[contentTab];
+      if (el) {
+        setManageContentIndicator({
+          left: el.offsetLeft,
+          width: el.offsetWidth,
+        });
+      }
+    };
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [contentTab]);
 
   useEffect(() => {
     if (!onProfileSelectionChange) return;
@@ -1080,7 +1460,7 @@ export function ModpackTab({
                     setCreateAllVersions(e.target.checked);
                     setVersionOptions([]);
                   }}
-                  className="h-3.5 w-3.5 rounded border-white/30 bg-black/40 text-emerald-500 focus:ring-emerald-500"
+                  className="h-3.5 w-3.5 cursor-pointer appearance-none rounded-[6px] border border-white/35 bg-black/50 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] transition-colors checked:border-emerald-400 checked:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
                 />
                 <span>
                   {language === "ru" ? "Все версии" : "All versions"}
@@ -1308,6 +1688,33 @@ export function ModpackTab({
             </button>
             <button
               type="button"
+              onClick={() => void openExportModal()}
+              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+              title={language === "ru" ? "Экспортировать сборку" : "Export build"}
+            >
+              <ExportIcon className="h-4 w-4" />
+              <span>{language === "ru" ? "Экспорт" : "Export"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void openProfileSettings(selectedProfile.id)}
+              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+              title={language === "ru" ? "Настройки сборки" : "Profile settings"}
+            >
+              <img
+                src="/launcher-assets/setttings.png"
+                alt=""
+                className="h-4 w-4 object-contain"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  img.style.display = "none";
+                }}
+              />
+              <SettingsIcon className="h-4 w-4" />
+              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+            </button>
+            <button
+              type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
               className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500"
             >
@@ -1392,7 +1799,14 @@ export function ModpackTab({
           </div>
 
           <div className="mb-3 flex items-center justify-between">
-            <div className="inline-flex gap-1 rounded-full bg-white/10 p-1">
+            <div className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden">
+              <div
+                className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
+                style={{
+                  left: `${manageContentIndicator.left}px`,
+                  width: `${manageContentIndicator.width}px`,
+                }}
+              />
               {(["mods", "resourcepacks", "shaderpacks"] as ContentTab[]).map(
                 (tab) => {
                   const active = tab === contentTab;
@@ -1400,11 +1814,12 @@ export function ModpackTab({
                     <button
                       key={tab}
                       type="button"
+                      ref={(el) => {
+                        manageContentTabRefs.current[tab] = el;
+                      }}
                       onClick={() => setContentTab(tab)}
-                      className={`interactive-press rounded-full px-3 py-1 text-xs font-semibold ${
-                        active
-                          ? "bg-white text-black shadow-soft"
-                          : "text-white/70 hover:text-white"
+                      className={`interactive-press relative z-10 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                        active ? "text-black" : "text-white/70 hover:text-white"
                       }`}
                     >
                       {manageTabLabels[tab]}
@@ -1500,6 +1915,19 @@ export function ModpackTab({
             <button
               type="button"
               onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void openProfileSettings(profile.id);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <SettingsIcon className="h-3.5 w-3.5" />
+              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 const profile = profiles.find(
                   (p) => p.id === contextMenu.profileId,
                 );
@@ -1507,7 +1935,7 @@ export function ModpackTab({
                 if (!profile) return;
                 setPendingDeleteProfileId(profile.id);
               }}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
             >
               <DeleteIcon className="h-3.5 w-3.5" />
               <span>
@@ -1592,6 +2020,504 @@ export function ModpackTab({
               >
                 {language === "ru" ? "Удалить" : "Delete"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isProfileSettingsOpen && selectedProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setIsProfileSettingsOpen(false)}
+        >
+          <div
+            className="glass-panel w-full max-w-3xl rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.16em] text-white/50">
+                  {language === "ru" ? "Настройки сборки" : "Profile settings"}
+                </div>
+                <div className="truncate text-lg font-semibold text-white">
+                  {selectedProfile.name}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
+                onClick={() => setIsProfileSettingsOpen(false)}
+              >
+                {language === "ru" ? "Закрыть" : "Close"}
+              </button>
+            </div>
+
+            <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1">
+              <button
+                type="button"
+                onClick={() => setProfileSettingsTab("general")}
+                className={`interactive-press flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  profileSettingsTab === "general"
+                    ? "bg-white text-black shadow-soft"
+                    : "text-white/70 hover:text-white"
+                }`}
+              >
+                {language === "ru" ? "Общие" : "General"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileSettingsTab("java")}
+                className={`interactive-press flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  profileSettingsTab === "java"
+                    ? "bg-white text-black shadow-soft"
+                    : "text-white/70 hover:text-white"
+                }`}
+              >
+                Java
+              </button>
+            </div>
+
+            {profileSettingsTab === "general" ? (
+              <div className="max-h-[420px] overflow-y-auto pr-1">
+                <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                  <div className="mb-2 text-xs text-white/60">
+                    {language === "ru"
+                      ? "Эти параметры применяются только к выбранной сборке и используются при запуске игры."
+                      : "These settings apply only to this profile and are used on launch."}
+                  </div>
+                  <SettingsToggle
+                    label={
+                      language === "ru"
+                        ? "Консоль при запуске:"
+                        : "Show console on game start:"
+                    }
+                    yesLabel={language === "ru" ? "Да" : "On"}
+                    noLabel={language === "ru" ? "Нет" : "Off"}
+                    value={profileEffectiveSettings?.show_console_on_launch ?? false}
+                    onChange={(value: boolean) =>
+                      void patchProfileGameSettings(selectedProfile.id, {
+                        show_console_on_launch: value,
+                      })
+                    }
+                  />
+                  <SettingsToggle
+                    label={
+                      language === "ru"
+                        ? "Закрывать лаунчер при запуске игры:"
+                        : "Close launcher when game starts:"
+                    }
+                    yesLabel={language === "ru" ? "Да" : "Yes"}
+                    noLabel={language === "ru" ? "Нет" : "No"}
+                    value={profileEffectiveSettings?.close_launcher_on_game_start ?? false}
+                    onChange={(value: boolean) =>
+                      void patchProfileGameSettings(selectedProfile.id, {
+                        close_launcher_on_game_start: value,
+                      })
+                    }
+                  />
+                  <SettingsToggle
+                    label={
+                      language === "ru"
+                        ? "Проверять запущенные процессы игры:"
+                        : "Check running game processes:"
+                    }
+                    yesLabel={language === "ru" ? "Да" : "Yes"}
+                    noLabel={language === "ru" ? "Нет" : "No"}
+                    value={profileEffectiveSettings?.check_game_processes ?? true}
+                    onChange={(value: boolean) =>
+                      void patchProfileGameSettings(selectedProfile.id, {
+                        check_game_processes: value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                  <SettingsSlider
+                    label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
+                    min={1}
+                    max={Math.max(64, systemMemoryGb)}
+                    value={Math.max(
+                      1,
+                      Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
+                    )}
+                    onChange={(value: number) =>
+                      void patchProfileGameSettings(selectedProfile.id, {
+                        ram_mb: Math.max(1, value) * 1024,
+                      })
+                    }
+                    right={
+                      <span className="text-sm font-semibold text-white/90">
+                        {Math.max(
+                          1,
+                          Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
+                        )}
+                        ГБ
+                      </span>
+                    }
+                  />
+                </div>
+              </div>
+            ) : (
+              <JavaSettingsTab
+                language={language}
+                systemMemoryGb={systemMemoryGb}
+                showNotification={showNotification}
+                profileId={selectedProfile.id}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {isExportOpen && selectedProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            if (exportBusy) return;
+            setIsExportOpen(false);
+          }}
+        >
+          <div
+            className="glass-panel w-full max-w-5xl max-h-[80vh] overflow-y-auto rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.16em] text-white/50">
+                  {language === "ru" ? "Экспорт сборки" : "Export build"}
+                </div>
+                <div className="truncate text-lg font-semibold text-white">
+                  {selectedProfile.name}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+                disabled={exportBusy}
+                onClick={() => setIsExportOpen(false)}
+              >
+                {language === "ru" ? "Закрыть" : "Close"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                <div className="mb-2 text-xs font-semibold text-white/80">
+                  {language === "ru" ? "Формат" : "Format"}
+                </div>
+                <div className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden">
+                  <div
+                    className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
+                    style={{
+                      left: `${exportFormatIndicator.left}px`,
+                      width: `${exportFormatIndicator.width}px`,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={exportBusy}
+                    ref={(el) => {
+                      exportFormatTabRefs.current.mrpack = el;
+                    }}
+                    onClick={() => setExportFormat("mrpack")}
+                    className={`interactive-press relative z-10 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      exportFormat === "mrpack"
+                        ? "text-black"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    MRPack
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportBusy}
+                    ref={(el) => {
+                      exportFormatTabRefs.current.zip = el;
+                    }}
+                    onClick={() => setExportFormat("zip")}
+                    className={`interactive-press relative z-10 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      exportFormat === "zip"
+                        ? "text-black"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    ZIP
+                  </button>
+                </div>
+
+                <div className="mt-4 text-xs font-semibold text-white/80">
+                  {language === "ru" ? "Исключения" : "Ignore patterns"}
+                </div>
+                <textarea
+                  value={ignorePatternsText}
+                  disabled={exportBusy}
+                  onChange={(e) => setIgnorePatternsText(e.target.value)}
+                  placeholder={language === "ru" ? "*.log\ncache/\n!important.log" : "*.log\ncache/\n!important.log"}
+                  className="custom-scrollbar mt-2 h-32 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
+                />
+                <div className="mt-2 text-[11px] text-white/55">
+                  {language === "ru"
+                    ? "Поддерживаются: *, **, ! (отмена исключения)."
+                    : "Supported: *, **, ! (negation)."}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3 lg:col-span-2">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-white/80">
+                    {language === "ru" ? "Файлы сборки" : "Build files"}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={exportBusy || exportTreeLoading || !exportTree}
+                      onClick={() => setSelectedExportPaths(new Set(flattenTreePaths(exportTree)))}
+                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                    >
+                      {language === "ru" ? "Выбрать всё" : "Select all"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={exportBusy}
+                      onClick={() => setSelectedExportPaths(new Set())}
+                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                    >
+                      {language === "ru" ? "Снять всё" : "Clear"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="custom-scrollbar max-h-[360px] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2">
+                  {exportTreeLoading ? (
+                    <div className="flex h-24 items-center justify-center text-xs text-white/60">
+                      {language === "ru" ? "Сканирование..." : "Scanning..."}
+                    </div>
+                  ) : !exportTree ? (
+                    <div className="flex h-24 items-center justify-center text-xs text-white/60">
+                      {language === "ru" ? "Нет данных." : "No data."}
+                    </div>
+                  ) : exportTree.length === 0 ? (
+                    <div className="flex h-24 items-center justify-center text-xs text-white/60">
+                      {language === "ru" ? "Папка сборки пуста." : "Build folder is empty."}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {(function renderNodes(nodes: FileNode[], depth: number): ReactNode[] {
+                        return nodes.flatMap((n) => {
+                          const checked = selectedExportPaths.has(n.path);
+                          const isCollapsed = collapsedExportPaths.has(n.path);
+                          const row = (
+                            <label
+                              key={n.path}
+                              className="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-2 py-1 hover:bg-white/5"
+                              style={{ paddingLeft: 8 + depth * 14 }}
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                {n.is_dir ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setCollapsedExportPaths((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(n.path)) next.delete(n.path);
+                                        else next.add(n.path);
+                                        return next;
+                                      });
+                                    }}
+                                    className="interactive-press mr-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white/5 text-white/70 hover:bg-white/15"
+                                  >
+                                    <ChevronDown
+                                      className={`h-3 w-3 transition-transform ${
+                                        isCollapsed ? "-rotate-90" : "rotate-0"
+                                      }`}
+                                    />
+                                  </button>
+                                ) : (
+                                  <span className="mr-0.5 h-4 w-4" />
+                                )}
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={exportBusy}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedExportPaths);
+                                    if (e.target.checked) next.add(n.path);
+                                    else next.delete(n.path);
+                                    setSelectedExportPaths(next);
+                                  }}
+                                  className="h-3.5 w-3.5 cursor-pointer appearance-none rounded-[6px] border border-white/35 bg-black/50 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] transition-colors checked:border-emerald-400 checked:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+                                />
+                                {n.is_dir ? (
+                                  <FolderIcon className="h-4 w-4 opacity-90" />
+                                ) : (
+                                  <FileIcon className="h-4 w-4 opacity-90" />
+                                )}
+                                <span className="truncate text-xs text-white/85">
+                                  {n.name}
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-[11px] text-white/55">
+                                {formatBytes(n.size, language)}
+                              </span>
+                            </label>
+                          );
+
+                          const children =
+                            n.children && n.children.length && !isCollapsed
+                              ? renderNodes(n.children, depth + 1)
+                              : [];
+                          return [row, ...children];
+                        });
+                      })(exportTree, 0)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={exportBusy || previewLoading}
+                    onClick={() => void handlePreviewExport()}
+                    className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-5 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
+                  >
+                    {language === "ru" ? "Предпросмотр" : "Preview"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportBusy}
+                    onClick={() => void handleStartExport()}
+                    className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
+                  >
+                    <ExportIcon className="h-4 w-4" />
+                    <span>{language === "ru" ? "Экспортировать" : "Export"}</span>
+                  </button>
+
+                  {exportBusy && exportProgress && (
+                    <div className="ml-auto flex min-w-[260px] flex-1 flex-col gap-1 rounded-2xl border border-white/12 bg-black/40 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3 text-[11px] text-white/70">
+                        <span className="truncate">
+                          {exportProgress.current_file || (language === "ru" ? "Экспорт…" : "Exporting…")}
+                        </span>
+                        <span className="shrink-0">
+                          {exportSpeedLabel || ""}
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/15">
+                        <div
+                          className="h-full rounded-full bg-emerald-500 transition-all duration-200"
+                          style={{
+                            width:
+                              exportProgress.total_bytes > 0
+                                ? `${Math.min(
+                                    100,
+                                    Math.round(
+                                      (exportProgress.bytes_written / exportProgress.total_bytes) * 100,
+                                    ),
+                                  )}%`
+                                : "8%",
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-white/55">
+                        <span>
+                          {formatBytes(exportProgress.bytes_written, language)} /{" "}
+                          {formatBytes(exportProgress.total_bytes, language)}
+                        </span>
+                        <span>
+                          {exportProgress.total_bytes > 0
+                            ? `${Math.round(
+                                (exportProgress.bytes_written / exportProgress.total_bytes) * 100,
+                              )}%`
+                            : ""}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {previewResult && (
+                  <div className="mt-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold text-white/80">
+                        {language === "ru" ? "Итоговое содержимое" : "Final contents"}
+                      </div>
+                      <div className="text-xs text-white/70">
+                        {language === "ru" ? "Размер:" : "Size:"}{" "}
+                        <span className="font-semibold text-white/90">
+                          {formatBytes(previewResult.total_bytes, language)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2 text-[11px] text-white/75">
+                      {previewResult.files.length === 0 ? (
+                        <div className="py-6 text-center text-white/55">
+                          {language === "ru" ? "Ничего не попадёт в архив." : "Nothing will be included."}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          {previewResult.files.slice(0, 400).map((f) => (
+                            <div key={f.path} className="flex items-center justify-between gap-3 px-2 py-0.5">
+                              <span className="min-w-0 truncate">{f.path}</span>
+                              <span className="shrink-0 text-white/50">
+                                {formatBytes(f.size, language)}
+                              </span>
+                            </div>
+                          ))}
+                          {previewResult.files.length > 400 && (
+                            <div className="px-2 py-1 text-white/50">
+                              {language === "ru"
+                                ? `… и ещё ${previewResult.files.length - 400} файлов`
+                                : `… and ${previewResult.files.length - 400} more files`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {exportResultPath && (
+                  <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold text-emerald-200">
+                        {language === "ru" ? "Готово" : "Done"}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void revealItemInDir(exportResultPath)}
+                        className="interactive-press rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+                      >
+                        {language === "ru" ? "Открыть папку" : "Open folder"}
+                      </button>
+                    </div>
+                    <div className="break-all text-[11px] text-emerald-100/90">{exportResultPath}</div>
+                    {exportSkippedFiles.length > 0 && (
+                      <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-[11px] text-white/70">
+                        <div className="mb-1 font-semibold text-white/80">
+                          {language === "ru"
+                            ? `Пропущено файлов: ${exportSkippedFiles.length}`
+                            : `Skipped files: ${exportSkippedFiles.length}`}
+                        </div>
+                        <div className="custom-scrollbar max-h-20 overflow-y-auto">
+                          {exportSkippedFiles.slice(0, 80).map((p) => (
+                            <div key={p} className="truncate">{p}</div>
+                          ))}
+                          {exportSkippedFiles.length > 80 && (
+                            <div className="text-white/50">
+                              {language === "ru"
+                                ? `… и ещё ${exportSkippedFiles.length - 80}`
+                                : `… and ${exportSkippedFiles.length - 80} more`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

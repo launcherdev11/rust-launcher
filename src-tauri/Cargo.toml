@@ -27,6 +27,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 futures-util = "0.3"
 dirs = "5"
 zip = "2"
+ignore = "0.4"
 rand = "0.8"
 urlencoding = "2"
 sha1 = "0.10"

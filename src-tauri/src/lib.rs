@@ -2,6 +2,7 @@ mod game_provider;
 mod java_runtime;
 mod ely_auth;
 mod ms_auth;
+mod commands;
 
 #[allow(unused_imports)]
 use tauri_plugin_updater::UpdaterExt;
@@ -17,8 +18,9 @@ use game_provider::{
     download_modrinth_file, import_mrpack, import_mrpack_as_new_profile,
     import_modpack_files, update_profile_settings, list_profile_items, rename_profile,
     add_profile_files, create_profile, get_java_settings, set_java_settings,
-    validate_java_args, detect_java_runtimes,
+    validate_java_args, detect_java_runtimes, get_profile_java_settings, set_profile_java_settings,
 };
+use commands::{list_build_files, preview_export, export_build};
 use ely_auth::{
     ely_login_with_password, ely_logout, handle_oauth_callback, refresh_ely_session,
     start_ely_oauth,
@@ -30,10 +32,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // Временно отключаем плагин updater, так как он требует настройки ключей в tauri.conf.json
         // .plugin(tauri_plugin_updater::Builder::new().build()) 
         .setup(|app| {
-            // Логика проверки обновлений временно отключена для успешного запуска в dev-режиме
+            //
             /*
             let handle = app.handle();
             let settings = game_provider::load_settings_from_disk();
@@ -94,8 +95,13 @@ pub fn run() {
             delete_profile,
             get_java_settings,
             set_java_settings,
+            get_profile_java_settings,
+            set_profile_java_settings,
             validate_java_args,
-            detect_java_runtimes
+            detect_java_runtimes,
+            list_build_files,
+            preview_export,
+            export_build
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
