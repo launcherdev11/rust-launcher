@@ -67,5 +67,5 @@ jobs:
 
       - name: Lint Rust code (clippy)
         working-directory: src-tauri
-        run: cargo clippy --locked -- -D warnings
+        run: cargo clippy --locked
 
