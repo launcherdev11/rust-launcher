@@ -1,5 +1,5 @@
 import { check } from "@tauri-apps/plugin-updater";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
 
 type SettingsTabId = "directories" | "game" | "versions" | "launcher" | "updates";
@@ -61,14 +61,22 @@ export function SettingsTab({
     left: number;
     width: number;
   }>({ left: 0, width: 0 });
+  const gameSubTabRefs = useRef<
+    Partial<Record<"general" | "java", HTMLButtonElement | null>>
+  >({});
+  const [gameSubIndicator, setGameSubIndicator] = useState<{
+    left: number;
+    width: number;
+  }>({ left: 0, width: 0 });
+  const languageTabRefs = useRef<
+    Partial<Record<Language, HTMLButtonElement | null>>
+  >({});
+  const [languageIndicator, setLanguageIndicator] = useState<{
+    left: number;
+    width: number;
+  }>({ left: 0, width: 0 });
 
-  const currentRamMb = settings?.ram_mb ?? 4096;
-  const currentRamGbRounded = Math.max(1, Math.round(currentRamMb / 1024));
-  const ramMinMb = 1024;
-  const ramMaxMb = 64 * 1024;
-  const ramSliderMaxGb = Math.max(64, systemMemoryGb);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateIndicator = () => {
       const el = settingsTabRefs.current[settingsTab];
       if (el) {
@@ -83,6 +91,44 @@ export function SettingsTab({
     window.addEventListener("resize", updateIndicator);
     return () => window.removeEventListener("resize", updateIndicator);
   }, [settingsTab]);
+
+  useLayoutEffect(() => {
+    const updateIndicator = () => {
+      const el = gameSubTabRefs.current[gameSubTab];
+      if (el) {
+        setGameSubIndicator({
+          left: el.offsetLeft,
+          width: el.offsetWidth,
+        });
+      }
+    };
+
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [gameSubTab]);
+
+  useLayoutEffect(() => {
+    const updateIndicator = () => {
+      const el = languageTabRefs.current[language];
+      if (el) {
+        setLanguageIndicator({
+          left: el.offsetLeft,
+          width: el.offsetWidth,
+        });
+      }
+    };
+
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [language]);
+
+  const currentRamMb = settings?.ram_mb ?? 4096;
+  const currentRamGbRounded = Math.max(1, Math.round(currentRamMb / 1024));
+  const ramMinMb = 1024;
+  const ramMaxMb = 64 * 1024;
+  const ramSliderMaxGb = Math.max(64, systemMemoryGb);
 
   useEffect(() => {
     if (!isRamEditing) {
@@ -161,69 +207,61 @@ export function SettingsTab({
         <div className="glass-panel w-full px-6 py-5">
           {settingsTab === "game" && (
             <SettingsCard title={language === "ru" ? "Игра" : "Game"}>
-              <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1">
+              <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1 relative overflow-hidden">
+                <div
+                  className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
+                  style={{
+                    left: `${gameSubIndicator.left}px`,
+                    width: `${gameSubIndicator.width}px`,
+                  }}
+                />
                 <button
                   type="button"
+                  ref={(el) => {
+                    gameSubTabRefs.current.general = el;
+                  }}
                   onClick={() => setGameSubTab("general")}
-                  className={`interactive-press flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    gameSubTab === "general"
-                      ? "bg-white text-black shadow-soft"
-                      : "text-white/70 hover:text-white"
+                  className={`interactive-press relative z-10 flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    gameSubTab === "general" ? "text-black" : "text-white/70 hover:text-white"
                   }`}
                 >
                   {language === "ru" ? "Общие" : "General"}
                 </button>
                 <button
                   type="button"
+                  ref={(el) => {
+                    gameSubTabRefs.current.java = el;
+                  }}
                   onClick={() => setGameSubTab("java")}
-                  className={`interactive-press flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    gameSubTab === "java"
-                      ? "bg-white text-black shadow-soft"
-                      : "text-white/70 hover:text-white"
+                  className={`interactive-press relative z-10 flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    gameSubTab === "java" ? "text-black" : "text-white/70 hover:text-white"
                   }`}
                 >
                   Java
                 </button>
               </div>
-
               {gameSubTab === "general" ? (
                 <>
                   <SettingsToggle
-                    label={
-                      language === "ru"
-                        ? "Консоль при запуске:"
-                        : "Show console on game start:"
-                    }
+                    label={language === "ru" ? "Консоль при запуске:" : "Show console on game start:"}
                     yesLabel={language === "ru" ? "Да" : "On"}
                     noLabel={language === "ru" ? "Нет" : "Off"}
                     value={settings?.show_console_on_launch ?? false}
                     onChange={(value: boolean) => updateSettings({ show_console_on_launch: value })}
                   />
                   <SettingsToggle
-                    label={
-                      language === "ru"
-                        ? "Закрывать лаунчер при запуске игры:"
-                        : "Close launcher when game starts:"
-                    }
+                    label={language === "ru" ? "Закрывать лаунчер при запуске игры:" : "Close launcher when game starts:"}
                     yesLabel={language === "ru" ? "Да" : "Yes"}
                     noLabel={language === "ru" ? "Нет" : "No"}
                     value={settings?.close_launcher_on_game_start ?? false}
-                    onChange={(value: boolean) =>
-                      updateSettings({ close_launcher_on_game_start: value })
-                    }
+                    onChange={(value: boolean) => updateSettings({ close_launcher_on_game_start: value })}
                   />
                   <SettingsToggle
-                    label={
-                      language === "ru"
-                        ? "Проверять запущенные процессы игры:"
-                        : "Check running game processes:"
-                    }
+                    label={language === "ru" ? "Проверять запущенные процессы игры:" : "Check running game processes:"}
                     yesLabel={language === "ru" ? "Да" : "Yes"}
                     noLabel={language === "ru" ? "Нет" : "No"}
                     value={settings?.check_game_processes ?? true}
-                    onChange={(value: boolean) =>
-                      updateSettings({ check_game_processes: value })
-                    }
+                    onChange={(value: boolean) => updateSettings({ check_game_processes: value })}
                   />
                 </>
               ) : (
@@ -233,9 +271,7 @@ export function SettingsTab({
                     min={1}
                     max={ramSliderMaxGb}
                     value={currentRamGbRounded}
-                    onChange={(value: number) =>
-                      updateSettings({ ram_mb: Math.max(1, value) * 1024 })
-                    }
+                    onChange={(value: number) => updateSettings({ ram_mb: Math.max(1, value) * 1024 })}
                     right={
                       isRamEditing ? (
                         <div className="flex items-center gap-2">
@@ -247,10 +283,7 @@ export function SettingsTab({
                             max={ramMaxMb}
                             value={ramInputMb}
                             onChange={(e) => setRamInputMb(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitRamMb(ramInputMb);
-                              if (e.key === "Escape") cancelRamEditing();
-                            }}
+                            onKeyDown={(e) => { if (e.key === "Enter") commitRamMb(ramInputMb); if (e.key === "Escape") cancelRamEditing(); }}
                             onBlur={() => commitRamMb(ramInputMb)}
                             className="no-number-spin h-7 w-28 rounded-lg border border-white/15 bg-black/25 px-2 text-right text-sm font-semibold text-white/90 outline-none focus:border-white/30"
                           />
@@ -261,22 +294,14 @@ export function SettingsTab({
                           type="button"
                           onClick={() => setIsRamEditing(true)}
                           className="interactive-press text-sm font-semibold text-white/90 hover:text-white"
-                          title={
-                            language === "ru"
-                              ? "Нажмите, чтобы ввести в МБ"
-                              : "Click to edit in MB"
-                          }
+                          title={language === "ru" ? "Нажмите, чтобы ввести в МБ" : "Click to edit in MB"}
                         >
                           {currentRamGbRounded}ГБ
                         </button>
                       )
                     }
                   />
-                  <JavaSettingsTab
-                    language={language}
-                    systemMemoryGb={systemMemoryGb}
-                    showNotification={showNotification}
-                  />
+                  <JavaSettingsTab language={language} systemMemoryGb={systemMemoryGb} showNotification={showNotification} />
                 </>
               )}
             </SettingsCard>
@@ -348,14 +373,22 @@ export function SettingsTab({
                 <span className="text-sm text-white/90">
                   {language === "ru" ? "Язык интерфейса:" : "Interface language:"}
                 </span>
-                <div className="flex rounded-full bg-white/10 p-0.5">
+                <div className="relative flex rounded-full bg-white/10 p-0.5 overflow-hidden">
+                  <div
+                    className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-full bg-white/90 transition-all duration-200 ease-out"
+                    style={{
+                      left: `${languageIndicator.left}px`,
+                      width: `${languageIndicator.width}px`,
+                    }}
+                  />
                   <button
                     type="button"
                     onClick={() => setLanguage("ru")}
-                    className={`interactive-press min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      language === "ru"
-                        ? "bg-white text-black shadow-soft"
-                        : "text-white/70 hover:text-white"
+                    ref={(el) => {
+                      languageTabRefs.current.ru = el;
+                    }}
+                    className={`interactive-press relative z-10 min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+                      language === "ru" ? "text-black" : "text-white/70 hover:text-white"
                     }`}
                   >
                     Русский
@@ -363,10 +396,11 @@ export function SettingsTab({
                   <button
                     type="button"
                     onClick={() => setLanguage("en")}
-                    className={`interactive-press min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold ${
-                      language === "en"
-                        ? "bg-white text-black shadow-soft"
-                        : "text-white/70 hover:text-white"
+                    ref={(el) => {
+                      languageTabRefs.current.en = el;
+                    }}
+                    className={`interactive-press relative z-10 min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+                      language === "en" ? "text-black" : "text-white/70 hover:text-white"
                     }`}
                   >
                     English
@@ -482,4 +516,3 @@ export function SettingsTab({
     </div>
   );
 }
-

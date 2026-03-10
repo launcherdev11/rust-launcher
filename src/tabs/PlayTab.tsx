@@ -142,9 +142,7 @@ export function PlayTab({
         setBannerError(false);
 
         const urls = [
-          // Прямой raw GitHub — всегда свежий banner.json
           "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/banner.json",
-          // CDN как запасной вариант
           "https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json",
         ];
 
@@ -185,13 +183,11 @@ export function PlayTab({
 
             throw new Error("Invalid banner format");
           } catch (err) {
-            // если запрос отменили при размонтировании — выходим
             if (controller.signal.aborted) return;
             lastError = err;
           }
         }
 
-        // если ни один из URL не сработал
         throw lastError ?? new Error("Failed to load banner from all sources");
       } catch (error) {
         console.error(error);

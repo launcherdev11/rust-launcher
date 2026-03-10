@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 type ModrinthContentType = "mod" | "resourcepack" | "shader";
@@ -127,7 +127,7 @@ export function ModsTab({
     width: number;
   }>({ left: 0, width: 0 });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (activeProfileGameVersion) {
       setModrinthGameVersion((prev) =>
         prev === activeProfileGameVersion ? prev : activeProfileGameVersion,
@@ -515,7 +515,6 @@ export function ModsTab({
                   window.localStorage.setItem("mods_layout", "list");
                 }
               } catch {
-                // ignore
               }
             }}
             className={`interactive-press rounded-xl p-1.5 ${
@@ -544,7 +543,6 @@ export function ModsTab({
                   window.localStorage.setItem("mods_layout", "grid");
                 }
               } catch {
-                // ignore
               }
             }}
             className={`interactive-press rounded-xl p-1.5 ${

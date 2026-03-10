@@ -12,7 +12,6 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-//import { check } from "@tauri-apps/plugin-updater";
 import "./App.css";
 import {
   SettingsToggle,
@@ -21,7 +20,6 @@ import {
 } from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
-// @ts-ignore временно подавляем предупреждение о модуле ModpackTab для строгой проверки типов
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 
@@ -390,7 +388,6 @@ function App() {
           }
         }
       } catch {
-        // ignore errors
       }
     };
 
@@ -407,7 +404,6 @@ function App() {
     try {
       window.localStorage.setItem("launcher_language", language);
     } catch {
-      // ignore
     }
   }, [language]);
 
@@ -457,7 +453,6 @@ function App() {
     const id = Date.now() + Math.random();
     setNotifications((prev) => [...prev, { id, kind, message }]);
 
-    // Анимация ухода вверх перед удалением
     setTimeout(() => {
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),

@@ -20,20 +20,13 @@ fn http_client() -> Client {
         .unwrap_or_else(|_| Client::new())
 }
 
-// ВАЖНО: client_id должен совпадать с приложением в Azure / Microsoft.
-// Значение взято из переданной ссылки авторизации.
 pub const MS_CLIENT_ID: &str = "4ce834ee-3152-443c-b0b4-f266c19efd06";
 
 pub const MS_OAUTH2_AUTH_URL: &str = "https://login.live.com/oauth20_authorize.srf";
 pub const MS_OAUTH2_TOKEN_URL: &str = "https://login.live.com/oauth20_token.srf";
 
-// Должен в точности совпадать с redirect_uri,
-// зарегистрированным в Azure / Microsoft.
-// Сейчас используем тот, что в переданной ссылке:
-// https://login.live.com/oauth20_authorize.srf?client_id=4ce834ee-3152-443c-b0b4-f266c19efd06&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1420&scope=XboxLive.signin%20offline_access%20openid%20profile%20email&prompt=select_account
 pub const MS_REDIRECT_URI: &str = "http://localhost:1420";
 
-// state для защиты от CSRF.
 static MS_OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 fn generate_state() -> String {
@@ -100,7 +93,6 @@ struct MsTokenResponse {
     id_token: Option<String>,
 }
 
-// ------------------------ Microsoft / Minecraft (официальный аккаунт) ------------------------
 
 #[derive(Debug, Serialize)]
 struct XblUserAuthProperties {
@@ -224,12 +216,9 @@ async fn exchange_code_for_token(code: String) -> Result<MsTokenResponse, String
         .map_err(|e| format!("Ошибка разбора ответа Microsoft OAuth2: {e}"))
 }
 
-/// Полная цепочка обмена Microsoft токена на Minecraft токен и профиль.
-/// Возвращает (никнейм, uuid, minecraft_access_token).
 pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, String, String), String> {
     let client = http_client();
 
-    // 1. Входим в Xbox Live с MSA токеном
     let xbl_req = XblUserAuthRequest {
         relying_party: "http://auth.xboxlive.com".to_string(),
         token_type: "JWT".to_string(),
@@ -272,7 +261,6 @@ pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, Stri
         .map(|x| x.uhs.clone())
         .ok_or_else(|| "Xbox Live ответ не содержит DisplayClaims.xui[0].uhs".to_string())?;
 
-    // 2. Получаем XSTS токен
     let xsts_req = XstsAuthRequest {
         relying_party: "rp://api.minecraftservices.com/".to_string(),
         token_type: "JWT".to_string(),
@@ -305,7 +293,6 @@ pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, Stri
 
     let xsts_token = xsts_body.Token;
 
-    // 3. Логинимся в Minecraft Services
     let identity_token = format!("XBL3.0 x={};{}", uhs, xsts_token);
     let mc_login_req = McLoginWithXboxRequest {
         identityToken: identity_token,
@@ -337,7 +324,6 @@ pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, Stri
 
     let mc_access_token = mc_login_body.access_token;
 
-    // 4. Получаем Minecraft профиль
     let mc_profile_resp = client
         .get("https://api.minecraftservices.com/minecraft/profile")
         .bearer_auth(&mc_access_token)
@@ -386,7 +372,6 @@ async fn handle_ms_oauth_callback_internal(
         profile.ms_id_token = Some(id);
     }
 
-    // Пытаемся сразу получить официальный Minecraft‑токен и профиль
     match exchange_to_minecraft_token(&token.access_token).await {
         Ok((mc_name, mc_uuid, mc_access_token)) => {
             profile.mc_username = Some(mc_name);
@@ -406,7 +391,6 @@ async fn handle_ms_oauth_callback_internal(
 }
 
 fn run_local_ms_oauth_server(app: AppHandle) -> Result<(), String> {
-    // Слушаем тот же порт, который указан в MS_REDIRECT_URI.
     let listener = TcpListener::bind("127.0.0.1:1420")
         .map_err(|e| format!("Не удалось запустить локальный HTTP-сервер Microsoft OAuth2: {e}"))?;
 
