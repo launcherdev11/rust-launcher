@@ -618,6 +618,24 @@ function App() {
         }
       } catch (error) {
         console.error("Не удалось загрузить список версий:", error);
+        const msg = error instanceof Error ? error.message : String(error);
+        if (loader === "forge") {
+          showNotification(
+            "error",
+            language === "ru"
+              ? `Не удалось загрузить Forge версии. Проверь доступ к files.minecraftforge.net (часто блокируется/режется провайдерами): ${msg}`
+              : `Failed to load Forge versions. Check access to files.minecraftforge.net: ${msg}`,
+          );
+        } else {
+          showNotification(
+            "error",
+            language === "ru"
+              ? `Не удалось загрузить список версий: ${msg}`
+              : `Failed to load versions list: ${msg}`,
+          );
+        }
+        setVersions([]);
+        setSelectedVersion(null);
       } finally {
         setVersionsLoading(false);
       }
@@ -639,7 +657,13 @@ function App() {
         unlisten();
       }
     };
-  }, [loader, settings?.show_snapshots, settings?.show_alpha_versions]);
+  }, [
+    loader,
+    settings?.show_snapshots,
+    settings?.show_alpha_versions,
+    showNotification,
+    language,
+  ]);
 
   useEffect(() => {
     if (
@@ -890,7 +914,9 @@ function App() {
 
   const handleOpenGameFolder = async () => {
     try {
-      await invoke("open_game_folder");
+      await invoke("open_game_folder", {
+        profileId: activeInstanceProfile?.id ?? null,
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("Не удалось открыть папку игры:", error);
@@ -1364,6 +1390,7 @@ function App() {
               <ModsTab
                 showNotification={showNotification}
                 language={language}
+                activeProfileId={activeInstanceProfile?.id ?? null}
                 activeProfileGameVersion={activeInstanceProfile?.game_version}
                 activeProfileLoader={activeInstanceProfile?.loader}
               />
@@ -1375,6 +1402,7 @@ function App() {
               showNotification={showNotification}
               onProfileSelectionChange={handleModpackProfileSelectionChange}
               initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+              onOpenModsTab={() => setActiveItem("mods")}
             />
           </div>
           ) : activeItem === "settings" ? (

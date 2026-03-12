@@ -12,7 +12,7 @@ use game_provider::{
     fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
     get_installed_quilt_profile_id, get_profile, get_profiles, get_selected_profile,
     install_fabric, install_forge, install_quilt, install_version, launch_game,
-    list_installed_versions, open_game_folder, reset_download_cancel, save_avatar,
+    list_installed_versions, open_game_folder, open_profile_folder, reset_download_cancel, save_avatar,
     set_profile, set_selected_profile, get_settings, set_settings, get_effective_settings,
     is_game_running_now, get_system_memory_gb, delete_item, delete_profile,
     download_modrinth_file, import_mrpack, import_mrpack_as_new_profile,
@@ -27,12 +27,25 @@ use ely_auth::{
 };
 use ms_auth::{ms_logout, start_ms_oauth};
 
+#[cfg(target_os = "linux")]
+fn configure_wayland_backend() {
+    use std::env;
+
+    // Предпочитаем Wayland для Tauri/winit и GTK.
+    // Если Wayland недоступен, winit попробует откатиться сам.
+    env::set_var("WINIT_UNIX_BACKEND", "wayland");
+    env::set_var("GDK_BACKEND", "wayland");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    configure_wayland_backend();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // .plugin(tauri_plugin_updater::Builder::new().build()) 
+        //.plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             //
             /*
@@ -63,6 +76,7 @@ pub fn run() {
             get_installed_fabric_profile_id,
             get_installed_quilt_profile_id,
             open_game_folder,
+            open_profile_folder,
             get_profile,
             get_profiles,
             create_profile,

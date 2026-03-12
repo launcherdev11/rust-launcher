@@ -49,6 +49,7 @@ type NotificationKind = "info" | "success" | "error" | "warning";
 type ModsTabProps = {
   showNotification: (kind: NotificationKind, message: string) => void;
   language: Language;
+  activeProfileId?: string | null;
   activeProfileGameVersion?: string | null;
   activeProfileLoader?: string | null;
 };
@@ -78,6 +79,7 @@ function HeartStatIcon() {
 export function ModsTab({
   showNotification,
   language,
+  activeProfileId,
   activeProfileGameVersion,
   activeProfileLoader,
 }: ModsTabProps) {
@@ -126,6 +128,27 @@ export function ModsTab({
     left: number;
     width: number;
   }>({ left: 0, width: 0 });
+  const [installedFilenames, setInstalledFilenames] = useState<Set<string>>(new Set());
+  const [versionLoaderLocked, setVersionLoaderLocked] = useState(!!activeProfileId);
+  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
+
+  const mapContentTypeToCategory = (t: ModrinthContentType) =>
+    t === "mod" ? "mods" : t === "resourcepack" ? "resourcepacks" : "shaderpacks";
+
+  useEffect(() => {
+    if (!activeProfileId) {
+      setInstalledFilenames(new Set());
+      setVersionLoaderLocked(false);
+      return;
+    }
+    setVersionLoaderLocked(true);
+    invoke<string[]>("list_profile_items", {
+      id: activeProfileId,
+      category: mapContentTypeToCategory(modrinthContentType),
+    })
+      .then((names) => setInstalledFilenames(new Set(names ?? [])))
+      .catch(() => setInstalledFilenames(new Set()));
+  }, [activeProfileId, modrinthContentType]);
 
   useLayoutEffect(() => {
     if (activeProfileGameVersion) {
@@ -340,6 +363,42 @@ export function ModsTab({
 
   return (
     <div className="flex h-full w-full max-w-4xl flex-col">
+      {showUnlockConfirm && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowUnlockConfirm(false)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-4 text-sm text-white/90">
+              {language === "ru"
+                ? "Версия и загрузчик синхронизированы с выбранной сборкой. Сменить их?"
+                : "Version and loader are synced with the selected profile. Change them anyway?"}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUnlockConfirm(false)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {language === "ru" ? "Отмена" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setVersionLoaderLocked(false);
+                  setShowUnlockConfirm(false);
+                }}
+                className="interactive-press rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+              >
+                {language === "ru" ? "Сменить" : "Change"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="relative z-[80] mb-4 mt-2 flex items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 py-2 shadow-soft backdrop-blur-xl">
           <img
@@ -365,15 +424,27 @@ export function ModsTab({
           <div className="relative">
             <button
               type="button"
-              onClick={() =>
-                setIsModrinthVersionDropdownOpen((current) => !current)
+              onClick={() => {
+                if (versionLoaderLocked) {
+                  setShowUnlockConfirm(true);
+                } else {
+                  setIsModrinthVersionDropdownOpen((c) => !c);
+                }
+              }}
+              disabled={versionLoaderLocked}
+              className={`interactive-press inline-flex min-w-[88px] items-center gap-2 rounded-full border border-white/25 bg-black/70 px-3 py-1 text-xs font-semibold text-white shadow-soft ${
+                versionLoaderLocked ? "cursor-not-allowed opacity-70" : "hover:border-white/60"
+              }`}
+              title={
+                versionLoaderLocked
+                  ? language === "ru"
+                    ? "Синхронизировано со сборкой. Нажмите «Сменить» для разблокировки."
+                    : "Synced with profile. Click «Change» to unlock."
+                  : undefined
               }
-              className="interactive-press inline-flex min-w-[88px] items-center gap-2 rounded-full border border-white/25 bg-black/70 px-3 py-1 text-xs font-semibold text-white shadow-soft hover:border-white/60"
             >
-              <span className="truncate">
-                {modrinthGameVersion || "—"}
-              </span>
-              <span className="text-[10px] text-gray-400">▾</span>
+              <span className="truncate">{modrinthGameVersion || "—"}</span>
+              {!versionLoaderLocked && <span className="text-[10px] text-gray-400">▾</span>}
             </button>
             {isModrinthVersionDropdownOpen && modrinthGameVersions.length > 0 && (
               <div className="absolute left-0 top-full z-[100] mt-1 max-h-64 w-32 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
@@ -400,10 +471,17 @@ export function ModsTab({
           <div className="relative">
             <button
               type="button"
-              onClick={() =>
-                setIsModrinthLoaderDropdownOpen((current) => !current)
-              }
-              className="interactive-press inline-flex min-w-[96px] items-center gap-2 rounded-full border border-white/25 bg-black/70 px-3 py-1 text-xs font-semibold text-white shadow-soft hover:border-white/60"
+              onClick={() => {
+                if (versionLoaderLocked) {
+                  setShowUnlockConfirm(true);
+                } else {
+                  setIsModrinthLoaderDropdownOpen((c) => !c);
+                }
+              }}
+              disabled={versionLoaderLocked}
+              className={`interactive-press inline-flex min-w-[96px] items-center gap-2 rounded-full border border-white/25 bg-black/70 px-3 py-1 text-xs font-semibold text-white shadow-soft ${
+                versionLoaderLocked ? "cursor-not-allowed opacity-70" : "hover:border-white/60"
+              }`}
             >
               <span>
                 {modrinthLoader === "any"
@@ -418,8 +496,17 @@ export function ModsTab({
                         ? "Quilt"
                         : "NeoForge"}
               </span>
-              <span className="text-[10px] text-gray-400">▾</span>
+              {!versionLoaderLocked && <span className="text-[10px] text-gray-400">▾</span>}
             </button>
+            {versionLoaderLocked && activeProfileId && (
+              <button
+                type="button"
+                onClick={() => setShowUnlockConfirm(true)}
+                className="interactive-press ml-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/20"
+              >
+                {language === "ru" ? "Сменить" : "Change"}
+              </button>
+            )}
             {isModrinthLoaderDropdownOpen && (
               <div className="absolute left-0 top-full z-[100] mt-1 max-h-64 w-36 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
                 {[
@@ -717,14 +804,22 @@ export function ModsTab({
               filteredModrinthVersions.map((v) => {
                 const primaryFile =
                   v.files.find((f) => f.primary) ?? v.files[0];
+                const isInstalled = primaryFile && installedFilenames.has(primaryFile.filename);
                 return (
                   <div
                     key={v.id}
                     className="mb-2 flex items-center justify-between rounded-2xl bg-black/35 px-3 py-2 text-xs text-white/80"
                   >
                     <div className="mr-2 min-w-0 flex-1">
-                      <div className="truncate font-semibold">
-                        {v.version_number}
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-semibold">
+                          {v.version_number}
+                        </span>
+                        {isInstalled && (
+                          <span className="shrink-0 rounded-full bg-emerald-500/80 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            {language === "ru" ? "установлен" : "installed"}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-white/55">
                         {modrinthGameVersion ? (
@@ -753,23 +848,29 @@ export function ModsTab({
                             category: modrinthContentType,
                             url: primaryFile.url,
                             filename: primaryFile.filename,
+                            profileId: activeProfileId ?? null,
                           });
+                        if (activeProfileId) {
+                          setInstalledFilenames((prev) =>
+                            new Set([...prev, primaryFile.filename]),
+                          );
+                        }
                         showNotification(
                           "success",
                           language === "ru"
-                            ? `Файл ${primaryFile.filename} сохранён в папку ${
-                                modrinthContentType === "mod"
-                                  ? "mods"
-                                  : modrinthContentType === "resourcepack"
-                                    ? "resourcepacks"
-                                    : "shaderpacks"
-                              }.`
-                            : `File ${primaryFile.filename} saved to folder ${
-                                modrinthContentType === "mod"
-                                  ? "mods"
-                                  : modrinthContentType === "resourcepack"
-                                    ? "resourcepacks"
-                                    : "shaderpacks"
+                            ? `Файл ${primaryFile.filename} сохранён${
+                                activeProfileId
+                                  ? " в сборку"
+                                  : ` в папку ${
+                                      modrinthContentType === "mod"
+                                        ? "mods"
+                                        : modrinthContentType === "resourcepack"
+                                          ? "resourcepacks"
+                                          : "shaderpacks"
+                                    }`
+                              }`
+                            : `File ${primaryFile.filename} saved${
+                                activeProfileId ? " to profile" : ""
                               }.`,
                         );
                         } catch (e) {

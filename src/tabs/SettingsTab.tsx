@@ -127,14 +127,21 @@ export function SettingsTab({
   const currentRamMb = settings?.ram_mb ?? 4096;
   const currentRamGbRounded = Math.max(1, Math.round(currentRamMb / 1024));
   const ramMinMb = 1024;
-  const ramMaxMb = 64 * 1024;
-  const ramSliderMaxGb = Math.max(64, systemMemoryGb);
+  const ramMaxMb = systemMemoryGb * 1024; // Ограничение: не больше ОЗУ системы
+  const ramSliderMaxGb = systemMemoryGb; // Максимум = ОЗУ системы
+
+  const [ramSliderLocal, setRamSliderLocal] = useState<number | null>(null);
+  const displayRamGb = ramSliderLocal ?? currentRamGbRounded;
 
   useEffect(() => {
     if (!isRamEditing) {
       setRamInputMb(String(currentRamMb));
     }
   }, [currentRamMb, isRamEditing]);
+
+  useEffect(() => {
+    setRamSliderLocal(null); // Сброс при внешнем изменении настроек
+  }, [currentRamMb]);
 
   useEffect(() => {
     if (isRamEditing) {
@@ -270,8 +277,13 @@ export function SettingsTab({
                     label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
                     min={1}
                     max={ramSliderMaxGb}
-                    value={currentRamGbRounded}
-                    onChange={(value: number) => updateSettings({ ram_mb: Math.max(1, value) * 1024 })}
+                    value={displayRamGb}
+                    onChange={(value: number) => setRamSliderLocal(Math.min(ramSliderMaxGb, Math.max(1, value)))}
+                    onChangeCommitted={(value: number) => {
+                      const clamped = Math.min(ramSliderMaxGb, Math.max(1, value));
+                      updateSettings({ ram_mb: clamped * 1024 });
+                      setRamSliderLocal(null);
+                    }}
                     right={
                       isRamEditing ? (
                         <div className="flex items-center gap-2">

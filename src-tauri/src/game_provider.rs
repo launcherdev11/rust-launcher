@@ -19,7 +19,9 @@ fn http_client() -> Client {
     Client::builder()
         .timeout(Duration::from_secs(300))
         .connect_timeout(Duration::from_secs(30))
-        .user_agent("16Launcher/1.0")
+        // Некоторые хосты (в т.ч. Forge) могут отдавать 403/челлендж для "ботовых" UA.
+        // Используем браузероподобный UA, чтобы стабильнее получать JSON-метаданные.
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36")
         .build()
         .unwrap_or_else(|_| Client::new())
 }
@@ -38,6 +40,14 @@ static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
 pub const EVENT_GAME_CONSOLE_LINE: &str = "game-console-line";
 
 pub const EVENT_MRPACK_IMPORT_PROGRESS: &str = "mrpack-import-progress";
+
+fn log_to_console(app: &AppHandle, line: &str) {
+    let payload = GameConsoleLinePayload {
+        line: line.to_string(),
+        source: "stdout".to_string(),
+    };
+    let _ = app.emit(EVENT_GAME_CONSOLE_LINE, payload);
+}
 
 
 #[derive(Debug, Serialize)]
@@ -2780,8 +2790,47 @@ pub fn get_game_root_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn open_game_folder() -> Result<(), String> {
-    let root = game_root_dir()?;
+pub async fn open_profile_folder(profile_id: String) -> Result<(), String> {
+    let root = instance_dir(&profile_id)?;
+    std::fs::create_dir_all(&root).map_err(|e| format!("Не удалось создать папку сборки: {e}"))?;
+    let path_str = root
+        .to_str()
+        .ok_or_else(|| "Путь к папке сборки не в UTF-8".to_string())?;
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(path_str)
+            .spawn()
+            .map_err(|e| format!("Не удалось открыть проводник: {e}"))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path_str)
+            .spawn()
+            .map_err(|e| format!("Не удалось открыть папку: {e}"))?;
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path_str)
+            .spawn()
+            .map_err(|e| format!("Не удалось открыть папку: {e}"))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_game_folder(profile_id: Option<String>) -> Result<(), String> {
+    let root = if let Some(id) = profile_id {
+        instance_dir(&id)?
+    } else {
+        game_root_dir()?
+    };
     std::fs::create_dir_all(&root).map_err(|e| format!("Не удалось создать папку игры: {e}"))?;
     let path_str = root
         .to_str()
@@ -2819,8 +2868,13 @@ pub async fn download_modrinth_file(
     category: String,
     url: String,
     filename: String,
+    profile_id: Option<String>,
 ) -> Result<(), String> {
-    let root = game_root_dir()?;
+    let root = if let Some(ref id) = profile_id {
+        instance_dir(id)?
+    } else {
+        game_root_dir()?
+    };
     let subdir = match category.as_str() {
         "mod" | "mods" => "mods",
         "resourcepack" | "resourcepacks" => "resourcepacks",
@@ -2989,7 +3043,9 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
         .get(FORGE_PROMOTIONS)
         .send()
         .await
-        .map_err(|e| format!("Ошибка запроса списка Forge: {e}"))?;
+        .map_err(|e| format!("Ошибка запроса списка Forge: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Forge вернул ошибку HTTP при получении списка: {e}"))?;
     let promos: ForgePromotions = resp
         .json()
         .await
@@ -3016,7 +3072,45 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
             }
         }
     }
-    out.sort_by(|a, b| b.id.cmp(&a.id));
+
+    // Сортируем так, чтобы более новые версии Minecraft и Forge шли первыми
+    out.sort_by(|a, b| {
+        // Сначала сравниваем версии Minecraft по числовым компонентам (1.21.10 > 1.21.8 > 1.20.6 и т.д.)
+        let parse_nums = |s: &str| {
+            s.split('.')
+                .filter_map(|p| p.parse::<u32>().ok())
+                .collect::<Vec<u32>>()
+        };
+
+        let a_mc = parse_nums(&a.mc_version);
+        let b_mc = parse_nums(&b.mc_version);
+
+        for (x, y) in a_mc.iter().zip(&b_mc) {
+            if x != y {
+                // хотим более новые версии первыми
+                return y.cmp(x);
+            }
+        }
+        if a_mc.len() != b_mc.len() {
+            return b_mc.len().cmp(&a_mc.len());
+        }
+
+        // Затем сравниваем номер сборки Forge также по числам
+        let a_build = parse_nums(&a.forge_build);
+        let b_build = parse_nums(&b.forge_build);
+
+        for (x, y) in a_build.iter().zip(&b_build) {
+            if x != y {
+                return y.cmp(x);
+            }
+        }
+        if a_build.len() != b_build.len() {
+            return b_build.len().cmp(&a_build.len());
+        }
+
+        // В крайнем случае сравниваем по строковому id (обратный порядок, чтобы новые были первыми)
+        b.id.cmp(&a.id)
+    });
     Ok(out)
 }
 
@@ -3123,19 +3217,35 @@ pub async fn install_fabric(
 ) -> Result<String, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client();
-    let profile_url = format!(
-        "{FABRIC_META_PROFILE}/{game_version}/{loader_version}/profile/json"
+    log_to_console(
+        &app,
+        &format!(
+            "[Fabric] Начало установки Fabric для Minecraft {game_version}, loader {loader_version}"
+        ),
     );
-    let profile: FabricProfile = client
+    let profile_url =
+        format!("{FABRIC_META_PROFILE}/{game_version}/{loader_version}/profile/json");
+    log_to_console(&app, &format!("[Fabric] Загрузка профиля с {profile_url}"));
+    let resp = client
         .get(&profile_url)
         .send()
         .await
-        .map_err(|e| format!("Ошибка загрузки профиля Fabric: {e}"))?
+        .map_err(|e| format!("Ошибка загрузки профиля Fabric: {e}"))?;
+    let status = resp.status();
+    log_to_console(&app, &format!("[Fabric] Ответ профиля: HTTP {status}"));
+    let profile: FabricProfile = resp
         .json()
         .await
         .map_err(|e| format!("Ошибка разбора профиля Fabric: {e}"))?;
 
     let mojang_url = get_mojang_version_url(&profile.inherits_from).await?;
+    log_to_console(
+        &app,
+        &format!(
+            "[Fabric] Манифест Mojang для базовой версии {}: {mojang_url}",
+            profile.inherits_from
+        ),
+    );
     let mojang_detail: VersionDetail = client
         .get(&mojang_url)
         .send()
@@ -3183,13 +3293,35 @@ pub async fn install_fabric(
         }
     }
     if let Some(ref ai) = mojang_detail.asset_index {
+        log_to_console(
+            &app,
+            &format!(
+                "[Fabric] Загрузка ассетов из {}",
+                ai.url.as_str()
+            ),
+        );
         if let Some(s) = ai.total_size {
             total_size = total_size.saturating_add(s);
         }
     }
     let mut total_downloaded: u64 = 0;
 
+    log_to_console(
+        &app,
+        &format!(
+            "[Fabric] Итоговый размер загрузки (jar+lib+natives+assets): {} байт",
+            total_size
+        ),
+    );
+
     let client_jar = root.join(format!("{profile_id}.jar"));
+    log_to_console(
+        &app,
+        &format!(
+            "[Fabric] Загрузка клиентского JAR в {}",
+            client_jar.display()
+        ),
+    );
     let _ = download_file(
         &client,
         &mojang_dl.client.url,
@@ -3212,6 +3344,8 @@ pub async fn install_fabric(
         _ => "natives-linux",
     };
 
+    log_to_console(&app, "[Fabric] Загрузка библиотек и natives Mojang");
+    log_to_console(&app, "[Quilt] Загрузка библиотек и natives Mojang");
     for lib in &mojang_detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
@@ -3362,22 +3496,43 @@ pub async fn install_quilt(
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client();
 
+    log_to_console(
+        &app,
+        &format!("[Quilt] Начало установки Quilt для Minecraft {game_version}"),
+    );
+
     let loader_version = select_latest_quilt_loader(&game_version).await?;
+    log_to_console(
+        &app,
+        &format!("[Quilt] Выбран loader {loader_version}"),
+    );
 
     let profile_url = format!(
         "https://meta.quiltmc.org/v3/versions/loader/{game_version}/{loader_version}/profile/json"
     );
+    log_to_console(&app, &format!("[Quilt] Загрузка профиля с {profile_url}"));
 
-    let profile: FabricProfile = client
+    let resp = client
         .get(&profile_url)
         .send()
         .await
-        .map_err(|e| format!("Ошибка загрузки профиля Quilt: {e}"))?
+        .map_err(|e| format!("Ошибка загрузки профиля Quilt: {e}"))?;
+    let status = resp.status();
+    log_to_console(&app, &format!("[Quilt] Ответ профиля: HTTP {status}"));
+
+    let profile: FabricProfile = resp
         .json()
         .await
         .map_err(|e| format!("Ошибка разбора профиля Quilt: {e}"))?;
 
     let mojang_url = get_mojang_version_url(&profile.inherits_from).await?;
+    log_to_console(
+        &app,
+        &format!(
+            "[Quilt] Манифест Mojang для базовой версии {}: {mojang_url}",
+            profile.inherits_from
+        ),
+    );
     let mojang_detail: VersionDetail = client
         .get(&mojang_url)
         .send()
@@ -3426,13 +3581,35 @@ pub async fn install_quilt(
         }
     }
     if let Some(ref ai) = mojang_detail.asset_index {
+        log_to_console(
+            &app,
+            &format!(
+                "[Quilt] Загрузка ассетов из {}",
+                ai.url.as_str()
+            ),
+        );
         if let Some(s) = ai.total_size {
             total_size = total_size.saturating_add(s);
         }
     }
     let mut total_downloaded: u64 = 0;
 
+    log_to_console(
+        &app,
+        &format!(
+            "[Quilt] Итоговый размер загрузки (jar+lib+natives+assets): {} байт",
+            total_size
+        ),
+    );
+
     let client_jar = root.join(format!("{profile_id}.jar"));
+    log_to_console(
+        &app,
+        &format!(
+            "[Quilt] Загрузка клиентского JAR в {}",
+            client_jar.display()
+        ),
+    );
     let _ = download_file(
         &client,
         &mojang_dl.client.url,
@@ -3612,48 +3789,91 @@ pub async fn install_forge(
         .map_err(|e| format!("Папка игры: {e}"))?;
 
     let installer_jar = root.join("forge-installer.jar");
+    // Стримим установщик (а не resp.bytes()), иначе UI долго висит на "Подготовка файлов..."
+    // и мы не можем корректно отменять/показывать прогресс.
+    log_to_console(
+        &app,
+        &format!(
+            "[Forge] Начало установки Forge версии {version_id}\nURL установщика: {installer_url}"
+        ),
+    );
     let resp = client
         .get(&installer_url)
         .send()
         .await
-        .map_err(|e| format!("Ошибка загрузки установщика Forge: {e}"))?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        return Err(format!(
-            "Сервер вернул ошибку {} при загрузке установщика. Попробуйте другую версию Forge.",
-            status
-        ));
-    }
+        .map_err(|e| format!("Ошибка загрузки установщика Forge: {e}"))?
+        .error_for_status()
+        .map_err(|e| {
+            format!(
+                "Forge Maven вернул ошибку HTTP при загрузке установщика: {e}. Проверь доступ к maven.minecraftforge.net / интернет."
+            )
+        })?;
 
     let total = resp.content_length().unwrap_or(0);
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("Ошибка чтения установщика: {e}"))?;
+    log_to_console(
+        &app,
+        &format!(
+            "[Forge] Ответ по установщику: content-length = {} (0 значит неизвестен)",
+            total
+        ),
+    );
+    let mut downloaded: u64 = 0;
 
-    if bytes.len() < 4 || &bytes[0..2] != b"PK" {
-        return Err(
-            "Скачанный файл не похож на JAR (возможно, страница ошибки). Попробуйте другую версию или проверьте интернет."
-                .to_string(),
-        );
-    }
-
-    let mut downloaded = 0u64;
     let mut file = tokio::fs::File::create(&installer_jar)
         .await
-        .map_err(|e| format!("Ошибка создания файла: {e}"))?;
-    tokio::io::AsyncWriteExt::write_all(&mut file, &bytes).await.map_err(|e| format!("{e}"))?;
-    downloaded += bytes.len() as u64;
-    if total > 0 {
+        .map_err(|e| format!("Ошибка создания файла установщика: {e}"))?;
+
+    let mut stream = resp.bytes_stream();
+    let mut first_bytes: Vec<u8> = Vec::with_capacity(4);
+
+    // Ограничиваем время ожидания каждого чанка установщика, чтобы загрузка не висела бесконечно
+    let per_chunk_timeout = Duration::from_secs(60);
+    while let Some(next_chunk) = tokio::time::timeout(per_chunk_timeout, stream.next())
+        .await
+        .map_err(|_| {
+            "Загрузка установщика Forge слишком долго не продвигалась (таймаут ожидания данных). Проверьте интернет/блокировки и попробуйте снова."
+                .to_string()
+        })?
+    {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            let _ = tokio::fs::remove_file(&installer_jar).await;
+            return Err("Загрузка отменена".to_string());
+        }
+
+        let chunk = next_chunk.map_err(|e| format!("Ошибка чтения установщика Forge: {e}"))?;
+
+        if first_bytes.len() < 4 {
+            let need = 4 - first_bytes.len();
+            first_bytes.extend_from_slice(&chunk[..std::cmp::min(need, chunk.len())]);
+        }
+
+        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+            .await
+            .map_err(|e| format!("Ошибка записи установщика Forge: {e}"))?;
+        downloaded = downloaded.saturating_add(chunk.len() as u64);
+
+        let percent = if total > 0 {
+            (downloaded as f32 / total as f32) * 100.0
+        } else {
+            0.0
+        };
         let _ = app.emit(
             EVENT_DOWNLOAD_PROGRESS,
             DownloadProgressPayload {
                 version_id: version_id.clone(),
                 downloaded,
                 total,
-                percent: downloaded as f32 / total as f32 * 100.0,
+                percent,
             },
+        );
+    }
+
+    // Быстрая проверка, что это похоже на JAR/ZIP (PK..)
+    if first_bytes.len() < 2 || &first_bytes[0..2] != b"PK" {
+        let _ = tokio::fs::remove_file(&installer_jar).await;
+        return Err(
+            "Скачанный файл не похож на JAR (возможно, страница ошибки/блокировка). Попробуйте другую версию или проверьте интернет."
+                .to_string(),
         );
     }
 
@@ -3662,6 +3882,13 @@ pub async fn install_forge(
         .ok_or("Путь к папке игры не в UTF-8")?;
     let mc_version = version_id.split('-').next().unwrap_or(&version_id);
     let mojang_url = get_mojang_version_url(mc_version).await?;
+    log_to_console(
+        &app,
+        &format!(
+            "[Forge] Манифест Mojang для базовой версии {}: {mojang_url}",
+            mc_version
+        ),
+    );
     let mojang_client = http_client();
     let mojang_detail: VersionDetail = mojang_client
         .get(&mojang_url)
@@ -3677,8 +3904,28 @@ pub async fn install_forge(
         (8, "jre-legacy".to_string())
     };
     let java_path = crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+    log_to_console(
+        &app,
+        &format!(
+            "[Forge] Используем Java {} ({}): {}",
+            java_major,
+            java_component,
+            java_path.display()
+        ),
+    );
 
-    let status = std::process::Command::new(&java_path)
+    // Установщик Forge может подтягивать зависимости/висеть на сети, поэтому:
+    // - даём возможность отмены через CANCEL_DOWNLOAD
+    // - ограничиваем разумным таймаутом, чтобы UI не висел бесконечно
+    log_to_console(
+        &app,
+        &format!(
+            "[Forge] Запуск forge-installer.jar (installClient в {})",
+            root_str
+        ),
+    );
+
+    let mut child = std::process::Command::new(&java_path)
         .args([
             "-jar",
             installer_jar.to_str().unwrap(),
@@ -3686,14 +3933,42 @@ pub async fn install_forge(
             root_str,
         ])
         .current_dir(&root)
-        .status()
+        .spawn()
         .map_err(|e| format!("Не удалось запустить установщик Forge (нужна Java): {e}"))?;
 
-    let _ = std::fs::remove_file(&installer_jar);
-
-    if !status.success() {
-        return Err("Установщик Forge завершился с ошибкой.".to_string());
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(15 * 60);
+    loop {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&installer_jar);
+            return Err("Установка отменена".to_string());
+        }
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&installer_jar);
+            return Err("Установщик Forge выполнялся слишком долго и был остановлен. Проверьте доступ к ресурсам Forge/Mojang и попробуйте снова.".to_string());
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    let _ = std::fs::remove_file(&installer_jar);
+                    return Err("Установщик Forge завершился с ошибкой.".to_string());
+                }
+                log_to_console(&app, "[Forge] Установщик Forge успешно завершил работу");
+                break;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(300)),
+            Err(e) => {
+                let _ = std::fs::remove_file(&installer_jar);
+                return Err(format!("Ошибка ожидания завершения установщика Forge: {e}"));
+            }
+        }
     }
+
+    let _ = std::fs::remove_file(&installer_jar);
 
     let vers_root = versions_dir()?;
     let src_jar = vers_root
@@ -3724,6 +3999,13 @@ pub async fn install_version(
     let client = http_client();
     let os_name = current_os_name();
 
+    log_to_console(
+        &app,
+        &format!(
+            "[Vanilla] Начало установки версии {version_id}\nURL манифеста: {version_url}"
+        ),
+    );
+
     let resp = client
         .get(&version_url)
         .send()
@@ -3736,6 +4018,12 @@ pub async fn install_version(
             resp.status()
         ));
     }
+
+    let status = resp.status();
+    log_to_console(
+        &app,
+        &format!("[Vanilla] Ответ манифеста: HTTP {status}"),
+    );
 
     let version_json_text = resp
         .text()
@@ -3791,8 +4079,23 @@ pub async fn install_version(
 
     let mut total_downloaded: u64 = 0;
 
+    log_to_console(
+        &app,
+        &format!(
+            "[Vanilla] Итоговый размер загрузки (jar+lib+natives+assets): {} байт",
+            total_size
+        ),
+    );
+
     //jar
     let client_jar = root.join(format!("{version_id}.jar"));
+    log_to_console(
+        &app,
+        &format!(
+            "[Vanilla] Загрузка клиентского JAR в {}",
+            client_jar.display()
+        ),
+    );
     let _ = download_file(
         &client,
         &downloads.client.url,
@@ -3816,6 +4119,8 @@ pub async fn install_version(
         "osx" => "natives-macos",
         _ => "natives-linux",
     };
+
+    log_to_console(&app, "[Vanilla] Загрузка библиотек и natives");
 
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
@@ -3888,6 +4193,13 @@ pub async fn install_version(
     }
 
     if let Some(ref asset_index) = detail.asset_index {
+        log_to_console(
+            &app,
+            &format!(
+                "[Vanilla] Загрузка ассетов из {}",
+                asset_index.url.as_str()
+            ),
+        );
         download_assets(
             &client,
             asset_index,
@@ -3899,6 +4211,11 @@ pub async fn install_version(
         )
         .await?;
     }
+
+    log_to_console(
+        &app,
+        "[Vanilla] Сохранение json-описания версии и финализация установки",
+    );
 
     //сохранение json версий
     let version_json_path = vers_root.join(&version_id).join(format!("{version_id}.json"));
