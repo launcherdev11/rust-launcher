@@ -1,6 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback } from "react";
 
@@ -82,23 +81,6 @@ export function AccountsTab({
     [profile.avatar_path, setProfile, setProfileSaving, showNotification],
   );
 
-  const handleChooseAvatar = useCallback(async () => {
-    try {
-      const path = await openFile({
-        multiple: false,
-        directory: false,
-        filters: [{ name: "Изображения", extensions: ["png", "jpg", "jpeg", "webp"] }],
-      });
-      if (path) {
-        const stored = await invoke<string>("save_avatar", { sourcePath: path });
-        setProfile((prev) => ({ ...prev, avatar_path: stored }));
-      }
-    } catch (e) {
-      console.error(e);
-      showNotification("error", "Не удалось загрузить аватар.");
-    }
-  }, [setProfile, showNotification]);
-
   const handleElyLogin = useCallback(async () => {
     setElyLoading(true);
     setElyAuthUrl(null);
@@ -148,11 +130,8 @@ export function AccountsTab({
         className="flex w-full items-center gap-6 rounded-2xl border border-white/10 bg-gradient-to-br from-[#1e3a5f]/95 to-[#0f2744]/95 px-6 py-5 shadow-xl backdrop-blur-sm"
         style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}
       >
-        <button
-          type="button"
-          onClick={handleChooseAvatar}
-          className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
-          title="Выбрать аватар"
+        <div
+          className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90"
         >
           {profile.avatar_path ? (
             <img
@@ -163,7 +142,7 @@ export function AccountsTab({
           ) : (
             <span className="text-3xl font-light text-white/70">?</span>
           )}
-        </button>
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <input

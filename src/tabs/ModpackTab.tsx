@@ -51,6 +51,7 @@ type ModpackTabProps = {
   showNotification: (kind: NotificationKind, message: string) => void;
   onProfileSelectionChange?: (profile: InstanceProfile | null) => void;
   initialSelectedProfileId?: string | null;
+  onOpenModsTab?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -189,6 +190,7 @@ export function ModpackTab({
   showNotification,
   onProfileSelectionChange,
   initialSelectedProfileId,
+  onOpenModsTab,
 }: ModpackTabProps) {
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => {
@@ -362,10 +364,6 @@ export function ModpackTab({
         ignorePatterns: parseIgnorePatterns(ignorePatternsText),
       });
       setPreviewResult(res);
-      showNotification(
-        "info",
-        language === "ru" ? "Предпросмотр обновлён." : "Preview updated.",
-      );
     } catch (e) {
       console.error(e);
       showNotification(
@@ -776,7 +774,7 @@ export function ModpackTab({
   }
 
   async function handleCreateProfile() {
-    const name = createName.trim();
+    const name = createName.trim().slice(0, 50);
     if (!name) {
       showNotification(
         "warning",
@@ -1316,7 +1314,7 @@ export function ModpackTab({
 
   function renderCreateView() {
     return (
-      <div className="glass-panel flex w-full max-w-2xl flex-col gap-4">
+      <div className="glass-panel flex w-full max-w-2xl flex-col gap-4 px-6 py-5">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">
             {language === "ru" ? "Создать сборку" : "Create profile"}
@@ -1361,7 +1359,7 @@ export function ModpackTab({
             )}
           </div>
 
-          <div className="flex flex-1 flex-col gap-3">
+          <div className="flex flex-1 flex-col gap-3 min-w-0">
             <div>
               <label className="mb-1 block text-xs font-medium text-white/70">
                 {language === "ru" ? "Название:" : "Name:"}
@@ -1369,7 +1367,8 @@ export function ModpackTab({
               <input
                 type="text"
                 value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
+                onChange={(e) => setCreateName(e.target.value.slice(0, 50))}
+                maxLength={50}
                 placeholder={
                   language === "ru"
                     ? "Введите название вашей сборки..."
@@ -1377,6 +1376,9 @@ export function ModpackTab({
                 }
                 className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
               />
+              <span className="mt-0.5 block text-[10px] text-white/50">
+                {createName.length}/50
+              </span>
             </div>
 
             <div>
@@ -1762,12 +1764,7 @@ export function ModpackTab({
                     type="button"
                     onClick={() => {
                       setIsAddMenuOpen(false);
-                      showNotification(
-                        "info",
-                        language === "ru"
-                          ? "Каталог Modrinth доступен на вкладке «Моды»."
-                          : "Modrinth catalog is available on the “Mods” tab.",
-                      );
+                      onOpenModsTab?.();
                     }}
                     className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
                   >

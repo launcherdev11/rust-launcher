@@ -52,6 +52,8 @@ export type SettingsSliderProps = {
   max: number;
   value: number;
   onChange: (value: number) => void;
+  /** Вызывается только при отпускании ползунка (не во время перетаскивания). Для сохранения и уведомлений. */
+  onChangeCommitted?: (value: number) => void;
   suffix?: string;
   right?: React.ReactNode;
 };
@@ -62,12 +64,18 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
   max,
   value,
   onChange,
+  onChangeCommitted,
   suffix = "ГБ",
   right,
 }) => {
   const normalized = Math.min(max, Math.max(min, value || min));
   const percent =
     max === min ? 100 : Math.min(100, Math.max(0, ((normalized - min) / (max - min)) * 100));
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLInputElement>) => {
+    const val = Number((e.target as HTMLInputElement).value);
+    onChangeCommitted?.(val);
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -86,6 +94,7 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
         max={max}
         value={normalized}
         onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={handlePointerUp}
         style={{
           background: `linear-gradient(to right, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.28) ${percent}%, rgba(0,0,0,0.40) ${percent}%, rgba(0,0,0,0.40) 100%)`,
         }}

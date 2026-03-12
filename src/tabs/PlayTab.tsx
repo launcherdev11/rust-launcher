@@ -465,7 +465,7 @@ export function PlayTab({
             type="button"
             onClick={handleOpenGameFolder}
             title={language === "ru" ? "Открыть папку игры" : "Open game folder"}
-            className="interactive-press no-shift pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft hover:border-white/40 hover:bg-black/80 hover:text-white"
+            className="pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft transition-colors hover:border-white/40 hover:bg-black/80 hover:text-white"
           >
             <img
               src="/launcher-assets/folder.png"
