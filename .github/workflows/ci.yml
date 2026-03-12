@@ -17,24 +17,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-        - name: Install system dependencies
-          run: |
-            sudo apt-get update
-            sudo apt-get install -y \
-              libwebkit2gtk-4.1-dev \
-              build-essential \
-              curl \
-              wget \
-              file \
-              libssl-dev \
-              libgtk-3-dev \
-              libayatana-appindicator3-dev \
-              librsvg2-dev \
-              libglib2.0-dev \
-              pkg-config \
-              libwayland-dev \
-              libxkbcommon-dev \
-              wayland-protocols
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            pkg-config \
+            libwayland-dev \
+            libxkbcommon-dev \
+            wayland-protocols
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,4 +71,3 @@ jobs:
       - name: Lint Rust code (clippy)
         working-directory: src-tauri
         run: cargo clippy --locked
-
