@@ -31,10 +31,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libglib2.0-dev \
-            pkg-config \
-            libwayland-dev \
-            libxkbcommon-dev \
-            wayland-protocols
+            pkg-config
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,3 +68,4 @@ jobs:
       - name: Lint Rust code (clippy)
         working-directory: src-tauri
         run: cargo clippy --locked
+
