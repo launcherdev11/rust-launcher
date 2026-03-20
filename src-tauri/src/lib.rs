@@ -12,13 +12,17 @@ use game_provider::{
     fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
     get_installed_quilt_profile_id, get_profile, get_profiles, get_selected_profile,
     install_fabric, install_forge, install_quilt, install_version, launch_game,
-    list_installed_versions, open_game_folder, open_profile_folder, reset_download_cancel, save_avatar,
+    list_installed_fabric_game_versions, list_installed_quilt_game_versions, list_installed_versions,
+    open_game_folder, open_profile_folder, reset_download_cancel,
     set_profile, set_selected_profile, get_settings, set_settings, get_effective_settings,
     is_game_running_now, get_system_memory_gb, delete_item, delete_profile,
-    download_modrinth_file, import_mrpack, import_mrpack_as_new_profile,
+    download_modrinth_file, download_modrinth_modpack_and_import, import_mrpack, import_mrpack_as_new_profile,
+    search_curseforge_mods,
     import_modpack_files, update_profile_settings, list_profile_items, rename_profile,
     add_profile_files, create_profile, get_java_settings, set_java_settings,
     validate_java_args, detect_java_runtimes, get_profile_java_settings, set_profile_java_settings,
+    reset_settings_to_default, get_launcher_cache_size, clear_launcher_cache,
+    set_background_image, get_background_data_uri,
 };
 use commands::{list_build_files, preview_export, export_build};
 use ely_auth::{
@@ -30,9 +34,6 @@ use ms_auth::{ms_logout, start_ms_oauth};
 #[cfg(target_os = "linux")]
 fn configure_wayland_backend() {
     use std::env;
-
-    // Предпочитаем Wayland для Tauri/winit и GTK.
-    // Если Wayland недоступен, winit попробует откатиться сам.
     env::set_var("WINIT_UNIX_BACKEND", "wayland");
     env::set_var("GDK_BACKEND", "wayland");
 }
@@ -45,22 +46,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        //.plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
-            //
-            /*
-            let handle = app.handle();
-            let settings = game_provider::load_settings_from_disk();
-            if settings.check_updates_on_start {
-                tauri::async_runtime::block_on(async {
-                    if let Ok(updater) = handle.updater_builder().build() {
-                        let _ = updater.check().await;
-                    }
-                });
-            }
-            */
-            Ok(())
-        })
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|_app| Ok(()))
         .invoke_handler(tauri::generate_handler![
             fetch_all_versions,
             fetch_vanilla_releases,
@@ -75,6 +62,8 @@ pub fn run() {
             list_installed_versions,
             get_installed_fabric_profile_id,
             get_installed_quilt_profile_id,
+            list_installed_fabric_game_versions,
+            list_installed_quilt_game_versions,
             open_game_folder,
             open_profile_folder,
             get_profile,
@@ -82,7 +71,6 @@ pub fn run() {
             create_profile,
             set_profile,
             set_selected_profile,
-            save_avatar,
             get_settings,
             set_settings,
             get_effective_settings,
@@ -98,8 +86,10 @@ pub fn run() {
             cancel_download,
             reset_download_cancel,
             download_modrinth_file,
+            download_modrinth_modpack_and_import,
             import_mrpack,
             import_mrpack_as_new_profile,
+            search_curseforge_mods,
             update_profile_settings,
             delete_item,
             list_profile_items,
@@ -115,7 +105,12 @@ pub fn run() {
             detect_java_runtimes,
             list_build_files,
             preview_export,
-            export_build
+            export_build,
+            reset_settings_to_default,
+            get_launcher_cache_size,
+            clear_launcher_cache,
+            set_background_image,
+            get_background_data_uri
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

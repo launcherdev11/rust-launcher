@@ -10,8 +10,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { check as checkLauncherUpdates } from "@tauri-apps/plugin-updater";
 import "./App.css";
 import {
   SettingsToggle,
@@ -22,13 +22,14 @@ import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
+import { useT } from "./i18n";
 
 type Profile = {
   nickname: string;
-  avatar_path: string | null;
   ely_username: string | null;
   ely_uuid: string | null;
   ms_id_token: string | null;
+  mc_uuid: string | null;
 };
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
@@ -43,6 +44,8 @@ type Settings = {
   show_console_on_launch: boolean;
   close_launcher_on_game_start: boolean;
   check_game_processes: boolean;
+  resolution_width: number | null;
+  resolution_height: number | null;
   show_snapshots: boolean;
   show_alpha_versions: boolean;
   notify_new_update: boolean;
@@ -50,6 +53,9 @@ type Settings = {
   notify_system_message: boolean;
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
+  open_launcher_on_profiles_tab: boolean;
+  background_accent_color: string;
+  background_image_url: string | null;
 };
 
 type InstanceProfileSummary = {
@@ -80,10 +86,21 @@ type ForgeVersionSummary = {
   installer_url: string;
 };
 
-type VersionItem = VersionSummary | ForgeVersionSummary;
+type NeoForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  neoforge_build: string;
+  installer_url: string;
+};
+
+type VersionItem = VersionSummary | ForgeVersionSummary | NeoForgeVersionSummary;
 
 function isForgeVersion(v: VersionItem): v is ForgeVersionSummary {
   return "forge_build" in v && "installer_url" in v;
+}
+
+function isNeoForgeVersion(v: VersionItem): v is NeoForgeVersionSummary {
+  return "neoforge_build" in v && "installer_url" in v;
 }
 
 type DownloadProgressPayload = {
@@ -113,11 +130,13 @@ type Notification = {
   leaving?: boolean;
 };
 
-const sidebarItems: { id: SidebarItemId; label: string }[] = [
-  { id: "play", label: "Играть" },
-  { id: "settings", label: "Настройки" },
-  { id: "mods", label: "Моды" },
-  { id: "modpacks", label: "Сборки" },
+const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
+
+const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
+  { id: "play", labelKey: "app.sidebar.play" },
+  { id: "settings", labelKey: "app.sidebar.settings" },
+  { id: "mods", labelKey: "app.sidebar.mods" },
+  { id: "modpacks", labelKey: "app.sidebar.modpacks" },
 ];
 
 function PlayIcon() {
@@ -254,6 +273,23 @@ function MaximizeIcon() {
 
 function App() {
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
+  const [sidebarOrder, setSidebarOrder] = useState<SidebarItemId[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_SIDEBAR_ORDER;
+    try {
+      const raw = window.localStorage.getItem("sidebar_order");
+      if (!raw) return DEFAULT_SIDEBAR_ORDER;
+      const parsed = JSON.parse(raw);
+      const allowed: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((id) => allowed.includes(id))
+      ) {
+        return parsed as SidebarItemId[];
+      }
+    } catch {
+    }
+    return DEFAULT_SIDEBAR_ORDER;
+  });
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarButtonRefs = useRef<
     Partial<Record<SidebarItemId, HTMLButtonElement | null>>
@@ -285,7 +321,34 @@ function App() {
     window.addEventListener("resize", updateSidebarIndicator);
     return () => window.removeEventListener("resize", updateSidebarIndicator);
   }, [updateSidebarIndicator]);
-  const [loader, setLoader] = useState<LoaderId>("vanilla");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener("contextmenu", onContextMenu, true);
+    return () => document.removeEventListener("contextmenu", onContextMenu, true);
+  }, []);
+
+  const [loader, setLoader] = useState<LoaderId>(() => {
+    if (typeof window === "undefined") return "vanilla";
+    try {
+      const saved = window.localStorage.getItem("selected_loader");
+      if (
+        saved === "vanilla" ||
+        saved === "fabric" ||
+        saved === "forge" ||
+        saved === "quilt" ||
+        saved === "neoforge"
+      ) {
+        return saved;
+      }
+    } catch {
+    }
+    return "vanilla";
+  });
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<VersionItem | null>(null);
   const [versionsLoading, setVersionsLoading] = useState(true);
@@ -294,14 +357,15 @@ function App() {
   const [isInstalling, setIsInstalling] = useState(false);
   const [progress, setProgress] = useState<DownloadProgressPayload | null>(null);
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
+  const [installedGameVersions, setInstalledGameVersions] = useState<Set<string>>(new Set());
   const [fabricProfileId, setFabricProfileId] = useState<string | null>(null);
   const [quiltProfileId, setQuiltProfileId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile>({
     nickname: "",
-    avatar_path: null,
     ely_username: null,
     ely_uuid: null,
     ms_id_token: null,
+    mc_uuid: null,
   });
   const [elyLoading, setElyLoading] = useState(false);
   const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
@@ -313,12 +377,65 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>("ru");
+  const tt = useT(language);
   const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>([]);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
+  const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
+  const didApplyStartPageRef = useRef(false);
+  const didCheckUpdatesOnStartRef = useRef(false);
+
+  const skinHeadSrc = useMemo(() => {
+    const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
+    const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
+    const uuid = mcUuid || elyUuid || "00000000000000000000000000000000";
+    return `https://crafatar.com/renders/head/${uuid}?scale=6&default=MHF_Steve`;
+  }, [profile.mc_uuid, profile.ely_uuid]);
+
+  const stevePlaceholderSrc = useMemo(() => {
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="32" fill="#0f2744"/>
+  <circle cx="32" cy="28" r="16" fill="#8b6b4f"/>
+  <rect x="14" y="38" width="36" height="24" rx="14" fill="#7a5a41"/>
+  <rect x="24" y="27" width="5" height="5" rx="1.2" fill="#2b2b2b"/>
+  <rect x="35" y="27" width="5" height="5" rx="1.2" fill="#2b2b2b"/>
+  <path d="M25 36 C28 39 36 39 39 36" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
+`.trim();
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }, []);
+
+  const [headImgSrc, setHeadImgSrc] = useState<string>(skinHeadSrc);
+  useEffect(() => {
+    setHeadImgSrc(skinHeadSrc);
+  }, [skinHeadSrc]);
+
+  const handleHeadImgError = useCallback(() => {
+    if (headImgSrc !== stevePlaceholderSrc) {
+      setHeadImgSrc(stevePlaceholderSrc);
+    }
+  }, [headImgSrc, stevePlaceholderSrc]);
+
+  const orderedSidebarItems = useMemo(() => {
+    const byId = new Map(sidebarItems.map((i) => [i.id, i]));
+    const result: { id: SidebarItemId; labelKey: string }[] = [];
+    for (const id of sidebarOrder) {
+      const item = byId.get(id);
+      if (item && item.id !== "accounts") {
+        result.push(item);
+      }
+    }
+    for (const item of sidebarItems) {
+      if (item.id !== "accounts" && !result.find((x) => x.id === item.id)) {
+        result.push(item);
+      }
+    }
+    return result;
+  }, [sidebarOrder]);
 
   const handleModpackProfileSelectionChange = useCallback(
     (
@@ -408,6 +525,14 @@ function App() {
   }, [language]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("selected_loader", loader);
+    } catch {
+    }
+  }, [loader]);
+
+  useEffect(() => {
     let unlisten: (() => void) | undefined;
 
     (async () => {
@@ -449,19 +574,55 @@ function App() {
     };
   }, []);
 
-  const showNotification = useCallback((kind: NotificationKind, message: string) => {
-    const id = Date.now() + Math.random();
-    setNotifications((prev) => [...prev, { id, kind, message }]);
+  const showNotification = useCallback(
+    (kind: NotificationKind, message: string) => {
+      const id = Date.now() + Math.random();
 
-    setTimeout(() => {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),
-      );
+      setNotifications((prev) => {
+        if (settings && !settings.notify_new_message && kind === "info") {
+          return prev;
+        }
+        return [...prev, { id, kind, message }];
+      });
+
       setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-      }, 200);
-    }, 4300);
-  }, []);
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),
+        );
+        setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== id));
+        }, 200);
+      }, 4300);
+    },
+    [settings],
+  );
+
+  const copyToClipboard = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.left = "-10000px";
+          ta.style.top = "-10000px";
+          ta.setAttribute("readonly", "true");
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+          return ok;
+        } catch {
+          return false;
+        }
+      }
+    },
+    [],
+  );
 
   const showSettingsSavedNotification = useCallback(() => {
     setNotifications((prev) =>
@@ -471,15 +632,17 @@ function App() {
     );
     showNotification(
       "success",
-      language === "ru" ? "Настройки сохранены!" : "Settings saved!",
+      tt("app.toast.settingsSaved"),
     );
-  }, [language, showNotification]);
+  }, [tt, showNotification]);
 
   const defaultSettings: Settings = {
     ram_mb: 4096,
     show_console_on_launch: false,
     close_launcher_on_game_start: false,
     check_game_processes: true,
+    resolution_width: null,
+    resolution_height: null,
     show_snapshots: false,
     show_alpha_versions: false,
     notify_new_update: true,
@@ -487,6 +650,9 @@ function App() {
     notify_system_message: true,
     check_updates_on_start: true,
     auto_install_updates: false,
+    open_launcher_on_profiles_tab: false,
+    background_accent_color: "#0b1530",
+    background_image_url: null,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -502,6 +668,13 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!settings) return;
+    if (didApplyStartPageRef.current) return;
+    setActiveItem(settings.open_launcher_on_profiles_tab ? "modpacks" : "play");
+    didApplyStartPageRef.current = true;
+  }, [settings]);
+
   const updateSettings = useCallback(
     async (patch: Partial<Settings>, profileId?: string | null) => {
       const gameFields = [
@@ -516,6 +689,9 @@ function App() {
       setSettings((prev) => {
         const current = prev ?? defaultSettings;
         const next: Settings = { ...current, ...patch };
+        if (patch.open_launcher_on_profiles_tab !== undefined) {
+          setActiveItem(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
+        }
         if (useProfile) {
           const profilePatch: Record<string, unknown> = {};
           if (patch.ram_mb !== undefined) profilePatch.ram_mb = patch.ram_mb;
@@ -567,6 +743,37 @@ function App() {
   }, [refreshSettings]);
 
   useEffect(() => {
+    if (!settings) return;
+    if (didCheckUpdatesOnStartRef.current) return;
+
+    didCheckUpdatesOnStartRef.current = true;
+
+    if (!settings.check_updates_on_start) return;
+
+    (async () => {
+      try {
+        const update = await checkLauncherUpdates();
+        if (!update) return;
+
+        if (settings.auto_install_updates) {
+          await update.downloadAndInstall();
+          if (settings.notify_new_update) {
+            showNotification("success", tt("settings.updates.installedRestart"));
+          }
+        } else if (settings.notify_new_update) {
+          showNotification(
+            "warning",
+            tt("settings.updates.availableNextStart", { version: update.version }),
+          );
+        }
+      } catch (e) {
+        console.error("Failed to check for updates:", e);
+        showNotification("error", tt("settings.updates.checkFailed"));
+      }
+    })();
+  }, [settings, showNotification, tt]);
+
+  useEffect(() => {
     (async () => {
       try {
         const current = await invoke<InstanceProfileSummary | null>("get_selected_profile");
@@ -602,7 +809,23 @@ function App() {
         if (loader === "forge") {
           const result = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
           setVersions(result);
-          setSelectedVersion(result.length > 0 ? result[0] : null);
+          const savedId =
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("selected_version_id_forge")
+              : null;
+          const match = savedId ? result.find((v) => v.id === savedId) : undefined;
+          setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
+          setInstalledGameVersions(new Set());
+        } else if (loader === "neoforge") {
+          const result = await invoke<NeoForgeVersionSummary[]>("fetch_neoforge_versions");
+          setVersions(result);
+          const savedId =
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("selected_version_id_neoforge")
+              : null;
+          const match = savedId ? result.find((v) => v.id === savedId) : undefined;
+          setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
+          setInstalledGameVersions(new Set());
         } else {
           const all = await invoke<VersionSummary[]>("fetch_all_versions");
           const showSnapshots = settings?.show_snapshots ?? false;
@@ -614,7 +837,34 @@ function App() {
             return false;
           });
           setVersions(filtered);
-          setSelectedVersion(filtered.length > 0 ? filtered[0] : null);
+          const savedKey =
+            loader === "fabric"
+              ? "selected_version_id_fabric"
+              : loader === "quilt"
+                ? "selected_version_id_quilt"
+                : "selected_version_id_vanilla";
+          const savedId =
+            typeof window !== "undefined" ? window.localStorage.getItem(savedKey) : null;
+          const match = savedId ? filtered.find((v) => v.id === savedId) : undefined;
+          setSelectedVersion(match ?? (filtered.length > 0 ? filtered[0] : null));
+
+          if (loader === "fabric") {
+            try {
+              const installedGv = await invoke<string[]>("list_installed_fabric_game_versions");
+              setInstalledGameVersions(new Set(installedGv ?? []));
+            } catch {
+              setInstalledGameVersions(new Set());
+            }
+          } else if (loader === "quilt") {
+            try {
+              const installedGv = await invoke<string[]>("list_installed_quilt_game_versions");
+              setInstalledGameVersions(new Set(installedGv ?? []));
+            } catch {
+              setInstalledGameVersions(new Set());
+            }
+          } else {
+            setInstalledGameVersions(new Set());
+          }
         }
       } catch (error) {
         console.error("Не удалось загрузить список версий:", error);
@@ -622,20 +872,22 @@ function App() {
         if (loader === "forge") {
           showNotification(
             "error",
-            language === "ru"
-              ? `Не удалось загрузить Forge версии. Проверь доступ к files.minecraftforge.net (часто блокируется/режется провайдерами): ${msg}`
-              : `Failed to load Forge versions. Check access to files.minecraftforge.net: ${msg}`,
+            tt("app.errors.forgeVersionsLoadFailed", { msg }),
+          );
+        } else if (loader === "neoforge") {
+          showNotification(
+            "error",
+            tt("app.errors.neoforgeVersionsLoadFailed", { msg }),
           );
         } else {
           showNotification(
             "error",
-            language === "ru"
-              ? `Не удалось загрузить список версий: ${msg}`
-              : `Failed to load versions list: ${msg}`,
+            tt("app.errors.versionsLoadFailed", { msg }),
           );
         }
         setVersions([]);
         setSelectedVersion(null);
+        setInstalledGameVersions(new Set());
       } finally {
         setVersionsLoading(false);
       }
@@ -664,6 +916,26 @@ function App() {
     showNotification,
     language,
   ]);
+
+  useEffect(() => {
+    if (activeInstanceProfile) return;
+    if (!selectedVersion) return;
+    if (typeof window === "undefined") return;
+    try {
+      const key =
+        loader === "forge"
+          ? "selected_version_id_forge"
+          : loader === "neoforge"
+            ? "selected_version_id_neoforge"
+            : loader === "fabric"
+              ? "selected_version_id_fabric"
+              : loader === "quilt"
+                ? "selected_version_id_quilt"
+                : "selected_version_id_vanilla";
+      window.localStorage.setItem(key, selectedVersion.id);
+    } catch {
+    }
+  }, [activeInstanceProfile, loader, selectedVersion]);
 
   useEffect(() => {
     if (
@@ -702,18 +974,18 @@ function App() {
       const p = await invoke<Profile>("get_profile");
       setProfile({
         nickname: p.nickname ?? "",
-        avatar_path: p.avatar_path ?? null,
         ely_username: p.ely_username ?? null,
         ely_uuid: p.ely_uuid ?? null,
         ms_id_token: p.ms_id_token ?? null,
+        mc_uuid: p.mc_uuid ?? null,
       });
     } catch {
       setProfile({
         nickname: "",
-        avatar_path: null,
         ely_username: null,
         ely_uuid: null,
         ms_id_token: null,
+        mc_uuid: null,
       });
     }
   }, []);
@@ -728,61 +1000,41 @@ function App() {
     const prev = prevActiveItemRef.current;
     prevActiveItemRef.current = activeItem;
     if (prev === "accounts" && activeItem !== "accounts" && profile.nickname.trim()) {
-      invoke("set_profile", { nickname: profile.nickname.trim(), avatar_path: profile.avatar_path }).catch(console.error);
+      invoke("set_profile", { nickname: profile.nickname.trim() }).catch(console.error);
     }
-  }, [activeItem, profile.nickname, profile.avatar_path]);
+  }, [activeItem, profile.nickname]);
 
   useEffect(() => {
     const t = setTimeout(() => {
       const nick = profile.nickname.trim();
       if (nick) {
         setProfileSaving(true);
-        invoke("set_profile", { nickname: nick, avatar_path: profile.avatar_path })
+        invoke("set_profile", { nickname: nick })
           .then(() => setProfile((prev) => ({ ...prev, nickname: nick })))
           .catch(console.error)
           .finally(() => setProfileSaving(false));
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [profile.nickname, profile.avatar_path]);
+  }, [profile.nickname]);
 
   const handleSaveNickname = async (nickname: string) => {
     setProfileSaving(true);
     try {
-      await invoke("set_profile", { nickname, avatar_path: profile.avatar_path });
+      await invoke("set_profile", { nickname });
       setProfile((prev) => ({ ...prev, nickname }));
       showNotification(
         "success",
-        language === "ru" ? "Изменения сохранены!" : "Changes saved!",
+        tt("app.accounts.toast.nicknameSaved"),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru" ? "Не удалось сохранить никнейм." : "Failed to save nickname.",
+        tt("app.accounts.toast.nicknameSaveFailed"),
       );
     } finally {
       setProfileSaving(false);
-    }
-  };
-
-  const handleChooseAvatar = async () => {
-    try {
-      const path = await openFile({
-        multiple: false,
-        directory: false,
-        filters: [{ name: "Изображения", extensions: ["png", "jpg", "jpeg", "webp"] }],
-      });
-      if (path) {
-        const stored = await invoke<string>("save_avatar", { sourcePath: path });
-        setProfile((prev) => ({ ...prev, avatar_path: stored }));
-      }
-    } catch (e) {
-      console.error(e);
-      showNotification(
-        "error",
-        language === "ru" ? "Не удалось загрузить аватар." : "Failed to upload avatar.",
-      );
     }
   };
 
@@ -794,10 +1046,10 @@ function App() {
         const p = e.payload;
         setProfile({
           nickname: p.nickname ?? "",
-          avatar_path: p.avatar_path ?? null,
           ely_username: p.ely_username ?? null,
           ely_uuid: p.ely_uuid ?? null,
           ms_id_token: p.ms_id_token ?? null,
+          mc_uuid: p.mc_uuid ?? null,
         });
         setElyLoading(false);
         setElyAuthUrl(null);
@@ -825,13 +1077,13 @@ function App() {
       await loadProfile();
       showNotification(
         "info",
-        language === "ru" ? "Вы вышли из аккаунта Ely.by." : "You have logged out of Ely.by.",
+        tt("app.accounts.toast.elyLoggedOut"),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru" ? "Не удалось выйти из аккаунта Ely.by." : "Failed to log out from Ely.by.",
+        tt("app.accounts.toast.elyLogoutFailed"),
       );
     }
   };
@@ -843,10 +1095,10 @@ function App() {
         const p = e.payload;
         setProfile({
           nickname: p.nickname ?? "",
-          avatar_path: p.avatar_path ?? null,
           ely_username: p.ely_username ?? null,
           ely_uuid: p.ely_uuid ?? null,
           ms_id_token: p.ms_id_token ?? null,
+          mc_uuid: p.mc_uuid ?? null,
         });
         setElyLoading(false);
         unlisten();
@@ -871,17 +1123,13 @@ function App() {
       await loadProfile();
       showNotification(
         "info",
-        language === "ru"
-          ? "Вы вышли из аккаунта Microsoft."
-          : "You have logged out of Microsoft.",
+        tt("app.accounts.toast.msLoggedOut"),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось выйти из аккаунта Microsoft."
-          : "Failed to log out of Microsoft.",
+        tt("app.accounts.toast.msLogoutFailed"),
       );
     }
   };
@@ -893,16 +1141,23 @@ function App() {
     return installedIds.has(selectedVersion.id);
   }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId]);
 
+  const installedVersionIdsForDropdown = useMemo(() => {
+    if (loader === "fabric" || loader === "quilt") {
+      return installedGameVersions;
+    }
+    return installedIds;
+  }, [installedGameVersions, installedIds, loader]);
+
   const primaryColorClasses = isInstalled
-    ? "bg-accentGreen hover:bg-emerald-500"
-    : "bg-accentBlue hover:bg-sky-500";
+    ? "accent-bg hover:opacity-90"
+    : "accent-bg hover:opacity-90";
 
   const primaryLabel = useMemo(() => {
     if (isInstalled) {
-      return language === "ru" ? "ИГРАТЬ" : "PLAY";
+      return tt("app.playAction.play");
     }
-    return language === "ru" ? "Установить" : "Install";
-  }, [isInstalled, language]);
+    return tt("app.playAction.install");
+  }, [isInstalled, tt]);
 
   const handleToggleConsole = () => {
     setIsConsoleVisible((prev) => !prev);
@@ -922,9 +1177,7 @@ function App() {
       console.error("Не удалось открыть папку игры:", error);
       showNotification(
         "error",
-        language === "ru"
-          ? `Не удалось открыть папку: ${msg}`
-          : `Failed to open folder: ${msg}`,
+        tt("app.errors.openFolderFailed", { msg }),
       );
     }
   };
@@ -1011,7 +1264,6 @@ function App() {
       try {
         await invoke("set_profile", {
           nickname: profile.nickname,
-          avatar_path: profile.avatar_path,
         });
         const versionUrl =
           loader === "vanilla" && !isForgeVersion(selectedVersion)
@@ -1037,7 +1289,7 @@ function App() {
         console.error("Ошибка запуска игры:", error);
         showNotification(
           "error",
-          language === "ru" ? `Ошибка запуска: ${msg}` : `Launch error: ${msg}`,
+          tt("app.errors.launchError", { msg }),
         );
       }
       return;
@@ -1046,20 +1298,20 @@ function App() {
     setInstallPaused(false);
     setIsInstalling(true);
     setProgress(null);
-    showNotification("info", "Загрузка началась!");
+    showNotification("info", tt("app.toast.downloadStarted"));
     try {
       try {
         await invoke("reset_download_cancel");
       } catch (e) {
         console.error("Не удалось сбросить состояние загрузки:", e);
       }
-      if (loader === "vanilla" && !isForgeVersion(selectedVersion)) {
+      if (loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
         await invoke("install_version", {
           versionId: v.id,
           versionUrl: v.url,
         });
-      } else if (loader === "fabric" && !isForgeVersion(selectedVersion)) {
+      } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
         const loaders = await invoke<string[]>("fetch_fabric_loaders", {
           gameVersion: v.id,
@@ -1075,7 +1327,7 @@ function App() {
         showNotification("success", "Загрузка завершена!");
         setIsInstalling(false);
         return;
-      } else if (loader === "quilt" && !isForgeVersion(selectedVersion)) {
+      } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
         const profileId = await invoke<string>("install_quilt", {
           gameVersion: v.id,
@@ -1090,11 +1342,15 @@ function App() {
           versionId: selectedVersion.id,
           installerUrl: selectedVersion.installer_url,
         });
+      } else if (loader === "neoforge" && isNeoForgeVersion(selectedVersion)) {
+        await invoke("install_neoforge", {
+          version_id: selectedVersion.id,
+        });
       } else {
         throw new Error("Неизвестный тип версии");
       }
 
-      showNotification("success", "Загрузка завершена!");
+      showNotification("success", tt("app.toast.downloadFinished"));
       setInstalledIds((prev) => {
         const next = new Set(prev);
         next.add(selectedVersion.id);
@@ -1105,25 +1361,87 @@ function App() {
       console.error("Ошибка установки версии:", error);
         showNotification(
           "error",
-          language === "ru" ? `Ошибка установки: ${msg}` : `Installation error: ${msg}`,
+          tt("app.errors.installError", { msg }),
         );
     } finally {
       setIsInstalling(false);
     }
   };
 
+  const accentColor = settings?.background_accent_color ?? "#0b1530";
+  const rawBackgroundImage =
+    settings?.background_image_url && settings.background_image_url.trim().length > 0
+      ? settings.background_image_url.trim()
+      : "/launcher-assets/background.jpg";
+
+  useEffect(() => {
+    (async () => {
+      if (!settings?.background_image_url) {
+        setBackgroundDataUri(null);
+        return;
+      }
+      try {
+        const uri = await invoke<string | null>("get_background_data_uri");
+        setBackgroundDataUri(uri ?? null);
+      } catch {
+        setBackgroundDataUri(null);
+      }
+    })();
+  }, [settings?.background_image_url]);
+
+  const backgroundImageUrl =
+    backgroundDataUri ??
+    (rawBackgroundImage.startsWith("http://") ||
+    rawBackgroundImage.startsWith("https://") ||
+    rawBackgroundImage.startsWith("data:") ||
+    rawBackgroundImage.startsWith("/launcher-assets/")
+      ? rawBackgroundImage
+      : convertFileSrc(rawBackgroundImage));
+
   return (
-    <div className="relative min-h-screen w-full overflow-hidden text-white">
+    <div
+      className="relative min-h-screen w-full overflow-hidden text-white"
+      style={
+        {
+          "--accent-color": accentColor,
+        } as React.CSSProperties
+      }
+    >
       <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url(/launcher-assets/background.jpg)" }}
+        className="pointer-events-none fixed inset-0 bg-center"
+        style={{
+          backgroundImage: `url(${backgroundImageUrl})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
       />
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl"
+          style={{
+            background: `radial-gradient(circle at 30% 30%, ${accentColor}80, transparent 70%)`,
+          }}
+        />
+        <div
+          className="absolute top-1/3 -right-32 h-80 w-80 rounded-full blur-3xl"
+          style={{
+            background: `radial-gradient(circle at 70% 30%, ${accentColor}70, transparent 75%)`,
+          }}
+        />
+        <div
+          className="absolute bottom-[-6rem] left-1/4 h-64 w-64 rounded-full blur-3xl"
+          style={{
+            background: `radial-gradient(circle at 50% 50%, ${accentColor}75, transparent 75%)`,
+          }}
+        />
+      </div>
 
       <div className="pointer-events-none absolute top-4 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4">
         {notifications.map((n) => {
           const baseClasses =
-            "pointer-events-auto flex max-w-xl items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-soft";
+            "pointer-events-auto group flex max-w-xl items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-soft";
           let bgClasses = "";
           let iconSrc = "";
 
@@ -1153,7 +1471,22 @@ function App() {
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/15">
                 <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
               </div>
-              <span className="whitespace-pre-line">{n.message}</span>
+              <span className="whitespace-pre-line select-text flex-1 break-words">
+                {n.message}
+              </span>
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const ok = await copyToClipboard(n.message);
+                  if (ok) showNotification("success", tt("app.toast.copied"));
+                }}
+                title={tt("app.toast.copy")}
+                className="interactive-press shrink-0 rounded-md bg-black/20 px-2 py-1 text-xs text-white/70 transition-opacity opacity-0 group-hover:opacity-100 hover:bg-black/35 hover:text-white"
+              >
+                {tt("app.toast.copy")}
+              </button>
             </div>
           );
         })}
@@ -1197,10 +1530,10 @@ function App() {
       <div className="relative z-10 flex h-[calc(100vh-2.25rem)]">
         <aside
           ref={sidebarRef}
-          className="relative flex w-20 flex-col justify-between bg-black/40 px-3 py-6 backdrop-blur-lg"
+          className="relative m-3 flex w-20 flex-col justify-between rounded-3xl bg-black/40 px-3 py-6 backdrop-blur-lg"
         >
           <span
-            className="pointer-events-none absolute left-3 top-0 w-1 rounded-full bg-accentGreen transition-transform duration-200 ease-out"
+            className="pointer-events-none absolute left-3 top-0 w-1 rounded-full accent-bg transition-transform duration-200 ease-out"
             style={{
               height: `${sidebarIndicator.height}px`,
               transform: `translateY(${sidebarIndicator.top}px)`,
@@ -1209,11 +1542,12 @@ function App() {
             }}
           />
           <div className="flex flex-col gap-3">
-            {sidebarItems.map((item) => (
+            {orderedSidebarItems.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItem(item.id)}
+                title={tt(item.labelKey)}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
                 }}
@@ -1267,24 +1601,19 @@ function App() {
           {activeItem === "accounts" ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-6">
               <div
-                className="flex w-full items-center gap-6 rounded-2xl border border-white/10 bg-gradient-to-br from-[#1e3a5f]/95 to-[#0f2744]/95 px-6 py-5 shadow-xl backdrop-blur-sm"
-                style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}
+                className="flex w-full items-center gap-6 rounded-2xl border border-white/10 glass-panel px-6 py-5 shadow-xl backdrop-blur-md bg-black/50"
               >
                 <button
                   type="button"
-                  onClick={handleChooseAvatar}
                   className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
-                  title={language === "ru" ? "Выбрать аватар" : "Choose avatar"}
                 >
-                  {profile.avatar_path ? (
-                    <img
-                      src={convertFileSrc(profile.avatar_path)}
-                      alt=""
-                      className="aspect-square h-full w-full object-cover object-center"
-                    />
-                  ) : (
-                    <span className="text-3xl font-light text-white/70">?</span>
-                  )}
+                  <img
+                    src={headImgSrc}
+                    alt=""
+                    draggable={false}
+                    className="aspect-square h-full w-full object-cover object-center"
+                    onError={handleHeadImgError}
+                  />
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -1296,26 +1625,23 @@ function App() {
                         const v = e.target.value.trim();
                         if (v !== profile.nickname) handleSaveNickname(v);
                       }}
-                      placeholder="Player"
+                      placeholder={tt("app.accounts.nicknamePlaceholder")}
                       className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
                       disabled={profileSaving}
                     />
-                    <span className="text-white/50" title="Редактировать никнейм">
+                    <span className="text-white/50" title={tt("app.accounts.editNickname")}>
                       <PencilIcon />
                     </span>
                   </div>
                   {profile.ely_username && (
                     <p className="mt-0.5 text-xs text-white/60">
-                    {(language === "ru" ? "Вход: " : "Signed in as: ") +
-                      profile.ely_username}
+                      {tt("app.accounts.signedInAsPrefix") + profile.ely_username}
                     </p>
                   )}
                 </div>
               </div>
               <p className="text-center text-sm text-white/80">
-                {language === "ru"
-                  ? "Настройте профиль и внешний вид под себя, войдя в систему."
-                  : "Configure your profile and appearance after you sign in."}
+                {tt("app.accounts.hint")}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 {profile.ms_id_token ? (
@@ -1326,7 +1652,7 @@ function App() {
                   >
                     <MicrosoftIcon />
                     <span>
-                      {language === "ru" ? "Выйти из Microsoft" : "Log out of Microsoft"}
+                      {tt("app.accounts.microsoftLogout")}
                     </span>
                   </button>
                 ) : (
@@ -1337,7 +1663,7 @@ function App() {
                     className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
                   >
                     <MicrosoftIcon />
-                    <span>{language === "ru" ? "Войти через Microsoft" : "Sign in with Microsoft"}</span>
+                    <span>{tt("app.accounts.microsoftSignIn")}</span>
                   </button>
                 )}
                 {profile.ely_username ? (
@@ -1347,7 +1673,7 @@ function App() {
                     className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
                   >
                     <ElyByIcon />
-                    <span>{language === "ru" ? "Выйти из Ely.by" : "Log out of Ely.by"}</span>
+                    <span>{tt("app.accounts.elyLogout")}</span>
                   </button>
                 ) : (
                   <button
@@ -1359,9 +1685,7 @@ function App() {
                     <ElyByIcon />
                     <span>
                       {elyLoading
-                        ? language === "ru"
-                          ? "Ожидание входа…"
-                          : "Waiting for login…"
+                        ? tt("app.accounts.elyWaiting")
                         : "Ely.by"}
                     </span>
                   </button>
@@ -1370,17 +1694,13 @@ function App() {
               {elyAuthUrl && (
                 <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
                   <p className="mb-1.5 text-xs font-medium text-amber-200">
-                    {language === "ru"
-                      ? "Если страница в браузере бесконечно грузится:"
-                      : "If the page in your browser is loading forever:"}
+                    {tt("app.accounts.elyDialogTitle")}
                   </p>
                   <p className="break-all text-xs text-white/90">
                     {elyAuthUrl}
                   </p>
                   <p className="mt-1.5 text-[11px] text-white/60">
-                    {language === "ru"
-                      ? "Лучше открыть в новой вкладке того же браузера. В другом браузере Ely.by может показать «Invalid request»."
-                      : "It is better to open it in a new tab of the same browser. In another browser Ely.by may show “Invalid request”."}
+                    {tt("app.accounts.elyDialogTip")}
                   </p>
                 </div>
               )}
@@ -1393,6 +1713,7 @@ function App() {
                 activeProfileId={activeInstanceProfile?.id ?? null}
                 activeProfileGameVersion={activeInstanceProfile?.game_version}
                 activeProfileLoader={activeInstanceProfile?.loader}
+                onOpenModpacksTab={() => setActiveItem("modpacks")}
               />
             </div>
           ) : activeItem === "modpacks" ? (
@@ -1403,6 +1724,16 @@ function App() {
               onProfileSelectionChange={handleModpackProfileSelectionChange}
               initialSelectedProfileId={activeInstanceProfile?.id ?? null}
               onOpenModsTab={() => setActiveItem("mods")}
+              onPlaySelectedProfile={() => {
+                if (!activeInstanceProfile) {
+                  showNotification(
+                    "warning",
+                    tt("app.warnings.selectProfileFirst"),
+                  );
+                  return;
+                }
+                void handlePrimaryClick();
+              }}
             />
           </div>
           ) : activeItem === "settings" ? (
@@ -1418,6 +1749,13 @@ function App() {
               SettingsToggle={SettingsToggle}
               language={language}
               setLanguage={setLanguage}
+              sidebarOrder={sidebarOrder.filter((id) =>
+                id === "play" ||
+                id === "settings" ||
+                id === "mods" ||
+                id === "modpacks"
+              ) as ("play" | "settings" | "mods" | "modpacks")[]}
+              setSidebarOrder={(order) => setSidebarOrder(order)}
             />
           ) : (
             <PlayTab
@@ -1448,6 +1786,8 @@ function App() {
               setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
               handleOpenGameFolder={handleOpenGameFolder}
               language={language}
+              installedVersionIds={installedVersionIdsForDropdown}
+              showSnapshots={settings?.show_snapshots ?? false}
           activeProfileName={activeInstanceProfile?.name ?? null}
             />
           )}

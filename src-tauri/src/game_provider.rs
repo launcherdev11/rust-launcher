@@ -1,38 +1,194 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use reqwest::Client;
+use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use sysinfo::{ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager};
 use std::env;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
+use tokio::sync::Semaphore;
+use sha1::{Digest, Sha1};
+use urlencoding::encode;
 
 use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 
-fn http_client() -> Client {
-    Client::builder()
+fn http_client(use_proxy: bool) -> Client {
+    let _ = dotenvy::dotenv();
+
+    let mut builder = Client::builder()
         .timeout(Duration::from_secs(300))
         .connect_timeout(Duration::from_secs(30))
-        // Некоторые хосты (в т.ч. Forge) могут отдавать 403/челлендж для "ботовых" UA.
-        // Используем браузероподобный UA, чтобы стабильнее получать JSON-метаданные.
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36")
-        .build()
-        .unwrap_or_else(|_| Client::new())
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
+
+    if use_proxy {
+        let host = env_var_trim("PROXY_HOST");
+        let port_str = env_var_trim("PROXY_PORT");
+        let user = env_var_trim("PROXY_USER");
+        let pass = env_var_trim("PROXY_PASS");
+
+        if let (Some(host), Some(port_str)) = (host, port_str) {
+            if let Ok(port) = port_str.parse::<u16>() {
+                let proxy_url = match (user, pass) {
+                    (Some(u), Some(p)) => format!(
+                        "http://{}:{}@{}:{}",
+                        encode(&u),
+                        encode(&p),
+                        host,
+                        port
+                    ),
+                    _ => format!("http://{host}:{port}"),
+                };
+
+                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                    builder = builder.proxy(proxy);
+                }
+            }
+        }
+    }
+
+    builder.build().unwrap_or_else(|_| Client::new())
+}
+
+fn env_var_trim(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn build_java_http_proxy_args() -> Vec<String> {
+    let _ = dotenvy::dotenv();
+
+    let host = env_var_trim("PROXY_HOST");
+    let port_str = env_var_trim("PROXY_PORT");
+    let (host, port) = match (host, port_str) {
+        (Some(h), Some(p)) => match p.parse::<u16>() {
+            Ok(port) => (h, port),
+            Err(_) => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+
+    let user = env_var_trim("PROXY_USER");
+    let pass = env_var_trim("PROXY_PASS");
+
+    let mut args = Vec::new();
+
+    args.push(format!("-Dhttp.proxyHost={}", host));
+    args.push(format!("-Dhttp.proxyPort={}", port));
+    args.push(format!("-Dhttps.proxyHost={}", host));
+    args.push(format!("-Dhttps.proxyPort={}", port));
+
+    if let (Some(user), Some(pass)) = (user, pass) {
+        args.push(format!("-DproxyUser={}", user));
+        args.push(format!("-DproxyPass={}", pass));
+    }
+
+    args.push("-Djdk.http.auth.tunneling.disabledSchemes=".to_string());
+
+    args.push("-Djava.net.useSystemProxies=true".to_string());
+
+    args.push("-Dsun.net.client.defaultConnectTimeout=30000".to_string());
+    args.push("-Dsun.net.client.defaultReadTimeout=300000".to_string());
+
+    args
+}
+
+const PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE: &str = include_str!("../ProxyAuthBootstrap.java");
+
+fn ensure_proxy_auth_bootstrap_jar(installer_jar_path: &Path) -> Result<PathBuf, String> {
+    let out_dir = launcher_data_dir()?.join("proxy_auth_bootstrap");
+    let jar_path = out_dir.join("bootstrap.jar");
+    let classes_dir = out_dir.join("classes");
+
+    if jar_path.exists() {
+        let jar_list = std::process::Command::new("jar")
+            .arg("tf")
+            .arg(&jar_path)
+            .output()
+            .map_err(|e| format!("Не удалось прочитать bootstrap.jar (jar tf): {e}"))?;
+
+        if jar_list.status.success() {
+            let text = String::from_utf8_lossy(&jar_list.stdout);
+            if text.contains("ProxyAuthBootstrap$1.class") {
+                return Ok(jar_path);
+            }
+        }
+    }
+
+    std::fs::create_dir_all(&out_dir)
+        .map_err(|e| format!("Не удалось создать папку bootstrap: {e}"))?;
+    std::fs::create_dir_all(&classes_dir)
+        .map_err(|e| format!("Не удалось создать папку bootstrap classes: {e}"))?;
+
+    let java_path = out_dir.join("ProxyAuthBootstrap.java");
+    std::fs::write(&java_path, PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE)
+        .map_err(|e| format!("Не удалось сохранить ProxyAuthBootstrap.java: {e}"))?;
+
+    let javac_out = std::process::Command::new("javac")
+        .arg("-encoding")
+        .arg("UTF-8")
+        .arg("-cp")
+        .arg(installer_jar_path)
+        .arg("-d")
+        .arg(&classes_dir)
+        .arg(&java_path)
+        .output()
+        .map_err(|e| format!("Не удалось запустить javac: {e}"))?;
+
+    if !javac_out.status.success() {
+        return Err(format!(
+            "Не удалось скомпилировать ProxyAuthBootstrap.java (javac {}): {}",
+            javac_out.status,
+            String::from_utf8_lossy(&javac_out.stderr)
+        ));
+    }
+
+
+    let _ = std::fs::remove_file(&jar_path);
+
+    let jar_out = std::process::Command::new("jar")
+        .arg("cf")
+        .arg(&jar_path)
+        .arg("-C")
+        .arg(&classes_dir)
+        .arg(".")
+        .output()
+        .map_err(|e| format!("Не удалось запустить jar: {e}"))?;
+
+    if !jar_out.status.success() {
+        return Err(format!(
+            "Не удалось упаковать bootstrap.jar (jar {}): {}",
+            jar_out.status,
+            String::from_utf8_lossy(&jar_out.stderr)
+        ));
+    }
+
+    Ok(jar_path)
 }
 
 const VERSION_MANIFEST_URL: &str =
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+const DEFAULT_DOWNLOAD_CONCURRENCY: usize = 12;
+const DEFAULT_DOWNLOAD_RETRIES: usize = 6;
+const FORGE_PROMOTIONS_URL: &str =
+    "https://files.minecraftforge.net/maven/net/minecraftforge/forge/promotions_slim.json";
+const FORGE_MAVEN_BASE: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
+const FORGE_INSTALLER_MIN_BYTES: u64 = 1_000_000;
+const BMCL_MAVEN_BASE: &str = "https://bmclapi2.bangbang93.com/maven";
 const FABRIC_META_LOADERS: &str = "https://meta.fabricmc.net/v2/versions/loader";
 const FABRIC_META_PROFILE: &str = "https://meta.fabricmc.net/v2/versions/loader";
-const FORGE_PROMOTIONS: &str =
-    "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
-const FORGE_INSTALLER_BASE: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
 
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
 static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
@@ -135,7 +291,7 @@ async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)
         _ => return Ok(None),
     };
 
-    let client = http_client();
+    let client = http_client(false);
 
     let xbl_req = XblUserAuthRequest {
         relying_party: "http://auth.xboxlive.com".to_string(),
@@ -407,6 +563,26 @@ fn build_java_command(
         }
     }
 
+    if let Some(java_major) = detect_java_major_version(&java_path) {
+        if java_major < 9 {
+            let mut filtered: Vec<String> = Vec::with_capacity(jvm_args.len());
+            let mut i = 0usize;
+            while i < jvm_args.len() {
+                if jvm_args[i] == "--add-opens" {
+                    i += 2;
+                    continue;
+                }
+                if jvm_args[i].starts_with("--add-opens=") {
+                    i += 1;
+                    continue;
+                }
+                filtered.push(jvm_args[i].clone());
+                i += 1;
+            }
+            jvm_args = filtered;
+        }
+    }
+
     let base_ram_mb = settings.ram_mb.max(1024);
     let mut xms_mb = (base_ram_mb / 2).max(512);
     let mut xmx_mb = base_ram_mb;
@@ -476,6 +652,15 @@ fn build_java_command(
                 continue;
             }
 
+            if a == "-p" || a == "--module-path" {
+                eprintln!("[JavaSettings] Флаг модулей игнорирован: {}", a);
+                i += 1;
+                if i < tokens.len() {
+                    i += 1;
+                }
+                continue;
+            }
+
             if a == "-cp" || a == "-classpath" {
                 eprintln!("[JavaSettings] Пользовательский -cp/-classpath игнорирован (обязательный classpath задаётся лаунчером).");
                 i += 1;
@@ -536,6 +721,9 @@ pub struct Settings {
     pub close_launcher_on_game_start: bool,
     pub check_game_processes: bool,
 
+    pub resolution_width: Option<u32>,
+    pub resolution_height: Option<u32>,
+
     pub show_snapshots: bool,
     pub show_alpha_versions: bool,
 
@@ -545,6 +733,11 @@ pub struct Settings {
 
     pub check_updates_on_start: bool,
     pub auto_install_updates: bool,
+
+    pub open_launcher_on_profiles_tab: bool,
+
+    pub background_accent_color: String,
+    pub background_image_url: Option<String>,
 }
 
 impl Default for Settings {
@@ -554,6 +747,8 @@ impl Default for Settings {
             show_console_on_launch: false,
             close_launcher_on_game_start: false,
             check_game_processes: true,
+            resolution_width: None,
+            resolution_height: None,
             show_snapshots: false,
             show_alpha_versions: false,
             notify_new_update: true,
@@ -561,12 +756,19 @@ impl Default for Settings {
             notify_system_message: true,
             check_updates_on_start: true,
             auto_install_updates: false,
+            open_launcher_on_profiles_tab: false,
+            background_accent_color: "#0b1530".to_string(),
+            background_image_url: None,
         }
     }
 }
 
 fn settings_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("settings.json"))
+}
+
+fn launcher_cache_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("cache"))
 }
 
 fn java_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -649,6 +851,32 @@ pub fn get_settings() -> Result<Settings, String> {
 #[tauri::command]
 pub fn set_settings(settings: Settings) -> Result<(), String> {
     save_settings_to_disk(&settings)
+}
+
+#[tauri::command]
+pub fn reset_settings_to_default() -> Result<Settings, String> {
+    let defaults = Settings::default();
+    save_settings_to_disk(&defaults)?;
+    Ok(defaults)
+}
+
+#[tauri::command]
+pub fn get_launcher_cache_size() -> Result<u64, String> {
+    let dir = launcher_cache_dir()?;
+    let (bytes, _) = dir_size_and_count(&dir);
+    Ok(bytes)
+}
+
+#[tauri::command]
+pub fn clear_launcher_cache() -> Result<(), String> {
+    let dir = launcher_cache_dir()?;
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| format!("Не удалось удалить кэш лаунчера: {e}"))?;
+    }
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Не удалось создать папку кэша лаунчера: {e}"))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -889,6 +1117,28 @@ fn detect_java_version(path: &str, source: &str) -> Option<JavaRuntimeInfo> {
     })
 }
 
+fn parse_java_major_version(version_line: &str) -> Option<u8> {
+    let start_quote = version_line.find('"')?;
+    let after = &version_line[start_quote + 1..];
+    let end_quote_rel = after.find('"')?;
+    let version = &after[..end_quote_rel];
+
+    let mut parts = version.split('.');
+    let first = parts.next()?;
+    if first == "1" {
+        let second = parts.next()?;
+        second.parse::<u8>().ok()
+    } else {
+        first.parse::<u8>().ok()
+    }
+}
+
+fn detect_java_major_version(java_path: &Path) -> Option<u8> {
+    let java_path_str = java_path.to_string_lossy();
+    let info = detect_java_version(java_path_str.as_ref(), "LAUNCH_JAVA_RUNTIME")?;
+    parse_java_major_version(&info.version)
+}
+
 #[tauri::command]
 pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
     let mut seen: HashSet<String> = HashSet::new();
@@ -1090,6 +1340,8 @@ impl From<ManifestVersion> for VersionSummary {
 struct VersionDetail {
     #[serde(default)]
     downloads: Option<VersionDownloads>,
+    #[serde(rename = "inheritsFrom", default)]
+    inherits_from: Option<String>,
     #[serde(rename = "mainClass")]
     main_class: String,
     #[serde(default)]
@@ -1121,10 +1373,12 @@ struct VersionDownloads {
 #[derive(Debug, Deserialize)]
 struct VersionDownloadInfo {
     url: String,
+    #[serde(default)]
+    sha1: Option<String>,
     size: u64,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 struct VersionArguments {
     #[serde(default)]
     jvm: Vec<ArgumentValue>,
@@ -1132,7 +1386,7 @@ struct VersionArguments {
     game: Vec<ArgumentValue>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 enum ArgumentValue {
     String(String),
@@ -1142,7 +1396,7 @@ enum ArgumentValue {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct ArgRule {
     #[serde(default)]
     action: String,
@@ -1186,6 +1440,8 @@ impl GameFeatures {
 struct AssetIndexRef {
     id: String,
     url: String,
+    #[serde(default)]
+    sha1: Option<String>,
     #[serde(rename = "totalSize", default)]
     total_size: Option<u64>,
 }
@@ -1227,6 +1483,8 @@ struct LibraryDownloads {
 struct LibraryArtifact {
     path: String,
     url: String,
+    #[serde(default)]
+    sha1: Option<String>,
     #[serde(default)]
     size: u64,
 }
@@ -1297,11 +1555,6 @@ struct FabricProfileLibrary {
     size: u64,
 }
 
-#[derive(Debug, Deserialize)]
-struct ForgePromotions {
-    promos: HashMap<String, String>,
-}
-
 #[derive(Debug, Serialize, Clone)]
 pub struct ForgeVersionSummary {
     pub id: String,
@@ -1327,8 +1580,6 @@ pub(crate) fn profile_path() -> Result<PathBuf, String> {
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Profile {
     pub nickname: String,
-    #[serde(default)]
-    pub avatar_path: Option<String>,
     #[serde(default)]
     pub ely_username: Option<String>,
     #[serde(default)]
@@ -1364,11 +1615,10 @@ pub fn get_profile() -> Result<Profile, String> {
 }
 
 #[tauri::command]
-pub fn set_profile(nickname: String, avatar_path: Option<String>) -> Result<(), String> {
+pub fn set_profile(nickname: String) -> Result<(), String> {
     let path = profile_path()?;
     let mut profile = get_profile().unwrap_or_default();
     profile.nickname = nickname;
-    profile.avatar_path = avatar_path;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку: {e}"))?;
     }
@@ -1388,24 +1638,79 @@ pub(crate) fn save_full_profile(profile: &Profile) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn save_avatar(source_path: String) -> Result<String, String> {
-    let path = std::path::Path::new(&source_path);
+fn image_path_to_data_uri(path: &Path) -> Result<Option<String>, String> {
     if !path.exists() {
-        return Err("Файл не найден.".to_string());
+        return Ok(None);
     }
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("png");
-    let data_dir = launcher_data_dir()?;
-    std::fs::create_dir_all(&data_dir).map_err(|e| format!("Не удалось создать папку: {e}"))?;
-    let dest = data_dir.join(format!("avatar.{}", ext));
-    std::fs::copy(path, &dest).map_err(|e| format!("Не удалось скопировать файл: {e}"))?;
-    let dest_str = dest.to_str().ok_or("Путь не в UTF-8")?.to_string();
-    let mut profile = get_profile().unwrap_or_default();
-    profile.avatar_path = Some(dest_str.clone());
-    let pp = profile_path()?;
-    let s = serde_json::to_string_pretty(&profile).map_err(|e| format!("{e}"))?;
-    std::fs::write(&pp, s).map_err(|e| format!("{e}"))?;
-    Ok(dest_str)
+    let bytes = std::fs::read(path)
+        .map_err(|e| format!("Не удалось прочитать файл изображения: {e}"))?;
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png")
+        .to_lowercase();
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "png" | _ => "image/png",
+    };
+    let encoded = BASE64_STANDARD.encode(bytes);
+    Ok(Some(format!("data:{};base64,{}", mime, encoded)))
+}
+
+#[tauri::command]
+pub fn set_background_image(source_path: Option<String>) -> Result<Option<String>, String> {
+    let mut settings = load_settings_from_disk();
+
+    let new_path = if let Some(src) = source_path {
+        let path = Path::new(&src);
+        if !path.exists() {
+            return Err("Файл не найден.".to_string());
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png");
+        let data_dir = launcher_data_dir()?;
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Не удалось создать папку данных лаунчера: {e}"))?;
+        let dest = data_dir.join(format!("background.{}", ext));
+        std::fs::copy(path, &dest)
+            .map_err(|e| format!("Не удалось скопировать файл: {e}"))?;
+        Some(
+            dest.to_str()
+                .ok_or("Путь не в UTF-8")?
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    if new_path.is_none() {
+        if let Some(old) = settings.background_image_url.as_ref() {
+            let old_path = PathBuf::from(old);
+            if let Ok(data_dir) = launcher_data_dir() {
+                if old_path.starts_with(&data_dir) {
+                    let _ = std::fs::remove_file(&old_path);
+                }
+            }
+        }
+    }
+
+    settings.background_image_url = new_path.clone();
+    save_settings_to_disk(&settings)?;
+    Ok(new_path)
+}
+
+#[tauri::command]
+pub fn get_background_data_uri() -> Result<Option<String>, String> {
+    let settings = load_settings_from_disk();
+    let path_str = match settings.background_image_url {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    let path = PathBuf::from(path_str);
+    image_path_to_data_uri(&path)
 }
 
 
@@ -1450,6 +1755,8 @@ pub struct InstanceConfig {
     pub game_version: String,
     pub loader: String,
     pub created_at: u64,
+    #[serde(default)]
+    pub play_time_seconds: u64,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -1473,6 +1780,7 @@ pub struct InstanceProfileSummary {
     pub game_version: String,
     pub loader: String,
     pub created_at: u64,
+    pub play_time_seconds: u64,
     pub mods_count: u32,
     pub resourcepacks_count: u32,
     pub shaderpacks_count: u32,
@@ -1559,13 +1867,21 @@ fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, 
             None => continue,
         };
 
+        let icon_png_path = path.join("icon.png");
+        let icon_path = if icon_png_path.exists() {
+            icon_png_path.to_str().map(|s| s.to_string())
+        } else {
+            cfg.icon_path
+        };
+
         out.push(InstanceProfileSummary {
             id: cfg.id,
             name: cfg.name,
-            icon_path: cfg.icon_path,
+            icon_path,
             game_version: cfg.game_version,
             loader: cfg.loader,
             created_at: cfg.created_at,
+            play_time_seconds: cfg.play_time_seconds,
             mods_count,
             resourcepacks_count: res_count,
             shaderpacks_count: shader_count,
@@ -1691,17 +2007,10 @@ fn create_profile_internal(
     if let Some(src) = icon_source_path {
         let src_path = PathBuf::from(&src);
         if src_path.exists() {
-            let ext = src_path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("png");
-            let dest = dir.join(format!("icon.{ext}"));
+            let dest = dir.join("icon.png");
             std::fs::copy(&src_path, &dest)
                 .map_err(|e| format!("Не удалось скопировать иконку сборки: {e}"))?;
-            icon_path = dest
-                .to_str()
-                .map(|s| s.to_string())
-                .or(icon_path);
+            icon_path = dest.to_str().map(|s| s.to_string());
         }
     }
 
@@ -1717,6 +2026,7 @@ fn create_profile_internal(
         game_version: game_version.clone(),
         loader: loader.clone(),
         created_at,
+        play_time_seconds: 0,
     };
 
     let cfg_path = instance_config_path(&id)?;
@@ -1759,12 +2069,38 @@ fn create_profile_internal(
         game_version,
         loader,
         created_at,
+        play_time_seconds: 0,
         mods_count,
         resourcepacks_count: res_count,
         shaderpacks_count: shader_count,
         total_size_bytes,
         directory,
     })
+}
+
+fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Result<(), String> {
+    let cfg_path = instance_config_path(profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(());
+    }
+
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
+
+    let mut cfg: InstanceConfig = match serde_json::from_str(&text) {
+        Ok(c) => c,
+        Err(_) => return Ok(()), 
+    };
+
+    cfg.play_time_seconds = cfg.play_time_seconds.saturating_add(delta_secs);
+
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json для playtime: {e}"))?;
+
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Ошибка записи config.json для playtime: {e}"))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -2159,7 +2495,7 @@ pub async fn import_mrpack(
         },
     );
 
-    let client = http_client();
+    let client = http_client(false);
 
     let mut current_file: u32 = 0;
     for f in index.files.iter() {
@@ -2326,7 +2662,7 @@ pub async fn import_mrpack_as_new_profile(
         },
     );
 
-    let client = http_client();
+    let client = http_client(false);
     let mut current_file: u32 = 0;
     for f in index.files.iter() {
         if f.downloads.is_empty() || f.downloads[0].is_empty() {
@@ -2385,10 +2721,18 @@ pub async fn import_mrpack_as_new_profile(
     Ok(InstanceProfileSummary {
         id: profile.id,
         name: profile.name,
-        icon_path: profile.icon_path,
+        icon_path: {
+            let icon_png_path = dir.join("icon.png");
+            if icon_png_path.exists() {
+                icon_png_path.to_str().map(|s| s.to_string())
+            } else {
+                profile.icon_path
+            }
+        },
         game_version: profile.game_version,
         loader: profile.loader,
         created_at: profile.created_at,
+        play_time_seconds: profile.play_time_seconds,
         mods_count,
         resourcepacks_count: res_count,
         shaderpacks_count: shader_count,
@@ -2566,11 +2910,232 @@ async fn download_file(
     total_size: u64,
     offset_downloaded: u64,
 ) -> Result<u64, String> {
-    tokio::fs::create_dir_all(path.parent().unwrap())
-        .await
-        .map_err(|e| format!("Не удалось создать папку: {e}"))?;
 
-    let mut file = tokio::fs::File::create(path)
+    let total_done = Arc::new(AtomicU64::new(offset_downloaded));
+    download_file_checked(
+        client,
+        url,
+        path,
+        None,
+        app,
+        version_id,
+        total_size,
+        total_done,
+        DEFAULT_DOWNLOAD_RETRIES,
+    )
+    .await
+}
+
+async fn download_text_with_retries(client: &Client, url: &str, retries: usize) -> Result<String, String> {
+    let mut attempt: usize = 0;
+    loop {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            return Err("Загрузка отменена пользователем".to_string());
+        }
+        let resp = client.get(url).send().await;
+        match resp {
+            Ok(r) => {
+                let status = r.status();
+                if status.is_success() {
+                    return r.text().await.map_err(|e| format!("Ошибка чтения ответа: {e}"));
+                }
+                let should_retry = status.as_u16() == 404
+                    || status.as_u16() == 408
+                    || status.as_u16() == 429
+                    || status.is_server_error();
+                if !should_retry || attempt + 1 >= retries {
+                    let body = r.text().await.unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
+                    return Err(format!("HTTP {} для {}: {}", status, url, body));
+                }
+            }
+            Err(e) => {
+                if attempt + 1 >= retries {
+                    return Err(format!("Ошибка запроса {url}: {e}"));
+                }
+            }
+        }
+        let delay_ms = (1000u64).saturating_mul(2u64.saturating_pow(attempt.min(6) as u32));
+        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        attempt += 1;
+    }
+}
+
+fn sha1_hex_of_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(bytes);
+    let out = hasher.finalize();
+    format!("{:x}", out)
+}
+
+async fn sha1_hex_of_file(path: &Path) -> Result<String, String> {
+    let data = tokio::fs::read(path)
+        .await
+        .map_err(|e| {
+            format!(
+                "Не удалось прочитать файл '{}' для SHA1: {e}",
+                path.display()
+            )
+        })?;
+    Ok(sha1_hex_of_bytes(&data))
+}
+
+async fn try_fetch_remote_sha1(client: &Client, url: &str) -> Option<String> {
+    let sha1_url = format!("{url}.sha1");
+    let text = download_text_with_retries(client, &sha1_url, 2).await.ok()?;
+    let s = text.trim();
+    if s.len() >= 40 {
+        Some(s[..40].to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+async fn try_resolve_one_redirect_location(url: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .connect_timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36")
+        .build()
+        .ok()?;
+
+    let resp = client.get(url).send().await.ok()?;
+    if !resp.status().is_redirection() {
+        return None;
+    }
+    let loc = resp.headers().get(reqwest::header::LOCATION)?.to_str().ok()?.trim();
+    if loc.is_empty() {
+        return None;
+    }
+    if loc.starts_with("http://") || loc.starts_with("https://") {
+        Some(loc.to_string())
+    } else {
+        None
+    }
+}
+
+fn parse_forge_id(id: &str) -> Option<(String, String)> {
+    let mut parts = id.split("-forge-");
+    let mc = parts.next()?.trim();
+    let forge = parts.next()?.trim();
+    if mc.is_empty() || forge.is_empty() {
+        return None;
+    }
+    Some((mc.to_string(), forge.to_string()))
+}
+
+async fn file_starts_with_pk(path: &Path) -> Result<bool, String> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<bool, String> {
+        use std::io::Read;
+        let mut f = std::fs::File::open(&path)
+            .map_err(|e| format!("Не удалось открыть файл для проверки заголовка: {e}"))?;
+        let mut buf = [0u8; 4];
+        let n = f
+            .read(&mut buf)
+            .map_err(|e| format!("Не удалось прочитать заголовок файла: {e}"))?;
+        if n < 2 {
+            return Ok(false);
+        }
+        Ok(buf[0] == b'P' && buf[1] == b'K')
+    })
+    .await
+    .map_err(|e| format!("Ошибка проверки файла: {e}"))?
+}
+
+fn ensure_launcher_profiles_json(game_dir: &Path, mc_version: &str) -> Result<(), String> {
+
+    let launcher_profiles_path = game_dir.join("launcher_profiles.json");
+    let game_dir_str = game_dir
+        .to_str()
+        .ok_or("Путь к gameDir не в UTF-8")?
+        .to_string();
+
+    let profile_key = format!("mc16launcher-forge-{}", mc_version);
+
+    let mut root_obj = if launcher_profiles_path.exists() {
+        let text = std::fs::read_to_string(&launcher_profiles_path)
+            .map_err(|e| format!("Не удалось прочитать launcher_profiles.json: {e}"))?;
+        serde_json::from_str::<serde_json::Value>(&text).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    if !root_obj.get("profiles").is_some() || !root_obj["profiles"].is_object() {
+        root_obj["profiles"] = serde_json::json!({});
+    }
+
+    let profiles_obj = root_obj["profiles"].as_object_mut().ok_or_else(|| {
+        "launcher_profiles.json: поле profiles не является объектом".to_string()
+    })?;
+
+    let mut found_key: Option<String> = None;
+    for (k, v) in profiles_obj.iter() {
+        if v.get("gameDir").and_then(|x| x.as_str()) == Some(game_dir_str.as_str()) {
+            found_key = Some(k.clone());
+            break;
+        }
+    }
+
+    if found_key.is_none() {
+        profiles_obj.insert(
+            profile_key.clone(),
+            serde_json::json!({
+                "name": profile_key,
+                "gameDir": game_dir_str,
+                "lastVersionId": mc_version,
+                "type": "custom",
+                "created": "1970-01-01T00:00:00.000Z",
+                "lastUsed": "1970-01-01T00:00:00.000Z"
+            }),
+        );
+        found_key = Some(profile_key.clone());
+    }
+
+    let selected_profile = found_key.ok_or_else(|| "Не удалось определить selectedProfile".to_string())?;
+    root_obj["selectedProfile"] = serde_json::Value::String(selected_profile);
+
+    if !root_obj.get("clientToken").is_some() {
+        root_obj["clientToken"] =
+            serde_json::Value::String("00000000-0000-0000-0000-000000000000".to_string());
+    }
+    if !root_obj.get("authenticationDatabase").is_some() || !root_obj["authenticationDatabase"].is_object() {
+        root_obj["authenticationDatabase"] = serde_json::json!({});
+    }
+    if !root_obj.get("selectedUser").is_some() {
+        root_obj["selectedUser"] = serde_json::Value::String("00000000000000000000000000000000".to_string());
+    }
+    if !root_obj.get("launcherVersion").is_some() {
+        root_obj["launcherVersion"] = serde_json::json!({"name": "1.5.3", "format": 17});
+    }
+
+    let text = serde_json::to_string_pretty(&root_obj)
+        .map_err(|e| format!("Не удалось сериализовать launcher_profiles.json: {e}"))?;
+    std::fs::write(&launcher_profiles_path, text)
+        .map_err(|e| format!("Не удалось записать launcher_profiles.json: {e}"))?;
+    Ok(())
+}
+
+async fn download_forge_installer_once(
+    client: &Client,
+    url: &str,
+    path: &Path,
+    app: &AppHandle,
+    version_id: &str,
+    total_done: Arc<AtomicU64>,
+) -> Result<u64, String> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("Не удалось создать папку: {e}"))?;
+    }
+
+    if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+        return Err("Загрузка отменена пользователем".to_string());
+    }
+
+    let tmp_path = path.with_extension("part");
+    let mut file = tokio::fs::File::create(&tmp_path)
         .await
         .map_err(|e| format!("Не удалось создать файл: {e}"))?;
 
@@ -2578,21 +3143,41 @@ async fn download_file(
         .get(url)
         .send()
         .await
-        .map_err(|e| format!("Ошибка загрузки: {e}"))?;
+        .map_err(|e| format!("Ошибка запроса Forge installer: {e}"))?;
 
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Сервер вернул ошибку {} для {}",
-            resp.status(),
-            url
-        ));
+    let status = resp.status();
+    if !status.is_success() {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        if status.as_u16() == 404 || status.is_server_error() {
+            return Err("Версия Forge не найдена".to_string());
+        }
+        return Err(format!("HTTP {status} при запросе Forge installer"));
     }
 
-    let mut downloaded: u64 = 0;
-    let mut stream = resp.bytes_stream();
+    let ct = resp
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("<нет>");
+    log_to_console(app, &format!("[Forge] Content-Type installer: {ct}"));
+    if ct.to_ascii_lowercase().starts_with("text/html") {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err("Версия Forge не найдена".to_string());
+    }
 
+    let content_len = resp.content_length().unwrap_or(0);
+    if content_len < FORGE_INSTALLER_MIN_BYTES {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err("Версия Forge не найдена".to_string());
+    }
+
+    let effective_total = content_len;
+    let mut downloaded: u64 = 0;
+
+    let mut stream = resp.bytes_stream();
     while let Some(chunk) = stream.next().await {
         if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            let _ = tokio::fs::remove_file(&tmp_path).await;
             return Err("Загрузка отменена пользователем".to_string());
         }
         let chunk = chunk.map_err(|e| format!("Ошибка чтения потока: {e}"))?;
@@ -2600,21 +3185,209 @@ async fn download_file(
             .await
             .map_err(|e| format!("Ошибка записи: {e}"))?;
         downloaded += chunk.len() as u64;
-        if total_size > 0 {
-            let total_done = offset_downloaded + downloaded;
-            let percent = total_done as f32 / total_size as f32 * 100.0;
+        total_done.fetch_add(chunk.len() as u64, Ordering::SeqCst);
+
+        let percent = if effective_total > 0 {
+            downloaded as f32 / effective_total as f32 * 100.0
+        } else {
+            0.0
+        };
+        let _ = app.emit(
+            EVENT_DOWNLOAD_PROGRESS,
+            DownloadProgressPayload {
+                version_id: version_id.to_string(),
+                downloaded,
+                total: effective_total,
+                percent,
+            },
+        );
+    }
+
+    drop(file);
+    let _ = tokio::fs::remove_file(path).await;
+    tokio::fs::rename(&tmp_path, path)
+        .await
+        .map_err(|e| format!("Не удалось переместить файл: {e}"))?;
+    Ok(downloaded)
+}
+
+async fn download_file_checked(
+    client: &Client,
+    url: &str,
+    path: &Path,
+    expected_sha1: Option<String>,
+    app: &AppHandle,
+    version_id: &str,
+    total_size: u64,
+    total_done: Arc<AtomicU64>,
+    retries: usize,
+) -> Result<u64, String> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("Не удалось создать папку: {e}"))?;
+    }
+
+    let mut attempt: usize = 0;
+    loop {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            return Err("Загрузка отменена пользователем".to_string());
+        }
+
+        if path.exists() {
+            if let Some(expected) = expected_sha1.as_ref() {
+                let actual = sha1_hex_of_file(path).await?;
+                if actual.eq_ignore_ascii_case(expected) {
+                    return Ok(0);
+                }
+                let _ = tokio::fs::remove_file(path).await;
+            } else {
+                return Ok(0);
+            }
+        }
+
+        let unique_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp_path = path.with_extension(format!("part-{}-{}", std::process::id(), unique_id));
+        let mut file = tokio::fs::File::create(&tmp_path)
+            .await
+            .map_err(|e| format!("Не удалось создать файл: {e}"))?;
+
+        let resp = client.get(url).send().await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt + 1 >= retries {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Err(format!("Ошибка загрузки {url}: {e}"));
+                }
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                let delay_ms = (1000u64).saturating_mul(2u64.saturating_pow(attempt.min(6) as u32));
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                attempt += 1;
+                continue;
+            }
+        };
+
+        let status = resp.status();
+        if !status.is_success() {
+            let should_retry = status.as_u16() == 404
+                || status.as_u16() == 408
+                || status.as_u16() == 429
+                || status.is_server_error();
+            let body = resp.text().await.unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
+            if !should_retry || attempt + 1 >= retries {
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                return Err(format!("HTTP {} для {}: {}", status, url, body));
+            }
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+            let delay_ms = (1000u64).saturating_mul(2u64.saturating_pow(attempt.min(6) as u32));
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            attempt += 1;
+            continue;
+        }
+
+        let content_len = resp.content_length().unwrap_or(0);
+        let effective_total = if total_size > 0 { total_size } else { content_len };
+
+        let mut downloaded: u64 = 0;
+        let mut stream = resp.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                return Err("Загрузка отменена пользователем".to_string());
+            }
+            let chunk = chunk.map_err(|e| format!("Ошибка чтения потока: {e}"))?;
+            tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+                .await
+                .map_err(|e| format!("Ошибка записи: {e}"))?;
+            downloaded += chunk.len() as u64;
+            let total_now = total_done.fetch_add(chunk.len() as u64, Ordering::SeqCst) + (chunk.len() as u64);
+            let (reported_done, percent) = if total_size > 0 {
+                let p = if effective_total > 0 {
+                    total_now as f32 / effective_total as f32 * 100.0
+                } else {
+                    0.0
+                };
+                (total_now, p)
+            } else {
+                let p = if effective_total > 0 {
+                    downloaded as f32 / effective_total as f32 * 100.0
+                } else {
+                    0.0
+                };
+                (downloaded, p)
+            };
             let _ = app.emit(
                 EVENT_DOWNLOAD_PROGRESS,
                 DownloadProgressPayload {
                     version_id: version_id.to_string(),
-                    downloaded: total_done,
-                    total: total_size,
+                    downloaded: reported_done,
+                    total: effective_total,
                     percent,
                 },
             );
         }
+
+        drop(file);
+
+        if let Some(expected) = expected_sha1.clone() {
+            let actual = sha1_hex_of_file(&tmp_path).await?;
+            if actual.to_ascii_lowercase() != expected.to_ascii_lowercase() {
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                if attempt + 1 >= retries {
+                    return Err(format!(
+                        "SHA1 не совпал для {} (ожидалось {}, получено {})",
+                        path.display(),
+                        expected,
+                        actual
+                    ));
+                }
+                let delay_ms = (800u64).saturating_mul(2u64.saturating_pow(attempt.min(6) as u32));
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                attempt += 1;
+                continue;
+            }
+        }
+
+        if path.exists() {
+            if let Some(expected) = expected_sha1.as_ref() {
+                let actual_existing = sha1_hex_of_file(path).await?;
+                if actual_existing.eq_ignore_ascii_case(expected) {
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
+                    return Ok(downloaded);
+                }
+                let _ = tokio::fs::remove_file(path).await;
+            } else {
+                let _ = tokio::fs::remove_file(&tmp_path).await;
+                return Ok(downloaded);
+            }
+        }
+
+        match tokio::fs::rename(&tmp_path, path).await {
+            Ok(()) => return Ok(downloaded),
+            Err(e) => {
+                if path.exists() {
+                    if let Some(expected) = expected_sha1.as_ref() {
+                        let actual_existing = sha1_hex_of_file(path).await?;
+                        if actual_existing.eq_ignore_ascii_case(expected) {
+                            let _ = tokio::fs::remove_file(&tmp_path).await;
+                            return Ok(downloaded);
+                        }
+                    } else {
+                        let _ = tokio::fs::remove_file(&tmp_path).await;
+                        return Ok(downloaded);
+                    }
+                }
+                return Err(format!(
+                    "Не удалось финализировать файл: {e} (url: {url}, target: {})",
+                    path.display()
+                ));
+            }
+        }
     }
-    Ok(downloaded)
 }
 
 const ASSETS_BASE_URL: &str = "https://resources.download.minecraft.net";
@@ -2644,18 +3417,7 @@ async fn download_assets(
             .await
             .map_err(|e| format!("Ошибка чтения индекса: {e}"))?
     } else {
-        let resp = client
-            .get(&asset_index.url)
-            .send()
-            .await
-            .map_err(|e| format!("Ошибка загрузки индекса ассетов: {e}"))?;
-        if !resp.status().is_success() {
-            return Err(format!(
-                "Сервер вернул {} для индекса ассетов",
-                resp.status()
-            ));
-        }
-        let text = resp.text().await.map_err(|e| format!("{e}"))?;
+        let text = download_text_with_retries(client, &asset_index.url, DEFAULT_DOWNLOAD_RETRIES).await?;
         tokio::fs::write(&index_path, &text)
             .await
             .map_err(|e| format!("Не удалось сохранить индекс: {e}"))?;
@@ -2665,49 +3427,57 @@ async fn download_assets(
     let index: AssetIndexJson = serde_json::from_str(&index_json)
         .map_err(|e| format!("Ошибка разбора индекса ассетов: {e}"))?;
 
+    let sem = Arc::new(Semaphore::new(DEFAULT_DOWNLOAD_CONCURRENCY));
+    let total_done = Arc::new(AtomicU64::new(total_downloaded));
+    let mut tasks = futures_util::stream::FuturesUnordered::new();
+
     for (_path, obj) in &index.objects {
         if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
             return Err("Загрузка отменена пользователем".to_string());
         }
-        let hash = &obj.hash;
+        let hash = obj.hash.clone();
+        let size = obj.size;
         if hash.len() < 2 {
             continue;
         }
-        let prefix = &hash[..2];
-        let obj_path = objects_dir.join(prefix).join(hash);
+        let prefix = hash[..2].to_string();
+        let obj_path = objects_dir.join(&prefix).join(&hash);
         if obj_path.exists() {
-            total_downloaded = total_downloaded.saturating_add(obj.size);
-            if total_size > 0 {
-                let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                let _ = app.emit(
-                    EVENT_DOWNLOAD_PROGRESS,
-                    DownloadProgressPayload {
-                        version_id: version_id.to_string(),
-                        downloaded: total_downloaded,
-                        total: total_size,
-                        percent,
-                    },
-                );
-            }
+            total_done.fetch_add(size, Ordering::SeqCst);
             continue;
         }
         let url = format!("{ASSETS_BASE_URL}/{prefix}/{hash}");
-        if let Some(parent) = obj_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| format!("Не удалось создать папку: {e}"))?;
-        }
-        let _ = download_file(
-            client,
-            &url,
-            &obj_path,
-            app,
-            version_id,
-            total_size,
-            total_downloaded,
-        )
-        .await?;
-        total_downloaded = total_downloaded.saturating_add(obj.size);
+        let client = client.clone();
+        let app = app.clone();
+        let sem = sem.clone();
+        let total_done = total_done.clone();
+        let version_id = version_id.to_string();
+        let obj_path2 = obj_path.clone();
+        tasks.push(tokio::spawn(async move {
+            let _permit = sem.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
+            if let Some(parent) = obj_path2.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|e| format!("Не удалось создать папку: {e}"))?;
+            }
+            download_file_checked(
+                &client,
+                &url,
+                &obj_path2,
+                Some(hash),
+                &app,
+                &version_id,
+                total_size,
+                total_done,
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+            Ok::<(), String>(())
+        }));
+    }
+
+    while let Some(res) = tasks.next().await {
+        res.map_err(|e| format!("Ошибка задачи загрузки ассетов: {e}"))??;
     }
 
     Ok(())
@@ -2742,17 +3512,14 @@ fn extract_natives_jar(jar_path: &Path, out_dir: &Path) -> Result<(), String> {
 }
 
 async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
-    let client = http_client();
-    let resp = client
-        .get(VERSION_MANIFEST_URL)
-        .send()
+    let client = http_client(false);
+    let text = download_text_with_retries(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
         .await
-        .map_err(|e| format!("Ошибка запроса манифеста версий: {e}"))?;
-
-    let manifest: VersionManifest = resp
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора манифеста версий: {e}"))?;
+        .map_err(|e| format!("Ошибка загрузки манифеста версий: {e}"))?;
+    let manifest: VersionManifest = serde_json::from_str(&text).map_err(|e| {
+        let head = text.chars().take(200).collect::<String>();
+        format!("Ошибка разбора манифеста версий: {e}. Первые символы ответа: {head}")
+    })?;
 
     let mut summaries: Vec<VersionSummary> =
         manifest.versions.into_iter().map(VersionSummary::from).collect();
@@ -2763,15 +3530,11 @@ async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
 }
 
 async fn get_mojang_version_url(version_id: &str) -> Result<String, String> {
-    let client = http_client();
-    let resp = client
-        .get(VERSION_MANIFEST_URL)
-        .send()
+    let client = http_client(false);
+    let text = download_text_with_retries(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса манифеста: {e}"))?;
-    let manifest: VersionManifest = resp
-        .json()
-        .await
+    let manifest: VersionManifest = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора манифеста: {e}"))?;
     manifest
         .versions
@@ -2863,6 +3626,238 @@ pub async fn open_game_folder(profile_id: Option<String>) -> Result<(), String> 
     Ok(())
 }
 
+#[derive(Debug, Deserialize)]
+struct CurseForgeModsSearchPagination {
+    index: u32,
+    pageSize: u32,
+    resultCount: u32,
+    totalCount: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurseForgeModsSearchLogo {
+    thumbnailUrl: Option<String>,
+    url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurseForgeModsSearchAuthor {
+    id: u64,
+    name: String,
+    url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurseForgeModsSearchLatestFile {
+    id: u64,
+    fileName: String,
+    downloadUrl: String,
+    gameVersions: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurseForgeModsSearchItem {
+    id: u64,
+    name: String,
+    slug: String,
+    summary: Option<String>,
+    downloadCount: u64,
+    authors: Vec<CurseForgeModsSearchAuthor>,
+    logo: Option<CurseForgeModsSearchLogo>,
+    latestFiles: Vec<CurseForgeModsSearchLatestFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurseForgeModsSearchResponse {
+    data: Vec<CurseForgeModsSearchItem>,
+    pagination: CurseForgeModsSearchPagination,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CurseForgeFileForUi {
+    id: String,
+    filename: String,
+    downloadUrl: String,
+    gameVersions: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CurseForgeProjectForUi {
+    project_id: String,
+    slug: String,
+    title: String,
+    description: String,
+    icon_url: Option<String>,
+    downloads: u64,
+    author: Option<String>,
+    latest_files: Vec<CurseForgeFileForUi>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CurseForgeModsSearchUi {
+    hits: Vec<CurseForgeProjectForUi>,
+    total_hits: u64,
+}
+
+fn curseforge_mod_loader_param(mod_loader: &str) -> Option<&'static str> {
+    match mod_loader {
+        "forge" => Some("Forge"),
+        "fabric" => Some("Fabric"),
+        "quilt" => Some("Quilt"),
+        "neoforge" => Some("NeoForge"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub async fn search_curseforge_mods(
+    search: String,
+    game_version: String,
+    mod_loader: String,
+    page: u32,
+    page_size: u32,
+) -> Result<CurseForgeModsSearchUi, String> {
+    let api_key = env_var_trim("CURSEFORGE_API_KEY")
+        .ok_or_else(|| "CURSEFORGE_API_KEY не задан в .env".to_string())?;
+
+    let mut params = vec![
+        ("gameId".to_string(), "432".to_string()),
+        ("index".to_string(), page.to_string()),
+        ("pageSize".to_string(), page_size.to_string()),
+    ];
+
+    if !search.trim().is_empty() {
+        params.push(("searchFilter".to_string(), search.trim().to_string()));
+    }
+
+    if !game_version.trim().is_empty() {
+        params.push(("gameVersion".to_string(), game_version.trim().to_string()));
+    }
+
+    if let Some(mod_loader_param) = curseforge_mod_loader_param(mod_loader.as_str()) {
+        params.push(("modLoaderType".to_string(), mod_loader_param.to_string()));
+    }
+
+    let client = http_client(true);
+    let url = "https://api.curseforge.com/v1/mods/search";
+
+    let resp = client
+        .get(url)
+        .header("Accept", "application/json")
+        .header("x-api-key", api_key)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка запроса CurseForge: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "CurseForge вернул ошибку {} при поиске",
+            resp.status()
+        ));
+    }
+
+    let parsed: CurseForgeModsSearchResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Ошибка разбора CurseForge JSON: {e}"))?;
+
+    let hits = parsed
+        .data
+        .into_iter()
+        .map(|m| {
+            let author = m.authors.first().map(|a| a.name.clone());
+            let icon_url = m
+                .logo
+                .as_ref()
+                .and_then(|l| l.thumbnailUrl.clone().or(l.url.clone()));
+
+            let latest_files = m
+                .latestFiles
+                .into_iter()
+                .map(|f| CurseForgeFileForUi {
+                    id: f.id.to_string(),
+                    filename: f.fileName,
+                    downloadUrl: f.downloadUrl,
+                    gameVersions: f.gameVersions,
+                })
+                .collect::<Vec<_>>();
+
+            CurseForgeProjectForUi {
+                project_id: m.id.to_string(),
+                slug: m.slug,
+                title: m.name,
+                description: m.summary.unwrap_or_default(),
+                icon_url,
+                downloads: m.downloadCount,
+                author,
+                latest_files,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    Ok(CurseForgeModsSearchUi {
+        hits,
+        total_hits: parsed.pagination.totalCount,
+    })
+}
+
+#[tauri::command]
+pub async fn download_modrinth_modpack_and_import(
+    app: AppHandle,
+    url: String,
+    filename: String,
+) -> Result<InstanceProfileSummary, String> {
+    let root = launcher_data_dir()?
+        .join("tmp")
+        .join("modrinth_modpacks");
+    tokio::fs::create_dir_all(&root)
+        .await
+        .map_err(|e| format!("Не удалось создать temp-папку: {e}"))?;
+
+    let base_name = Path::new(&filename)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("pack.mrpack");
+
+    let suffix: u64 = rand::thread_rng().gen();
+    let dest = root.join(format!("{}-{}", suffix, base_name));
+
+    let client = http_client(false);
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка загрузки Modrinth .mrpack: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Modrinth вернул ошибку {} при скачивании .mrpack",
+            resp.status()
+        ));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+
+    tokio::fs::write(&dest, &bytes)
+        .await
+        .map_err(|e| format!("Не удалось сохранить .mrpack во временный файл: {e}"))?;
+
+    let dest_str = dest
+        .to_str()
+        .ok_or_else(|| "Путь к временной .mrpack не в UTF-8".to_string())?
+        .to_string();
+
+    let imported = import_mrpack_as_new_profile(app.clone(), dest_str).await?;
+
+    let _ = tokio::fs::remove_file(&dest).await;
+
+    Ok(imported)
+}
+
 #[tauri::command]
 pub async fn download_modrinth_file(
     category: String,
@@ -2893,7 +3888,7 @@ pub async fn download_modrinth_file(
 
     let dest_path = target_dir.join(&filename);
 
-    let client = http_client();
+    let client = http_client(false);
     let resp = client
         .get(&url)
         .send()
@@ -2983,19 +3978,79 @@ pub async fn fetch_vanilla_releases() -> Result<Vec<VersionSummary>, String> {
     Ok(versions)
 }
 
+#[derive(Debug, Deserialize)]
+struct ForgePromotionsSlim {
+    promos: HashMap<String, String>,
+}
+
+#[tauri::command]
+pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> {
+
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+
+    let client = http_client(true);
+    let text = download_text_with_retries(&client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
+        .await
+        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
+
+    let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
+
+
+    let mut chosen_by_mc: HashMap<String, String> = HashMap::new();
+    for (promo_key, forge_build) in parsed.promos {
+        let Some((mc_version, suffix)) = promo_key.rsplit_once('-') else {
+            continue;
+        };
+        if suffix != "latest" && suffix != "recommended" {
+            continue;
+        }
+
+        let entry = chosen_by_mc.entry(mc_version.to_string());
+        let should_replace = match entry {
+            std::collections::hash_map::Entry::Vacant(_) => true,
+            std::collections::hash_map::Entry::Occupied(o) => {
+                let existing = o.get();
+                suffix == "recommended" || existing.is_empty()
+            }
+        };
+
+        if should_replace {
+            chosen_by_mc.insert(mc_version.to_string(), forge_build);
+        }
+    }
+
+    let mut out: Vec<ForgeVersionSummary> = chosen_by_mc
+        .into_iter()
+        .map(|(mc_version, forge_build)| {
+            let id = format!("{mc_version}-forge-{forge_build}");
+            let installer_url = format!(
+                "{FORGE_MAVEN_BASE}/{mc_version}-{forge_build}/forge-{mc_version}-{forge_build}-installer.jar"
+            );
+            ForgeVersionSummary {
+                id,
+                mc_version,
+                forge_build,
+                installer_url,
+            }
+        })
+        .collect();
+
+    out.sort_by(|a, b| b.mc_version.cmp(&a.mc_version));
+    Ok(out)
+}
+
 #[tauri::command]
 pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<String>, String> {
     let url = format!("{FABRIC_META_LOADERS}/{game_version}");
-    let client = http_client();
-    let resp = client
-        .get(&url)
-        .send()
+    let client = http_client(false);
+    let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса списка Fabric: {e}"))?;
-    let list: Vec<FabricLoaderEntry> = resp
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора списка Fabric: {e}"))?;
+    let list: Vec<FabricLoaderEntry> = serde_json::from_str(&text).map_err(|e| {
+        let head = text.chars().take(200).collect::<String>();
+        format!("Ошибка разбора списка Fabric: {e}. Первые символы ответа: {head}")
+    })?;
     let versions: Vec<String> = list
         .into_iter()
         .map(|e| e.loader.version)
@@ -3005,16 +4060,14 @@ pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<String>, S
 
 async fn select_latest_quilt_loader(game_version: &str) -> Result<String, String> {
     let url = format!("https://meta.quiltmc.org/v3/versions/loader/{game_version}");
-    let client = http_client();
-    let resp = client
-        .get(&url)
-        .send()
+    let client = http_client(false);
+    let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса списка Quilt: {e}"))?;
-    let list: Vec<QuiltLoaderEntry> = resp
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора списка Quilt: {e}"))?;
+    let list: Vec<QuiltLoaderEntry> = serde_json::from_str(&text).map_err(|e| {
+        let head = text.chars().take(200).collect::<String>();
+        format!("Ошибка разбора списка Quilt: {e}. Первые символы ответа: {head}")
+    })?;
     if list.is_empty() {
         return Err(format!(
             "Для версии Minecraft {game_version} нет доступных версий Quilt Loader"
@@ -3034,84 +4087,6 @@ async fn select_latest_quilt_loader(game_version: &str) -> Result<String, String
     }
     let best = best.ok_or_else(|| "Не удалось выбрать версию Quilt Loader".to_string())?;
     Ok(best.loader.version)
-}
-
-#[tauri::command]
-pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> {
-    let client = http_client();
-    let resp = client
-        .get(FORGE_PROMOTIONS)
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка запроса списка Forge: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("Forge вернул ошибку HTTP при получении списка: {e}"))?;
-    let promos: ForgePromotions = resp
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора Forge: {e}"))?;
-    let mut out = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for (key, build) in &promos.promos {
-        let mc_ver = key
-            .strip_suffix("-latest")
-            .or_else(|| key.strip_suffix("-recommended"));
-        if let Some(mc) = mc_ver {
-            let forge_id = format!("{mc}-forge-{build}");
-            if seen.insert(forge_id.clone()) {
-                let maven_id = format!("{mc}-{build}");
-                let installer_url = format!(
-                    "{FORGE_INSTALLER_BASE}/{maven_id}/forge-{maven_id}-installer.jar"
-                );
-                out.push(ForgeVersionSummary {
-                    id: forge_id.clone(),
-                    mc_version: mc.to_string(),
-                    forge_build: build.clone(),
-                    installer_url,
-                });
-            }
-        }
-    }
-
-    // Сортируем так, чтобы более новые версии Minecraft и Forge шли первыми
-    out.sort_by(|a, b| {
-        // Сначала сравниваем версии Minecraft по числовым компонентам (1.21.10 > 1.21.8 > 1.20.6 и т.д.)
-        let parse_nums = |s: &str| {
-            s.split('.')
-                .filter_map(|p| p.parse::<u32>().ok())
-                .collect::<Vec<u32>>()
-        };
-
-        let a_mc = parse_nums(&a.mc_version);
-        let b_mc = parse_nums(&b.mc_version);
-
-        for (x, y) in a_mc.iter().zip(&b_mc) {
-            if x != y {
-                // хотим более новые версии первыми
-                return y.cmp(x);
-            }
-        }
-        if a_mc.len() != b_mc.len() {
-            return b_mc.len().cmp(&a_mc.len());
-        }
-
-        // Затем сравниваем номер сборки Forge также по числам
-        let a_build = parse_nums(&a.forge_build);
-        let b_build = parse_nums(&b.forge_build);
-
-        for (x, y) in a_build.iter().zip(&b_build) {
-            if x != y {
-                return y.cmp(x);
-            }
-        }
-        if a_build.len() != b_build.len() {
-            return b_build.len().cmp(&a_build.len());
-        }
-
-        // В крайнем случае сравниваем по строковому id (обратный порядок, чтобы новые были первыми)
-        b.id.cmp(&a.id)
-    });
-    Ok(out)
 }
 
 #[tauri::command]
@@ -3175,6 +4150,66 @@ pub fn get_installed_quilt_profile_id(game_version: String) -> Result<Option<Str
 }
 
 #[tauri::command]
+pub fn list_installed_fabric_game_versions() -> Result<Vec<String>, String> {
+    let vers_root = versions_dir()?;
+    if !vers_root.exists() {
+        return Ok(vec![]);
+    }
+    let mut out: HashSet<String> = HashSet::new();
+    for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
+        let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
+        let path = e.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let profile_path = path.join("profile.json");
+        if !profile_path.exists() {
+            continue;
+        }
+        let s = std::fs::read_to_string(&profile_path)
+            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
+        let profile: FabricProfile =
+            serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        if profile.id.starts_with("fabric-loader-") && !profile.inherits_from.is_empty() {
+            out.insert(profile.inherits_from);
+        }
+    }
+    let mut result: Vec<String> = out.into_iter().collect();
+    result.sort();
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn list_installed_quilt_game_versions() -> Result<Vec<String>, String> {
+    let vers_root = versions_dir()?;
+    if !vers_root.exists() {
+        return Ok(vec![]);
+    }
+    let mut out: HashSet<String> = HashSet::new();
+    for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
+        let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
+        let path = e.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let profile_path = path.join("profile.json");
+        if !profile_path.exists() {
+            continue;
+        }
+        let s = std::fs::read_to_string(&profile_path)
+            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
+        let profile: FabricProfile =
+            serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        if profile.id.starts_with("quilt-loader-") && !profile.inherits_from.is_empty() {
+            out.insert(profile.inherits_from);
+        }
+    }
+    let mut result: Vec<String> = out.into_iter().collect();
+    result.sort();
+    Ok(result)
+}
+
+#[tauri::command]
 pub fn list_installed_versions() -> Result<Vec<String>, String> {
     let root = game_root_dir()?;
     let vers_root = versions_dir()?;
@@ -3216,7 +4251,7 @@ pub async fn install_fabric(
     loader_version: String,
 ) -> Result<String, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
-    let client = http_client();
+    let client = http_client(false);
     log_to_console(
         &app,
         &format!(
@@ -3494,7 +4529,7 @@ pub async fn install_quilt(
     game_version: String,
 ) -> Result<String, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
-    let client = http_client();
+    let client = http_client(false);
 
     log_to_console(
         &app,
@@ -3782,208 +4817,237 @@ pub async fn install_forge(
     installer_url: String,
 ) -> Result<(), String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
-    let client = http_client();
+
+    let (mc_version, _forge_build) = parse_forge_id(&version_id)
+        .ok_or_else(|| format!("Некорректный id Forge версии: {version_id}"))?;
+
     let root = game_root_dir()?;
+    let libs_root = libraries_dir()?;
+    let vers_root = versions_dir()?;
+
     tokio::fs::create_dir_all(&root)
         .await
-        .map_err(|e| format!("Папка игры: {e}"))?;
-
-    let installer_jar = root.join("forge-installer.jar");
-    // Стримим установщик (а не resp.bytes()), иначе UI долго висит на "Подготовка файлов..."
-    // и мы не можем корректно отменять/показывать прогресс.
-    log_to_console(
-        &app,
-        &format!(
-            "[Forge] Начало установки Forge версии {version_id}\nURL установщика: {installer_url}"
-        ),
-    );
-    let resp = client
-        .get(&installer_url)
-        .send()
+        .map_err(|e| format!("Не удалось создать папку игры: {e}"))?;
+    tokio::fs::create_dir_all(&libs_root)
         .await
-        .map_err(|e| format!("Ошибка загрузки установщика Forge: {e}"))?
-        .error_for_status()
-        .map_err(|e| {
-            format!(
-                "Forge Maven вернул ошибку HTTP при загрузке установщика: {e}. Проверь доступ к maven.minecraftforge.net / интернет."
-            )
-        })?;
-
-    let total = resp.content_length().unwrap_or(0);
-    log_to_console(
-        &app,
-        &format!(
-            "[Forge] Ответ по установщику: content-length = {} (0 значит неизвестен)",
-            total
-        ),
-    );
-    let mut downloaded: u64 = 0;
-
-    let mut file = tokio::fs::File::create(&installer_jar)
+        .map_err(|e| format!("Не удалось создать папку библиотек: {e}"))?;
+    tokio::fs::create_dir_all(&vers_root)
         .await
-        .map_err(|e| format!("Ошибка создания файла установщика: {e}"))?;
+        .map_err(|e| format!("Не удалось создать папку версий: {e}"))?;
 
-    let mut stream = resp.bytes_stream();
-    let mut first_bytes: Vec<u8> = Vec::with_capacity(4);
-
-    // Ограничиваем время ожидания каждого чанка установщика, чтобы загрузка не висела бесконечно
-    let per_chunk_timeout = Duration::from_secs(60);
-    while let Some(next_chunk) = tokio::time::timeout(per_chunk_timeout, stream.next())
-        .await
-        .map_err(|_| {
-            "Загрузка установщика Forge слишком долго не продвигалась (таймаут ожидания данных). Проверьте интернет/блокировки и попробуйте снова."
-                .to_string()
-        })?
-    {
-        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
-            let _ = tokio::fs::remove_file(&installer_jar).await;
-            return Err("Загрузка отменена".to_string());
-        }
-
-        let chunk = next_chunk.map_err(|e| format!("Ошибка чтения установщика Forge: {e}"))?;
-
-        if first_bytes.len() < 4 {
-            let need = 4 - first_bytes.len();
-            first_bytes.extend_from_slice(&chunk[..std::cmp::min(need, chunk.len())]);
-        }
-
-        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
-            .await
-            .map_err(|e| format!("Ошибка записи установщика Forge: {e}"))?;
-        downloaded = downloaded.saturating_add(chunk.len() as u64);
-
-        let percent = if total > 0 {
-            (downloaded as f32 / total as f32) * 100.0
-        } else {
-            0.0
-        };
-        let _ = app.emit(
-            EVENT_DOWNLOAD_PROGRESS,
-            DownloadProgressPayload {
-                version_id: version_id.clone(),
-                downloaded,
-                total,
-                percent,
-            },
-        );
+    let base_version_json_path =
+        vers_root.join(&mc_version).join(format!("{mc_version}.json"));
+    if !base_version_json_path.exists() {
+        let vanilla_url = get_mojang_version_url(&mc_version).await?;
+        install_version(app.clone(), mc_version.clone(), vanilla_url).await?;
     }
 
-    // Быстрая проверка, что это похоже на JAR/ZIP (PK..)
-    if first_bytes.len() < 2 || &first_bytes[0..2] != b"PK" {
-        let _ = tokio::fs::remove_file(&installer_jar).await;
-        return Err(
-            "Скачанный файл не похож на JAR (возможно, страница ошибки/блокировка). Попробуйте другую версию или проверьте интернет."
-                .to_string(),
-        );
-    }
+    ensure_launcher_profiles_json(&root, &mc_version)?;
 
-    let root_str = root
-        .to_str()
-        .ok_or("Путь к папке игры не в UTF-8")?;
-    let mc_version = version_id.split('-').next().unwrap_or(&version_id);
-    let mojang_url = get_mojang_version_url(mc_version).await?;
-    log_to_console(
-        &app,
-        &format!(
-            "[Forge] Манифест Mojang для базовой версии {}: {mojang_url}",
-            mc_version
-        ),
-    );
-    let mojang_client = http_client();
-    let mojang_detail: VersionDetail = mojang_client
-        .get(&mojang_url)
-        .send()
+    let installer_client = http_client(true);
+    let installer_dir = launcher_data_dir()?.join("forge_installers").join(&version_id);
+    tokio::fs::create_dir_all(&installer_dir)
         .await
-        .map_err(|e| format!("Ошибка загрузки описания версии Minecraft для Forge: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора описания версии Minecraft для Forge: {e}"))?;
-    let (java_major, java_component) = if let Some(jv) = mojang_detail.java_version {
-        (jv.major_version, jv.component)
+        .map_err(|e| format!("Не удалось создать папку для Forge installer: {e}"))?;
+    let installer_path = installer_dir.join("installer.jar");
+
+    let need_download = if installer_path.exists() {
+        let ok = file_starts_with_pk(&installer_path).await.unwrap_or(false);
+        !ok
     } else {
-        (8, "jre-legacy".to_string())
+        true
     };
-    let java_path = crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
-    log_to_console(
-        &app,
-        &format!(
-            "[Forge] Используем Java {} ({}): {}",
-            java_major,
-            java_component,
-            java_path.display()
-        ),
-    );
 
-    // Установщик Forge может подтягивать зависимости/висеть на сети, поэтому:
-    // - даём возможность отмены через CANCEL_DOWNLOAD
-    // - ограничиваем разумным таймаутом, чтобы UI не висел бесконечно
-    log_to_console(
-        &app,
-        &format!(
-            "[Forge] Запуск forge-installer.jar (installClient в {})",
-            root_str
-        ),
-    );
-
-    let mut child = std::process::Command::new(&java_path)
-        .args([
-            "-jar",
-            installer_jar.to_str().unwrap(),
-            "--installClient",
-            root_str,
-        ])
-        .current_dir(&root)
-        .spawn()
-        .map_err(|e| format!("Не удалось запустить установщик Forge (нужна Java): {e}"))?;
-
-    let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(15 * 60);
-    loop {
-        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = std::fs::remove_file(&installer_jar);
-            return Err("Установка отменена".to_string());
-        }
-        if start.elapsed() > timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = std::fs::remove_file(&installer_jar);
-            return Err("Установщик Forge выполнялся слишком долго и был остановлен. Проверьте доступ к ресурсам Forge/Mojang и попробуйте снова.".to_string());
-        }
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if !status.success() {
-                    let _ = std::fs::remove_file(&installer_jar);
-                    return Err("Установщик Forge завершился с ошибкой.".to_string());
-                }
-                log_to_console(&app, "[Forge] Установщик Forge успешно завершил работу");
-                break;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(300)),
-            Err(e) => {
-                let _ = std::fs::remove_file(&installer_jar);
-                return Err(format!("Ошибка ожидания завершения установщика Forge: {e}"));
-            }
-        }
+    let total_done = Arc::new(AtomicU64::new(0));
+    if need_download {
+        let _ = download_forge_installer_once(
+            &installer_client,
+            &installer_url,
+            &installer_path,
+            &app,
+            &version_id,
+            total_done,
+        )
+        .await?;
     }
 
-    let _ = std::fs::remove_file(&installer_jar);
+    let game_dir = root.clone();
+    let java_installer = installer_path.clone();
 
-    let vers_root = versions_dir()?;
-    let src_jar = vers_root
-        .join(&version_id)
-        .join(format!("{version_id}.jar"));
-    let dest_jar = root.join(format!("{version_id}.jar"));
-    if src_jar.exists() && !dest_jar.exists() {
-        if let Some(parent) = dest_jar.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Не удалось создать папку для Forge jar: {e}"))?;
+    let java_http_proxy_args = build_java_http_proxy_args();
+
+    let app_for_forge_install = app.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        use std::process::{Command, Stdio};
+
+        let cp_sep = if cfg!(windows) { ";" } else { ":" };
+
+        let proxy_user = env_var_trim("PROXY_USER");
+        let proxy_pass = env_var_trim("PROXY_PASS");
+        let has_proxy_auth = proxy_user.is_some() && proxy_pass.is_some();
+
+        let bootstrap_jar_path = if has_proxy_auth {
+            Some(
+                ensure_proxy_auth_bootstrap_jar(&java_installer)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
+            )
+        } else {
+            None
+        };
+
+        let classpath_opt = bootstrap_jar_path.as_ref().map(|b| {
+            format!("{}{}{}", b.display(), cp_sep, java_installer.display())
+        });
+
+        let help_output = if let Some(ref classpath) = classpath_opt {
+            let mut cmd_help = Command::new("java");
+            for a in &java_http_proxy_args {
+                cmd_help.arg(a);
+            }
+            cmd_help
+                .arg("-cp")
+                .arg(classpath)
+                .arg("ProxyAuthBootstrap")
+                .arg("--help")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            cmd_help.output()
+        } else {
+            let mut cmd_help = Command::new("java");
+            for a in &java_http_proxy_args {
+                cmd_help.arg(a);
+            }
+            cmd_help
+                .arg("-jar")
+                .arg(&java_installer)
+                .arg("--help")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            cmd_help.output()
+        };
+
+        let help_text = help_output
+            .as_ref()
+            .map(|o| {
+                let mut s = String::new();
+                s.push_str(&String::from_utf8_lossy(&o.stdout));
+                s.push_str(&String::from_utf8_lossy(&o.stderr));
+                s
+            })
+            .unwrap_or_default();
+
+        let has_install_client = help_text.contains("--installClient");
+        let has_install_server = help_text.contains("--installServer");
+
+        if has_install_client {
+            let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: --installClient");
+            if let Some(ref classpath) = classpath_opt {
+                let mut cmd = Command::new("java");
+                for a in &java_http_proxy_args {
+                    cmd.arg(a);
+                }
+                cmd.arg("-cp")
+                    .arg(classpath)
+                    .arg("ProxyAuthBootstrap")
+                    .arg("--installClient")
+                    .arg(&game_dir)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                cmd.output()
+            } else {
+                let mut cmd = Command::new("java");
+                for a in &java_http_proxy_args {
+                    cmd.arg(a);
+                }
+                cmd.arg("-jar")
+                    .arg(&java_installer)
+                    .arg("--installClient")
+                    .arg(&game_dir)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                cmd.output()
+            }
+        } else if has_install_server {
+            let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: --installServer (cwd=game_dir)");
+            if let Some(ref classpath) = classpath_opt {
+                let mut cmd = Command::new("java");
+                for a in &java_http_proxy_args {
+                    cmd.arg(a);
+                }
+                cmd.current_dir(&game_dir);
+                cmd.arg("-cp")
+                    .arg(classpath)
+                    .arg("ProxyAuthBootstrap")
+                    .arg("--installServer")
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                cmd.output()
+            } else {
+                let mut cmd = Command::new("java");
+                for a in &java_http_proxy_args {
+                    cmd.arg(a);
+                }
+                cmd.current_dir(&game_dir);
+                cmd.arg("-jar")
+                    .arg(&java_installer)
+                    .arg("--installServer")
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                cmd.output()
+            }
+        } else {
+            let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: fallback --installClient");
+            if let Some(ref classpath) = classpath_opt {
+                let mut cmd = Command::new("java");
+                for a in &java_http_proxy_args {
+                    cmd.arg(a);
+                }
+                cmd.arg("-cp")
+                    .arg(classpath)
+                    .arg("ProxyAuthBootstrap")
+                    .arg("--installClient")
+                    .arg(&game_dir)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                cmd.output()
+            } else {
+                let mut cmd = Command::new("java");
+                for a in &java_http_proxy_args {
+                    cmd.arg(a);
+                }
+                cmd.arg("-jar")
+                    .arg(&java_installer)
+                    .arg("--installClient")
+                    .arg(&game_dir)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                cmd.output()
             }
         }
-        std::fs::copy(&src_jar, &dest_jar)
-            .map_err(|e| format!("Не удалось скопировать Forge jar: {e}"))?;
+    })
+    .await
+    .map_err(|e| format!("Ошибка запуска Forge installer (spawn_blocking): {e}"))?;
+
+    let output = output.map_err(|e| format!("Ошибка запуска Forge installer: {e}"))?;
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "Forge installer завершился ошибкой ({}). stdout: {}\nstderr: {}",
+            output.status,
+            stdout,
+            stderr
+        ));
+    }
+
+    let expected_version_json_path =
+        vers_root.join(&version_id).join(format!("{version_id}.json"));
+    if !expected_version_json_path.exists() {
+        return Err(format!(
+            "После установки Forge не найден файл версии: {}",
+            expected_version_json_path.display()
+        ));
     }
 
     Ok(())
@@ -3996,7 +5060,7 @@ pub async fn install_version(
     version_url: String,
 ) -> Result<(), String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
-    let client = http_client();
+    let client = http_client(false);
     let os_name = current_os_name();
 
     log_to_console(
@@ -4006,29 +5070,8 @@ pub async fn install_version(
         ),
     );
 
-    let resp = client
-        .get(&version_url)
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка загрузки описания версии: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Сервер вернул ошибку {} при запросе описания версии. Проверьте интернет и выбранную версию.",
-            resp.status()
-        ));
-    }
-
-    let status = resp.status();
-    log_to_console(
-        &app,
-        &format!("[Vanilla] Ответ манифеста: HTTP {status}"),
-    );
-
-    let version_json_text = resp
-        .text()
-        .await
-        .map_err(|e| format!("Ошибка чтения ответа: {e}"))?;
+    let version_json_text =
+        download_text_with_retries(&client, &version_url, DEFAULT_DOWNLOAD_RETRIES).await?;
 
     let detail: VersionDetail = serde_json::from_str(&version_json_text)
         .map_err(|e| format!("Ошибка разбора описания версии: {e}"))?;
@@ -4077,7 +5120,7 @@ pub async fn install_version(
         }
     }
 
-    let mut total_downloaded: u64 = 0;
+    let total_done = Arc::new(AtomicU64::new(0));
 
     log_to_console(
         &app,
@@ -4087,7 +5130,7 @@ pub async fn install_version(
         ),
     );
 
-    //jar
+    // jar
     let client_jar = root.join(format!("{version_id}.jar"));
     log_to_console(
         &app,
@@ -4096,17 +5139,18 @@ pub async fn install_version(
             client_jar.display()
         ),
     );
-    let _ = download_file(
+    download_file_checked(
         &client,
         &downloads.client.url,
         &client_jar,
+        downloads.client.sha1.clone(),
         &app,
         &version_id,
         total_size,
-        total_downloaded,
+        total_done.clone(),
+        DEFAULT_DOWNLOAD_RETRIES,
     )
     .await?;
-    total_downloaded = total_downloaded.saturating_add(downloads.client.size);
 
     //библиотеки
     let natives_dir = vers_root.join(&version_id).join("natives");
@@ -4120,76 +5164,93 @@ pub async fn install_version(
         _ => "natives-linux",
     };
 
-    log_to_console(&app, "[Vanilla] Загрузка библиотек и natives");
+    log_to_console(&app, "[Vanilla] Загрузка библиотек и natives (параллельно)");
+    let sem = Arc::new(Semaphore::new(DEFAULT_DOWNLOAD_CONCURRENCY));
+    let mut tasks = futures_util::stream::FuturesUnordered::new();
 
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
+
         if let Some(ref artifact) = lib.downloads.artifact {
-            let path = libs_root.join(&artifact.path);
-            if path.exists() {
-                total_downloaded = total_downloaded.saturating_add(artifact.size);
-                if total_size > 0 {
-                    let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                    let _ = app.emit(
-                        EVENT_DOWNLOAD_PROGRESS,
-                        DownloadProgressPayload {
-                            version_id: version_id.clone(),
-                            downloaded: total_downloaded,
-                            total: total_size,
-                            percent,
-                        },
-                    );
-                }
+            let dest = libs_root.join(&artifact.path);
+            if dest.exists() {
                 continue;
             }
-            let _ = download_file(
-                &client,
-                &artifact.url,
-                &path,
-                &app,
-                &version_id,
-                total_size,
-                total_downloaded,
-            )
-            .await?;
-            total_downloaded = total_downloaded.saturating_add(artifact.size);
-        }
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let path = libs_root.join(&nat.path);
-                if path.exists() {
-                    total_downloaded = total_downloaded.saturating_add(nat.size);
-                    if total_size > 0 {
-                        let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                        let _ = app.emit(
-                            EVENT_DOWNLOAD_PROGRESS,
-                            DownloadProgressPayload {
-                                version_id: version_id.clone(),
-                                downloaded: total_downloaded,
-                                total: total_size,
-                                percent,
-                            },
-                        );
-                    }
-                    let _ = extract_natives_jar(&path, &natives_dir);
-                    continue;
-                }
-                let _ = download_file(
-                    &client,
-                    &nat.url,
-                    &path,
-                    &app,
-                    &version_id,
+            let url = artifact.url.clone();
+            let expected = artifact.sha1.clone();
+            let client2 = client.clone();
+            let app2 = app.clone();
+            let sem2 = sem.clone();
+            let total_done2 = total_done.clone();
+            let vid = version_id.clone();
+            tasks.push(tokio::spawn(async move {
+                let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
+                let expected2 = match expected {
+                    Some(s) => Some(s),
+                    None => try_fetch_remote_sha1(&client2, &url).await,
+                };
+                download_file_checked(
+                    &client2,
+                    &url,
+                    &dest,
+                    expected2,
+                    &app2,
+                    &vid,
                     total_size,
-                    total_downloaded,
+                    total_done2,
+                    DEFAULT_DOWNLOAD_RETRIES,
                 )
                 .await?;
-                total_downloaded = total_downloaded.saturating_add(nat.size);
-                let _ = extract_natives_jar(&path, &natives_dir);
+                Ok::<(), String>(())
+            }));
+        }
+
+        if let Some(ref classifiers) = lib.downloads.classifiers {
+            if let Some(nat) = classifiers.get(native_classifier) {
+                let dest = libs_root.join(&nat.path);
+                if dest.exists() {
+                    let natives_dir2 = natives_dir.clone();
+                    let dest2 = dest.clone();
+                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest2, &natives_dir2)).await;
+                } else {
+                    let url = nat.url.clone();
+                    let expected = nat.sha1.clone();
+                    let client2 = client.clone();
+                    let app2 = app.clone();
+                    let sem2 = sem.clone();
+                    let total_done2 = total_done.clone();
+                    let vid = version_id.clone();
+                    let natives_dir2 = natives_dir.clone();
+                    tasks.push(tokio::spawn(async move {
+                        let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
+                        let expected2 = match expected {
+                            Some(s) => Some(s),
+                            None => try_fetch_remote_sha1(&client2, &url).await,
+                        };
+                        download_file_checked(
+                            &client2,
+                            &url,
+                            &dest,
+                            expected2,
+                            &app2,
+                            &vid,
+                            total_size,
+                            total_done2,
+                            DEFAULT_DOWNLOAD_RETRIES,
+                        )
+                        .await?;
+                        let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &natives_dir2)).await;
+                        Ok::<(), String>(())
+                    }));
+                }
             }
         }
+    }
+
+    while let Some(res) = tasks.next().await {
+        res.map_err(|e| format!("Ошибка задачи загрузки библиотек: {e}"))??;
     }
 
     if let Some(ref asset_index) = detail.asset_index {
@@ -4207,7 +5268,7 @@ pub async fn install_version(
             &app,
             &version_id,
             total_size,
-            total_downloaded,
+            total_done.load(Ordering::SeqCst),
         )
         .await?;
     }
@@ -4238,18 +5299,13 @@ pub async fn launch_game(
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
     let vers_root = versions_dir()?;
+    let playtime_profile_id = read_selected_profile_id_internal();
     let game_dir = selected_instance_dir_internal().unwrap_or_else(|| root.clone());
 
-    let (detail, is_fabric) = if let Some(ref url) = version_url {
-        let client = http_client();
-        let resp = client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| format!("Ошибка загрузки описания версии: {e}"))?;
-        let d: VersionDetail = resp
-            .json()
-            .await
+    let (mut detail, is_fabric) = if let Some(ref url) = version_url {
+        let client = http_client(false);
+        let text = download_text_with_retries(&client, url, DEFAULT_DOWNLOAD_RETRIES).await?;
+        let d: VersionDetail = serde_json::from_str(&text)
             .map_err(|e| format!("Ошибка разбора описания версии: {e}"))?;
         (d, false)
     } else {
@@ -4269,17 +5325,13 @@ pub async fn launch_game(
             let profile: FabricProfile = serde_json::from_str(&s)
                 .map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
             let mojang_url = get_mojang_version_url(&profile.inherits_from).await?;
-            let client = http_client();
-            let mojang_detail: VersionDetail = client
-                .get(&mojang_url)
-                .send()
-                .await
-                .map_err(|e| format!("Ошибка загрузки версии Mojang: {e}"))?
-                .json()
-                .await
+            let client = http_client(false);
+            let mojang_text = download_text_with_retries(&client, &mojang_url, DEFAULT_DOWNLOAD_RETRIES).await?;
+            let mojang_detail: VersionDetail = serde_json::from_str(&mojang_text)
                 .map_err(|e| format!("Ошибка разбора: {e}"))?;
             let mut detail = VersionDetail {
                 downloads: None,
+                inherits_from: None,
                 main_class: profile.main_class,
                 libraries: mojang_detail.libraries.clone(),
                 arguments: VersionArguments {
@@ -4299,6 +5351,7 @@ pub async fn launch_game(
                         artifact: Some(LibraryArtifact {
                             path: path.clone(),
                             url: format!("https://maven.fabricmc.net/{path}"),
+                            sha1: None,
                             size: lib.size,
                         }),
                         classifiers: None,
@@ -4314,7 +5367,38 @@ pub async fn launch_game(
         }
     };
 
-    let jar_path = root.join(format!("{version_id}.jar"));
+        let mut effective_jar_version = version_id.clone();
+    if let Some(parent_id) = detail.inherits_from.clone() {
+        effective_jar_version = parent_id.clone();
+        let parent_json_path = vers_root.join(&parent_id).join(format!("{parent_id}.json"));
+        let parent_detail: VersionDetail = if parent_json_path.exists() {
+            let s = tokio::fs::read_to_string(&parent_json_path)
+                .await
+                .map_err(|e| format!("Ошибка чтения parent version.json: {e}"))?;
+            serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора parent version.json: {e}"))?
+        } else {
+                let url = get_mojang_version_url(&parent_id).await?;
+            let client = http_client(false);
+            let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES).await?;
+                serde_json::from_str(&text)
+                .map_err(|e| format!("Ошибка разбора parent версии: {e}"))?
+        };
+
+        let mut merged_libs = parent_detail.libraries.clone();
+        merged_libs.extend(detail.libraries.clone());
+        let mut merged_args = parent_detail.arguments.clone();
+        merged_args.jvm.extend(detail.arguments.jvm.clone());
+        merged_args.game.extend(detail.arguments.game.clone());
+
+        detail.downloads = parent_detail.downloads;
+        detail.asset_index = detail.asset_index.clone().or(parent_detail.asset_index);
+        detail.assets = detail.assets.clone().or(parent_detail.assets);
+        detail.java_version = detail.java_version.clone().or(parent_detail.java_version);
+        detail.libraries = merged_libs;
+        detail.arguments = merged_args;
+    }
+
+    let jar_path = root.join(format!("{effective_jar_version}.jar"));
     if detail.downloads.is_some() && !jar_path.exists() {
         return Err("Версия не установлена. Сначала нажмите «Установить».".to_string());
     }
@@ -4391,7 +5475,7 @@ pub async fn launch_game(
         }
     }
     if !has_natives_files {
-        let client = http_client();
+        let client = http_client(false);
         for lib in &detail.libraries {
             if !library_applies(lib, os_name) {
                 continue;
@@ -4405,8 +5489,9 @@ pub async fn launch_game(
                                 format!("Не удалось создать папку для natives '{}': {e}", parent.display())
                             })?;
                         }
+                        let nat_url = format!("{}/{}", BMCL_MAVEN_BASE, nat.path);
                         let mut resp = client
-                            .get(&nat.url)
+                            .get(&nat_url)
                             .send()
                             .await
                             .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
@@ -4414,7 +5499,7 @@ pub async fn launch_game(
                             return Err(format!(
                                 "Сервер вернул ошибку {} при загрузке natives '{}'",
                                 resp.status(),
-                                nat.url
+                                nat_url
                             ));
                         }
                         let mut file = std::fs::File::create(&path)
@@ -4422,7 +5507,7 @@ pub async fn launch_game(
                         while let Some(chunk) = resp
                             .chunk()
                             .await
-                            .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat.url))?
+                            .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat_url))?
                         {
                             use std::io::Write;
                             file.write_all(&chunk)
@@ -4631,6 +5716,43 @@ pub async fn launch_game(
                 .collect::<Vec<String>>()
         };
 
+    let looks_like_forge = version_id.contains("-forge-")
+        || detail.main_class.contains("bootstraplauncher")
+        || detail.main_class.contains("forge");
+    let supports_add_opens = java_major >= 9;
+    if !supports_add_opens {
+        let mut filtered: Vec<String> = Vec::with_capacity(jvm_args.len());
+        let mut i = 0usize;
+        while i < jvm_args.len() {
+            if jvm_args[i] == "--add-opens" {
+                i += 2;
+                continue;
+            }
+            if jvm_args[i].starts_with("--add-opens=") {
+                i += 1;
+                continue;
+            }
+            filtered.push(jvm_args[i].clone());
+            i += 1;
+        }
+        jvm_args = filtered;
+    }
+    if looks_like_forge && supports_add_opens {
+        let has_invoke_open = jvm_args.iter().any(|s| {
+            s.contains("java.lang.invoke=ALL-UNNAMED") || s.contains("java.base/java.lang.invoke=ALL-UNNAMED")
+        });
+        if !has_invoke_open {
+            jvm_args.push("--add-opens".to_string());
+            jvm_args.push("java.base/java.lang.invoke=ALL-UNNAMED".to_string());
+        }
+
+        let has_jar_open = jvm_args.iter().any(|s| s.contains("java.base/java.util.jar=ALL-UNNAMED"));
+        if !has_jar_open {
+            jvm_args.push("--add-opens".to_string());
+            jvm_args.push("java.base/java.util.jar=ALL-UNNAMED".to_string());
+        }
+    }
+
     let mut game_args: Vec<String> = if let Some(ref legacy) = detail.minecraft_arguments {
         legacy
             .split_whitespace()
@@ -4643,8 +5765,18 @@ pub async fn launch_game(
             .collect::<Vec<String>>()
     };
 
+    let mut applied_resolution = false;
     if let Some(inst) = &instance_settings_for_launch {
         if let (Some(w), Some(h)) = (inst.resolution_width, inst.resolution_height) {
+            game_args.push("--width".to_string());
+            game_args.push(w.to_string());
+            game_args.push("--height".to_string());
+            game_args.push(h.to_string());
+            applied_resolution = true;
+        }
+    }
+    if !applied_resolution {
+        if let (Some(w), Some(h)) = (settings.resolution_width, settings.resolution_height) {
             game_args.push("--width".to_string());
             game_args.push(w.to_string());
             game_args.push("--height".to_string());
@@ -4729,6 +5861,8 @@ pub async fn launch_game(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
+    let play_start_time = SystemTime::now();
+
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Не удалось запустить игру (установите Java): {e}"))?;
@@ -4767,6 +5901,21 @@ pub async fn launch_game(
                     }
                     Err(_) => break,
                 }
+            }
+        });
+    }
+
+    if let Some(profile_id) = playtime_profile_id {
+        let started_at = play_start_time;
+        let mut child_for_wait = child;
+        std::thread::spawn(move || {
+            let _ = child_for_wait.wait();
+            let delta_secs = started_at
+                .elapsed()
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if delta_secs > 0 {
+                let _ = add_play_time_seconds_to_profile(&profile_id, delta_secs);
             }
         });
     }

@@ -1,0 +1,419 @@
+{
+  "common": {
+    "cancel": "Отмена",
+    "change": "Сменить",
+    "save": "Сохранить",
+    "loading": "Загрузка…",
+    "search": "Поиск…"
+  },
+  "mods": {
+    "unlockConfirm": "Версия и загрузчик синхронизированы с выбранной сборкой. Сменить их?",
+    "searchPlaceholder": "Поиск...",
+    "version": "Версия",
+    "syncedHint": "Синхронизировано со сборкой. Нажмите «Сменить» для разблокировки.",
+    "loaderAny": "Любой",
+    "loaderAll": "Все",
+    "tab": {
+      "mods": "Моды",
+      "resources": "Ресурсы",
+      "shaders": "Шейдеры",
+      "modpacks": "Сборки"
+    },
+    "layout": {
+      "list": "Список",
+      "grid": "Сетка"
+    },
+    "loadingPopular": "Загрузка популярных проектов…",
+    "nothingFound": "Ничего не найдено для выбранных фильтров Modrinth.",
+    "pageOf": "Страница {{current}} из {{total}}",
+    "prev": "Назад",
+    "next": "Вперёд",
+    "selectProject": "Выберите проект слева, чтобы посмотреть версии",
+    "versionsLoading": "Загрузка версий…",
+    "installed": "установлен",
+    "download": "Скачать",
+    "noAvailableVersions": "Для этого проекта нет доступных версий.",
+    "provider": {
+      "modrinth": "Modrinth",
+      "curseforge": "CurseForge"
+    },
+    "curseforgeOnlyMods": "CurseForge в этой версии поддерживает только моды.",
+    "searchFailedCurseForge": "Не удалось выполнить поиск на CurseForge.",
+    "nothingFoundCurseForge": "Ничего не найдено для выбранных фильтров CurseForge.",
+    "modpackImportSuccess": "Сборка «{{name}}» успешно импортирована.",
+    "modpackImport": {
+      "title": "Установка сборки…",
+      "start": "Подготовка…",
+      "overrides": "Распаковка…",
+      "files": "Скачивание файлов…"
+    },
+    "noIcon": "Нет иконки",
+    "saveSuccessProfile": "Файл {{filename}} сохранён в сборку.",
+    "saveSuccessFolder": "Файл {{filename}} сохранён в папку {{folder}}.",
+    "downloadFailed": "Не удалось скачать файл Modrinth."
+  },
+  "settings": {
+    "common": {
+      "yes": "Да",
+      "no": "Нет",
+      "reset": "Сбросить",
+      "imagesFilterName": "Изображения",
+      "toggle": {
+        "on": "Да",
+        "off": "Нет"
+      }
+    },
+    "tab": {
+      "directories": "Директории",
+      "game": "Игра",
+      "versions": "Версии",
+      "launcher": "Лаунчер",
+      "updates": "Обновления"
+    },
+    "card": {
+      "directories": "Директории",
+      "game": "Игра",
+      "versions": "Версии Minecraft",
+      "launcher": "Лаунчер",
+      "updates": "Обновления лаунчера"
+    },
+    "directories": {
+      "comingSoon": "Настройки директорий будут добавлены позже."
+    },
+    "game": {
+      "subtab": {
+        "general": "Общие",
+        "java": "Java"
+      },
+      "showConsoleOnLaunch": {
+        "label": "Консоль при запуске:"
+      },
+      "closeLauncherOnStart": {
+        "label": "Закрывать лаунчер при запуске игры:"
+      },
+      "checkGameProcesses": {
+        "label": "Проверять запущенные процессы игры:"
+      },
+      "windowSize": {
+        "label": "Размер окна игры:",
+        "widthPlaceholder": "Ширина",
+        "heightPlaceholder": "Высота"
+      },
+      "ram": {
+        "label": "Оперативная память:",
+        "mbUnit": "МБ",
+        "editInMbHint": "Нажмите, чтобы ввести в МБ",
+        "gbValue": "{{gb}}ГБ"
+      }
+    },
+    "versions": {
+      "showSnapshots": { "label": "Показывать снапшоты:" },
+      "showAlpha": { "label": "Показывать Alpha версии:" },
+      "available": { "label": "Доступные версии:" },
+      "refresh": "Обновить",
+      "loading": "Загрузка списка версий...",
+      "noneFound": "Версии не найдены. Проверьте интернет-соединение.",
+      "installedBadge": "Установлена",
+      "action": {
+        "install": "Установить",
+        "reinstall": "Переустановить",
+        "installing": "Установка..."
+      },
+      "loadFailed": "Не удалось загрузить список версий Minecraft.",
+      "refreshFailed": "Не удалось обновить список версий.",
+      "installSuccess": "Версия {{version}} успешно установлена.",
+      "installFailed": "Не удалось установить версию {{version}}."
+    },
+    "launcher": {
+      "openOnProfilesTab": {
+        "label": "Открывать лаунчер на вкладке сборок:",
+        "yes": "Сборки",
+        "no": "Главное"
+      },
+      "notifyNewUpdate": { "label": "Новое обновление:" },
+      "notifyNewMessage": { "label": "Новое сообщение:" },
+      "notifySystemMessage": { "label": "Системное сообщение:" },
+      "interfaceLanguage": {
+        "label": "Язык интерфейса:",
+        "ru": "Русский",
+        "en": "English"
+      },
+      "accentColor": {
+        "label": "Цвет элементов:",
+        "popupTitle": "Цвет интерфейса",
+        "pickColorAria": "Выбрать цвет",
+        "currentLabel": "Текущий",
+        "helpText": "Нажмите на круг или измените HEX-код, чтобы выбрать новый цвет."
+      },
+      "backgroundImage": {
+        "label": "Изображение заднего фона:",
+        "choose": "Выбрать изображение",
+        "hint": "Файл будет скопирован в папку данных лаунчера. Кнопка «Сбросить» вернёт стандартный фон."
+      },
+      "cache": {
+        "label": "Кэш лаунчера:",
+        "loading": "Подсчёт размера кэша…",
+        "sizeLabel": "Размер: {{size}}",
+        "sizeUnknown": "Размер неизвестен",
+        "bytes": "{{value}} Б",
+        "kb": "{{value}} КБ",
+        "mb": "{{value}} МБ",
+        "gb": "{{value}} ГБ",
+        "clearButton": "Очистить кэш",
+        "cleared": "Кэш лаунчера очищен.",
+        "clearFailed": "Не удалось очистить кэш лаунчера."
+      },
+      "sidebarOrder": {
+        "label": "Порядок кнопок в сайдбаре:",
+        "moveUp": "Переместить выше",
+        "moveDown": "Переместить ниже"
+      },
+      "resetSettings": {
+        "button": "Сбросить настройки лаунчера к базовым",
+        "success": "Настройки лаунчера сброшены к значениям по умолчанию.",
+        "failed": "Не удалось сбросить настройки лаунчера."
+      }
+    },
+    "updates": {
+      "checkOnStart": { "label": "Проверять обновления при запуске:" },
+      "autoInstall": { "label": "Автоматически устанавливать обновления:" },
+      "checkNow": "Проверить обновления",
+      "noneFound": "Новых обновлений не найдено.",
+      "installedRestart": "Обновление установлено. Перезапустите лаунчер.",
+      "availableNextStart": "Доступна новая версия лаунчера: {{version}}. Установка будет предложена при следующем запуске.",
+      "checkFailed": "Не удалось проверить обновления."
+    }
+  },
+  "javaSettings": {
+    "loading": "Загрузка Java‑настроек...",
+    "description": "Управляйте тем, какую Java и какие JVM‑аргументы будет использовать игра. При отключении пользовательских аргументов лаунчер применяет безопасные значения по умолчанию.",
+    "useCustomArgs": {
+      "label": "Использовать пользовательские JVM‑аргументы",
+      "hint": "При выключении используются только стандартные аргументы лаунчера."
+    },
+    "javaPath": {
+      "label": "Путь к Java",
+      "hint": "Оставьте пустым, чтобы использовать встроенный runtime Mojang.",
+      "placeholder": "Например: C:\\Program Files\\Java\\bin\\javaw.exe"
+    },
+    "memory": {
+      "title": "Память JVM",
+      "hint": "Рекомендуется оставлять 1–2 ГБ ОЗУ системе и другим приложениям.",
+      "xmsPlaceholder": "Напр. 1G",
+      "xmxPlaceholder": "Напр. 4G",
+      "quickPresets": "Быстрые пресеты:",
+      "currentPair": "Сейчас: {{xms}} / {{xmx}}"
+    },
+    "jvmArgs": {
+      "title": "JVM‑аргументы",
+      "hint": "Каждый флаг через пробел или с новой строки.",
+      "placeholder": "-XX:+UseG1GC\n-XX:MaxGCPauseMillis=50\n# Поддерживаются плейсхолдеры: ${classpath}, ${natives}, ${gameDir}, ${assetsDir}, ${version}",
+      "placeholdersLabel": "Плейсхолдеры:",
+      "recommendedPresets": "Рекомендованные пресеты:"
+    },
+    "presets": {
+      "balanced": "Баланс",
+      "performance": "Макс. производительность",
+      "lowMemory": "Низкая память"
+    },
+    "actions": {
+      "detect": "Обнаружить",
+      "browse": "Открыть",
+      "save": "Сохранить",
+      "cancel": "Отменить",
+      "resetRecommended": "Сбросить к рекомендованным",
+      "validate": "Проверить"
+    },
+    "dialog": {
+      "javaFilterName": "Java"
+    },
+    "toast": {
+      "loadFailedUsingDefaults": "Не удалось загрузить Java‑настройки. Будут использованы значения по умолчанию.",
+      "saved": "Java‑настройки сохранены.",
+      "saveFailed": "Не удалось сохранить Java‑настройки.",
+      "chooseJavaFailed": "Не удалось выбрать исполняемый файл Java.",
+      "noSuitableRuntimes": "Подходящие Java‑runtime не найдены. Лаунчер продолжит использовать встроенный runtime Mojang.",
+      "detected": "Найдена Java: {{version}}",
+      "detectFailed": "Произошла ошибка при поиске Java‑runtime.",
+      "validateOk": "Проверка Java и JVM‑аргументов не выявила критичных ошибок.",
+      "validateErrors": "Обнаружены ошибки при проверке JVM‑аргументов.",
+      "validateWarnings": "Проверка завершена с предупреждениями.",
+      "validateFailed": "Не удалось выполнить проверку Java‑аргументов."
+    },
+    "validation": {
+      "invalidFormatXms": "Некорректный формат. Примеры: 1024M, 2G.",
+      "invalidFormatXmx": "Некорректный формат. Примеры: 2048M, 4G.",
+      "minGreaterThanMax": "MIN (Xms) не может быть больше MAX (Xmx).",
+      "maxAboveRecommended": "MAX (Xmx) превышает доступную память. Рекомендуется не больше {{gb}}ГБ."
+    },
+    "validationOutput": {
+      "errors": "Ошибки:",
+      "warnings": "Предупреждения:",
+      "showJavaVersion": "Показать вывод java -version"
+    }
+  },
+  "play": {
+    "banner": {
+      "loading": "Загрузка новостей лаунчера...",
+      "loadFailedTitle": "Не удалось загрузить баннер лаунчера.",
+      "loadFailedHint": "Проверь подключение к интернету или доступ к GitHub.",
+      "defaultAlt": "Баннер лаунчера",
+      "learnMore": "Подробнее",
+      "empty": "Новости лаунчера и баннер игры"
+    },
+    "version": {
+      "label": "Версия",
+      "loading": "Загрузка...",
+      "select": "Выберите версию",
+      "searchPlaceholder": "Введите версию...",
+      "snapshotHint": "Похоже на снапшот. Включите «Показывать снапшоты» в настройках → Версии.",
+      "nothingFound": "Ничего не найдено."
+    },
+    "install": {
+      "resume": "Продолжить",
+      "pause": "Пауза",
+      "cancel": "Отменить",
+      "preparing": "Подготовка файлов..."
+    },
+    "loader": {
+      "label": "Загрузчик"
+    },
+    "gameFolder": {
+      "openTitle": "Открыть папку игры",
+      "alt": "Папка игры"
+    },
+    "profile": {
+      "selected": "Выбран профиль: {{name}}"
+    },
+    "console": {
+      "title": "Консоль игры",
+      "clear": "Очистить",
+      "show": "Показать",
+      "hide": "Свернуть",
+      "detach": "Открепить",
+      "attach": "Прикрепить",
+      "empty": "Логи появятся после запуска игры.",
+      "hint": "Управляется настройкой «Консоль при запуске» в разделе игры."
+    }
+  },
+  "modpacks": {
+    "export": {
+      "readFilesFailed": "Не удалось прочитать файлы сборки.",
+      "selectAtLeastOnePath": "Выберите хотя бы один путь.",
+      "previewFailed": "Не удалось сделать предпросмотр.",
+      "failed": "Экспорт не удался: {{msg}}",
+      "finished": "Экспорт завершён.",
+      "errorGeneric": "Ошибка экспорта",
+      "perSecond": "/с"
+    },
+    "profileSettings": {
+      "saved": "Настройки сборки сохранены.",
+      "saveFailed": "Не удалось сохранить настройки сборки."
+    },
+    "common": {
+      "loading": "Загрузка...",
+      "backToList": "Назад к списку",
+      "select": "Выберите"
+    },
+    "actions": {
+      "create": "Создать",
+      "import": "Импорт",
+      "refresh": "Обновить",
+      "play": "Играть",
+      "select": "Выбрать",
+      "unselect": "Снять выбор"
+    },
+    "profile": {
+      "renamed": "Название сборки изменено.",
+      "renameFailed": "Не удалось переименовать сборку."
+    },
+    "list": {
+      "searchPlaceholder": "Поиск...",
+      "activeBadge": "Выбран",
+      "playSelectedTitle": "Запустить игру с этой сборкой",
+      "playtimeLabel": "Время",
+      "empty": "Сборки ещё не созданы. Нажмите «Создать», чтобы добавить первую.",
+      "layout": {
+        "list": "Список",
+        "grid": "Сетка"
+      }
+    },
+    "create": {
+      "title": "Создать сборку",
+      "uploadIcon": "Загрузить\nиконку",
+      "removeIcon": "Удалить иконку",
+      "nameLabel": "Название:",
+      "namePlaceholder": "Введите название вашей сборки...",
+      "loaderLabel": "Загрузчик:",
+      "gameVersionLabel": "Версия игры:",
+      "allVersions": "Все версии"
+    },
+    "import": {
+      "title": "Импорт Modrinth пакета",
+      "chooseFile": "Выбрать файл",
+      "progress": {
+        "preparing": "Подготовка…",
+        "extractingOverrides": "Распаковка файлов пакета…",
+        "downloading": "Скачивание: {{current}} / {{total}}{{msg}}",
+        "importing": "Импорт…"
+      },
+      "dropzone": {
+        "title": "Перетащите сюда .mrpack файл",
+        "hint": "Будет создана новая сборка с именем пакета и версией игры из .mrpack. Моды и ресурсы скачаются автоматически."
+      }
+    }
+  },
+  "app": {
+    "sidebar": {
+      "play": "Играть",
+      "settings": "Настройки",
+      "mods": "Моды",
+      "modpacks": "Сборки"
+    },
+    "accounts": {
+      "editNickname": "Редактировать никнейм",
+      "nicknamePlaceholder": "Игрок",
+      "signedInAsPrefix": "Вход: ",
+      "hint": "Настройте профиль и внешний вид под себя, войдя в систему.",
+      "microsoftSignIn": "Войти через Microsoft",
+      "microsoftLogout": "Выйти из Microsoft",
+      "elyLogout": "Выйти из Ely.by",
+      "elyWaiting": "Ожидание входа…",
+      "elyDialogTitle": "Если страница в браузере бесконечно грузится:",
+      "elyDialogTip": "Лучше открыть в новой вкладке того же браузера. В другом браузере Ely.by может показать «Invalid request».",
+      "toast": {
+        "nicknameSaved": "Изменения сохранены!",
+        "nicknameSaveFailed": "Не удалось сохранить никнейм.",
+        "elyLoggedOut": "Вы вышли из аккаунта Ely.by.",
+        "elyLogoutFailed": "Не удалось выйти из аккаунта Ely.by.",
+        "msLoggedOut": "Вы вышли из аккаунта Microsoft.",
+        "msLogoutFailed": "Не удалось выйти из аккаунта Microsoft."
+      }
+    },
+    "toast": {
+      "settingsSaved": "Настройки сохранены!",
+      "downloadStarted": "Загрузка началась!",
+      "downloadFinished": "Загрузка завершена!",
+      "copy": "Скопировать",
+      "copied": "Скопировано!"
+    },
+    "dialog": {
+      "imagesFilterName": "Изображения"
+    },
+    "playAction": {
+      "play": "ИГРАТЬ",
+      "install": "Установить"
+    },
+    "errors": {
+      "openFolderFailed": "Не удалось открыть папку: {{msg}}",
+      "forgeVersionsLoadFailed": "Не удалось загрузить Forge версии. Проверь доступ к files.minecraftforge.net (часто блокируется/режется провайдерами): {{msg}}",
+      "neoforgeVersionsLoadFailed": "Не удалось загрузить версии NeoForge: {{msg}}",
+      "versionsLoadFailed": "Не удалось загрузить список версий: {{msg}}",
+      "launchError": "Ошибка запуска: {{msg}}",
+      "installError": "Ошибка установки: {{msg}}"
+    },
+    "warnings": {
+      "selectProfileFirst": "Сначала выберите сборку, затем нажмите «Играть»."
+    }
+  }
+}

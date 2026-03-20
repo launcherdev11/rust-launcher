@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { useT } from "../i18n";
 
 type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -57,6 +58,7 @@ export function JavaSettingsTab({
   showNotification,
   profileId,
 }: JavaSettingsProps) {
+  const tt = useT(language);
   const [settings, setSettings] = useState<JavaSettings | null>(null);
   const [initialSettings, setInitialSettings] = useState<JavaSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,9 +106,7 @@ export function JavaSettingsTab({
         if (!cancelled) {
           showNotification(
             "error",
-            language === "ru"
-              ? "Не удалось загрузить Java‑настройки. Будут использованы значения по умолчанию."
-              : "Failed to load Java settings. Using defaults.",
+            tt("javaSettings.toast.loadFailedUsingDefaults"),
           );
         }
       } finally {
@@ -168,34 +168,20 @@ export function JavaSettingsTab({
     const xmxMb = xmxRaw ? parseMemoryToMb(xmxRaw) : null;
 
     if (xmsRaw && xmsMb == null) {
-      xmsError =
-        language === "ru"
-          ? "Некорректный формат. Примеры: 1024M, 2G."
-          : "Invalid format. Examples: 1024M, 2G.";
+      xmsError = tt("javaSettings.validation.invalidFormatXms");
     }
     if (xmxRaw && xmxMb == null) {
-      xmxError =
-        language === "ru"
-          ? "Некорректный формат. Примеры: 2048M, 4G."
-          : "Invalid format. Examples: 2048M, 4G.";
+      xmxError = tt("javaSettings.validation.invalidFormatXmx");
     }
 
     if (xmsMb != null && xmxMb != null) {
       if (xmsMb > xmxMb) {
-        generalError =
-          language === "ru"
-            ? "MIN (Xms) не может быть больше MAX (Xmx)."
-            : "MIN (Xms) cannot be greater than MAX (Xmx).";
+        generalError = tt("javaSettings.validation.minGreaterThanMax");
       }
       if (xmxMb > maxAllowedMb) {
-        generalError =
-          language === "ru"
-            ? `MAX (Xmx) превышает доступную память. Рекомендуется не больше ${
-                Math.floor(maxAllowedMb / 1024)
-              }ГБ.`
-            : `MAX (Xmx) is above recommended limit. Use not more than ${Math.floor(
-                maxAllowedMb / 1024,
-              )}GB.`;
+        generalError = tt("javaSettings.validation.maxAboveRecommended", {
+          gb: Math.floor(maxAllowedMb / 1024),
+        });
       }
     }
 
@@ -216,15 +202,13 @@ export function JavaSettingsTab({
       setInitialSettings(settings);
       showNotification(
         "success",
-        language === "ru" ? "Java‑настройки сохранены." : "Java settings saved.",
+        tt("javaSettings.toast.saved"),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось сохранить Java‑настройки."
-          : "Failed to save Java settings.",
+        tt("javaSettings.toast.saveFailed"),
       );
     } finally {
       setSaving(false);
@@ -258,7 +242,7 @@ export function JavaSettingsTab({
         directory: false,
         filters: [
           {
-            name: "Java",
+            name: tt("javaSettings.dialog.javaFilterName"),
             extensions: ["exe", "bat", "cmd", "sh", "bin", "jar"],
           },
         ],
@@ -270,9 +254,7 @@ export function JavaSettingsTab({
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось выбрать исполняемый файл Java."
-          : "Failed to choose Java executable.",
+        tt("javaSettings.toast.chooseJavaFailed"),
       );
     }
   };
@@ -284,9 +266,7 @@ export function JavaSettingsTab({
       if (!runtimes || runtimes.length === 0) {
         showNotification(
           "warning",
-          language === "ru"
-            ? "Подходящие Java‑runtime не найдены. Лаунчер продолжит использовать встроенный runtime Mojang."
-            : "No suitable Java runtimes found. Launcher will keep using Mojang runtime.",
+          tt("javaSettings.toast.noSuitableRuntimes"),
         );
         return;
       }
@@ -294,17 +274,13 @@ export function JavaSettingsTab({
       updateField("java_path", preferred.path);
       showNotification(
         "success",
-        language === "ru"
-          ? `Найдена Java: ${preferred.version}`
-          : `Java detected: ${preferred.version}`,
+        tt("javaSettings.toast.detected", { version: preferred.version }),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Произошла ошибка при поиске Java‑runtime."
-          : "Error while detecting Java runtime.",
+        tt("javaSettings.toast.detectFailed"),
       );
     } finally {
       setDetecting(false);
@@ -329,32 +305,24 @@ export function JavaSettingsTab({
       if (res.ok && res.errors.length === 0) {
         showNotification(
           "success",
-          language === "ru"
-            ? "Проверка Java и JVM‑аргументов не выявила критичных ошибок."
-            : "Java and JVM arguments validation passed.",
+          tt("javaSettings.toast.validateOk"),
         );
       } else if (res.errors.length > 0) {
         showNotification(
           "error",
-          language === "ru"
-            ? "Обнаружены ошибки при проверке JVM‑аргументов."
-            : "Errors detected while validating JVM arguments.",
+          tt("javaSettings.toast.validateErrors"),
         );
       } else if (res.warnings.length > 0) {
         showNotification(
           "warning",
-          language === "ru"
-            ? "Проверка завершена с предупреждениями."
-            : "Validation finished with warnings.",
+          tt("javaSettings.toast.validateWarnings"),
         );
       }
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось выполнить проверку Java‑аргументов."
-          : "Failed to validate Java arguments.",
+        tt("javaSettings.toast.validateFailed"),
       );
     }
   };
@@ -362,31 +330,24 @@ export function JavaSettingsTab({
   const xmsMb = effectiveSettings.xms ? parseMemoryToMb(effectiveSettings.xms) : null;
   const xmxMb = effectiveSettings.xmx ? parseMemoryToMb(effectiveSettings.xmx) : null;
 
-  const memoryHint =
-    language === "ru"
-      ? "Рекомендуется оставлять 1–2 ГБ ОЗУ системе и другим приложениям."
-      : "It is recommended to leave 1–2 GB of RAM for the system and other apps.";
+  const memoryHint = tt("javaSettings.memory.hint");
 
   return (
     <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
       {loading ? (
         <div className="flex h-32 items-center justify-center text-sm text-white/70">
-          {language === "ru" ? "Загрузка Java‑настроек..." : "Loading Java settings..."}
+          {tt("javaSettings.loading")}
         </div>
       ) : (
         <>
           <div className="mb-1 text-xs text-white/60">
-            {language === "ru"
-              ? "Управляйте тем, какую Java и какие JVM‑аргументы будет использовать игра. При отключении пользовательских аргументов лаунчер применяет безопасные значения по умолчанию."
-              : "Control which Java and JVM arguments the game will use. When custom arguments are disabled, the launcher applies safe default values."}
+            {tt("javaSettings.description")}
           </div>
 
           <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
             <label className="flex items-center justify-between gap-3 text-sm text-white/90">
               <span>
-                {language === "ru"
-                  ? "Использовать пользовательские JVM‑аргументы"
-                  : "Use custom JVM arguments"}
+                {tt("javaSettings.useCustomArgs.label")}
               </span>
               <button
                 type="button"
@@ -399,9 +360,7 @@ export function JavaSettingsTab({
                     : "border-white/25 bg-white/10"
                 }`}
                 title={
-                  language === "ru"
-                    ? "При выключении используются только стандартные аргументы лаунчера."
-                    : "When off, only launcher defaults are used."
+                  tt("javaSettings.useCustomArgs.hint")
                 }
               >
                 <span
@@ -418,12 +377,10 @@ export function JavaSettingsTab({
               <div className="mt-4 space-y-2 rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm text-white/90">
-                    {language === "ru" ? "Путь к Java" : "Java path"}
+                    {tt("javaSettings.javaPath.label")}
                   </span>
                   <span className="text-[11px] text-white/50">
-                    {language === "ru"
-                      ? "Оставьте пустым, чтобы использовать встроенный runtime Mojang."
-                      : "Leave empty to use Mojang built‑in runtime."}
+                    {tt("javaSettings.javaPath.hint")}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-2 flex-nowrap">
@@ -437,9 +394,7 @@ export function JavaSettingsTab({
                       )
                     }
                     placeholder={
-                      language === "ru"
-                        ? "Например: C:\\Program Files\\Java\\bin\\javaw.exe"
-                        : "Example: C:\\Program Files\\Java\\bin\\javaw.exe"
+                      tt("javaSettings.javaPath.placeholder")
                     }
                     className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/35 focus:outline-none"
                   />
@@ -449,14 +404,14 @@ export function JavaSettingsTab({
                     disabled={detecting}
                     className="interactive-press shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
                   >
-                    {language === "ru" ? "Обнаружить" : "Detect"}
+                    {tt("javaSettings.actions.detect")}
                   </button>
                   <button
                     type="button"
                     onClick={handleBrowseJava}
                     className="interactive-press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
                   >
-                    {language === "ru" ? "Открыть" : "Browse"}
+                    {tt("javaSettings.actions.browse")}
                   </button>
                 </div>
               </div>
@@ -465,7 +420,7 @@ export function JavaSettingsTab({
                 <div className="space-y-2 rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-white/90">
-                    {language === "ru" ? "Память JVM" : "JVM memory"}
+                    {tt("javaSettings.memory.title")}
                   </span>
                   <span className="text-[11px] text-white/60">{memoryHint}</span>
                 </div>
@@ -478,7 +433,7 @@ export function JavaSettingsTab({
                       type="text"
                       value={effectiveSettings.xms ?? ""}
                       onChange={(e) => updateField("xms", e.target.value || null)}
-                      placeholder={language === "ru" ? "Напр. 1G" : "e.g. 1G"}
+                      placeholder={tt("javaSettings.memory.xmsPlaceholder")}
                       className="w-full rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/40 focus:outline-none"
                     />
                     {validation.xmsError && (
@@ -493,7 +448,7 @@ export function JavaSettingsTab({
                       type="text"
                       value={effectiveSettings.xmx ?? ""}
                       onChange={(e) => updateField("xmx", e.target.value || null)}
-                      placeholder={language === "ru" ? "Напр. 4G" : "e.g. 4G"}
+                      placeholder={tt("javaSettings.memory.xmxPlaceholder")}
                       className="w-full rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/40 focus:outline-none"
                     />
                     {validation.xmxError && (
@@ -503,7 +458,7 @@ export function JavaSettingsTab({
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
                   <span className="mr-1">
-                    {language === "ru" ? "Быстрые пресеты:" : "Quick presets:"}
+                    {tt("javaSettings.memory.quickPresets")}
                   </span>
                   {["1G", "2G", "4G", "8G"].map((v) => (
                     <button
@@ -520,9 +475,10 @@ export function JavaSettingsTab({
                   ))}
                   {xmsMb != null && xmxMb != null && (
                     <span className="ml-auto text-[11px] text-white/60">
-                      {language === "ru"
-                        ? `Сейчас: ${formatMbToDisplay(xmsMb)} / ${formatMbToDisplay(xmxMb)}`
-                        : `Current: ${formatMbToDisplay(xmsMb)} / ${formatMbToDisplay(xmxMb)}`}
+                      {tt("javaSettings.memory.currentPair", {
+                        xms: formatMbToDisplay(xmsMb),
+                        xmx: formatMbToDisplay(xmxMb),
+                      })}
                     </span>
                   )}
                 </div>
@@ -536,12 +492,10 @@ export function JavaSettingsTab({
               <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-white/90">
-                    JVM‑аргументы
+                    {tt("javaSettings.jvmArgs.title")}
                   </span>
                   <span className="text-[11px] text-white/60">
-                    {language === "ru"
-                      ? "Каждый флаг через пробел или с новой строки."
-                      : "Flags separated by spaces or new lines."}
+                    {tt("javaSettings.jvmArgs.hint")}
                   </span>
                 </div>
                 <textarea
@@ -550,14 +504,12 @@ export function JavaSettingsTab({
                   rows={7}
                   className="w-full rounded-2xl border border-white/15 bg-black/50 px-3 py-2 text-xs font-mono text-white placeholder:text-white/30 focus:border-white/35 focus:outline-none"
                   placeholder={
-                    language === "ru"
-                      ? "-XX:+UseG1GC\n-XX:MaxGCPauseMillis=50\n# Поддерживаются плейсхолдеры: ${classpath}, ${natives}, ${gameDir}, ${assetsDir}, ${version}"
-                      : "-XX:+UseG1GC\n-XX:MaxGCPauseMillis=50\n# Placeholders supported: ${classpath}, ${natives}, ${gameDir}, ${assetsDir}, ${version}"
+                    tt("javaSettings.jvmArgs.placeholder")
                   }
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/65">
                   <span className="text-white/80">
-                    {language === "ru" ? "Плейсхолдеры:" : "Placeholders:"}
+                    {tt("javaSettings.jvmArgs.placeholdersLabel")}
                   </span>
                   <code className="rounded-full bg-white/10 px-2 py-0.5">${"{classpath}"}</code>
                   <code className="rounded-full bg-white/10 px-2 py-0.5">${"{natives}"}</code>
@@ -567,28 +519,28 @@ export function JavaSettingsTab({
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/75">
                   <span className="mr-1">
-                    {language === "ru" ? "Рекомендованные пресеты:" : "Recommended presets:"}
+                    {tt("javaSettings.jvmArgs.recommendedPresets")}
                   </span>
                   <button
                     type="button"
                     onClick={() => applyPreset("balanced")}
                     className="interactive-press rounded-full bg-white/10 px-3 py-0.5 text-[11px] font-semibold text-white hover:bg-white/20"
                   >
-                    {language === "ru" ? "Баланс" : "Balanced"}
+                    {tt("javaSettings.presets.balanced")}
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset("performance")}
                     className="interactive-press rounded-full bg-white/10 px-3 py-0.5 text-[11px] font-semibold text-white hover:bg-white/20"
                   >
-                    {language === "ru" ? "Макс. производительность" : "Max performance"}
+                    {tt("javaSettings.presets.performance")}
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset("low_memory")}
                     className="interactive-press rounded-full bg-white/10 px-3 py-0.5 text-[11px] font-semibold text-white hover:bg-white/20"
                   >
-                    {language === "ru" ? "Низкая память" : "Low memory"}
+                    {tt("javaSettings.presets.lowMemory")}
                   </button>
                 </div>
               </div>
@@ -601,28 +553,28 @@ export function JavaSettingsTab({
                     disabled={saving}
                     className="interactive-press rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
                   >
-                    {language === "ru" ? "Сохранить" : "Save"}
+                    {tt("javaSettings.actions.save")}
                   </button>
                   <button
                     type="button"
                     onClick={handleCancel}
                     className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
                   >
-                    {language === "ru" ? "Отменить" : "Cancel"}
+                    {tt("javaSettings.actions.cancel")}
                   </button>
                   <button
                     type="button"
                     onClick={handleResetToRecommended}
                     className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
                   >
-                    {language === "ru" ? "Сбросить к рекомендованным" : "Reset to recommended"}
+                    {tt("javaSettings.actions.resetRecommended")}
                   </button>
                   <button
                     type="button"
                     onClick={handleValidateArgs}
-                    className="interactive-press ml-auto rounded-xl bg-accentBlue px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-sky-500"
+                    className="interactive-press ml-auto rounded-xl accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
                   >
-                    {language === "ru" ? "Проверить" : "Validate"}
+                    {tt("javaSettings.actions.validate")}
                   </button>
                 </div>
 
@@ -631,7 +583,7 @@ export function JavaSettingsTab({
                     {validationOutput.errors.length > 0 && (
                       <div className="mb-2">
                         <div className="mb-1 font-semibold text-red-300">
-                          {language === "ru" ? "Ошибки:" : "Errors:"}
+                          {tt("javaSettings.validationOutput.errors")}
                         </div>
                         <ul className="list-disc space-y-0.5 pl-4">
                           {validationOutput.errors.map((e, i) => (
@@ -643,7 +595,7 @@ export function JavaSettingsTab({
                     {validationOutput.warnings.length > 0 && (
                       <div className="mb-2">
                         <div className="mb-1 font-semibold text-amber-300">
-                          {language === "ru" ? "Предупреждения:" : "Warnings:"}
+                          {tt("javaSettings.validationOutput.warnings")}
                         </div>
                         <ul className="list-disc space-y-0.5 pl-4">
                           {validationOutput.warnings.map((w, i) => (
@@ -655,9 +607,7 @@ export function JavaSettingsTab({
                     {validationOutput.output && (
                       <details className="mt-1">
                         <summary className="cursor-pointer text-[11px] text-white/60">
-                          {language === "ru"
-                            ? "Показать вывод java -version"
-                            : "Show java -version output"}
+                          {tt("javaSettings.validationOutput.showJavaVersion")}
                         </summary>
                         <pre className="mt-1 whitespace-pre-wrap text-[11px] text-white/70">
                           {validationOutput.output}

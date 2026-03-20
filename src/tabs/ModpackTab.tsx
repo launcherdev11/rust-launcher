@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ChevronDown, Download, UploadCloud } from "lucide-react";
 import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
+import { useT } from "../i18n";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
@@ -16,6 +17,8 @@ type Settings = {
   show_console_on_launch: boolean;
   close_launcher_on_game_start: boolean;
   check_game_processes: boolean;
+  resolution_width: number | null;
+  resolution_height: number | null;
   show_snapshots: boolean;
   show_alpha_versions: boolean;
   notify_new_update: boolean;
@@ -32,6 +35,7 @@ type InstanceProfile = {
   game_version: string;
   loader: string;
   created_at: number;
+  play_time_seconds: number | null;
   mods_count: number;
   resourcepacks_count: number;
   shaderpacks_count: number;
@@ -52,6 +56,7 @@ type ModpackTabProps = {
   onProfileSelectionChange?: (profile: InstanceProfile | null) => void;
   initialSelectedProfileId?: string | null;
   onOpenModsTab?: () => void;
+  onPlaySelectedProfile?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -173,6 +178,45 @@ function countLabel(count: number, language: Language): string {
   return `Mods: ${count}`;
 }
 
+function resolveIconSrc(iconPath: string): string {
+  if (iconPath.startsWith("http://") || iconPath.startsWith("https://") || iconPath.startsWith("data:")) {
+    return iconPath;
+  }
+
+  let localPath = iconPath;
+  if (localPath.startsWith("file://")) {
+    localPath = localPath.replace(/^file:\/\//, "");
+  }
+
+  const normalized = localPath.replace(/\\/g, "/");
+  const driveMatch = normalized.match(/^\/([a-zA-Z]:\/.*)$/);
+  if (driveMatch) {
+    localPath = driveMatch[1];
+  }
+
+  return convertFileSrc(localPath);
+}
+
+function formatPlaytime(seconds: number | null, language: Language): string {
+  const s = seconds != null && Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+
+  if (language === "ru") {
+    if (h > 0) return `${h}ч ${m}м`;
+    return `${m}м`;
+  }
+
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function getProfileIconPath(profile: InstanceProfile): string {
+  const baseDir = profile.directory.replace(/\\/g, "/").replace(/\/$/, "");
+  if (profile.icon_path) return profile.icon_path;
+  return `${baseDir}/icon.png`;
+}
+
 const contentTabLabelsRu: Record<ContentTab, string> = {
   mods: "Моды",
   resourcepacks: "Ресурспаки",
@@ -191,7 +235,9 @@ export function ModpackTab({
   onProfileSelectionChange,
   initialSelectedProfileId,
   onOpenModsTab,
+  onPlaySelectedProfile,
 }: ModpackTabProps) {
+  const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => {
     if (typeof window === "undefined") return initialSelectedProfileId ?? null;
@@ -277,6 +323,7 @@ export function ModpackTab({
   const manageContentTabRefs = useRef<
     Partial<Record<ContentTab, HTMLButtonElement | null>>
   >({});
+  const manageContentTabsContainerRef = useRef<HTMLDivElement | null>(null);
   const [manageContentIndicator, setManageContentIndicator] = useState<{
     left: number;
     width: number;
@@ -337,7 +384,7 @@ export function ModpackTab({
       console.error(e);
       showNotification(
         "error",
-        language === "ru" ? "Не удалось прочитать файлы сборки." : "Failed to read build files.",
+        tt("modpacks.export.readFilesFailed"),
       );
       setExportTree(null);
     } finally {
@@ -351,7 +398,7 @@ export function ModpackTab({
     if (selected.length === 0) {
       showNotification(
         "warning",
-        language === "ru" ? "Выберите хотя бы один путь." : "Select at least one path.",
+        tt("modpacks.export.selectAtLeastOnePath"),
       );
       return;
     }
@@ -368,7 +415,7 @@ export function ModpackTab({
       console.error(e);
       showNotification(
         "error",
-        language === "ru" ? "Не удалось сделать предпросмотр." : "Failed to preview export.",
+        tt("modpacks.export.previewFailed"),
       );
     } finally {
       setPreviewLoading(false);
@@ -381,7 +428,7 @@ export function ModpackTab({
     if (selected.length === 0) {
       showNotification(
         "warning",
-        language === "ru" ? "Выберите хотя бы один путь." : "Select at least one path.",
+        tt("modpacks.export.selectAtLeastOnePath"),
       );
       return;
     }
@@ -427,7 +474,7 @@ export function ModpackTab({
         e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
       showNotification(
         "error",
-        language === "ru" ? `Экспорт не удался: ${msg}` : `Export failed: ${msg}`,
+        tt("modpacks.export.failed", { msg }),
       );
       setExportBusy(false);
     }
@@ -452,9 +499,7 @@ export function ModpackTab({
             const bps = (db * 1000) / dt;
             if (Number.isFinite(bps)) {
               setExportSpeedLabel(
-                language === "ru"
-                  ? `${formatBytes(bps, language)}/с`
-                  : `${formatBytes(bps, language)}/s`,
+                `${formatBytes(bps, language)}${tt("modpacks.export.perSecond")}`,
               );
             }
           }
@@ -473,7 +518,7 @@ export function ModpackTab({
           setExportProgress(null);
           showNotification(
             "success",
-            language === "ru" ? "Экспорт завершён." : "Export finished.",
+            tt("modpacks.export.finished"),
           );
         });
       } catch (e) {
@@ -488,7 +533,7 @@ export function ModpackTab({
               ? p
               : p && typeof p.message === "string"
                 ? p.message
-                : "Export error";
+                : tt("modpacks.export.errorGeneric");
           setExportBusy(false);
           showNotification("error", msg);
         });
@@ -545,21 +590,17 @@ export function ModpackTab({
       await invoke("update_profile_settings", { id: profileId, patch: profilePatch });
       showNotification(
         "success",
-        language === "ru" ? "Настройки сборки сохранены." : "Profile settings saved.",
+        tt("modpacks.profileSettings.saved"),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось сохранить настройки сборки."
-          : "Failed to save profile settings.",
+        tt("modpacks.profileSettings.saveFailed"),
       );
     }
   }
 
-  // Если `App` уже знает выбранный профиль (например, после рестарта лаунчера),
-  // синхронизируем локальное состояние при первом монтировании или смене id.
   useEffect(() => {
     if (!initialSelectedProfileId) return;
     setSelectedProfileId((prev) => prev ?? initialSelectedProfileId);
@@ -609,19 +650,48 @@ export function ModpackTab({
   }, [isExportOpen, exportFormat]);
 
   useLayoutEffect(() => {
+    let raf = 0;
+    let cancelled = false;
+
     const updateIndicator = () => {
-      const el = manageContentTabRefs.current[contentTab];
-      if (el) {
-        setManageContentIndicator({
-          left: el.offsetLeft,
-          width: el.offsetWidth,
-        });
-      }
+      if (cancelled) return;
+
+      const btnEl = manageContentTabRefs.current[contentTab];
+      const containerEl = manageContentTabsContainerRef.current;
+      if (!btnEl || !containerEl) return;
+
+      const btnRect = btnEl.getBoundingClientRect();
+      const containerRect = containerEl.getBoundingClientRect();
+      setManageContentIndicator({
+        left: btnRect.left - containerRect.left,
+        width: btnRect.width,
+      });
     };
-    updateIndicator();
-    window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
-  }, [contentTab]);
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateIndicator);
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+
+    if (typeof document !== "undefined" && (document as any).fonts?.ready) {
+      void (document as any).fonts.ready
+        .then(() => {
+          if (!cancelled) scheduleUpdate();
+        })
+        .catch(() => {
+          if (!cancelled) scheduleUpdate();
+        });
+    }
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [contentTab, activeView]);
 
   useEffect(() => {
     if (!onProfileSelectionChange) return;
@@ -786,12 +856,72 @@ export function ModpackTab({
     }
     setCreateBusy(true);
     try {
+      let versionUrl: string | null = null;
+      const fromLoaded = versionOptions.find((v) => v.id === createGameVersion);
+      if (fromLoaded?.url) {
+        versionUrl = fromLoaded.url;
+      } else {
+        try {
+          const all = await invoke<VersionSummary[]>("fetch_all_versions");
+          const found = all.find((v) => v.id === createGameVersion);
+          if (found?.url) versionUrl = found.url;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if (!versionUrl) {
+        throw new Error(
+          language === "ru"
+            ? `Не удалось определить URL манифеста версии ${createGameVersion}.`
+            : `Failed to resolve manifest URL for version ${createGameVersion}.`,
+        );
+      }
+
       const profile = await invoke<InstanceProfile>("create_profile", {
         name,
         gameVersion: createGameVersion,
         loader: createLoader,
         iconSourcePath: createIconPath,
       });
+
+      try {
+        const installed = await invoke<string[]>("list_installed_versions");
+        const isInstalled = installed.includes(createGameVersion);
+        if (!isInstalled) {
+          showNotification(
+            "info",
+            language === "ru"
+              ? `Версия ${createGameVersion} не установлена. Начинаю загрузку…`
+              : `Version ${createGameVersion} is not installed. Starting download…`,
+          );
+          try {
+            await invoke("reset_download_cancel");
+          } catch (e) {
+            console.error(e);
+          }
+          await invoke("install_version", {
+            versionId: createGameVersion,
+            versionUrl,
+          });
+          showNotification(
+            "success",
+            language === "ru"
+              ? `Версия ${createGameVersion} установлена.`
+              : `Version ${createGameVersion} installed.`,
+          );
+        }
+      } catch (e) {
+        console.error(e);
+        const msg =
+          e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+        showNotification(
+          "warning",
+          language === "ru"
+            ? `Сборка создана, но не удалось проверить/установить версию игры: ${msg}`
+            : `Profile created, but failed to check/install game version: ${msg}`,
+        );
+      }
+
       setProfiles((prev) => [...prev, profile]);
       setCreateName("");
       setCreateIconPath(null);
@@ -1074,17 +1204,13 @@ export function ModpackTab({
       );
       showNotification(
         "success",
-        language === "ru"
-          ? "Название сборки изменено."
-          : "Profile renamed.",
+        tt("modpacks.profile.renamed"),
       );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось переименовать сборку."
-          : "Failed to rename profile.",
+        tt("modpacks.profile.renameFailed"),
       );
     } finally {
       setIsRenaming(false);
@@ -1099,7 +1225,7 @@ export function ModpackTab({
             <SearchIcon className="h-4 w-4" />
             <input
               type="text"
-              placeholder={language === "ru" ? "Поиск..." : "Search..."}
+              placeholder={tt("modpacks.list.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
@@ -1112,10 +1238,10 @@ export function ModpackTab({
                 setActiveView("create");
                 void ensureVersionsLoaded();
               }}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500"
+              className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90"
             >
               <PlusIcon className="h-4 w-4" />
-              <span>{language === "ru" ? "Создать" : "Create"}</span>
+              <span>{tt("modpacks.actions.create")}</span>
             </button>
             <button
               type="button"
@@ -1123,7 +1249,7 @@ export function ModpackTab({
               className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-white/20"
             >
               <UploadCloud className="h-4 w-4" />
-              <span>{language === "ru" ? "Импорт" : "Import"}</span>
+              <span>{tt("modpacks.actions.import")}</span>
             </button>
             <button
               type="button"
@@ -1131,7 +1257,7 @@ export function ModpackTab({
               className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-sm font-semibold text-white/80 shadow-soft hover:bg-black/60"
             >
               <RefreshIcon className="h-4 w-4" />
-              <span>{language === "ru" ? "Обновить" : "Refresh"}</span>
+              <span>{tt("modpacks.actions.refresh")}</span>
             </button>
             <div className="flex items-center gap-1 rounded-2xl border border-white/20 bg-black/40 p-1">
               <button
@@ -1151,7 +1277,7 @@ export function ModpackTab({
                     ? "bg-white text-black shadow-soft"
                     : "text-white/70 hover:bg-white/10"
                 }`}
-                title={language === "ru" ? "Список" : "List"}
+                title={tt("modpacks.list.layout.list")}
               >
                 {profilesLayout === "list" ? (
                   <ImageIcon
@@ -1179,7 +1305,7 @@ export function ModpackTab({
                     ? "bg-white text-black shadow-soft"
                     : "text-white/70 hover:bg-white/10"
                 }`}
-                title={language === "ru" ? "Сетка" : "Grid"}
+                title={tt("modpacks.list.layout.grid")}
               >
                 {profilesLayout === "grid" ? (
                   <ImageIcon
@@ -1199,7 +1325,7 @@ export function ModpackTab({
             <span>{totalProfilesLabel}</span>
             {loadingProfiles && (
               <span>
-                {language === "ru" ? "Загрузка..." : "Loading..."}
+                {tt("modpacks.common.loading")}
               </span>
             )}
           </div>
@@ -1237,17 +1363,33 @@ export function ModpackTab({
                     }}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-                        {p.icon_path ? (
-                          <img
-                            src={p.icon_path}
-                            alt="icon"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <ModsIcon className="h-6 w-6" />
-                        )}
+                    <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
+                      <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
+                        <ModsIcon className="h-6 w-6" />
                       </div>
+                      <img
+                        src={resolveIconSrc(getProfileIconPath(p))}
+                        alt="icon"
+                        className="absolute inset-0 h-full w-full object-contain"
+                        style={{ display: "none" }}
+                        onLoad={(e) => {
+                          const img = e.currentTarget;
+                          const fallback = img.parentElement?.querySelector(
+                            '[data-icon-fallback="1"]',
+                          ) as HTMLElement | null;
+                          if (fallback) fallback.style.display = "none";
+                          img.style.display = "block";
+                        }}
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          const fallback = img.parentElement?.querySelector(
+                            '[data-icon-fallback="1"]',
+                          ) as HTMLElement | null;
+                          if (fallback) fallback.style.display = "flex";
+                          img.style.display = "none";
+                        }}
+                      />
+                    </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold text-white">
@@ -1255,12 +1397,30 @@ export function ModpackTab({
                           </span>
                           {isSelected && (
                             <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-                              {language === "ru" ? "Выбран" : "Active"}
+                              {tt("modpacks.list.activeBadge")}
                             </span>
                           )}
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
                           <span>{`${p.game_version} • ${p.loader}`}</span>
+                          <span className="flex items-center gap-1">
+                            <img
+                              src="/launcher-assets/cllock.png"
+                              alt=""
+                              title={tt("modpacks.list.playtimeLabel")}
+                              className="h-3 w-3 object-contain opacity-80"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.dataset.failedOnce !== "1") {
+                                  img.dataset.failedOnce = "1";
+                                  img.src = "/launcher-assets/clock.png";
+                                  return;
+                                }
+                                img.style.display = "none";
+                              }}
+                            />
+                            <span>{formatPlaytime(p.play_time_seconds, language)}</span>
+                          </span>
                           <span className="flex items-center gap-1">
                             <ModsIcon className="h-3 w-3" />
                             <span>{countLabel(p.mods_count, language)}</span>
@@ -1273,25 +1433,32 @@ export function ModpackTab({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                    {isSelected && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleSelectProfile(p);
+                          onPlaySelectedProfile?.();
                         }}
-                        className={`interactive-press rounded-xl px-3 py-1.5 text-xs font-semibold ${
-                          isSelected
-                            ? "bg-white/10 text-white/80 hover:bg-white/20"
-                            : "bg-emerald-600 text-white hover:bg-emerald-500"
-                        }`}
+                      className="interactive-press rounded-xl accent-bg px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-soft hover:opacity-90"
+                        title={tt("modpacks.list.playSelectedTitle")}
                       >
-                        {language === "ru"
-                          ? isSelected
-                            ? "Снять выбор"
-                            : "Выбрать"
-                          : isSelected
-                            ? "Unselect"
-                            : "Select"}
+                        {tt("modpacks.actions.play")}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleSelectProfile(p);
+                      }}
+                      className={`interactive-press inline-flex shrink-0 items-center justify-center rounded-xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap ${
+                        isSelected
+                          ? "min-w-[96px] bg-white/10 text-white/80 hover:bg-white/20"
+                          : "accent-bg text-white hover:opacity-90"
+                      }`}
+                    >
+                        {isSelected ? tt("modpacks.actions.unselect") : tt("modpacks.actions.select")}
                       </button>
                     </div>
                   </div>
@@ -1301,9 +1468,7 @@ export function ModpackTab({
 
             {!loadingProfiles && filteredProfiles.length === 0 && (
               <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-black/40 px-4 py-6 text-center text-sm text-white/70">
-                {language === "ru"
-                  ? "Сборки ещё не созданы. Нажмите «Создать», чтобы добавить первую."
-                  : "No profiles yet. Click “Create” to add one."}
+                {tt("modpacks.list.empty")}
               </div>
             )}
           </div>
@@ -1317,14 +1482,14 @@ export function ModpackTab({
       <div className="glass-panel flex w-full max-w-2xl flex-col gap-4 px-6 py-5">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">
-            {language === "ru" ? "Создать сборку" : "Create profile"}
+            {tt("modpacks.create.title")}
           </h2>
           <button
             type="button"
             onClick={() => setActiveView("list")}
             className="interactive-press rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80 hover:bg-white/20"
           >
-            {language === "ru" ? "Назад к списку" : "Back to list"}
+            {tt("modpacks.common.backToList")}
           </button>
         </div>
 
@@ -1338,13 +1503,17 @@ export function ModpackTab({
               {createIconPath ? (
                 // eslint-disable-next-line jsx-a11y/img-redundant-alt
                 <img
-                  src={createIconPath}
+                  src={resolveIconSrc(createIconPath)}
                   alt="icon"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    img.style.display = "none";
+                  }}
                 />
               ) : (
                 <span>
-                  {language === "ru" ? "Загрузить\nиконку" : "Upload\nicon"}
+                  {tt("modpacks.create.uploadIcon")}
                 </span>
               )}
             </button>
@@ -1354,7 +1523,7 @@ export function ModpackTab({
                 onClick={() => setCreateIconPath(null)}
                 className="interactive-press text-[11px] text-white/60 hover:text-white/90"
               >
-                {language === "ru" ? "Удалить иконку" : "Remove icon"}
+                {tt("modpacks.create.removeIcon")}
               </button>
             )}
           </div>
@@ -1362,7 +1531,7 @@ export function ModpackTab({
           <div className="flex flex-1 flex-col gap-3 min-w-0">
             <div>
               <label className="mb-1 block text-xs font-medium text-white/70">
-                {language === "ru" ? "Название:" : "Name:"}
+                {tt("modpacks.create.nameLabel")}
               </label>
               <input
                 type="text"
@@ -1370,9 +1539,7 @@ export function ModpackTab({
                 onChange={(e) => setCreateName(e.target.value.slice(0, 50))}
                 maxLength={50}
                 placeholder={
-                  language === "ru"
-                    ? "Введите название вашей сборки..."
-                    : "Enter profile name..."
+                  tt("modpacks.create.namePlaceholder")
                 }
                 className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
               />
@@ -1383,7 +1550,7 @@ export function ModpackTab({
 
             <div>
               <span className="mb-1 block text-xs font-medium text-white/70">
-                {language === "ru" ? "Загрузчик:" : "Loader:"}
+                {tt("modpacks.create.loaderLabel")}
               </span>
               <div className="flex flex-wrap gap-2">
                 {(["vanilla", "forge", "fabric", "quilt", "neoforge"] as LoaderId[]).map(
@@ -1407,7 +1574,7 @@ export function ModpackTab({
 
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-white/70">
-                {language === "ru" ? "Версия игры:" : "Game version:"}
+                {tt("modpacks.create.gameVersionLabel")}
               </label>
               <div className="relative inline-flex w-60 items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
                 <button
@@ -1419,7 +1586,7 @@ export function ModpackTab({
                   className="flex flex-1 items-center justify-between gap-2 text-left"
                 >
                   <span className="truncate">
-                    {createGameVersion || (language === "ru" ? "Выберите" : "Select")}
+                    {createGameVersion || tt("modpacks.common.select")}
                   </span>
                   <ChevronDown className="h-3 w-3 text-white/60" />
                 </button>
@@ -1427,7 +1594,7 @@ export function ModpackTab({
                   <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
                     {versionsLoading && (
                       <div className="px-3 py-2 text-white/60">
-                        {language === "ru" ? "Загрузка..." : "Loading..."}
+                        {tt("modpacks.common.loading")}
                       </div>
                     )}
                     {!versionsLoading &&
@@ -1462,10 +1629,10 @@ export function ModpackTab({
                     setCreateAllVersions(e.target.checked);
                     setVersionOptions([]);
                   }}
-                  className="h-3.5 w-3.5 cursor-pointer appearance-none rounded-[6px] border border-white/35 bg-black/50 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] transition-colors checked:border-emerald-400 checked:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+                  className="accent-checkbox"
                 />
                 <span>
-                  {language === "ru" ? "Все версии" : "All versions"}
+                  {tt("modpacks.create.allVersions")}
                 </span>
               </label>
             </div>
@@ -1477,10 +1644,10 @@ export function ModpackTab({
             type="button"
             disabled={createBusy}
             onClick={() => void handleCreateProfile()}
-            className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
+            className="interactive-press inline-flex items-center gap-2 rounded-2xl accent-bg px-6 py-2.5 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
           >
             <PlusIcon className="h-4 w-4" />
-            <span>{language === "ru" ? "Создать" : "Create"}</span>
+            <span>{tt("modpacks.actions.create")}</span>
           </button>
         </div>
       </div>
@@ -1492,14 +1659,14 @@ export function ModpackTab({
       <div className="glass-panel flex w-full max-w-2x2 flex-col gap-3">
         <div className="mb-2 flex items-center justify-between pl-2">
           <h2 className="text-lg font-semibold text-white">
-            {language === "ru" ? "Импорт Modrinth пакета" : "Import Modrinth pack"}
+            {tt("modpacks.import.title")}
           </h2>
           <button
             type="button"
             onClick={() => setActiveView("list")}
             className="interactive-press rounded-full bg-white/10 px-5 py-1 text-xs font-medium text-white/80 hover:bg-white/20"
           >
-            {language === "ru" ? "Назад к списку" : "Back to list"}
+            {tt("modpacks.common.backToList")}
           </button>
         </div>
 
@@ -1507,20 +1674,16 @@ export function ModpackTab({
           <div className="flex flex-col gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3">
             <p className="text-sm font-medium text-white">
               {mrpackProgress.phase === "start"
-                ? language === "ru"
-                  ? "Подготовка…"
-                  : "Preparing…"
+                ? tt("modpacks.import.progress.preparing")
                 : mrpackProgress.phase === "overrides"
-                  ? language === "ru"
-                    ? "Распаковка файлов пакета…"
-                    : "Extracting pack overrides…"
+                  ? tt("modpacks.import.progress.extractingOverrides")
                   : mrpackProgress.phase === "files" && mrpackProgress.total != null && mrpackProgress.total > 0
-                    ? language === "ru"
-                      ? `Скачивание: ${mrpackProgress.current ?? 0} / ${mrpackProgress.total}${mrpackProgress.message ? ` — ${mrpackProgress.message}` : ""}`
-                      : `Downloading: ${mrpackProgress.current ?? 0} / ${mrpackProgress.total}${mrpackProgress.message ? ` — ${mrpackProgress.message}` : ""}`
-                    : language === "ru"
-                      ? "Импорт…"
-                      : "Importing…"}
+                    ? tt("modpacks.import.progress.downloading", {
+                        current: mrpackProgress.current ?? 0,
+                        total: mrpackProgress.total,
+                        msg: mrpackProgress.message ? ` — ${mrpackProgress.message}` : "",
+                      })
+                    : tt("modpacks.import.progress.importing")}
             </p>
             {mrpackProgress.total != null &&
               mrpackProgress.total > 0 &&
@@ -1550,24 +1713,20 @@ export function ModpackTab({
         >
           <UploadCloud className="mb-2 h-10 w-10 text-white/70" />
           <p className="text-sm font-medium text-white">
-            {language === "ru"
-              ? "Перетащите сюда .mrpack файл"
-              : "Drag & drop a .mrpack file here"}
+            {tt("modpacks.import.dropzone.title")}
           </p>
           <p className="max-w-md text-xs text-white/60">
-            {language === "ru"
-              ? "Будет создана новая сборка с именем пакета и версией игры из .mrpack. Моды и ресурсы скачаются автоматически."
-              : "A new profile will be created with the pack name and game version from the .mrpack. Mods and resources will be downloaded automatically."}
+            {tt("modpacks.import.dropzone.hint")}
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
               disabled={mrpackBusy}
               onClick={() => void handleImportMrpack()}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-5 py-2 text-sm font-semibold text-white hover:bg-white/25 disabled:opacity-60"
+              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
-              <span>{language === "ru" ? "Выбрать файл" : "Choose file"}</span>
+              <span>{tt("modpacks.import.chooseFile")}</span>
             </button>
           </div>
         </div>
@@ -1588,17 +1747,32 @@ export function ModpackTab({
       <div className="flex w-full flex-col gap-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-              {selectedProfile.icon_path ? (
-                // eslint-disable-next-line jsx-a11y/img-redundant-alt
-                <img
-                  src={selectedProfile.icon_path}
-                  alt="icon"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
+            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
+              <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
                 <ModsIcon className="h-6 w-6" />
-              )}
+              </div>
+              <img
+                src={resolveIconSrc(getProfileIconPath(selectedProfile))}
+                alt="icon"
+                className="absolute inset-0 h-full w-full object-contain"
+                style={{ display: "none" }}
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  const fallback = img.parentElement?.querySelector(
+                    '[data-icon-fallback="1"]',
+                  ) as HTMLElement | null;
+                  if (fallback) fallback.style.display = "none";
+                  img.style.display = "block";
+                }}
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  const fallback = img.parentElement?.querySelector(
+                    '[data-icon-fallback="1"]',
+                  ) as HTMLElement | null;
+                  if (fallback) fallback.style.display = "flex";
+                  img.style.display = "none";
+                }}
+              />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -1642,7 +1816,7 @@ export function ModpackTab({
                     <button
                       type="button"
                       onClick={() => void handleRenameConfirm()}
-                      className="interactive-press rounded-full bg-emerald-600 p-1 text-white hover:bg-emerald-500"
+                      className="interactive-press rounded-full accent-bg p-1 text-white hover:opacity-90"
                     >
                       ✓
                     </button>
@@ -1658,6 +1832,27 @@ export function ModpackTab({
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-white/70">
                 <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
+                <span className="flex items-center gap-1">
+                  <img
+                    src="/launcher-assets/cllock.png"
+                    alt=""
+                    title={tt("modpacks.list.playtimeLabel")}
+                    className="h-3 w-3 object-contain opacity-80"
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      // Fallback for a correctly named asset.
+                      if (img.dataset.failedOnce !== "1") {
+                        img.dataset.failedOnce = "1";
+                        img.src = "/launcher-assets/clock.png";
+                        return;
+                      }
+                      img.style.display = "none";
+                    }}
+                  />
+                  <span>
+                    {formatPlaytime(selectedProfile.play_time_seconds, language)}
+                  </span>
+                </span>
                 <span className="flex items-center gap-1">
                   <ModsIcon className="h-3 w-3" />
                   <span>{countLabel(selectedProfile.mods_count, language)}</span>
@@ -1718,7 +1913,7 @@ export function ModpackTab({
             <button
               type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-soft hover:bg-emerald-500"
+              className="interactive-press inline-flex items-center gap-2 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90"
             >
               <Download className="h-4 w-4" />
               <span>{language === "ru" ? "Выбрать" : "Select"}</span>
@@ -1752,7 +1947,7 @@ export function ModpackTab({
               <button
                 type="button"
                 onClick={() => setIsAddMenuOpen((v) => !v)}
-                className="interactive-press inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500"
+                className="interactive-press inline-flex items-center gap-2 rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
               >
                 <PlusIcon className="h-3.5 w-3.5" />
                 <span>{language === "ru" ? "Добавить" : "Add"}</span>
@@ -1796,7 +1991,10 @@ export function ModpackTab({
           </div>
 
           <div className="mb-3 flex items-center justify-between">
-            <div className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden">
+            <div
+              ref={manageContentTabsContainerRef}
+              className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden"
+            >
               <div
                 className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
                 style={{
@@ -2335,7 +2533,7 @@ export function ModpackTab({
                                 ) : (
                                   <span className="mr-0.5 h-4 w-4" />
                                 )}
-                                <input
+                                  <input
                                   type="checkbox"
                                   checked={checked}
                                   disabled={exportBusy}
@@ -2345,7 +2543,7 @@ export function ModpackTab({
                                     else next.delete(n.path);
                                     setSelectedExportPaths(next);
                                   }}
-                                  className="h-3.5 w-3.5 cursor-pointer appearance-none rounded-[6px] border border-white/35 bg-black/50 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] transition-colors checked:border-emerald-400 checked:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+                                  className="accent-checkbox"
                                 />
                                 {n.is_dir ? (
                                   <FolderIcon className="h-4 w-4 opacity-90" />
@@ -2378,7 +2576,7 @@ export function ModpackTab({
                     type="button"
                     disabled={exportBusy || previewLoading}
                     onClick={() => void handlePreviewExport()}
-                    className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-5 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
+                    className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
                   >
                     {language === "ru" ? "Предпросмотр" : "Preview"}
                   </button>
@@ -2386,7 +2584,7 @@ export function ModpackTab({
                     type="button"
                     disabled={exportBusy}
                     onClick={() => void handleStartExport()}
-                    className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
+                    className="interactive-press inline-flex items-center gap-2 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
                   >
                     <ExportIcon className="h-4 w-4" />
                     <span>{language === "ru" ? "Экспортировать" : "Export"}</span>
@@ -2485,7 +2683,7 @@ export function ModpackTab({
                       <button
                         type="button"
                         onClick={() => void revealItemInDir(exportResultPath)}
-                        className="interactive-press rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+                        className="interactive-press rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90"
                       >
                         {language === "ru" ? "Открыть папку" : "Open folder"}
                       </button>
