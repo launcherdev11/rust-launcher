@@ -1,0 +1,77 @@
+:root {
+  --accent-color: #0b1530;
+}
+
+.accent-bg {
+  background-color: var(--accent-color);
+}
+
+.accent-border {
+  border-color: var(--accent-color);
+}
+
+.glass-panel {
+  background: radial-gradient(
+    circle at top left,
+    rgba(11, 21, 48, 0.85),
+    rgba(3, 7, 18, 0.92)
+  );
+}
+
+.glass-chip {
+  background: linear-gradient(
+    135deg,
+    rgba(11, 21, 48, 0.9),
+    rgba(15, 23, 42, 0.95)
+  );
+}
+
+.accent-chip {
+  background: color-mix(in srgb, var(--accent-color) 70%, #020617 30%);
+}
+
+.accent-checkbox {
+  height: 0.875rem;
+  width: 0.875rem;
+  cursor: pointer;
+  appearance: none;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background-color: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+
+.accent-checkbox:checked {
+  border-color: var(--accent-color);
+  background-color: var(--accent-color);
+}
+
+.accent-checkbox:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 70%, #ffffff 30%);
+  outline-offset: 1px;
+}
+
+.sidebar-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.55);
+  transition:
+    background-color 0.18s ease-out,
+    box-shadow 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+.sidebar-icon:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.7);
+}
+
+.sidebar-icon-active {
+  background: color-mix(in srgb, var(--accent-color) 70%, #020617 30%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 18px 40px rgba(0, 0, 0, 0.9);
+}

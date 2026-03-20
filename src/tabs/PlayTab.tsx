@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useT } from "../i18n";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
@@ -17,10 +18,21 @@ type ForgeVersionSummary = {
   installer_url: string;
 };
 
-type VersionItem = VersionSummary | ForgeVersionSummary;
+type NeoForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  neoforge_build: string;
+  installer_url: string;
+};
+
+type VersionItem = VersionSummary | ForgeVersionSummary | NeoForgeVersionSummary;
 
 function isForgeVersion(v: VersionItem): v is ForgeVersionSummary {
   return "forge_build" in v && "installer_url" in v;
+}
+
+function isNeoForgeVersion(v: VersionItem): v is NeoForgeVersionSummary {
+  return "neoforge_build" in v && "installer_url" in v;
 }
 
 type DownloadProgressPayload = {
@@ -82,6 +94,8 @@ type PlayTabProps = {
   handleOpenGameFolder: () => void;
   language: Language;
   activeProfileName: string | null;
+  installedVersionIds: Set<string>;
+  showSnapshots: boolean;
 };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -121,11 +135,143 @@ export function PlayTab({
   handleOpenGameFolder,
   language,
   activeProfileName,
+  installedVersionIds,
+  showSnapshots,
 }: PlayTabProps) {
+  const tt = useT(language);
   const [banners, setBanners] = useState<LauncherBannerData[]>([]);
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState(false);
+
+  const [isConsoleDetached, setIsConsoleDetached] = useState(false);
+  const [consolePos, setConsolePos] = useState({ x: 24, y: 110 });
+  const consoleWindowRef = useRef<HTMLDivElement | null>(null);
+
+  const [isDraggingConsole, setIsDraggingConsole] = useState(false);
+  const consoleDragStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  const [isCopyingConsole, setIsCopyingConsole] = useState(false);
+  const [isConsoleCopied, setIsConsoleCopied] = useState(false);
+
+  const consoleText = useMemo(
+    () => consoleLines.map((e) => e.line).join("\n"),
+    [consoleLines],
+  );
+
+  const handleCopyConsole = useCallback(async () => {
+    if (isCopyingConsole) return;
+    setIsCopyingConsole(true);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(consoleText);
+      ok = true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = consoleText;
+        ta.style.position = "fixed";
+        ta.style.left = "-10000px";
+        ta.style.top = "-10000px";
+        ta.setAttribute("readonly", "true");
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        // ignore
+      }
+    } finally {
+      setIsCopyingConsole(false);
+    }
+
+    if (ok) {
+      setIsConsoleCopied(true);
+      window.setTimeout(() => setIsConsoleCopied(false), 1200);
+    }
+  }, [consoleText, isCopyingConsole]);
+
+  const handleToggleConsoleDetached = useCallback(() => {
+    if (!isConsoleDetached) {
+      const rect = consoleWindowRef.current?.getBoundingClientRect();
+      if (rect) {
+        setConsolePos({ x: Math.round(rect.left), y: Math.round(rect.top) });
+      }
+    }
+    setIsConsoleDetached((prev) => !prev);
+  }, [isConsoleDetached]);
+
+  const handleConsoleHeaderPointerDown = useCallback(
+    (e: import("react").PointerEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("button")) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isConsoleDetached) return;
+
+      consoleDragStartRef.current = {
+        pointerX: e.clientX,
+        pointerY: e.clientY,
+        startX: consolePos.x,
+        startY: consolePos.y,
+      };
+      setIsDraggingConsole(true);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "grabbing";
+    },
+    [consolePos.x, consolePos.y, isConsoleDetached],
+  );
+
+  useEffect(() => {
+    if (!isDraggingConsole) return;
+
+    const onMove = (e: PointerEvent) => {
+      const drag = consoleDragStartRef.current;
+      if (!drag) return;
+
+      const panel = consoleWindowRef.current;
+      const panelWidth = panel?.offsetWidth ?? 720;
+      const panelHeight = panel?.offsetHeight ?? 320;
+
+      const dx = e.clientX - drag.pointerX;
+      const dy = e.clientY - drag.pointerY;
+
+      const nextX = drag.startX + dx;
+      const nextY = drag.startY + dy;
+
+      const maxX = window.innerWidth - panelWidth - 8;
+      const maxY = window.innerHeight - panelHeight - 8;
+
+      setConsolePos({
+        x: Math.max(8, Math.min(nextX, maxX)),
+        y: Math.max(8, Math.min(nextY, maxY)),
+      });
+    };
+
+    const onUp = () => {
+      consoleDragStartRef.current = null;
+      setIsDraggingConsole(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [isDraggingConsole]);
 
   const currentBanner =
     banners.length > 0 &&
@@ -216,8 +362,65 @@ export function PlayTab({
 
   const versionDisplayName = (v: VersionItem): string => {
     if (isForgeVersion(v)) return `${v.mc_version} (Forge ${v.forge_build})`;
+    if (isNeoForgeVersion(v)) return `${v.mc_version} (NeoForge ${v.neoforge_build})`;
     return v.id;
   };
+
+  const [versionQuery, setVersionQuery] = useState("");
+  const versionListRef = useRef<HTMLDivElement | null>(null);
+  const selectedButtonRef = useRef<HTMLButtonElement | null>(null);
+  const versionInputRef = useRef<HTMLInputElement | null>(null);
+
+  const looksLikeSnapshot = (s: string): boolean => {
+    const v = s.trim();
+    if (!v) return false;
+    if (/^\d{2}w\d{2}[a-z]$/i.test(v)) return true; // 24w14a
+    if (/^\d+\.\d+(\.\d+)?-pre\d+$/i.test(v)) return true;
+    if (/^\d+\.\d+(\.\d+)?-rc\d+$/i.test(v)) return true;
+    if (/^\d+\.\d+(\.\d+)?-snapshot$/i.test(v)) return true;
+    return false;
+  };
+
+  const snapshotHintVisible = useMemo(() => {
+    if (showSnapshots) return false;
+    if (!versionQuery.trim()) return false;
+    return looksLikeSnapshot(versionQuery);
+  }, [showSnapshots, versionQuery]);
+
+  const filteredVersions = useMemo(() => {
+    const q = versionQuery.trim().toLowerCase();
+    if (!q) return versions;
+    return versions.filter((v) => versionDisplayName(v).toLowerCase().includes(q) || v.id.toLowerCase().includes(q));
+  }, [versionQuery, versions]);
+
+  useEffect(() => {
+    if (!isVersionDropdownOpen) return;
+    setVersionQuery("");
+  }, [isVersionDropdownOpen]);
+
+  useEffect(() => {
+    if (!isVersionDropdownOpen) return;
+    requestAnimationFrame(() => {
+      try {
+        versionInputRef.current?.focus({ preventScroll: true });
+      } catch {
+        versionInputRef.current?.focus();
+      }
+
+      const container = versionListRef.current;
+      const item = selectedButtonRef.current;
+      if (!container || !item) return;
+
+      const cRect = container.getBoundingClientRect();
+      const iRect = item.getBoundingClientRect();
+      const centerOffset =
+        (iRect.top - cRect.top) - (cRect.height / 2 - iRect.height / 2);
+      container.scrollTop = Math.max(
+        0,
+        Math.min(container.scrollHeight, container.scrollTop + centerOffset),
+      );
+    });
+  }, [isVersionDropdownOpen, filteredVersions.length]);
 
   const statusDotClass =
     gameStatus === "running"
@@ -234,22 +437,16 @@ export function PlayTab({
         {bannerLoading ? (
           <div className="flex h-full w-full items-center justify-center">
             <span className="text-sm font-medium tracking-wide text-white/70">
-              {language === "ru"
-                ? "Загрузка новостей лаунчера..."
-                : "Loading launcher news..."}
+              {tt("play.banner.loading")}
             </span>
           </div>
         ) : bannerError ? (
           <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
             <span className="text-sm font-medium tracking-wide text-red-300">
-              {language === "ru"
-                ? "Не удалось загрузить баннер лаунчера."
-                : "Failed to load launcher banner."}
+              {tt("play.banner.loadFailedTitle")}
             </span>
             <span className="mt-1 text-xs text-white/60">
-              {language === "ru"
-                ? "Проверь подключение к интернету или доступ к GitHub."
-                : "Check your internet connection or access to GitHub."}
+              {tt("play.banner.loadFailedHint")}
             </span>
           </div>
         ) : currentBanner ? (
@@ -258,7 +455,7 @@ export function PlayTab({
               src={resolveBannerImageUrl(currentBanner.imageUrl)}
               alt={
                 currentBanner.title ??
-                (language === "ru" ? "Баннер лаунчера" : "Launcher banner")
+                tt("play.banner.defaultAlt")
               }
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -283,7 +480,7 @@ export function PlayTab({
                     rel="noreferrer"
                     className="inline-flex items-center rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20"
                   >
-                    {language === "ru" ? "Подробнее" : "Learn more"}
+                    {tt("play.banner.learnMore")}
                     <span className="ml-1 text-[10px]">↗</span>
                   </a>
                 </div>
@@ -293,9 +490,7 @@ export function PlayTab({
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <span className="text-sm font-medium tracking-wide text-white/70">
-              {language === "ru"
-                ? "Новости лаунчера и баннер игры"
-                : "Launcher news and game banner"}
+              {tt("play.banner.empty")}
             </span>
           </div>
         )}
@@ -306,7 +501,7 @@ export function PlayTab({
           <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8">
             <div className="relative flex flex-col text-left">
               <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
-                {language === "ru" ? "Версия" : "Version"}
+                {tt("play.version.label")}
               </span>
               <button
                 type="button"
@@ -320,40 +515,95 @@ export function PlayTab({
                   {selectedVersion
                     ? versionDisplayName(selectedVersion)
                     : versionsLoading
-                      ? language === "ru"
-                        ? "Загрузка..."
-                        : "Loading..."
-                      : language === "ru"
-                        ? "Выберите версию"
-                        : "Select version"}
+                      ? tt("play.version.loading")
+                      : tt("play.version.select")}
                 </span>
                 <span className="shrink-0 text-xs text-gray-400">▾</span>
               </button>
 
               {isVersionDropdownOpen && versions.length > 0 && (
-                <div className="absolute left-0 bottom-full mb-2 z-30 max-h-[min(70vh,320px)] w-56 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-                  {versions.map((v) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedVersion(v);
-                        setIsVersionDropdownOpen(false);
+                <div className="absolute left-0 bottom-full mb-2 z-30 w-64 rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                  <div className="px-2 pt-2 pb-1">
+                    <input
+                      ref={versionInputRef}
+                      type="text"
+                      value={versionQuery}
+                      onChange={(e) => setVersionQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setIsVersionDropdownOpen(false);
+                          return;
+                        }
+                        if (e.key === "Enter") {
+                          const q = versionQuery.trim().toLowerCase();
+                          if (!q) return;
+                          const exact =
+                            versions.find((v) => v.id.toLowerCase() === q) ??
+                            versions.find(
+                              (v) => versionDisplayName(v).toLowerCase() === q,
+                            );
+                          const first = filteredVersions[0];
+                          const chosen = exact ?? first;
+                          if (chosen) {
+                            setSelectedVersion(chosen);
+                            setIsVersionDropdownOpen(false);
+                          }
+                        }
                       }}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
-                        selectedVersion && selectedVersion.id === v.id
-                          ? "bg-white/90 text-black"
-                          : "text-white/80 hover:bg-white/10"
-                      }`}
-                    >
-                      <span>{versionDisplayName(v)}</span>
-                      {!isForgeVersion(v) && (
-                        <span className="ml-2 text-[10px] uppercase text-gray-400">
-                          {(v as VersionSummary).version_type}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                      placeholder={tt("play.version.searchPlaceholder")}
+                      className="h-8 w-full rounded-xl border border-white/15 bg-black/40 px-3 text-xs text-white/90 placeholder:text-white/35 outline-none focus:border-white/35"
+                    />
+                    {snapshotHintVisible && (
+                      <div className="mt-1 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                        {tt("play.version.snapshotHint")}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    ref={versionListRef}
+                    className="max-h-[min(70vh,320px)] overflow-y-auto px-1 pb-1"
+                  >
+                    {filteredVersions.length === 0 ? (
+                      <div className="px-3 py-2 text-[11px] text-white/50">
+                        {tt("play.version.nothingFound")}
+                      </div>
+                    ) : (
+                      filteredVersions.map((v) => {
+                        const selected = !!selectedVersion && selectedVersion.id === v.id;
+                        const installed = installedVersionIds.has(v.id);
+                        return (
+                          <button
+                            key={v.id}
+                            ref={(el) => {
+                              if (selected) selectedButtonRef.current = el;
+                            }}
+                            type="button"
+                            onClick={() => {
+                              setSelectedVersion(v);
+                              setIsVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              selected
+                                ? "bg-white/90 text-black"
+                                : installed
+                                  ? "bg-emerald-500/10 text-white/90 hover:bg-emerald-500/15"
+                                  : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span className="min-w-0 truncate">{versionDisplayName(v)}</span>
+                            <span className="ml-2 shrink-0 flex items-center gap-2">
+                              {!isForgeVersion(v) && !isNeoForgeVersion(v) && (
+                                <span className="text-[10px] uppercase text-gray-400">
+                                  {(v as VersionSummary).version_type}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -365,28 +615,22 @@ export function PlayTab({
                     <button
                       type="button"
                       onClick={installPaused ? handleResumeInstall : handlePauseInstall}
-                      className="interactive-press rounded-xl bg-accentBlue px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-sky-500"
+                      className="interactive-press rounded-xl accent-bg px-6 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90"
                     >
-                      {installPaused
-                        ? language === "ru"
-                          ? "Продолжить"
-                          : "Resume"
-                        : language === "ru"
-                          ? "Пауза"
-                          : "Pause"}
+                      {installPaused ? tt("play.install.resume") : tt("play.install.pause")}
                     </button>
                     <button
                       type="button"
                       onClick={handleCancelInstall}
                       className="interactive-press rounded-xl bg-red-600 px-6 py-2 text-sm font-semibold text-white shadow-soft hover:bg-red-500"
                     >
-                      {language === "ru" ? "Отменить" : "Cancel"}
+                      {tt("play.install.cancel")}
                     </button>
                   </div>
                   <div className="mt-1 w-full max-w-md">
                     <div className="h-3 w-full overflow-hidden rounded-full bg-black/40">
                       <div
-                        className="h-full rounded-full bg-accentGreen transition-[width] duration-200"
+                        className="h-full rounded-full accent-bg transition-[width] duration-200"
                         style={{
                           width: `${Math.max(
                             0,
@@ -401,9 +645,7 @@ export function PlayTab({
                     <div className="mt-1 text-center text-xs text-white/70">
                       {progress && progress.total > 0
                         ? `${Math.round(progress.percent)}%`
-                        : language === "ru"
-                          ? "Подготовка файлов..."
-                          : "Preparing files..."}
+                        : tt("play.install.preparing")}
                     </div>
                   </div>
                 </>
@@ -420,7 +662,7 @@ export function PlayTab({
 
             <div className="relative flex flex-col items-end text-right">
               <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
-                {language === "ru" ? "Загрузчик" : "Loader"}
+                {tt("play.loader.label")}
               </span>
               <div className="mt-1 flex items-center gap-2">
                 <button
@@ -437,7 +679,7 @@ export function PlayTab({
 
               {isLoaderDropdownOpen && (
                 <div className="absolute right-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-                  {(["vanilla", "fabric", "forge", "quilt"] as LoaderId[]).map((id) => {
+                  {(["vanilla", "fabric", "forge", "quilt", "neoforge"] as LoaderId[]).map((id) => {
                     const isActive = loader === id;
                     return (
                       <button
@@ -464,12 +706,12 @@ export function PlayTab({
           <button
             type="button"
             onClick={handleOpenGameFolder}
-            title={language === "ru" ? "Открыть папку игры" : "Open game folder"}
+            title={tt("play.gameFolder.openTitle")}
             className="pointer-events-auto absolute -right-14 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-gray-200 shadow-soft transition-colors hover:border-white/40 hover:bg-black/80 hover:text-white"
           >
             <img
               src="/launcher-assets/folder.png"
-              alt={language === "ru" ? "Папка игры" : "Game folder"}
+              alt={tt("play.gameFolder.alt")}
               className="h-6 w-6 object-contain"
             />
           </button>
@@ -479,79 +721,221 @@ export function PlayTab({
       {activeProfileName && (
         <div className="mt-2 flex w-full max-w-[95vw] justify-center px-2">
           <div className="rounded-full bg-black/60 px-4 py-1.5 text-xs text-white/85 shadow-soft backdrop-blur-md">
-            {language === "ru"
-              ? `Выбран профиль: ${activeProfileName}`
-              : `Selected profile: ${activeProfileName}`}
+            {tt("play.profile.selected", { name: activeProfileName })}
           </div>
         </div>
       )}
 
       {showConsoleOnLaunch && (
-        <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
-          <div className="glass-panel pointer-events-auto w-full max-w-3xl rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`} />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
-                  {language === "ru" ? "Консоль игры" : "Game console"}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClearConsole}
-                  className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
-                >
-                  {language === "ru" ? "Очистить" : "Clear"}
-                </button>
-                <button
-                  type="button"
-                  onClick={onToggleConsole}
-                  className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
-                >
-                  {isConsoleVisible
-                    ? language === "ru"
-                      ? "Свернуть"
-                      : "Hide"
-                    : language === "ru"
-                      ? "Показать"
-                      : "Show"}
-                </button>
+        <>
+          {!isConsoleDetached ? (
+            <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
+              <div
+                ref={consoleWindowRef}
+                className="glass-panel pointer-events-auto w-full max-w-3xl rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`}
+                    />
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                      {tt("play.console.title")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onClearConsole}
+                      data-no-console-drag
+                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+                    >
+                      {tt("play.console.clear")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onToggleConsole}
+                      data-no-console-drag
+                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+                    >
+                      {isConsoleVisible
+                        ? tt("play.console.hide")
+                        : tt("play.console.show")}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyConsole}
+                      data-no-console-drag
+                      disabled={isCopyingConsole}
+                      className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20 disabled:opacity-50"
+                      title={
+                        isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")
+                      }
+                      aria-label={tt("app.toast.copy")}
+                    >
+                      <img
+                        src="/launcher-assets/copy.png"
+                        alt=""
+                        className="h-4 w-4 object-contain"
+                      />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleConsoleDetached}
+                      data-no-console-drag
+                      className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20"
+                      title={tt("play.console.detach")}
+                      aria-label={tt("play.console.detach")}
+                    >
+                      <img
+                        src="/launcher-assets/move.png"
+                        alt=""
+                        className="h-4 w-4 object-contain"
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {isConsoleVisible && (
+                  <>
+                    {consoleLines.length > 0 ? (
+                      <div className="mt-2 h-44 w-full overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80">
+                        {consoleLines.map((entry) => (
+                          <div
+                            key={entry.id}
+                            className={`whitespace-pre break-all ${
+                              entry.source === "stderr"
+                                ? "text-red-300"
+                                : "text-emerald-200"
+                            }`}
+                          >
+                            {entry.line}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60">
+                        {tt("play.console.empty")}
+                      </div>
+                    )}
+
+                    <p className="mt-2 text-[10px] text-white/40">
+                      {tt("play.console.hint")}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
+          ) : (
+            <div
+              ref={consoleWindowRef}
+              className="pointer-events-auto fixed z-50 w-[min(90vw,48rem)] rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl"
+              style={{
+                left: consolePos.x,
+                top: consolePos.y,
+              }}
+            >
+              <div
+                className="mb-2 flex items-center justify-between gap-2 select-none touch-none"
+                style={{ cursor: isDraggingConsole ? "grabbing" : "grab" }}
+                onPointerDown={handleConsoleHeaderPointerDown}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`}
+                  />
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                    {tt("play.console.title")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClearConsole}
+                    data-no-console-drag
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+                  >
+                    {tt("play.console.clear")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onToggleConsole}
+                    data-no-console-drag
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+                  >
+                    {isConsoleVisible
+                      ? tt("play.console.hide")
+                      : tt("play.console.show")}
+                  </button>
 
-            {isConsoleVisible && (
-              <>
-                {consoleLines.length > 0 ? (
-                  <div className="mt-2 h-44 w-full overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80">
-                    {consoleLines.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className={`whitespace-pre break-all ${
-                          entry.source === "stderr" ? "text-red-300" : "text-emerald-200"
-                        }`}
-                      >
-                        {entry.line}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-2 flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60">
-                    {language === "ru"
-                      ? "Логи появятся после запуска игры."
-                      : "Logs will appear after the game starts."}
-                  </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={handleCopyConsole}
+                    data-no-console-drag
+                    disabled={isCopyingConsole}
+                    className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20 disabled:opacity-50"
+                    title={
+                      isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")
+                    }
+                    aria-label={tt("app.toast.copy")}
+                  >
+                    <img
+                      src="/launcher-assets/copy.png"
+                      alt=""
+                      className="h-4 w-4 object-contain"
+                    />
+                  </button>
 
-                <p className="mt-2 text-[10px] text-white/40">
-                  {language === "ru"
-                    ? "Управляется настройкой «Консоль при запуске» в разделе игры."
-                    : "Controlled by the “Show console on game start” setting in the game section."}
-                </p>
-              </>
-            )}
-          </div>
-        </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleConsoleDetached}
+                    data-no-console-drag
+                    className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20"
+                    title={tt("play.console.attach")}
+                    aria-label={tt("play.console.attach")}
+                  >
+                    <img
+                      src="/launcher-assets/move.png"
+                      alt=""
+                      className="h-4 w-4 object-contain"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {isConsoleVisible && (
+                <>
+                  {consoleLines.length > 0 ? (
+                    <div className="mt-2 h-44 w-full overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80">
+                      {consoleLines.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className={`whitespace-pre break-all ${
+                            entry.source === "stderr"
+                              ? "text-red-300"
+                              : "text-emerald-200"
+                          }`}
+                        >
+                          {entry.line}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60">
+                      {tt("play.console.empty")}
+                    </div>
+                  )}
+
+                  <p className="mt-2 text-[10px] text-white/40">
+                    {tt("play.console.hint")}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </>
       )}
     </>
   );

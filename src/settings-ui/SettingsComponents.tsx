@@ -12,8 +12,8 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
   label,
   value,
   onChange,
-  yesLabel = "Да",
-  noLabel = "Нет",
+  yesLabel,
+  noLabel,
 }) => {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -28,7 +28,7 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
               : "text-white/60 hover:text-white"
           }`}
         >
-          {yesLabel}
+          {yesLabel ?? "Yes"}
         </button>
         <button
           type="button"
@@ -39,7 +39,7 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
               : "text-white/60 hover:text-white"
           }`}
         >
-          {noLabel}
+          {noLabel ?? "No"}
         </button>
       </div>
     </div>
@@ -52,7 +52,6 @@ export type SettingsSliderProps = {
   max: number;
   value: number;
   onChange: (value: number) => void;
-  /** Вызывается только при отпускании ползунка (не во время перетаскивания). Для сохранения и уведомлений. */
   onChangeCommitted?: (value: number) => void;
   suffix?: string;
   right?: React.ReactNode;
@@ -65,7 +64,7 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
   value,
   onChange,
   onChangeCommitted,
-  suffix = "ГБ",
+  suffix,
   right,
 }) => {
   const normalized = Math.min(max, Math.max(min, value || min));
@@ -84,7 +83,7 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
         {right ?? (
           <span className="text-sm font-semibold text-white/90">
             {normalized}
-            {suffix}
+            {suffix ?? ""}
           </span>
         )}
       </div>

@@ -1,0 +1,419 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "change": "Change",
+    "save": "Save",
+    "loading": "Loading…",
+    "search": "Search…"
+  },
+  "mods": {
+    "unlockConfirm": "Version and loader are synced with the selected profile. Change them anyway?",
+    "searchPlaceholder": "Search...",
+    "version": "Version",
+    "syncedHint": "Synced with profile. Click «Change» to unlock.",
+    "loaderAny": "Any",
+    "loaderAll": "All",
+    "tab": {
+      "mods": "Mods",
+      "resources": "Resources",
+      "shaders": "Shaders",
+      "modpacks": "Modpacks"
+    },
+    "layout": {
+      "list": "List",
+      "grid": "Grid"
+    },
+    "loadingPopular": "Loading popular projects…",
+    "nothingFound": "Nothing found for the selected Modrinth filters.",
+    "pageOf": "Page {{current}} of {{total}}",
+    "prev": "Prev",
+    "next": "Next",
+    "selectProject": "Select a project on the left to see versions",
+    "versionsLoading": "Loading versions…",
+    "installed": "installed",
+    "download": "Download",
+    "noAvailableVersions": "There are no available versions for this project.",
+    "provider": {
+      "modrinth": "Modrinth",
+      "curseforge": "CurseForge"
+    },
+    "curseforgeOnlyMods": "In this version, CurseForge supports only mods.",
+    "searchFailedCurseForge": "Failed to search on CurseForge.",
+    "nothingFoundCurseForge": "Nothing found for the selected CurseForge filters.",
+    "modpackImportSuccess": "Modpack “{{name}}” imported successfully.",
+    "modpackImport": {
+      "title": "Installing modpack…",
+      "start": "Preparing…",
+      "overrides": "Extracting…",
+      "files": "Downloading files…"
+    },
+    "noIcon": "No icon",
+    "saveSuccessProfile": "File {{filename}} saved to profile.",
+    "saveSuccessFolder": "File {{filename}} saved to {{folder}} folder.",
+    "downloadFailed": "Failed to download Modrinth file."
+  },
+  "settings": {
+    "common": {
+      "yes": "Yes",
+      "no": "No",
+      "reset": "Reset",
+      "imagesFilterName": "Images",
+      "toggle": {
+        "on": "On",
+        "off": "Off"
+      }
+    },
+    "tab": {
+      "directories": "Directories",
+      "game": "Game",
+      "versions": "Versions",
+      "launcher": "Launcher",
+      "updates": "Updates"
+    },
+    "card": {
+      "directories": "Directories",
+      "game": "Game",
+      "versions": "Minecraft versions",
+      "launcher": "Launcher",
+      "updates": "Launcher updates"
+    },
+    "directories": {
+      "comingSoon": "Directory settings will be added later."
+    },
+    "game": {
+      "subtab": {
+        "general": "General",
+        "java": "Java"
+      },
+      "showConsoleOnLaunch": {
+        "label": "Show console on game start:"
+      },
+      "closeLauncherOnStart": {
+        "label": "Close launcher when game starts:"
+      },
+      "checkGameProcesses": {
+        "label": "Check running game processes:"
+      },
+      "windowSize": {
+        "label": "Window size on launch:",
+        "widthPlaceholder": "Width",
+        "heightPlaceholder": "Height"
+      },
+      "ram": {
+        "label": "Memory (RAM):",
+        "mbUnit": "MB",
+        "editInMbHint": "Click to edit in MB",
+        "gbValue": "{{gb}}GB"
+      }
+    },
+    "versions": {
+      "showSnapshots": { "label": "Show snapshot versions:" },
+      "showAlpha": { "label": "Show Alpha versions:" },
+      "available": { "label": "Available versions:" },
+      "refresh": "Refresh",
+      "loading": "Loading versions list...",
+      "noneFound": "No versions found. Check your internet connection.",
+      "installedBadge": "Installed",
+      "action": {
+        "install": "Install",
+        "reinstall": "Reinstall",
+        "installing": "Installing..."
+      },
+      "loadFailed": "Failed to load Minecraft versions list.",
+      "refreshFailed": "Failed to refresh versions list.",
+      "installSuccess": "Version {{version}} installed successfully.",
+      "installFailed": "Failed to install version {{version}}."
+    },
+    "launcher": {
+      "openOnProfilesTab": {
+        "label": "Open launcher on profiles/modpacks tab:",
+        "yes": "Modpacks",
+        "no": "Main"
+      },
+      "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
+      "notifyNewMessage": { "label": "Notify about new messages:" },
+      "notifySystemMessage": { "label": "Notify about system messages:" },
+      "interfaceLanguage": {
+        "label": "Interface language:",
+        "ru": "Russian",
+        "en": "English"
+      },
+      "accentColor": {
+        "label": "Launcher accent color:",
+        "popupTitle": "Accent color",
+        "pickColorAria": "Pick color",
+        "currentLabel": "Current",
+        "helpText": "Click the circle or edit the HEX code to choose a new color."
+      },
+      "backgroundImage": {
+        "label": "Background image:",
+        "choose": "Choose image",
+        "hint": "The file will be copied to the launcher data folder. “Reset” restores the default background."
+      },
+      "cache": {
+        "label": "Launcher cache:",
+        "loading": "Calculating cache size…",
+        "sizeLabel": "Size: {{size}}",
+        "sizeUnknown": "Size unknown",
+        "bytes": "{{value}} B",
+        "kb": "{{value}} KB",
+        "mb": "{{value}} MB",
+        "gb": "{{value}} GB",
+        "clearButton": "Clear cache",
+        "cleared": "Launcher cache cleared.",
+        "clearFailed": "Failed to clear launcher cache."
+      },
+      "sidebarOrder": {
+        "label": "Sidebar buttons order:",
+        "moveUp": "Move up",
+        "moveDown": "Move down"
+      },
+      "resetSettings": {
+        "button": "Reset launcher settings to defaults",
+        "success": "Launcher settings have been reset to default values.",
+        "failed": "Failed to reset launcher settings."
+      }
+    },
+    "updates": {
+      "checkOnStart": { "label": "Check for updates on start:" },
+      "autoInstall": { "label": "Automatically install updates:" },
+      "checkNow": "Check for updates",
+      "noneFound": "No new updates were found.",
+      "installedRestart": "Update installed. Please restart the launcher.",
+      "availableNextStart": "A new launcher version is available: {{version}}. Installation will be offered on the next start.",
+      "checkFailed": "Failed to check for updates."
+    }
+  },
+  "javaSettings": {
+    "loading": "Loading Java settings...",
+    "description": "Control which Java and JVM arguments the game will use. When custom arguments are disabled, the launcher applies safe default values.",
+    "useCustomArgs": {
+      "label": "Use custom JVM arguments",
+      "hint": "When off, only launcher defaults are used."
+    },
+    "javaPath": {
+      "label": "Java path",
+      "hint": "Leave empty to use Mojang built‑in runtime.",
+      "placeholder": "Example: C:\\Program Files\\Java\\bin\\javaw.exe"
+    },
+    "memory": {
+      "title": "JVM memory",
+      "hint": "It is recommended to leave 1–2 GB of RAM for the system and other apps.",
+      "xmsPlaceholder": "e.g. 1G",
+      "xmxPlaceholder": "e.g. 4G",
+      "quickPresets": "Quick presets:",
+      "currentPair": "Current: {{xms}} / {{xmx}}"
+    },
+    "jvmArgs": {
+      "title": "JVM arguments",
+      "hint": "Flags separated by spaces or new lines.",
+      "placeholder": "-XX:+UseG1GC\n-XX:MaxGCPauseMillis=50\n# Placeholders supported: ${classpath}, ${natives}, ${gameDir}, ${assetsDir}, ${version}",
+      "placeholdersLabel": "Placeholders:",
+      "recommendedPresets": "Recommended presets:"
+    },
+    "presets": {
+      "balanced": "Balanced",
+      "performance": "Max performance",
+      "lowMemory": "Low memory"
+    },
+    "actions": {
+      "detect": "Detect",
+      "browse": "Browse",
+      "save": "Save",
+      "cancel": "Cancel",
+      "resetRecommended": "Reset to recommended",
+      "validate": "Validate"
+    },
+    "dialog": {
+      "javaFilterName": "Java"
+    },
+    "toast": {
+      "loadFailedUsingDefaults": "Failed to load Java settings. Using defaults.",
+      "saved": "Java settings saved.",
+      "saveFailed": "Failed to save Java settings.",
+      "chooseJavaFailed": "Failed to choose Java executable.",
+      "noSuitableRuntimes": "No suitable Java runtimes found. Launcher will keep using Mojang runtime.",
+      "detected": "Java detected: {{version}}",
+      "detectFailed": "Error while detecting Java runtime.",
+      "validateOk": "Java and JVM arguments validation passed.",
+      "validateErrors": "Errors detected while validating JVM arguments.",
+      "validateWarnings": "Validation finished with warnings.",
+      "validateFailed": "Failed to validate Java arguments."
+    },
+    "validation": {
+      "invalidFormatXms": "Invalid format. Examples: 1024M, 2G.",
+      "invalidFormatXmx": "Invalid format. Examples: 2048M, 4G.",
+      "minGreaterThanMax": "MIN (Xms) cannot be greater than MAX (Xmx).",
+      "maxAboveRecommended": "MAX (Xmx) is above recommended limit. Use not more than {{gb}}GB."
+    },
+    "validationOutput": {
+      "errors": "Errors:",
+      "warnings": "Warnings:",
+      "showJavaVersion": "Show java -version output"
+    }
+  },
+  "play": {
+    "banner": {
+      "loading": "Loading launcher news...",
+      "loadFailedTitle": "Failed to load launcher banner.",
+      "loadFailedHint": "Check your internet connection or access to GitHub.",
+      "defaultAlt": "Launcher banner",
+      "learnMore": "Learn more",
+      "empty": "Launcher news and game banner"
+    },
+    "version": {
+      "label": "Version",
+      "loading": "Loading...",
+      "select": "Select version",
+      "searchPlaceholder": "Type version...",
+      "snapshotHint": "Looks like a snapshot. Enable “Show snapshot versions” in Settings → Versions.",
+      "nothingFound": "Nothing found."
+    },
+    "install": {
+      "resume": "Resume",
+      "pause": "Pause",
+      "cancel": "Cancel",
+      "preparing": "Preparing files..."
+    },
+    "loader": {
+      "label": "Loader"
+    },
+    "gameFolder": {
+      "openTitle": "Open game folder",
+      "alt": "Game folder"
+    },
+    "profile": {
+      "selected": "Selected profile: {{name}}"
+    },
+    "console": {
+      "title": "Game console",
+      "clear": "Clear",
+      "show": "Show",
+      "hide": "Hide",
+      "detach": "Detach",
+      "attach": "Attach",
+      "empty": "Logs will appear after the game starts.",
+      "hint": "Controlled by the “Show console on game start” setting in the game section."
+    }
+  },
+  "modpacks": {
+    "export": {
+      "readFilesFailed": "Failed to read build files.",
+      "selectAtLeastOnePath": "Select at least one path.",
+      "previewFailed": "Failed to preview export.",
+      "failed": "Export failed: {{msg}}",
+      "finished": "Export finished.",
+      "errorGeneric": "Export error",
+      "perSecond": "/s"
+    },
+    "profileSettings": {
+      "saved": "Profile settings saved.",
+      "saveFailed": "Failed to save profile settings."
+    },
+    "common": {
+      "loading": "Loading...",
+      "backToList": "Back to list",
+      "select": "Select"
+    },
+    "actions": {
+      "create": "Create",
+      "import": "Import",
+      "refresh": "Refresh",
+      "play": "Play",
+      "select": "Select",
+      "unselect": "Unselect"
+    },
+    "profile": {
+      "renamed": "Profile renamed.",
+      "renameFailed": "Failed to rename profile."
+    },
+    "list": {
+      "searchPlaceholder": "Search...",
+      "activeBadge": "Active",
+      "playSelectedTitle": "Launch game with this profile",
+      "playtimeLabel": "Playtime",
+      "empty": "No profiles yet. Click “Create” to add one.",
+      "layout": {
+        "list": "List",
+        "grid": "Grid"
+      }
+    },
+    "create": {
+      "title": "Create profile",
+      "uploadIcon": "Upload\nicon",
+      "removeIcon": "Remove icon",
+      "nameLabel": "Name:",
+      "namePlaceholder": "Enter profile name...",
+      "loaderLabel": "Loader:",
+      "gameVersionLabel": "Game version:",
+      "allVersions": "All versions"
+    },
+    "import": {
+      "title": "Import Modrinth pack",
+      "chooseFile": "Choose file",
+      "progress": {
+        "preparing": "Preparing…",
+        "extractingOverrides": "Extracting pack overrides…",
+        "downloading": "Downloading: {{current}} / {{total}}{{msg}}",
+        "importing": "Importing…"
+      },
+      "dropzone": {
+        "title": "Drag & drop a .mrpack file here",
+        "hint": "A new profile will be created with the pack name and game version from the .mrpack. Mods and resources will be downloaded automatically."
+      }
+    }
+  },
+  "app": {
+    "sidebar": {
+      "play": "Play",
+      "settings": "Settings",
+      "mods": "Mods",
+      "modpacks": "Modpacks"
+    },
+    "accounts": {
+      "editNickname": "Edit nickname",
+      "nicknamePlaceholder": "Player",
+      "signedInAsPrefix": "Signed in as: ",
+      "hint": "Configure your profile and appearance after you sign in.",
+      "microsoftSignIn": "Sign in with Microsoft",
+      "microsoftLogout": "Log out of Microsoft",
+      "elyLogout": "Log out of Ely.by",
+      "elyWaiting": "Waiting for login…",
+      "elyDialogTitle": "If the page in your browser is loading forever:",
+      "elyDialogTip": "It is better to open it in a new tab of the same browser. In another browser Ely.by may show “Invalid request”.",
+      "toast": {
+        "nicknameSaved": "Changes saved!",
+        "nicknameSaveFailed": "Failed to save nickname.",
+        "elyLoggedOut": "You have logged out of Ely.by.",
+        "elyLogoutFailed": "Failed to log out from Ely.by.",
+        "msLoggedOut": "You have logged out of Microsoft.",
+        "msLogoutFailed": "Failed to log out of Microsoft."
+      }
+    },
+    "toast": {
+      "settingsSaved": "Settings saved!",
+      "downloadStarted": "Download started!",
+      "downloadFinished": "Download finished!",
+      "copy": "Copy",
+      "copied": "Copied!"
+    },
+    "dialog": {
+      "imagesFilterName": "Images"
+    },
+    "playAction": {
+      "play": "PLAY",
+      "install": "Install"
+    },
+    "errors": {
+      "openFolderFailed": "Failed to open folder: {{msg}}",
+      "forgeVersionsLoadFailed": "Failed to load Forge versions. Check access to files.minecraftforge.net: {{msg}}",
+      "neoforgeVersionsLoadFailed": "Failed to load NeoForge versions: {{msg}}",
+      "versionsLoadFailed": "Failed to load versions list: {{msg}}",
+      "launchError": "Launch error: {{msg}}",
+      "installError": "Installation error: {{msg}}"
+    },
+    "warnings": {
+      "selectProfileFirst": "Select a profile first, then click “Play”."
+    }
+  }
+}
