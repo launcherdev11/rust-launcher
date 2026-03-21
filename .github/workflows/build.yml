@@ -1,0 +1,178 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      make_release:
+        description: 'Create Github Release?'
+        type: boolean
+        required: true
+        default: false
+      version:
+        description: "Release version tag (e.g. v1.0.0)"
+        required: false
+        default: "v2.0.0"
+
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: CI checks (frontend deps + Rust check/clippy)
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            pkg-config
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build Vite frontend
+        run: npm run build
+
+      - name: Setup Rust toolchain (clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-check-
+
+      - name: Check Rust code compiles
+        working-directory: src-tauri
+        run: cargo check --locked
+
+      - name: Lint Rust code (clippy)
+        working-directory: src-tauri
+        run: cargo clippy --locked
+
+  build:
+    name: Build Tauri bundles (${{ matrix.label }})
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+          - os: macos-latest
+            label: macos
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            pkg-config \
+            libwayland-dev \
+            libxkbcommon-dev \
+            wayland-protocols
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Build Tauri bundles and create Release (with updater artifacts)
+        id: tauri_build
+        uses: tauri-apps/tauri-action@v0.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: .
+          tauriScript: "npm run tauri"
+          includeDebug: false
+          includeRelease: true
+          tagName: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true' && github.event.inputs.version) || '' }}
+          releaseName: "16Launcher ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version) || 'v0.0.0' }}"
+          releaseBody: "Автоматический релиз 16Launcher."
+
+      - name: Upload bundles as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 16Launcher-${{ matrix.label }}
+          path: |
+            src-tauri/target/release/bundle/**
+

@@ -181,7 +181,13 @@
       "noneFound": "No new updates were found.",
       "installedRestart": "Update installed. Please restart the launcher.",
       "availableNextStart": "A new launcher version is available: {{version}}. Installation will be offered on the next start.",
-      "checkFailed": "Failed to check for updates."
+      "checkFailed": "Failed to check for updates.",
+      "checking": "Checking for updates...",
+      "downloading": "Downloading update... {{percent}}%",
+      "installing": "Installing update...",
+      "available": "New version {{version}} is available",
+      "installNow": "Install now",
+      "upToDate": "Launcher is up to date"
     }
   },
   "javaSettings": {
@@ -386,6 +392,7 @@
         "nicknameSaveFailed": "Failed to save nickname.",
         "elyLoggedOut": "You have logged out of Ely.by.",
         "elyLogoutFailed": "Failed to log out from Ely.by.",
+        "msAuthUnavailable": "Microsoft authorization is unavailable.",
         "msLoggedOut": "You have logged out of Microsoft.",
         "msLogoutFailed": "Failed to log out of Microsoft."
       }
@@ -397,12 +404,28 @@
       "copy": "Copy",
       "copied": "Copied!"
     },
+    "social": {
+      "discord": "Join our Discord!\nChat with the team and share your emotions!",
+      "telegram": "Follow our Telegram!\nGet the latest launcher updates!",
+      "joinButton": "Join",
+      "subscribeButton": "Subscribe",
+      "laterButton": "Later"
+    },
     "dialog": {
       "imagesFilterName": "Images"
     },
+    "help": {
+      "title": "About Launcher",
+      "mainInfo": "16Launcher is a free Minecraft launcher with support for Fabric, Forge, Quilt, NeoForge.",
+      "icons": "Icons from",
+      "mojangDisclaimer": "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\n\n16Launcher is in no way affiliated with Mojang Studios, nor should it be considered a project endorsed by Mojang Studios.",
+      "apis": "We use Modrinth and Ely.by APIs",
+      "close": "Close"
+    },
     "playAction": {
       "play": "PLAY",
-      "install": "Install"
+      "install": "Install",
+      "stop": "STOP"
     },
     "errors": {
       "openFolderFailed": "Failed to open folder: {{msg}}",
@@ -410,7 +433,8 @@
       "neoforgeVersionsLoadFailed": "Failed to load NeoForge versions: {{msg}}",
       "versionsLoadFailed": "Failed to load versions list: {{msg}}",
       "launchError": "Launch error: {{msg}}",
-      "installError": "Installation error: {{msg}}"
+      "installError": "Installation error: {{msg}}",
+      "stopError": "Stop error: {{msg}}"
     },
     "warnings": {
       "selectProfileFirst": "Select a profile first, then click “Play”."

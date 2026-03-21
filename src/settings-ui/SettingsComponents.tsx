@@ -15,6 +15,7 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
   yesLabel,
   noLabel,
 }) => {
+  const accentVar = "var(--accent-color)";
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="text-sm text-white/90">{label}</span>
@@ -24,9 +25,10 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
           onClick={() => onChange(true)}
           className={`interactive-press min-w-[64px] rounded-full px-4 py-1.5 text-xs font-semibold ${
             value
-              ? "bg-[#4b9dff] text-white shadow-soft"
+              ? "text-white shadow-soft"
               : "text-white/60 hover:text-white"
           }`}
+          style={value ? { backgroundColor: accentVar } : undefined}
         >
           {yesLabel ?? "Yes"}
         </button>
@@ -35,9 +37,10 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
           onClick={() => onChange(false)}
           className={`interactive-press min-w-[64px] rounded-full px-4 py-1.5 text-xs font-semibold ${
             !value
-              ? "bg-[#3a3f4a] text-white shadow-soft"
+              ? "text-white shadow-soft"
               : "text-white/60 hover:text-white"
           }`}
+          style={!value ? { backgroundColor: accentVar } : undefined}
         >
           {noLabel ?? "No"}
         </button>

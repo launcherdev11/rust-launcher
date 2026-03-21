@@ -11,7 +11,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { check as checkLauncherUpdates } from "@tauri-apps/plugin-updater";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
 import {
   SettingsToggle,
@@ -35,7 +36,7 @@ type Profile = {
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
-type SettingsTabId = "directories" | "game" | "versions" | "launcher" | "updates";
+type SettingsTabId = "directories" | "game" | "versions" | "launcher";
 
 type Language = "ru" | "en";
 
@@ -54,6 +55,7 @@ type Settings = {
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
+  interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
 };
@@ -125,10 +127,179 @@ type NotificationKind = "info" | "success" | "error" | "warning";
 
 type Notification = {
   id: number;
-  kind: NotificationKind;
+  kind?: NotificationKind;
   message: string;
   leaving?: boolean;
+  // For remote notifications coming from notifications.json
+  colorMsg?: string;
+  iconMsg?: string;
 };
+
+function appendAlphaToHex(hex: string, alpha01: number): string {
+  const a = Math.round(Math.max(0, Math.min(1, alpha01)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  // Expect format: #RRGGBB
+  return `${hex}${a}`.toUpperCase();
+}
+
+function isHexColor(value: string): value is `#${string}` {
+  return /^#([0-9a-fA-F]{6})$/.test(value.trim());
+}
+
+function getTextColorForHexBg(hex: string): "black" | "white" {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return "white";
+  const raw = m[1];
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  // Relative luminance shortcut
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 160 ? "black" : "white";
+}
+
+function resolveRemoteNotificationIconSrc(iconMsg?: string): string | null {
+  if (!iconMsg) return null;
+  const v = iconMsg.trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v) || v.startsWith("/")) return v;
+
+  // Accept plain asset filename like "success.png" (existing launcher assets live in /launcher-assets/)
+  if (/^[a-zA-Z0-9_-]+\.(png|webp|gif)$/i.test(v)) {
+    return `/launcher-assets/${v}`;
+  }
+
+  const lower = v.toLowerCase();
+  if (lower === "info") return "/launcher-assets/info.png";
+  if (lower === "success") return "/launcher-assets/success.png";
+  if (lower === "error") return "/launcher-assets/errorIcon.png";
+  if (lower === "warning" || lower === "warn") return "/launcher-assets/warn.png";
+
+  return null;
+}
+
+function normalizeOptionalString(value?: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const v = value.trim();
+  return v.length > 0 ? v : undefined;
+}
+
+function resolveRemoteNotificationKindFromColorMsg(colorMsg?: string): NotificationKind | null {
+  const c = normalizeOptionalString(colorMsg)?.toLowerCase();
+  if (!c) return null;
+
+  // Requested mapping
+  if (c === "red") return "error";
+  if (c === "green") return "success";
+  if (c === "yellow") return "warning";
+  if (c === "gray" || c === "grey") return "info";
+
+  // Allow direct system kind names too (future-proof)
+  if (c === "info") return "info";
+  if (c === "success") return "success";
+  if (c === "error") return "error";
+  if (c === "warning") return "warning";
+
+  return null;
+}
+
+function resolveRemoteNotificationBgStyle(
+  colorMsg?: string,
+): { background: string; border: string; textColor: "black" | "white" } | null {
+  if (!colorMsg) return null;
+  const v = colorMsg.trim();
+  if (!v) return null;
+
+  if (isHexColor(v)) {
+    const background = appendAlphaToHex(v.toUpperCase(), 0.95);
+    const border = appendAlphaToHex(v.toUpperCase(), 0.45);
+    const textColor = getTextColorForHexBg(v);
+    return { background, border, textColor };
+  }
+
+  // Fallback: use given string as background.
+  // We cannot reliably compute contrast for non-hex colors.
+  return {
+    background: v,
+    border: "rgba(255, 255, 255, 0.35)",
+    textColor: "white",
+  };
+}
+
+type RemoteNotificationsJsonItem = {
+  // Requested keys in notifications.json
+  "color-msg"?: string;
+  "icon-msg"?: string;
+  "text-msg"?: string;
+
+  // Optional camelCase fallbacks (in case you change JSON later)
+  colorMsg?: string;
+  iconMsg?: string;
+  textMsg?: string;
+
+  // Optional placement hint
+  type?: string;
+};
+
+type BottomSocialKind = "discord" | "telegram";
+
+type BottomSocialNotification = {
+  id: number;
+  kind: BottomSocialKind;
+  colorMsg?: string;
+  iconMsg?: string;
+  textMsg?: string;
+  messageKey?: "app.social.discord" | "app.social.telegram";
+  leaving?: boolean;
+};
+
+function SocialIcon({ kind }: { kind: BottomSocialKind }) {
+  const src = kind === "discord" ? "/launcher-assets/discord.png" : "/launcher-assets/telegram.png";
+  const [broken, setBroken] = useState(false);
+
+  if (broken) {
+    return (
+      <span className="text-sm font-extrabold text-white">
+        {kind === "discord" ? "D" : "T"}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-5 w-5 object-contain"
+      draggable={false}
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
+function getRemoteItemField(item: RemoteNotificationsJsonItem, hyphenKey: string, camelKey: string) {
+  // @ts-expect-error - allow dynamic key access
+  return item[hyphenKey] ?? (item as any)[camelKey];
+}
+
+function splitTitleAndSubtitle(textMsg: string): { title: string; subtitle?: string } {
+  const normalized = (textMsg ?? "").trim();
+  if (!normalized) return { title: "" };
+  const parts = normalized.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 1) return { title: parts[0] };
+  return { title: parts[0], subtitle: parts.slice(1).join("\n") };
+}
+
+// Cache-busting helps avoid stale CDN content (jsDelivr caches aggressively).
+const NOTIFICATIONS_CACHE_BUST = `?t=${Date.now()}`;
+const REMOTE_NOTIFICATIONS_URLS = [
+  // raw GitHub often updates faster than jsDelivr CDN
+  `https://raw.githubusercontent.com/16steyy/16Launcher-News/main/notifications.json${NOTIFICATIONS_CACHE_BUST}`,
+  `https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/notifications.json${NOTIFICATIONS_CACHE_BUST}`,
+];
+
+const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
+const TELEGRAM_LINK = "https://t.me/of16launcher";
 
 const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
 
@@ -373,20 +544,34 @@ function App() {
   const [installPaused, setInstallPaused] = useState(false);
   const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
+  const didLoadedRemoteNotificationsRef = useRef(false);
+  const didLoadedBottomSocialRef = useRef(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
+  const [updateStatus, setUpdateStatus] = useState<
+    "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
+  >("idle");
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [updateDownloadPercent, setUpdateDownloadPercent] = useState<number | null>(null);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>("ru");
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const tt = useT(language);
+  const isAuthorized = !!profile.ms_id_token || !!profile.ely_username;
+  const displayedNickname =
+    profile.nickname.trim() !== ""
+      ? profile.nickname
+      : profile.ely_username ?? "";
   const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>([]);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
+  const [isStopping, setIsStopping] = useState(false);
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
-  const didCheckUpdatesOnStartRef = useRef(false);
 
   const skinHeadSrc = useMemo(() => {
     const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
@@ -475,6 +660,26 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!settings) return;
+    let lang = settings.interface_language;
+    if (lang !== "ru" && lang !== "en") {
+      try {
+        const saved = window.localStorage.getItem("launcher_language");
+        if (saved === "ru" || saved === "en") {
+          lang = saved;
+          invoke("set_settings", {
+            settings: { ...settings, interface_language: lang },
+          }).catch(() => {});
+        }
+      } catch {
+      }
+    }
+    if (lang === "ru" || lang === "en") {
+      setLanguage(lang);
+    }
+  }, [settings]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const checkStatus = async () => {
@@ -518,9 +723,11 @@ function App() {
   }, [consoleLines]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem("launcher_language", language);
-    } catch {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("launcher_language", language);
+      } catch {
+      }
     }
   }, [language]);
 
@@ -595,33 +802,6 @@ function App() {
       }, 4300);
     },
     [settings],
-  );
-
-  const copyToClipboard = useCallback(
-    async (text: string) => {
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch {
-        try {
-          const ta = document.createElement("textarea");
-          ta.value = text;
-          ta.style.position = "fixed";
-          ta.style.left = "-10000px";
-          ta.style.top = "-10000px";
-          ta.setAttribute("readonly", "true");
-          document.body.appendChild(ta);
-          ta.focus();
-          ta.select();
-          const ok = document.execCommand("copy");
-          document.body.removeChild(ta);
-          return ok;
-        } catch {
-          return false;
-        }
-      }
-    },
-    [],
   );
 
   const showSettingsSavedNotification = useCallback(() => {
@@ -726,6 +906,7 @@ function App() {
     [showSettingsSavedNotification],
   );
 
+
   useEffect(() => {
     (async () => {
       await refreshSettings();
@@ -742,36 +923,246 @@ function App() {
     })();
   }, [refreshSettings]);
 
+  // Remote notifications (system + bottom social prompts)
   useEffect(() => {
     if (!settings) return;
-    if (didCheckUpdatesOnStartRef.current) return;
+    if (didLoadedRemoteNotificationsRef.current) return;
 
-    didCheckUpdatesOnStartRef.current = true;
-
-    if (!settings.check_updates_on_start) return;
-
+    const controller = new AbortController();
     (async () => {
       try {
-        const update = await checkLauncherUpdates();
-        if (!update) return;
+        let raw: unknown = null;
+        let lastError: unknown = null;
 
-        if (settings.auto_install_updates) {
-          await update.downloadAndInstall();
-          if (settings.notify_new_update) {
-            showNotification("success", tt("settings.updates.installedRestart"));
+        for (const url of REMOTE_NOTIFICATIONS_URLS) {
+          // If one CDN endpoint hangs, quickly try the next one.
+          const requestController = new AbortController();
+          const timeoutId = window.setTimeout(() => requestController.abort(), 6500);
+
+          try {
+            const response = await fetch(url, {
+              signal: requestController.signal,
+              cache: "no-store",
+            });
+
+            if (!response.ok) {
+              throw new Error(`Failed to load notifications: ${response.status}`);
+            }
+
+            // Some repo JSON files may contain trailing commas (invalid JSON),
+            // so we parse manually with a small sanitizer.
+            const text = await response.text();
+            const sanitized = text.replace(/,\s*([}\]])/g, "$1");
+            raw = JSON.parse(sanitized) as unknown;
+            break;
+          } catch (e) {
+            lastError = e;
+          } finally {
+            window.clearTimeout(timeoutId);
           }
-        } else if (settings.notify_new_update) {
-          showNotification(
-            "warning",
-            tt("settings.updates.availableNextStart", { version: update.version }),
-          );
         }
+
+        if (!raw) {
+          console.warn("Remote notifications failed to load:", lastError);
+          return;
+        }
+
+        let items: RemoteNotificationsJsonItem[] = [];
+        if (Array.isArray(raw)) {
+          items = raw as RemoteNotificationsJsonItem[];
+        } else if (raw && typeof raw === "object") {
+          const obj = raw as any;
+          if (Array.isArray(obj.notifications)) {
+            items = obj.notifications as RemoteNotificationsJsonItem[];
+          } else if (Array.isArray(obj.items)) {
+            items = obj.items as RemoteNotificationsJsonItem[];
+          }
+        }
+
+        const normalized = items
+          .map((item) => {
+            const colorMsg = getRemoteItemField(item, "color-msg", "colorMsg");
+            const iconMsg = getRemoteItemField(item, "icon-msg", "iconMsg");
+            const textMsg = getRemoteItemField(item, "text-msg", "textMsg");
+
+            const color = normalizeOptionalString(colorMsg);
+            const icon = normalizeOptionalString(iconMsg);
+            const text = normalizeOptionalString(textMsg) ?? "";
+            return {
+              item,
+              colorMsg: color,
+              iconMsg: icon,
+              textMsg: text,
+            };
+          })
+          .filter((x) => x.textMsg.length > 0);
+
+        const system: Array<
+          Pick<Notification, "colorMsg" | "iconMsg" | "message" | "kind">
+        > = [];
+
+        for (const n of normalized) {
+          const kindFromColor = resolveRemoteNotificationKindFromColorMsg(n.colorMsg);
+          system.push({
+            message: n.textMsg,
+            colorMsg: n.colorMsg,
+            iconMsg: n.iconMsg,
+            kind: kindFromColor ?? undefined,
+          });
+        }
+
+        // Mark as loaded only after we successfully fetched + parsed JSON.
+        didLoadedRemoteNotificationsRef.current = true;
+
+        if (system.length === 0) return;
+        if (!settings.notify_system_message) return;
+
+        for (const s of system) {
+          const id = Date.now() + Math.random();
+
+          setNotifications((prev) => [...prev, { id, ...s }]);
+
+          setTimeout(() => {
+            setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)));
+            setTimeout(() => {
+              setNotifications((prev) => prev.filter((n) => n.id !== id));
+            }, 200);
+          }, 4300);
+        }
+
       } catch (e) {
-        console.error("Failed to check for updates:", e);
-        showNotification("error", tt("settings.updates.checkFailed"));
+        if (controller.signal.aborted) return;
+        console.error("Failed to load remote notifications:", e);
       }
     })();
-  }, [settings, showNotification, tt]);
+
+    return () => controller.abort();
+  }, [settings]);
+
+  // Bottom-right social prompts (independent from notifications.json)
+  useEffect(() => {
+    if (didLoadedBottomSocialRef.current) return;
+    didLoadedBottomSocialRef.current = true;
+
+    const showDiscordInitial = Math.random() < 0.5;
+    const showTelegramInitial = Math.random() < 0.5;
+    // Ensure at least one card is shown.
+    const showDiscord =
+      showDiscordInitial || (!showDiscordInitial && !showTelegramInitial)
+        ? showDiscordInitial || Math.random() < 0.5
+        : false;
+    const showTelegram = !showDiscord && (showTelegramInitial || Math.random() < 0.5);
+
+    const cards: BottomSocialNotification[] = [];
+
+    if (showDiscord) {
+      cards.push({
+        id: Date.now() + Math.random(),
+        kind: "discord",
+        colorMsg: "#5865F2",
+        iconMsg: undefined,
+        messageKey: "app.social.discord",
+      });
+    }
+
+    if (showTelegram) {
+      cards.push({
+        id: Date.now() + Math.random(),
+        kind: "telegram",
+        colorMsg: "#229ED9",
+        iconMsg: undefined,
+        messageKey: "app.social.telegram",
+      });
+    }
+
+    if (cards.length > 0) setBottomSocialNotifications(cards);
+  }, []);
+
+  const checkForUpdate = useCallback(async (silent = false) => {
+    try {
+      setUpdateStatus("checking");
+      setUpdateVersion(null);
+      const update = await check();
+      if (update) {
+        setUpdateVersion(update.version);
+        setUpdateStatus("available");
+        if (!silent && settings?.notify_new_update) {
+          showNotification(
+            "info",
+            tt("settings.updates.available", { version: update.version }),
+          );
+        }
+        if (settings?.auto_install_updates) {
+          void installUpdate(update);
+        }
+      } else {
+        setUpdateStatus("up-to-date");
+        if (!silent) {
+          showNotification("success", tt("settings.updates.noneFound"));
+        }
+      }
+    } catch (e) {
+      console.error("Update check failed:", e);
+      setUpdateStatus("error");
+      if (!silent) {
+        showNotification("error", tt("settings.updates.checkFailed"));
+      }
+    }
+  }, [settings?.notify_new_update, settings?.auto_install_updates, showNotification, tt]);
+
+  const installUpdate = useCallback(
+    async (
+      upd?: import("@tauri-apps/plugin-updater").Update | null,
+    ) => {
+      let update = upd;
+      if (!update && updateVersion) {
+        setUpdateStatus("checking");
+        const u = await check();
+        if (!u) {
+          setUpdateStatus("available");
+          return;
+        }
+        update = u;
+      }
+      if (!update) return;
+      try {
+        setUpdateStatus("downloading");
+        setUpdateDownloadPercent(0);
+        let downloaded = 0;
+        let total = 0;
+        await update.download((event) => {
+          if (event.event === "Started" && event.data?.contentLength) {
+            total = event.data.contentLength;
+            downloaded = 0;
+          } else if (event.event === "Progress" && event.data?.chunkLength) {
+            downloaded += event.data.chunkLength;
+            if (total > 0) {
+              setUpdateDownloadPercent(Math.min(99, Math.round((downloaded / total) * 100)));
+            }
+          }
+        });
+        setUpdateStatus("installing");
+        setUpdateDownloadPercent(100);
+        await update.install();
+        showNotification("success", tt("settings.updates.installedRestart"));
+        await relaunch();
+      } catch (e) {
+        console.error("Update install failed:", e);
+        setUpdateStatus("available");
+        setUpdateDownloadPercent(null);
+        showNotification("error", tt("settings.updates.checkFailed"));
+      }
+    },
+    [updateVersion, showNotification, tt],
+  );
+
+  useEffect(() => {
+    if (settings?.check_updates_on_start === false) return;
+    const t = setTimeout(() => {
+      void checkForUpdate(true);
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [settings?.check_updates_on_start, checkForUpdate]);
 
   useEffect(() => {
     (async () => {
@@ -1089,32 +1480,7 @@ function App() {
   };
 
   const handleMicrosoftLogin = async () => {
-    setElyLoading(true);
-    try {
-      const unlisten = await listen<Profile>("ms-login-complete", (e) => {
-        const p = e.payload;
-        setProfile({
-          nickname: p.nickname ?? "",
-          ely_username: p.ely_username ?? null,
-          ely_uuid: p.ely_uuid ?? null,
-          ms_id_token: p.ms_id_token ?? null,
-          mc_uuid: p.mc_uuid ?? null,
-        });
-        setElyLoading(false);
-        unlisten();
-      });
-
-      const url = await invoke<string>("start_ms_oauth");
-      try {
-        await openUrl(url);
-      } catch (e) {
-        console.error("Не удалось открыть браузер для Microsoft OAuth:", e);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showNotification("error", msg);
-      setElyLoading(false);
-    }
+    showNotification("warning", tt("app.accounts.toast.msAuthUnavailable"));
   };
 
   const handleMicrosoftLogout = async () => {
@@ -1148,16 +1514,20 @@ function App() {
     return installedIds;
   }, [installedGameVersions, installedIds, loader]);
 
-  const primaryColorClasses = isInstalled
-    ? "accent-bg hover:opacity-90"
-    : "accent-bg hover:opacity-90";
+  const primaryColorClasses =
+    gameStatus === "running" || isStopping
+      ? "bg-red-600 hover:bg-red-500"
+      : "accent-bg hover:opacity-90";
 
   const primaryLabel = useMemo(() => {
+    if (gameStatus === "running" || isStopping) {
+      return tt("app.playAction.stop");
+    }
     if (isInstalled) {
       return tt("app.playAction.play");
     }
     return tt("app.playAction.install");
-  }, [isInstalled, tt]);
+  }, [gameStatus, isStopping, isInstalled, tt]);
 
   const handleToggleConsole = () => {
     setIsConsoleVisible((prev) => !prev);
@@ -1258,9 +1628,26 @@ function App() {
   };
 
   const handlePrimaryClick = async () => {
-    if (!selectedVersion || isInstalling) return;
+    if (!selectedVersion || isInstalling || isStopping) return;
 
     if (isInstalled) {
+      if (gameStatus === "running") {
+        setIsStopping(true);
+        try {
+          await invoke("stop_game");
+          // Avoid "crashed" heuristics on the next polling tick.
+          lastRunningRef.current = false;
+          setGameStatus("stopped");
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error("Ошибка остановки игры:", error);
+          showNotification("error", tt("app.errors.stopError", { msg }));
+        } finally {
+          setIsStopping(false);
+        }
+        return;
+      }
+
       try {
         await invoke("set_profile", {
           nickname: profile.nickname,
@@ -1324,7 +1711,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setFabricProfileId(profileId);
-        showNotification("success", "Загрузка завершена!");
+        showNotification("success", tt("app.toast.downloadFinished"));
         setIsInstalling(false);
         return;
       } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
@@ -1334,7 +1721,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setQuiltProfileId(profileId);
-        showNotification("success", "Загрузка завершена!");
+        showNotification("success", tt("app.toast.downloadFinished"));
         setIsInstalling(false);
         return;
       } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
@@ -1444,6 +1831,7 @@ function App() {
             "pointer-events-auto group flex max-w-xl items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-soft";
           let bgClasses = "";
           let iconSrc = "";
+          let style: React.CSSProperties | undefined;
 
           if (n.kind === "info") {
             bgClasses = "bg-neutral-800/90 border border-white/35 text-white";
@@ -1454,9 +1842,30 @@ function App() {
           } else if (n.kind === "error") {
             bgClasses = "bg-red-700/95 border border-red-400/70 text-white";
             iconSrc = "/launcher-assets/errorIcon.png";
-          } else {
+          } else if (n.kind === "warning") {
             bgClasses = "bg-amber-500/95 border border-amber-300/70 text-black";
             iconSrc = "/launcher-assets/warn.png";
+          } else {
+            // Remote/custom notification rendering
+            const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);
+            iconSrc = resolvedIcon ?? "/launcher-assets/icon.png";
+            const resolvedBg = resolveRemoteNotificationBgStyle(n.colorMsg);
+            if (resolvedBg) {
+              style = {
+                backgroundColor: resolvedBg.background,
+                border: `1px solid ${resolvedBg.border}`,
+                color: resolvedBg.textColor === "black" ? "#000" : "#fff",
+              };
+            } else {
+              // If we don't have custom style, fallback to a neutral card.
+              bgClasses = "bg-neutral-800/90 border border-white/35 text-white";
+            }
+          }
+
+          // Allow overriding launcher default icon via icon-msg (e.g. "success.png")
+          if (n.iconMsg) {
+            const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);
+            if (resolvedIcon) iconSrc = resolvedIcon;
           }
 
           return (
@@ -1467,37 +1876,175 @@ function App() {
                   ? "animate-notification-slide-out"
                   : "animate-notification-slide-in"
               }`}
+              style={style}
             >
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/15">
                 <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
               </div>
-              <span className="whitespace-pre-line select-text flex-1 break-words">
+              <span className="whitespace-pre-line flex-1 break-words">
                 {n.message}
               </span>
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const ok = await copyToClipboard(n.message);
-                  if (ok) showNotification("success", tt("app.toast.copied"));
-                }}
-                title={tt("app.toast.copy")}
-                className="interactive-press shrink-0 rounded-md bg-black/20 px-2 py-1 text-xs text-white/70 transition-opacity opacity-0 group-hover:opacity-100 hover:bg-black/35 hover:text-white"
-              >
-                {tt("app.toast.copy")}
-              </button>
             </div>
           );
         })}
       </div>
 
+      <div className="pointer-events-auto fixed bottom-6 right-6 z-50 flex w-[360px] flex-col gap-3">
+        {bottomSocialNotifications.map((n) => {
+          const text = n.messageKey ? tt(n.messageKey) : (n.textMsg ?? "");
+          const { title, subtitle } = splitTitleAndSubtitle(text);
+          const colorFallback = n.kind === "discord" ? "#5865F2" : "#229ED9";
+          const hexForShadow =
+            typeof n.colorMsg === "string" && n.colorMsg.trim().startsWith("#")
+              ? n.colorMsg.trim()
+              : null;
+
+          const primaryLabel =
+            n.kind === "discord" ? tt("app.social.joinButton") : tt("app.social.subscribeButton");
+          const laterLabel = tt("app.social.laterButton");
+          const link = n.kind === "discord" ? DISCORD_LINK : TELEGRAM_LINK;
+
+          return (
+            <div
+              key={n.id}
+              className={`relative rounded-2xl border border-white/10 bg-black/35 p-4 backdrop-blur-lg shadow-[0_0_12px_rgba(0,0,0,0.25)] ${
+                n.leaving ? "animate-notification-slide-out" : "animate-notification-slide-in"
+              }`}
+              style={{
+                borderColor: hexForShadow ? `${hexForShadow}33` : undefined,
+                boxShadow: hexForShadow ? `0 0 14px ${hexForShadow}33` : undefined,
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full"
+                  style={{ backgroundColor: n.colorMsg ?? colorFallback }}
+                >
+                  <SocialIcon kind={n.kind} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold leading-tight">{title}</div>
+                  {subtitle && (
+                    <div className="mt-1 whitespace-pre-line text-xs leading-snug text-white/70">
+                      {subtitle}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className="interactive-press flex-1 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setBottomSocialNotifications((prev) =>
+                      prev.map((x) => (x.id === n.id ? { ...x, leaving: true } : x)),
+                    );
+                    window.setTimeout(() => {
+                      setBottomSocialNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                    }, 180);
+                    try {
+                      await openUrl(link);
+                    } catch (err) {
+                      console.error("Failed to open link:", err);
+                    }
+                  }}
+                >
+                  {primaryLabel}
+                </button>
+
+                <button
+                  type="button"
+                  className="interactive-press flex-1 rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setBottomSocialNotifications((prev) =>
+                      prev.map((x) => (x.id === n.id ? { ...x, leaving: true } : x)),
+                    );
+                    window.setTimeout(() => {
+                      setBottomSocialNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                    }, 180);
+                  }}
+                >
+                  {laterLabel}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {showHelpModal && (
+        <div
+          className="pointer-events-auto fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowHelpModal(false)}
+        >
+          <div
+            className="glass-panel w-[min(90vw,28rem)] max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <img src="/launcher-assets/help.png" alt="" className="h-8 w-8 object-contain opacity-90" />
+              <h2 className="text-base font-semibold text-white">{tt("app.help.title")}</h2>
+            </div>
+            <div className="space-y-4 text-sm text-white/90 leading-relaxed">
+              <p>{tt("app.help.mainInfo")}</p>
+              <p>
+                {tt("app.help.icons")}{" "}
+                <button
+                  type="button"
+                  className="text-amber-400 hover:text-amber-300 underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await openUrl("https://icons8.ru/icons");
+                    } catch (err) {
+                      console.error("Failed to open link:", err);
+                    }
+                  }}
+                >
+                  icons8.ru
+                </button>
+              </p>
+              <p className="text-xs text-white/70 whitespace-pre-line">
+                {tt("app.help.mojangDisclaimer")}
+              </p>
+              <p className="text-white/80">
+                {tt("app.help.apis")}
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                {tt("app.help.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className="relative z-20 flex h-9 items-center justify-between px-4 select-none"
         onMouseDown={handleTitleBarMouseDown}
       >
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/40 select-none">
+        <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-white/40 select-none">
           <span>16Launcher</span>
+          <button
+            type="button"
+            onClick={() => setShowHelpModal(true)}
+            className="interactive-press flex h-6 w-6 items-center justify-center rounded-md bg-black/20 text-white/60 hover:bg-black/40 hover:text-white/90 transition-colors"
+            title={tt("app.help.title")}
+            data-no-drag
+          >
+            <img src="/launcher-assets/help.png" alt="" className="h-3.5 w-3.5 object-contain" />
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1619,24 +2166,24 @@ function App() {
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={profile.nickname}
+                      value={displayedNickname}
                       onChange={(e) => setProfile((p) => ({ ...p, nickname: e.target.value }))}
                       onBlur={(e) => {
                         const v = e.target.value.trim();
-                        if (v !== profile.nickname) handleSaveNickname(v);
+                        if (!isAuthorized && v !== profile.nickname) handleSaveNickname(v);
                       }}
                       placeholder={tt("app.accounts.nicknamePlaceholder")}
                       className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
-                      disabled={profileSaving}
+                      disabled={profileSaving || isAuthorized}
                     />
-                    <span className="text-white/50" title={tt("app.accounts.editNickname")}>
-                      <PencilIcon />
-                    </span>
+                    {!isAuthorized && (
+                      <span className="text-white/50" title={tt("app.accounts.editNickname")}>
+                        <PencilIcon />
+                      </span>
+                    )}
                   </div>
                   {profile.ely_username && (
-                    <p className="mt-0.5 text-xs text-white/60">
-                      {tt("app.accounts.signedInAsPrefix") + profile.ely_username}
-                    </p>
+                    <p className="mt-0.5 text-xs text-white/60">{profile.ely_username}</p>
                   )}
                 </div>
               </div>
@@ -1756,6 +2303,11 @@ function App() {
                 id === "modpacks"
               ) as ("play" | "settings" | "mods" | "modpacks")[]}
               setSidebarOrder={(order) => setSidebarOrder(order)}
+              updateStatus={updateStatus}
+              updateVersion={updateVersion}
+              updateDownloadPercent={updateDownloadPercent}
+              onCheckUpdate={() => void checkForUpdate(false)}
+              onInstallUpdate={() => void installUpdate()}
             />
           ) : (
             <PlayTab

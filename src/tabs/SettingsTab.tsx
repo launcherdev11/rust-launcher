@@ -1,4 +1,3 @@
-import { check } from "@tauri-apps/plugin-updater";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -6,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
 
-type SettingsTabId = "directories" | "game" | "versions" | "launcher" | "updates";
+type SettingsTabId = "directories" | "game" | "versions" | "launcher";
 
 type Language = "ru" | "en";
 
@@ -27,11 +26,21 @@ type Settings = {
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
+  interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
 };
 
 type NotificationKind = "info" | "success" | "error" | "warning";
+
+type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "installing"
+  | "up-to-date"
+  | "error";
 
 type SettingsTabProps = {
   settings: Settings | null;
@@ -47,6 +56,11 @@ type SettingsTabProps = {
   setLanguage: (lang: Language) => void;
   sidebarOrder: SidebarItemId[];
   setSidebarOrder: (order: SidebarItemId[]) => void;
+  updateStatus?: UpdateStatus;
+  updateVersion?: string | null;
+  updateDownloadPercent?: number | null;
+  onCheckUpdate?: () => void;
+  onInstallUpdate?: () => void;
 };
 
 type VersionSummary = {
@@ -77,6 +91,11 @@ export function SettingsTab({
   setLanguage,
   sidebarOrder,
   setSidebarOrder,
+  updateStatus = "idle",
+  updateVersion = null,
+  updateDownloadPercent = null,
+  onCheckUpdate,
+  onInstallUpdate,
 }: SettingsTabProps) {
   const tt = useT(language);
   const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
@@ -371,38 +390,6 @@ export function SettingsTab({
     setIsRamEditing(false);
   };
 
-  const handleManualUpdateCheck = async () => {
-    try {
-      const update = await check();
-      const shouldNotify = settings?.notify_new_update ?? true;
-      if (!update) {
-        if (shouldNotify) {
-          showNotification("info", tt("settings.updates.noneFound"));
-        }
-        return;
-      }
-      if (settings?.auto_install_updates) {
-        await update.downloadAndInstall();
-        if (shouldNotify) {
-          showNotification("success", tt("settings.updates.installedRestart"));
-        }
-      } else {
-        if (shouldNotify) {
-          showNotification(
-            "warning",
-            tt("settings.updates.availableNextStart", { version: update.version }),
-          );
-        }
-      }
-    } catch (e) {
-      console.error("Failed to check for updates:", e);
-      showNotification(
-        "error",
-        tt("settings.updates.checkFailed"),
-      );
-    }
-  };
-
   const [resolutionWidthInput, setResolutionWidthInput] = useState<string>("");
   const [resolutionHeightInput, setResolutionHeightInput] = useState<string>("");
 
@@ -531,9 +518,10 @@ export function SettingsTab({
   };
 
   return (
-    <div className="flex w-full max-w-3xl h-[420px] flex-col">
-      <div className="flex flex-1 items-center justify-center">
-        <div className="glass-panel w-full px-6 py-5">
+    <div className="flex w-full max-w-3xl flex-1 min-h-0 flex-col">
+      <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden">
+        <div className="w-full min-h-0 overflow-y-auto">
+          <div className="glass-panel w-full px-6 py-5">
           {settingsTab === "game" && (
             <SettingsCard title={tt("settings.card.game")}>
               <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1 relative overflow-hidden">
@@ -843,6 +831,78 @@ export function SettingsTab({
           {settingsTab === "launcher" && (
             <SettingsCard title={tt("settings.card.launcher")}>
               <div className="max-h-[310px] overflow-y-auto pr-1 space-y-3">
+              {onCheckUpdate && (
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3 space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                    {tt("settings.card.updates")}
+                  </span>
+                  <SettingsToggle
+                    label={tt("settings.updates.checkOnStart.label")}
+                    yesLabel={tt("settings.common.toggle.on")}
+                    noLabel={tt("settings.common.toggle.off")}
+                    value={settings?.check_updates_on_start ?? true}
+                    onChange={(v) => updateSettings({ check_updates_on_start: v })}
+                  />
+                  <SettingsToggle
+                    label={tt("settings.updates.autoInstall.label")}
+                    yesLabel={tt("settings.common.toggle.on")}
+                    noLabel={tt("settings.common.toggle.off")}
+                    value={settings?.auto_install_updates ?? false}
+                    onChange={(v) => updateSettings({ auto_install_updates: v })}
+                  />
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <span className="text-xs text-white/70">
+                      {updateStatus === "checking" && tt("settings.updates.checking")}
+                      {updateStatus === "downloading" &&
+                        tt("settings.updates.downloading", {
+                          percent: updateDownloadPercent ?? 0,
+                        })}
+                      {updateStatus === "installing" && tt("settings.updates.installing")}
+                      {updateStatus === "available" &&
+                        updateVersion &&
+                        tt("settings.updates.available", { version: updateVersion })}
+                      {updateStatus === "up-to-date" && tt("settings.updates.upToDate")}
+                      {updateStatus === "error" && tt("settings.updates.checkFailed")}
+                      {updateStatus === "idle" && "\u00A0"}
+                    </span>
+                    <div className="flex gap-2">
+                      {updateStatus === "available" && onInstallUpdate && (
+                        <button
+                          type="button"
+                          onClick={() => void onInstallUpdate()}
+                          className="interactive-press rounded-full bg-emerald-500/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+                        >
+                          {tt("settings.updates.installNow")}
+                        </button>
+                      )}
+                      {(updateStatus === "idle" ||
+                        updateStatus === "up-to-date" ||
+                        updateStatus === "error" ||
+                        updateStatus === "available" ||
+                        updateStatus === "checking") && (
+                        <button
+                          type="button"
+                          disabled={updateStatus === "checking"}
+                          onClick={() => void onCheckUpdate()}
+                          className="interactive-press rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/40 hover:text-white disabled:opacity-50"
+                        >
+                          {tt("settings.updates.checkNow")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {updateStatus === "downloading" && updateDownloadPercent != null && (
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-emerald-400 transition-[width]"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, updateDownloadPercent))}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <SettingsToggle
                 label={tt("settings.launcher.openOnProfilesTab.label")}
                 yesLabel={tt("settings.launcher.openOnProfilesTab.yes")}
@@ -851,27 +911,6 @@ export function SettingsTab({
                 onChange={(value: boolean) =>
                   updateSettings({ open_launcher_on_profiles_tab: value })
                 }
-              />
-              <SettingsToggle
-                label={tt("settings.launcher.notifyNewUpdate.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.notify_new_update ?? true}
-                onChange={(value: boolean) => updateSettings({ notify_new_update: value })}
-              />
-              <SettingsToggle
-                label={tt("settings.launcher.notifyNewMessage.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.notify_new_message ?? true}
-                onChange={(value: boolean) => updateSettings({ notify_new_message: value })}
-              />
-              <SettingsToggle
-                label={tt("settings.launcher.notifySystemMessage.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.notify_system_message ?? true}
-                onChange={(value: boolean) => updateSettings({ notify_system_message: value })}
               />
               <div className="mt-3 flex items-center justify-between gap-4">
                 <span className="text-sm text-white/90">
@@ -890,7 +929,10 @@ export function SettingsTab({
                   />
                   <button
                     type="button"
-                    onClick={() => setLanguage("ru")}
+                    onClick={() => {
+                      setLanguage("ru");
+                      updateSettings({ interface_language: "ru" });
+                    }}
                     ref={(el) => {
                       languageTabRefs.current.ru = el;
                     }}
@@ -902,7 +944,10 @@ export function SettingsTab({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setLanguage("en")}
+                    onClick={() => {
+                      setLanguage("en");
+                      updateSettings({ interface_language: "en" });
+                    }}
                     ref={(el) => {
                       languageTabRefs.current.en = el;
                     }}
@@ -1186,38 +1231,6 @@ export function SettingsTab({
             </SettingsCard>
           )}
 
-          {settingsTab === "updates" && (
-            <SettingsCard
-              title={tt("settings.card.updates")}
-            >
-              <SettingsToggle
-                label={tt("settings.updates.checkOnStart.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.check_updates_on_start ?? true}
-                onChange={(value: boolean) => updateSettings({ check_updates_on_start: value })}
-              />
-              <SettingsToggle
-                label={tt("settings.updates.autoInstall.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.auto_install_updates ?? false}
-                onChange={(value: boolean) =>
-                  updateSettings({ auto_install_updates: value })
-                }
-              />
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleManualUpdateCheck}
-                  className="interactive-press mt-1 inline-flex w-full items-center justify-center rounded-2xl accent-bg px-6 py-3 text-sm font-semibold text-white shadow-soft hover:opacity-90"
-                >
-                  {tt("settings.updates.checkNow")}
-                </button>
-              </div>
-            </SettingsCard>
-          )}
-
           {settingsTab === "directories" && (
             <SettingsCard title={tt("settings.card.directories")}>
               <p className="text-sm text-white/70">
@@ -1225,6 +1238,7 @@ export function SettingsTab({
               </p>
             </SettingsCard>
           )}
+          </div>
         </div>
       </div>
 
@@ -1251,10 +1265,6 @@ export function SettingsTab({
               {
                 id: "launcher",
                 label: tt("settings.tab.launcher"),
-              },
-              {
-                id: "updates",
-                label: tt("settings.tab.updates"),
               },
             ] as { id: SettingsTabId; label: string }[]
           ).map((tab) => {
