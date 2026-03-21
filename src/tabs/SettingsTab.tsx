@@ -1242,7 +1242,7 @@ export function SettingsTab({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-center">
+      <div className="mt-4 mb-6 flex items-center justify-center">
         <div className="relative flex items-center gap-0 rounded-full border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
           <div
             className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
