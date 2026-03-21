@@ -1098,14 +1098,14 @@ function App() {
       } else {
         setUpdateStatus("up-to-date");
         if (!silent) {
-          showNotification("success", tt("settings.updates.noneFound"));
+          showNotification("info", tt("settings.updates.noneFound"));
         }
       }
     } catch (e) {
       console.error("Update check failed:", e);
       setUpdateStatus("error");
       if (!silent) {
-        showNotification("error", tt("settings.updates.checkFailed"));
+        showNotification("info", tt("settings.updates.checkFailed"));
       }
     }
   }, [settings?.notify_new_update, settings?.auto_install_updates, showNotification, tt]);
