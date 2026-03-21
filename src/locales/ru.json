@@ -181,7 +181,13 @@
       "noneFound": "Новых обновлений не найдено.",
       "installedRestart": "Обновление установлено. Перезапустите лаунчер.",
       "availableNextStart": "Доступна новая версия лаунчера: {{version}}. Установка будет предложена при следующем запуске.",
-      "checkFailed": "Не удалось проверить обновления."
+      "checkFailed": "Не удалось проверить обновления.",
+      "checking": "Проверка обновлений...",
+      "downloading": "Загрузка обновления... {{percent}}%",
+      "installing": "Установка обновления...",
+      "available": "Доступна новая версия {{version}}",
+      "installNow": "Установить сейчас",
+      "upToDate": "Лаунчер обновлён"
     }
   },
   "javaSettings": {
@@ -386,6 +392,7 @@
         "nicknameSaveFailed": "Не удалось сохранить никнейм.",
         "elyLoggedOut": "Вы вышли из аккаунта Ely.by.",
         "elyLogoutFailed": "Не удалось выйти из аккаунта Ely.by.",
+        "msAuthUnavailable": "Авторизация недоступна.",
         "msLoggedOut": "Вы вышли из аккаунта Microsoft.",
         "msLogoutFailed": "Не удалось выйти из аккаунта Microsoft."
       }
@@ -397,12 +404,28 @@
       "copy": "Скопировать",
       "copied": "Скопировано!"
     },
+    "social": {
+      "discord": "Вступайте в наш Discord!\nОбщайтесь с командой и делитесь эмоциями!",
+      "telegram": "Подпишитесь на наш Telegram!\nСледите за актуальными новостями лаунчера!",
+      "joinButton": "Вступить",
+      "subscribeButton": "Подписаться",
+      "laterButton": "Позже"
+    },
     "dialog": {
       "imagesFilterName": "Изображения"
     },
+    "help": {
+      "title": "О лаунчере",
+      "mainInfo": "16Launcher — бесплатный лаунчер для Minecraft с поддержкой Fabric, Forge, Quilt, NeoForge.",
+      "icons": "Иконки взяты с сайта",
+      "mojangDisclaimer": "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\n\n16Launcher is in no way affiliated with Mojang Studios, nor should it be considered a project endorsed by Mojang Studios.",
+      "apis": "Используем API Modrinth и Ely.by",
+      "close": "Закрыть"
+    },
     "playAction": {
       "play": "ИГРАТЬ",
-      "install": "Установить"
+      "install": "Установить",
+      "stop": "ОСТАНОВИТЬ"
     },
     "errors": {
       "openFolderFailed": "Не удалось открыть папку: {{msg}}",
@@ -410,7 +433,8 @@
       "neoforgeVersionsLoadFailed": "Не удалось загрузить версии NeoForge: {{msg}}",
       "versionsLoadFailed": "Не удалось загрузить список версий: {{msg}}",
       "launchError": "Ошибка запуска: {{msg}}",
-      "installError": "Ошибка установки: {{msg}}"
+      "installError": "Ошибка установки: {{msg}}",
+      "stopError": "Ошибка остановки: {{msg}}"
     },
     "warnings": {
       "selectProfileFirst": "Сначала выберите сборку, затем нажмите «Играть»."

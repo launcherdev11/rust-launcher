@@ -4,9 +4,6 @@ mod ely_auth;
 mod ms_auth;
 mod commands;
 
-#[allow(unused_imports)]
-use tauri_plugin_updater::UpdaterExt;
-
 use game_provider::{
     cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
     fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
@@ -15,7 +12,7 @@ use game_provider::{
     list_installed_fabric_game_versions, list_installed_quilt_game_versions, list_installed_versions,
     open_game_folder, open_profile_folder, reset_download_cancel,
     set_profile, set_selected_profile, get_settings, set_settings, get_effective_settings,
-    is_game_running_now, get_system_memory_gb, delete_item, delete_profile,
+    is_game_running_now, stop_game, get_system_memory_gb, delete_item, delete_profile,
     download_modrinth_file, download_modrinth_modpack_and_import, import_mrpack, import_mrpack_as_new_profile,
     search_curseforge_mods,
     import_modpack_files, update_profile_settings, list_profile_items, rename_profile,
@@ -23,6 +20,7 @@ use game_provider::{
     validate_java_args, detect_java_runtimes, get_profile_java_settings, set_profile_java_settings,
     reset_settings_to_default, get_launcher_cache_size, clear_launcher_cache,
     set_background_image, get_background_data_uri,
+    get_profile_play_time_seconds,
 };
 use commands::{list_build_files, preview_export, export_build};
 use ely_auth::{
@@ -47,6 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|_app| Ok(()))
         .invoke_handler(tauri::generate_handler![
             fetch_all_versions,
@@ -68,6 +67,7 @@ pub fn run() {
             open_profile_folder,
             get_profile,
             get_profiles,
+            get_profile_play_time_seconds,
             create_profile,
             set_profile,
             set_selected_profile,
@@ -75,6 +75,7 @@ pub fn run() {
             set_settings,
             get_effective_settings,
             is_game_running_now,
+            stop_game,
             get_system_memory_gb,
             start_ely_oauth,
             handle_oauth_callback,

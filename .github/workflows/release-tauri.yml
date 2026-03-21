@@ -1,9 +1,7 @@
 name: Release Tauri
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -69,59 +67,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Used by Tauri to sign updater artifacts (required because `bundle.createUpdaterArtifacts = true`)
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: .
           tauriScript: "npm run tauri"
           tagName: "v__VERSION__"
           releaseName: "16Launcher v__VERSION__"
           releaseBody: "Автоматический релиз 16Launcher v__VERSION__."
-
-      - name: Upload updater bundle artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: updater-bundle-${{ matrix.platform }}
-          path: src-tauri/target/release/bundle
-          if-no-files-found: error
-
-  generate-latest-json:
-    name: Generate latest.json for updater
-    runs-on: ubuntu-latest
-    needs: build-and-release
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Download updater bundle artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Merge bundles into target/release/bundle
-        run: |
-          mkdir -p target/release/bundle
-          cp -R artifacts/* target/release/bundle/
-
-      - name: Install tauri-latest-json
-        run: cargo install tauri-latest-json --locked
-
-      - name: Generate latest.json
-        env:
-          NOTES: "Автоматический релиз 16Launcher"
-        run: |
-          download_url_base="${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}"
-          tauri-latest-json "${download_url_base}" "${NOTES}"
-          node -e "const fs=require('fs'); const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')); const latest=JSON.parse(fs.readFileSync('latest.json','utf8')); latest.version=tauri.version; fs.writeFileSync('latest.json', JSON.stringify(latest,null,2));"
-
-      - name: Upload latest.json to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ github.ref_name }}" latest.json --clobber
 

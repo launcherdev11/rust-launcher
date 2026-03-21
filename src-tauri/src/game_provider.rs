@@ -12,7 +12,7 @@ use rand::Rng;
 use reqwest::Client;
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
-use sysinfo::{ProcessesToUpdate, System};
+use sysinfo::{ProcessesToUpdate, Pid, System};
 use tauri::{AppHandle, Emitter, Manager};
 use std::env;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -192,10 +192,13 @@ const FABRIC_META_PROFILE: &str = "https://meta.fabricmc.net/v2/versions/loader"
 
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
 static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
+static GAME_PROCESS_PID: AtomicU64 = AtomicU64::new(0);
 
 pub const EVENT_GAME_CONSOLE_LINE: &str = "game-console-line";
 
 pub const EVENT_MRPACK_IMPORT_PROGRESS: &str = "mrpack-import-progress";
+
+pub const EVENT_PLAYTIME_UPDATED: &str = "playtime-updated";
 
 fn log_to_console(app: &AppHandle, line: &str) {
     let payload = GameConsoleLinePayload {
@@ -435,6 +438,12 @@ pub struct MrpackImportProgressPayload {
 pub struct GameConsoleLinePayload {
     pub line: String,
     pub source: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct PlaytimeUpdatedPayload {
+    pub profile_id: String,
+    pub delta_seconds: u64,
 }
 
 
@@ -736,8 +745,15 @@ pub struct Settings {
 
     pub open_launcher_on_profiles_tab: bool,
 
+    #[serde(default = "default_interface_language")]
+    pub interface_language: String,
+
     pub background_accent_color: String,
     pub background_image_url: Option<String>,
+}
+
+fn default_interface_language() -> String {
+    "ru".to_string()
 }
 
 impl Default for Settings {
@@ -757,6 +773,7 @@ impl Default for Settings {
             check_updates_on_start: true,
             auto_install_updates: false,
             open_launcher_on_profiles_tab: false,
+            interface_language: "ru".to_string(),
             background_accent_color: "#0b1530".to_string(),
             background_image_url: None,
         }
@@ -972,7 +989,43 @@ fn is_javaw_process_running() -> bool {
 
 #[tauri::command]
 pub fn is_game_running_now() -> Result<bool, String> {
+    let pid = GAME_PROCESS_PID.load(Ordering::SeqCst);
+    if pid != 0 {
+        let mut sys = System::new_all();
+        sys.refresh_processes(ProcessesToUpdate::All, true);
+
+        let pid_u32 = pid as u32;
+        let pid_obj = Pid::from_u32(pid_u32);
+        if sys.process(pid_obj).is_some() {
+            return Ok(true);
+        }
+
+        // PID no longer exists (game stopped/crashed).
+        GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+        return Ok(false);
+    }
+
     Ok(is_javaw_process_running())
+}
+
+#[tauri::command]
+pub fn stop_game() -> Result<(), String> {
+    let pid = GAME_PROCESS_PID.swap(0, Ordering::SeqCst);
+    if pid == 0 {
+        return Ok(());
+    }
+
+    let pid_u32 = pid as u32;
+    let pid_obj = Pid::from_u32(pid_u32);
+
+    let mut sys = System::new_all();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+
+    if let Some(process) = sys.process(pid_obj) {
+        let _ = process.kill(); // best-effort kill
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1977,6 +2030,19 @@ fn selected_instance_dir_internal() -> Option<PathBuf> {
 #[tauri::command]
 pub fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
     load_all_instance_profiles_internal()
+}
+
+#[tauri::command]
+pub fn get_profile_play_time_seconds(profile_id: String) -> Result<u64, String> {
+    let cfg_path = instance_config_path(&profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(0);
+    }
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
+    let cfg: InstanceConfig = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
+    Ok(cfg.play_time_seconds)
 }
 
 fn create_profile_internal(
@@ -5296,6 +5362,9 @@ pub async fn launch_game(
     version_id: String,
     version_url: Option<String>,
 ) -> Result<(), String> {
+    // Clear previously stored PID (if any) so stop_game targets only current launch.
+    GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
     let vers_root = versions_dir()?;
@@ -5866,6 +5935,7 @@ pub async fn launch_game(
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Не удалось запустить игру (установите Java): {e}"))?;
+    GAME_PROCESS_PID.store(child.id() as u64, Ordering::SeqCst);
 
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
@@ -5908,6 +5978,7 @@ pub async fn launch_game(
     if let Some(profile_id) = playtime_profile_id {
         let started_at = play_start_time;
         let mut child_for_wait = child;
+        let app_clone_for_playtime = app.clone();
         std::thread::spawn(move || {
             let _ = child_for_wait.wait();
             let delta_secs = started_at
@@ -5915,7 +5986,16 @@ pub async fn launch_game(
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             if delta_secs > 0 {
-                let _ = add_play_time_seconds_to_profile(&profile_id, delta_secs);
+                if add_play_time_seconds_to_profile(&profile_id, delta_secs).is_ok() {
+                    let payload = PlaytimeUpdatedPayload {
+                        profile_id,
+                        delta_seconds: delta_secs,
+                    };
+                    let _ = app_clone_for_playtime.emit(
+                        EVENT_PLAYTIME_UPDATED,
+                        payload,
+                    );
+                }
             }
         });
     }

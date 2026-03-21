@@ -75,6 +75,7 @@ type PreviewResult = { files: PreviewFile[]; total_bytes: number };
 type ExportProgressPayload = { bytes_written: number; total_bytes: number; current_file: string };
 type ExportFinishedPayload = { path: string; skipped_files: string[] };
 type ExportErrorPayload = { message: string };
+type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
 
 const loaderLabels: Record<LoaderId, string> = {
   vanilla: "Vanilla",
@@ -745,6 +746,35 @@ export function ModpackTab({
       setLoadingProfiles(false);
     }
   }
+
+  useEffect(() => {
+    const unlistenPromise = listen<PlaytimeUpdatedPayload>(
+      "playtime-updated",
+      (event) => {
+        const { profile_id } = event.payload;
+        // Чтобы избежать гонок/несовпадения со старым стейтом,
+        // читаем playtime напрямую из config.json конкретной сборки (дешево).
+        void (async () => {
+          try {
+            const seconds = await invoke<number>(
+              "get_profile_play_time_seconds",
+              { profile_id },
+            );
+            setProfiles((prev) =>
+              prev.map((p) =>
+                p.id === profile_id ? { ...p, play_time_seconds: seconds } : p,
+              ),
+            );
+          } catch (e) {
+            console.error(e);
+          }
+        })();
+      },
+    );
+    return () => {
+      unlistenPromise.then((fn) => fn());
+    };
+  }, []);
 
   async function refreshItems(id: string, tab: ContentTab) {
     setItemsLoading(true);
