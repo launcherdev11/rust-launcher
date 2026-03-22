@@ -445,6 +445,13 @@
     },
     "warnings": {
       "selectProfileFirst": "Select a profile first, then click “Play”."
+    },
+    "discord": {
+      "play": "In the main menu",
+      "settings": "Configuring the launcher",
+      "mods": "Selecting a mod",
+      "modpacks": "Selecting a profile",
+      "accounts": "Managing account"
     }
   }
 }

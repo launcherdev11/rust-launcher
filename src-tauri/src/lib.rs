@@ -3,6 +3,7 @@ mod java_runtime;
 mod ely_auth;
 mod ms_auth;
 mod commands;
+mod discord_rpc;
 
 use game_provider::{
     cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
@@ -28,6 +29,7 @@ use ely_auth::{
     start_ely_oauth,
 };
 use ms_auth::{ms_logout, start_ms_oauth};
+use discord_rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 
 #[cfg(target_os = "linux")]
 fn configure_wayland_backend() {
@@ -48,6 +50,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|_app| Ok(()))
         .invoke_handler(tauri::generate_handler![
+            discord_presence_update,
             fetch_all_versions,
             fetch_vanilla_releases,
             fetch_fabric_loaders,
@@ -113,6 +116,11 @@ pub fn run() {
             set_background_image,
             get_background_data_uri
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                discord_presence_shutdown();
+            }
+        });
 }
