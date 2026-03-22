@@ -61,8 +61,6 @@ fn http_client(use_proxy: bool) -> Client {
     builder.build().unwrap_or_else(|_| Client::new())
 }
 
-/// Без авто‑gzip/brotli/deflate: иначе reqwest иногда падает с «error decoding response body»
-/// при скачивании JAR (прокси/CDN и несовпадение Content-Encoding с потоком).
 fn http_client_for_binary_download(use_proxy: bool) -> Client {
     let _ = dotenvy::dotenv();
 
@@ -154,9 +152,8 @@ fn build_java_http_proxy_args() -> Vec<String> {
 
     args.push("-Djava.net.useSystemProxies=true".to_string());
 
-    // Увеличенные таймауты для прокси: SSL-handshake и загрузка client.jar через медленный прокси
-    args.push("-Dsun.net.client.defaultConnectTimeout=120000".to_string()); // 2 мин
-    args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());   // 10 мин
+    args.push("-Dsun.net.client.defaultConnectTimeout=120000".to_string()); //2 мин
+    args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());   //10 мин
 
     args
 }
@@ -596,14 +593,12 @@ fn format_mb_to_spec(mb: u32) -> String {
     }
 }
 
-/// Extracts module name from add-exports/add-opens value.
-/// Format: "MODULE/PACKAGE=TARGET" or "MODULE=TARGET"
+
 fn extract_module_from_add_exports_opens_value(s: &str) -> &str {
     let before_eq = s.split('=').next().unwrap_or(s).trim();
     before_eq.split('/').next().unwrap_or(before_eq)
 }
 
-/// Returns true if the module is problematic for Forge (JAR in classpath, not a JVM module).
 fn is_problematic_module(module: &str) -> bool {
     let m = extract_module_from_add_exports_opens_value(module);
     m.starts_with("cpw.mods.")
@@ -611,8 +606,7 @@ fn is_problematic_module(module: &str) -> bool {
         || m.starts_with("org.openjdk.nashorn")
 }
 
-/// Filters out --add-exports/--add-opens for cpw.mods.*, org.objectweb.asm, org.openjdk.nashorn.
-/// Returns (filtered_args, removed_args_for_logging).
+
 fn filter_forge_problematic_jvm_args(args: Vec<String>) -> (Vec<String>, Vec<String>) {
     let mut filtered = Vec::with_capacity(args.len());
     let mut removed = Vec::new();
@@ -653,9 +647,7 @@ fn filter_forge_problematic_jvm_args(args: Vec<String>) -> (Vec<String>, Vec<Str
     (filtered, removed)
 }
 
-/// Forge BootstrapLauncher превращает каждый JAR из classpath в модуль; vanilla `1.20.2.jar`
-/// даёт автоматический модуль `_1._20._2` и конфликтует с модулем `minecraft` в ModLauncher.
-/// В `-DignoreList` Forge уже есть `${version_name}.jar` (id Forge), но не клиент родителя — добавляем `<mc>.jar`.
+
 fn ensure_forge_ignore_list_includes_vanilla_client_jar(jvm_args: &mut Vec<String>, mc_version: &str) {
     let token = format!("{mc_version}.jar");
     for arg in jvm_args.iter_mut() {
@@ -669,7 +661,6 @@ fn ensure_forge_ignore_list_includes_vanilla_client_jar(jvm_args: &mut Vec<Strin
     }
 }
 
-/// Adds safe Forge opens if not already present. No duplicates.
 fn ensure_forge_safe_opens(args: &mut Vec<String>) {
     let has_invoke = args.iter().any(|s| {
         s.contains("java.lang.invoke=ALL-UNNAMED") || s.contains("java.base/java.lang.invoke=ALL-UNNAMED")
@@ -686,7 +677,6 @@ fn ensure_forge_safe_opens(args: &mut Vec<String>) {
     }
 }
 
-/// Removes all --add-opens for Java < 9.
 fn remove_add_opens_for_java_under_9(args: Vec<String>) -> Vec<String> {
     let mut filtered = Vec::with_capacity(args.len());
     let mut i = 0usize;
@@ -716,7 +706,7 @@ fn build_java_command(
     version_id: &str,
     classpath_str: &str,
     mut jvm_args: Vec<String>,
-    force_java_path: Option<PathBuf>, // Для Forge: принудительно Java 17, обход Nashorn/ASM crash при Java 21+
+    force_java_path: Option<PathBuf>,
 ) -> Result<(PathBuf, Vec<String>), String> {
     let mut java_path = if let Some(forced) = force_java_path {
         forced
@@ -779,7 +769,6 @@ fn build_java_command(
         std::mem::swap(&mut xms_mb, &mut xmx_mb);
     }
 
-    //ограничение по физической памяти, не больше total_ram-2ГБ.
     let mut sys = System::new_all();
     sys.refresh_memory();
     let total_mb: u64 = sys.total_memory() / 1024;
@@ -1176,7 +1165,6 @@ pub fn is_game_running_now() -> Result<bool, String> {
             return Ok(true);
         }
 
-        // PID no longer exists (game stopped/crashed).
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
         return Ok(false);
     }
@@ -1845,8 +1833,7 @@ struct Library {
     natives: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-/// Detects Forge profile by version_id, main_class, and libraries.
-/// Covers formats: 1.20.3-forge-49.0.2, 1.20.3-forge49.0.2, etc.
+
 fn is_forge_profile(version_id: &str, main_class: &str, libraries: &[Library]) -> bool {
     let version_lower = version_id.to_lowercase();
     let main_class_lower = main_class.to_lowercase();
@@ -3557,8 +3544,7 @@ async fn download_forge_installer_once(
         .await
         .map_err(|e| format!("Не удалось создать файл: {e}"))?;
 
-    // Запрашиваем без сжатия (identity) — на некоторых устройствах/прокси
-    // gzip/deflate декомпрессия при стриминге вызывает "error decoding response body"
+
     let resp = client
         .get(url)
         .header(ACCEPT_ENCODING, "identity")
@@ -3594,7 +3580,6 @@ async fn download_forge_installer_once(
 
     let effective_total = content_len;
 
-    // Клиент с gzip(false): тело приходит как в сети; при gzip-магии распаковываем вручную.
     let mut raw = resp
         .bytes()
         .await
@@ -5306,8 +5291,7 @@ pub async fn install_forge(
         .await?;
     }
 
-    // Pre-download vanilla client.jar via launcher HTTP client (better proxy support than Forge's JVM).
-    // Forge installer ожидает файл в versions/<mc_version>/<mc_version>.jar
+
     let vanilla_client_jar = vers_root.join(&mc_version).join(format!("{mc_version}.jar"));
     if !vanilla_client_jar.exists() {
         let json_text = tokio::fs::read_to_string(&base_version_json_path)
@@ -5524,8 +5508,6 @@ pub async fn install_forge(
         return Ok(());
     }
 
-    // Установщик Forge для некоторых версий создаёт папку без дефиса: "1.20.3-forge49.0.2"
-    // вместо "1.20.3-forge-49.0.2". Проверяем альтернативное имя и копируем.
     let alt_folder_name = format!("{mc_version}-forge{_forge_build}");
     let alt_json_name = format!("{alt_folder_name}.json");
     let alt_dir = vers_root.join(&alt_folder_name);
@@ -5795,7 +5777,6 @@ pub async fn launch_game(
     version_id: String,
     version_url: Option<String>,
 ) -> Result<(), String> {
-    // Clear previously stored PID (if any) so stop_game targets only current launch.
     GAME_PROCESS_PID.store(0, Ordering::SeqCst);
 
     let root = game_root_dir()?;
@@ -5915,8 +5896,6 @@ pub async fn launch_game(
         _ => "natives-linux",
     };
 
-    // Собираем classpath без дубликатов (Forge + parent могут содержать одну и ту же библиотеку,
-    // напр. Guava — дубли приводят к IllegalStateException: Duplicate key в Bootstrap)
     let mut classpath = Vec::new();
     let mut seen_paths = std::collections::HashSet::<String>::new();
     for lib in &detail.libraries {
@@ -6153,8 +6132,6 @@ pub async fn launch_game(
     let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
         let mut major = jv.major_version;
         let mut component = jv.component.clone();
-        // Forge + Java 21: известный баг (Nashorn/ASM — "Module org.objectweb.asm not found").
-        // Лаунчер автоматически выбирает Java 17 вместо 21 для Forge.
         if is_forge && major >= 21 {
             eprintln!(
                 "[Launch] Forge: используем Java 17 вместо {} (обход бага Nashorn/ASM в Java 21)",
@@ -6243,8 +6220,6 @@ pub async fn launch_game(
         ensure_forge_ignore_list_includes_vanilla_client_jar(&mut jvm_args, &effective_jar_version);
     }
 
-    // Фильтруем --add-exports/--add-opens для cpw.mods.*, org.objectweb.asm, org.openjdk.nashorn.
-    // Эти "модули" — JAR-ы из classpath, не системные; JVM даёт Unknown module / Module not found.
     let mut jvm_args = if is_forge {
         filter_forge_problematic_jvm_args(jvm_args).0
     } else {
@@ -6359,7 +6334,6 @@ pub async fn launch_game(
         }
     }
 
-    // Финальная фильтрация Forge-проблемных аргументов (манифест, user args, instance args).
     let removed_for_log = if is_forge {
         let (filtered, removed) = filter_forge_problematic_jvm_args(std::mem::take(&mut jvm_args));
         jvm_args = filtered;
@@ -6380,7 +6354,6 @@ pub async fn launch_game(
 
     let _jar_path_str = jar_path.to_str().ok_or("Путь к jar не в UTF-8")?;
 
-    // Предпроверка доступа — помогает избежать "os error 13" на Android 13 и в ограниченных средах
     if let Err(e) = std::fs::metadata(&java_path) {
         if e.kind() == ErrorKind::PermissionDenied {
             return Err(format!(
@@ -6411,15 +6384,10 @@ pub async fn launch_game(
     let play_start_time = SystemTime::now();
 
     let mut child = cmd.spawn().map_err(|e| {
-        // os error 13 = EACCES (Permission Denied) — частые причины: папка в Program Files,
-        // антивирус, ограничения Android 13 / Scoped Storage, OneDrive.
+
         if e.kind() == ErrorKind::PermissionDenied {
             format!(
-                "Отказано в доступе (os error 13). Попробуйте: 1) Запустить лаунчер от имени администратора. \
-                2) Добавить папку игры и Java в исключения антивируса. \
-                3) Перенести игру из Program Files/OneDrive в простую папку (например, C:\\Games). \
-                4) На Android 13: выдать все разрешения приложению и убедиться, что папка игры доступна. \
-                Java: {}, Папка игры: {}",
+                "Отказано в доступе (os error 13). Java: {}, рабочая папка: {}",
                 java_path.display(),
                 game_dir_str
             )

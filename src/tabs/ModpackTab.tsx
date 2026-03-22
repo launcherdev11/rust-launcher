@@ -769,8 +769,6 @@ export function ModpackTab({
       "playtime-updated",
       (event) => {
         const { profile_id } = event.payload;
-        // Чтобы избежать гонок/несовпадения со старым стейтом,
-        // читаем playtime напрямую из config.json конкретной сборки (дешево).
         void (async () => {
           try {
             const seconds = await invoke<number>(
@@ -1171,7 +1169,7 @@ export function ModpackTab({
       }
     }).then((fn) => { unlisten = fn; }).catch(console.error);
     return () => { unlisten?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
   useEffect(() => {
@@ -1226,7 +1224,7 @@ export function ModpackTab({
       setIsManageDropTarget(false);
       unlisten?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, selectedProfile?.id, contentTab, language]);
 
   async function handleAddFilesFromPc() {
@@ -1957,7 +1955,6 @@ export function ModpackTab({
                     className="h-3 w-3 object-contain opacity-80"
                     onError={(e) => {
                       const img = e.currentTarget;
-                      // Fallback for a correctly named asset.
                       if (img.dataset.failedOnce !== "1") {
                         img.dataset.failedOnce = "1";
                         img.src = "/launcher-assets/clock.png";
