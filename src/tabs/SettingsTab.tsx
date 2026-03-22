@@ -1,7 +1,8 @@
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
 
@@ -29,6 +30,7 @@ type Settings = {
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
+  background_blur_enabled: boolean;
 };
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -75,6 +77,106 @@ type DownloadProgressPayload = {
   downloaded: number;
   total: number;
   percent: number;
+};
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  const v = max;
+  const s = max === 0 ? 0 : d / max;
+  let h = 0;
+  if (d !== 0) {
+    switch (max) {
+      case r:
+        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        break;
+      case g:
+        h = ((b - r) / d + 2) / 6;
+        break;
+      default:
+        h = ((r - g) / d + 4) / 6;
+    }
+  }
+  return { h: h * 360, s: s * 100, v: v * 100 };
+}
+
+function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(100, s)) / 100;
+  v = Math.max(0, Math.min(100, v)) / 100;
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let rp = 0;
+  let gp = 0;
+  let bp = 0;
+  if (h < 60) {
+    rp = c;
+    gp = x;
+  } else if (h < 120) {
+    rp = x;
+    gp = c;
+  } else if (h < 180) {
+    gp = c;
+    bp = x;
+  } else if (h < 240) {
+    gp = x;
+    bp = c;
+  } else if (h < 300) {
+    rp = x;
+    bp = c;
+  } else {
+    rp = c;
+    bp = x;
+  }
+  return {
+    r: Math.round((rp + m) * 255),
+    g: Math.round((gp + m) * 255),
+    b: Math.round((bp + m) * 255),
+  };
+}
+
+function hexWithHueFromWheel(baseHex: string, hueDeg: number): string {
+  const rgb = hexToRgb(baseHex);
+  if (!rgb) return baseHex;
+  const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+  const next = hsvToRgb(hueDeg, hsv.s, hsv.v);
+  return rgbToHex(next.r, next.g, next.b);
+}
+
+function hueDegFromWheelClientPos(el: HTMLElement, clientX: number, clientY: number): number | null {
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = clientX - cx;
+  const dy = clientY - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 4) return null;
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  return (angleDeg + 90 + 360) % 360;
+}
+
+/** Плавное радужное кольцо (много стопов — меньше «ступенек» на краях). */
+const ACCENT_HUE_RING_STYLE: CSSProperties = {
+  backgroundImage: `conic-gradient(from 0deg, ${Array.from({ length: 72 }, (_, i) => {
+    const h = (i * 360) / 72;
+    return `hsl(${h} 95% 52%)`;
+  }).join(", ")})`,
 };
 
 export function SettingsTab({
@@ -135,6 +237,10 @@ export function SettingsTab({
   }>({ left: 0, width: 0 });
   const [accentInput, setAccentInput] = useState<string>("");
   const [isAccentPickerOpen, setIsAccentPickerOpen] = useState(false);
+  const accentHueWheelRef = useRef<HTMLDivElement | null>(null);
+  const accentHueDragBaseRef = useRef<string | null>(null);
+  const accentSvPadRef = useRef<HTMLDivElement | null>(null);
+  const accentSvDragHueRef = useRef<number | null>(null);
   const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
   const [isCacheLoading, setIsCacheLoading] = useState(false);
   const [isResettingSettings, setIsResettingSettings] = useState(false);
@@ -218,6 +324,90 @@ export function SettingsTab({
     const current = settings?.background_accent_color ?? "#0b1530";
     setAccentInput(current);
   }, [settings?.background_accent_color]);
+
+  const accentColorHsv = useMemo(() => {
+    const c = settings?.background_accent_color ?? "#0b1530";
+    const rgb = hexToRgb(c);
+    if (!rgb) return { h: 0, s: 0, v: 0 };
+    return rgbToHsv(rgb.r, rgb.g, rgb.b);
+  }, [settings?.background_accent_color]);
+
+  const applyAccentHueFromPointer = (clientX: number, clientY: number) => {
+    const el = accentHueWheelRef.current;
+    if (!el) return;
+    const hue = hueDegFromWheelClientPos(el, clientX, clientY);
+    if (hue === null) return;
+    const base =
+      accentHueDragBaseRef.current ?? settings?.background_accent_color ?? "#0b1530";
+    const next = hexWithHueFromWheel(base, hue);
+    setAccentInput(next);
+    updateSettings({ background_accent_color: next });
+  };
+
+  const handleAccentWheelPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    accentHueDragBaseRef.current = settings?.background_accent_color ?? "#0b1530";
+    e.currentTarget.setPointerCapture(e.pointerId);
+    applyAccentHueFromPointer(e.clientX, e.clientY);
+  };
+
+  const handleAccentWheelPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    applyAccentHueFromPointer(e.clientX, e.clientY);
+  };
+
+  const handleAccentWheelPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    accentHueDragBaseRef.current = null;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const applyAccentSvFromPointer = (clientX: number, clientY: number) => {
+    const el = accentSvPadRef.current;
+    if (!el) return;
+    const h =
+      accentSvDragHueRef.current !== null
+        ? accentSvDragHueRef.current
+        : accentColorHsv.h;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const s = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const v = Math.max(0, Math.min(100, (1 - (clientY - rect.top) / rect.height) * 100));
+    const next = hsvToRgb(h, s, v);
+    const hex = rgbToHex(next.r, next.g, next.b);
+    setAccentInput(hex);
+    updateSettings({ background_accent_color: hex });
+  };
+
+  const handleAccentSvPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const c = settings?.background_accent_color ?? "#0b1530";
+    const rgb = hexToRgb(c);
+    accentSvDragHueRef.current = rgb ? rgbToHsv(rgb.r, rgb.g, rgb.b).h : accentColorHsv.h;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    applyAccentSvFromPointer(e.clientX, e.clientY);
+  };
+
+  const handleAccentSvPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    applyAccentSvFromPointer(e.clientX, e.clientY);
+  };
+
+  const handleAccentSvPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    accentSvDragHueRef.current = null;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     if (settingsTab !== "launcher") return;
@@ -982,7 +1172,7 @@ export function SettingsTab({
                       {settings?.background_accent_color ?? "#0b1530"}
                     </span>
                     {isAccentPickerOpen && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 w-72 rounded-2xl border border-white/15 bg-black/90 px-3 py-3 text-xs text-white shadow-soft backdrop-blur-xl">
+                      <div className="absolute right-0 bottom-full z-40 mb-2 w-80 rounded-2xl border border-white/15 bg-black/90 px-3 py-3 text-xs text-white shadow-soft backdrop-blur-xl">
                         <div className="mb-2 flex items-center justify-between">
                           <span className="text-[11px] uppercase tracking-[0.16em] text-white/50">
                             {tt("settings.launcher.accentColor.popupTitle")}
@@ -995,48 +1185,84 @@ export function SettingsTab({
                             ✕
                           </button>
                         </div>
-                        <div className="mb-3 flex items-center gap-3">
+                        <div className="mb-2 flex items-center gap-3">
                           <div
-                            className="relative flex h-12 w-12 items-center justify-center rounded-full border border-white/25 bg-black/70"
+                            ref={accentHueWheelRef}
+                            role="slider"
+                            tabIndex={0}
+                            aria-label={tt("settings.launcher.accentColor.pickColorAria")}
+                            aria-valuemin={0}
+                            aria-valuemax={360}
+                            aria-valuenow={Math.round(accentColorHsv.h)}
+                            className="relative h-14 w-14 shrink-0 cursor-crosshair touch-none select-none rounded-full"
                             style={{
-                              backgroundImage: `conic-gradient(
-                                from 0deg,
-                                #ff4d4f,
-                                #ff7a45,
-                                #ffd666,
-                                #73d13d,
-                                #36cfc9,
-                                #40a9ff,
-                                #9254de,
-                                #f759ab,
-                                #ff4d4f
-                              )`,
+                              boxShadow:
+                                "0 0 0 1px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.45) inset, 0 8px 28px rgba(0,0,0,0.55), 0 0 32px rgba(0,0,0,0.35)",
+                            }}
+                            onPointerDown={handleAccentWheelPointerDown}
+                            onPointerMove={handleAccentWheelPointerMove}
+                            onPointerUp={handleAccentWheelPointerEnd}
+                            onPointerCancel={handleAccentWheelPointerEnd}
+                            onKeyDown={(e) => {
+                              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                              e.preventDefault();
+                              const cur = settings?.background_accent_color ?? "#0b1530";
+                              const rgb = hexToRgb(cur);
+                              if (!rgb) return;
+                              const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                              const delta = e.key === "ArrowRight" ? 3 : -3;
+                              const next = hsvToRgb((hsv.h + delta + 360) % 360, hsv.s, hsv.v);
+                              const hex = rgbToHex(next.r, next.g, next.b);
+                              setAccentInput(hex);
+                              updateSettings({ background_accent_color: hex });
                             }}
                           >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const input = document.getElementById(
-                                  "accent-color-hidden-input",
-                                ) as HTMLInputElement | null;
-                                input?.click();
+                            <div
+                              className="pointer-events-none absolute inset-0 overflow-hidden rounded-full [transform:translateZ(0)] [backface-visibility:hidden]"
+                              style={{
+                                ...ACCENT_HUE_RING_STYLE,
+                                filter: "saturate(1.05) brightness(1.02)",
                               }}
-                              className="absolute inset-0 rounded-full"
-                              aria-label={tt("settings.launcher.accentColor.pickColorAria")}
                             />
                             <div
-                              className="h-8 w-8 rounded-full border border-black/60"
+                              className="pointer-events-none absolute inset-0 rounded-full"
                               style={{
-                                background:
-                                  settings?.background_accent_color ?? "#0b1530",
+                                boxShadow:
+                                  "inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 -12px 20px rgba(0,0,0,0.35)",
                               }}
                             />
+                            <div className="pointer-events-none absolute inset-[10px] rounded-full shadow-[inset_0_2px_6px_rgba(0,0,0,0.45)] ring-1 ring-white/10">
+                              <div
+                                className="h-full w-full rounded-full ring-1 ring-black/50"
+                                style={{
+                                  backgroundColor:
+                                    settings?.background_accent_color ?? "#0b1530",
+                                  backgroundImage: [
+                                    "radial-gradient(circle at 32% 26%, rgba(255,255,255,0.16), transparent 52%)",
+                                    "linear-gradient(155deg, rgba(255,255,255,0.07), transparent 48%)",
+                                  ].join(", "),
+                                }}
+                              />
+                            </div>
+                            <div
+                              className="pointer-events-none absolute left-1/2 top-1/2 z-10"
+                              style={{ width: 0, height: 0 }}
+                            >
+                              <div
+                                style={{ transform: `rotate(${accentColorHsv.h}deg) translateY(-23px)` }}
+                              >
+                                <div
+                                  className="h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 bg-white shadow-[0_0_12px_rgba(255,255,255,0.55),0_2px_8px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
+                                  aria-hidden
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex flex-col gap-1">
+                          <div className="flex min-w-0 flex-1 flex-col gap-1">
                             <span className="text-[11px] text-white/60">
                               {tt("settings.launcher.accentColor.currentLabel")}
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-mono text-[11px] text-white/85">
                                 {settings?.background_accent_color ?? "#0b1530"}
                               </span>
@@ -1063,23 +1289,39 @@ export function SettingsTab({
                                   setAccentInput(normalized);
                                   updateSettings({ background_accent_color: normalized });
                                 }}
-                                className="h-6 w-20 rounded-lg border border-white/25 bg-black/60 px-2 text-[11px] font-mono text-white/85 outline-none focus:border-white/50"
+                                className="h-6 w-[7.25rem] rounded-lg border border-white/25 bg-black/60 px-2 text-[11px] font-mono text-white/85 outline-none focus:border-white/50"
                               />
                             </div>
                           </div>
                         </div>
-                        <input
-                          id="accent-color-hidden-input"
-                          type="color"
-                          className="hidden"
-                          value={settings?.background_accent_color ?? "#0b1530"}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (!value) return;
-                            setAccentInput(value);
-                            updateSettings({ background_accent_color: value });
-                          }}
-                        />
+                        <div className="mb-2">
+                          <div className="mb-1.5 text-[10px] text-white/45">
+                            {tt("settings.launcher.accentColor.svPadLabel")}
+                          </div>
+                          <div
+                            ref={accentSvPadRef}
+                            className="relative h-24 w-full cursor-crosshair touch-none select-none overflow-hidden rounded-xl ring-1 ring-white/12"
+                            style={{
+                              boxShadow:
+                                "inset 0 0 0 1px rgba(0,0,0,0.4), 0 6px 20px rgba(0,0,0,0.35)",
+                              backgroundImage: `linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, hsl(${accentColorHsv.h} 100% 50%))`,
+                            }}
+                            aria-label={tt("settings.launcher.accentColor.svPadAria")}
+                            onPointerDown={handleAccentSvPointerDown}
+                            onPointerMove={handleAccentSvPointerMove}
+                            onPointerUp={handleAccentSvPointerEnd}
+                            onPointerCancel={handleAccentSvPointerEnd}
+                          >
+                            <div
+                              className="pointer-events-none absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 bg-white/95 shadow-[0_0_10px_rgba(255,255,255,0.35),0_2px_8px_rgba(0,0,0,0.45)] ring-1 ring-black/35"
+                              style={{
+                                left: `${accentColorHsv.s}%`,
+                                top: `${100 - accentColorHsv.v}%`,
+                              }}
+                              aria-hidden
+                            />
+                          </div>
+                        </div>
                         <div className="mt-1 text-[11px] text-white/55">
                           {tt("settings.launcher.accentColor.helpText")}
                         </div>
@@ -1148,6 +1390,13 @@ export function SettingsTab({
                   <p className="text-[11px] text-white/45">
                     {tt("settings.launcher.backgroundImage.hint")}
                   </p>
+                  <SettingsToggle
+                    label={tt("settings.launcher.backgroundBlur.label")}
+                    yesLabel={tt("settings.common.toggle.on")}
+                    noLabel={tt("settings.common.toggle.off")}
+                    value={settings?.background_blur_enabled ?? true}
+                    onChange={(v) => updateSettings({ background_blur_enabled: v })}
+                  />
                 </div>
                 <div className="pt-2 border-t border-white/10 mt-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">

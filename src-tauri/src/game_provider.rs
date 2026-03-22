@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,7 +10,7 @@ use futures_util::StreamExt;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use reqwest::Client;
-use reqwest::header::CONTENT_TYPE;
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use sysinfo::{ProcessesToUpdate, Pid, System};
 use tauri::{AppHandle, Emitter, Manager};
@@ -99,8 +99,9 @@ fn build_java_http_proxy_args() -> Vec<String> {
 
     args.push("-Djava.net.useSystemProxies=true".to_string());
 
-    args.push("-Dsun.net.client.defaultConnectTimeout=30000".to_string());
-    args.push("-Dsun.net.client.defaultReadTimeout=300000".to_string());
+    // Увеличенные таймауты для прокси: SSL-handshake и загрузка client.jar через медленный прокси
+    args.push("-Dsun.net.client.defaultConnectTimeout=120000".to_string()); // 2 мин
+    args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());   // 10 мин
 
     args
 }
@@ -540,6 +541,115 @@ fn format_mb_to_spec(mb: u32) -> String {
     }
 }
 
+/// Extracts module name from add-exports/add-opens value.
+/// Format: "MODULE/PACKAGE=TARGET" or "MODULE=TARGET"
+fn extract_module_from_add_exports_opens_value(s: &str) -> &str {
+    let before_eq = s.split('=').next().unwrap_or(s).trim();
+    before_eq.split('/').next().unwrap_or(before_eq)
+}
+
+/// Returns true if the module is problematic for Forge (JAR in classpath, not a JVM module).
+fn is_problematic_module(module: &str) -> bool {
+    let m = extract_module_from_add_exports_opens_value(module);
+    m.starts_with("cpw.mods.")
+        || m.starts_with("org.objectweb.asm")
+        || m.starts_with("org.openjdk.nashorn")
+}
+
+/// Filters out --add-exports/--add-opens for cpw.mods.*, org.objectweb.asm, org.openjdk.nashorn.
+/// Returns (filtered_args, removed_args_for_logging).
+fn filter_forge_problematic_jvm_args(args: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let mut filtered = Vec::with_capacity(args.len());
+    let mut removed = Vec::new();
+    let mut i = 0usize;
+
+    while i < args.len() {
+        let skip = if args[i] == "--add-exports" || args[i] == "--add-opens" {
+            if i + 1 < args.len() && is_problematic_module(&args[i + 1]) {
+                removed.push(format!("{} {}", args[i], args[i + 1]));
+                true
+            } else {
+                false
+            }
+        } else if args[i].starts_with("--add-exports=") || args[i].starts_with("--add-opens=") {
+            let value = args[i].split('=').nth(1).unwrap_or("");
+            if is_problematic_module(value) {
+                removed.push(args[i].clone());
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if skip {
+            if (args[i] == "--add-exports" || args[i] == "--add-opens") && i + 1 < args.len() {
+                i += 2;
+            } else {
+                i += 1;
+            }
+        } else {
+            filtered.push(args[i].clone());
+            i += 1;
+        }
+    }
+
+    (filtered, removed)
+}
+
+/// Forge BootstrapLauncher превращает каждый JAR из classpath в модуль; vanilla `1.20.2.jar`
+/// даёт автоматический модуль `_1._20._2` и конфликтует с модулем `minecraft` в ModLauncher.
+/// В `-DignoreList` Forge уже есть `${version_name}.jar` (id Forge), но не клиент родителя — добавляем `<mc>.jar`.
+fn ensure_forge_ignore_list_includes_vanilla_client_jar(jvm_args: &mut Vec<String>, mc_version: &str) {
+    let token = format!("{mc_version}.jar");
+    for arg in jvm_args.iter_mut() {
+        if let Some(val) = arg.strip_prefix("-DignoreList=") {
+            if val.split(',').any(|s| s == token) {
+                return;
+            }
+            *arg = format!("-DignoreList={val},{token}");
+            return;
+        }
+    }
+}
+
+/// Adds safe Forge opens if not already present. No duplicates.
+fn ensure_forge_safe_opens(args: &mut Vec<String>) {
+    let has_invoke = args.iter().any(|s| {
+        s.contains("java.lang.invoke=ALL-UNNAMED") || s.contains("java.base/java.lang.invoke=ALL-UNNAMED")
+    });
+    if !has_invoke {
+        args.push("--add-opens".to_string());
+        args.push("java.base/java.lang.invoke=ALL-UNNAMED".to_string());
+    }
+
+    let has_jar = args.iter().any(|s| s.contains("java.base/java.util.jar=ALL-UNNAMED"));
+    if !has_jar {
+        args.push("--add-opens".to_string());
+        args.push("java.base/java.util.jar=ALL-UNNAMED".to_string());
+    }
+}
+
+/// Removes all --add-opens for Java < 9.
+fn remove_add_opens_for_java_under_9(args: Vec<String>) -> Vec<String> {
+    let mut filtered = Vec::with_capacity(args.len());
+    let mut i = 0usize;
+    while i < args.len() {
+        if args[i] == "--add-opens" {
+            i += 2;
+            continue;
+        }
+        if args[i].starts_with("--add-opens=") {
+            i += 1;
+            continue;
+        }
+        filtered.push(args[i].clone());
+        i += 1;
+    }
+    filtered
+}
+
 fn build_java_command(
     default_java_path: PathBuf,
     settings: &Settings,
@@ -551,8 +661,11 @@ fn build_java_command(
     version_id: &str,
     classpath_str: &str,
     mut jvm_args: Vec<String>,
+    force_java_path: Option<PathBuf>, // Для Forge: принудительно Java 17, обход Nashorn/ASM crash при Java 21+
 ) -> Result<(PathBuf, Vec<String>), String> {
-    let mut java_path = if let Some(custom) = java_settings
+    let mut java_path = if let Some(forced) = force_java_path {
+        forced
+    } else if let Some(custom) = java_settings
         .java_path
         .as_ref()
         .and_then(|s| if s.trim().is_empty() { None } else { Some(s) })
@@ -750,10 +863,17 @@ pub struct Settings {
 
     pub background_accent_color: String,
     pub background_image_url: Option<String>,
+
+    #[serde(default = "default_background_blur_enabled")]
+    pub background_blur_enabled: bool,
 }
 
 fn default_interface_language() -> String {
     "ru".to_string()
+}
+
+fn default_background_blur_enabled() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -776,6 +896,7 @@ impl Default for Settings {
             interface_language: "ru".to_string(),
             background_accent_color: "#0b1530".to_string(),
             background_image_url: None,
+            background_blur_enabled: true,
         }
     }
 }
@@ -1298,19 +1419,8 @@ mod tests {
 
     #[test]
     fn build_java_command_filters_dangerous_and_required_overrides() {
-        let settings = Settings {
-            ram_mb: 4096,
-            show_console_on_launch: false,
-            close_launcher_on_game_start: false,
-            check_game_processes: true,
-            show_snapshots: false,
-            show_alpha_versions: false,
-            notify_new_update: true,
-            notify_new_message: true,
-            notify_system_message: true,
-            check_updates_on_start: true,
-            auto_install_updates: false,
-        };
+        let mut settings = Settings::default();
+        settings.ram_mb = 4096;
 
         let java_settings = JavaSettings {
             use_custom_jvm_args: true,
@@ -1338,6 +1448,7 @@ mod tests {
             "1.20.1",
             "CP",
             base_jvm_args,
+            None,
         )
         .unwrap();
 
@@ -1351,6 +1462,161 @@ mod tests {
         assert!(args.iter().any(|a| a.starts_with("-Djava.library.path=")));
 
         assert!(args.iter().any(|a| a.contains("C:\\game")));
+    }
+
+    #[test]
+    fn filter_forge_problematic_jvm_args_removes_cpw_mods() {
+        let args = vec![
+            "-Xms1G".to_string(),
+            "--add-exports".to_string(),
+            "cpw.mods.securejarhandler/cpw.mods.jar=ALL-UNNAMED".to_string(),
+            "--add-opens".to_string(),
+            "cpw.mods.bootstraplauncher/cpw.mods=ALL-UNNAMED".to_string(),
+            "-cp".to_string(),
+            "classpath".to_string(),
+        ];
+        let (filtered, removed) = filter_forge_problematic_jvm_args(args);
+        assert!(!filtered.iter().any(|a| a.contains("cpw.mods")));
+        assert_eq!(removed.len(), 2);
+        assert!(removed.iter().any(|s| s.contains("securejarhandler")));
+        assert!(filtered.contains(&"-Xms1G".to_string()));
+        assert!(filtered.contains(&"-cp".to_string()));
+    }
+
+    #[test]
+    fn filter_forge_problematic_jvm_args_removes_org_objectweb_asm() {
+        let args = vec![
+            "--add-exports=org.objectweb.asm/org.objectweb.asm=ALL-UNNAMED".to_string(),
+            "-Xmx2G".to_string(),
+        ];
+        let (filtered, removed) = filter_forge_problematic_jvm_args(args);
+        assert!(!filtered.iter().any(|a| a.contains("org.objectweb.asm")));
+        assert_eq!(removed.len(), 1);
+    }
+
+    #[test]
+    fn filter_forge_problematic_jvm_args_removes_org_openjdk_nashorn() {
+        let args = vec![
+            "--add-opens".to_string(),
+            "org.openjdk.nashorn/org.openjdk.nashorn=ALL-UNNAMED".to_string(),
+        ];
+        let (filtered, _) = filter_forge_problematic_jvm_args(args);
+        assert!(!filtered.iter().any(|a| a.contains("nashorn")));
+    }
+
+    #[test]
+    fn filter_forge_problematic_jvm_args_preserves_java_base() {
+        let args = vec![
+            "--add-opens".to_string(),
+            "java.base/java.lang.invoke=ALL-UNNAMED".to_string(),
+            "--add-opens".to_string(),
+            "java.base/java.util.jar=ALL-UNNAMED".to_string(),
+        ];
+        let (filtered, removed) = filter_forge_problematic_jvm_args(args);
+        assert!(filtered.iter().any(|a| a.contains("java.lang.invoke")));
+        assert!(filtered.iter().any(|a| a.contains("java.util.jar")));
+        assert!(removed.is_empty());
+    }
+
+    #[test]
+    fn remove_add_opens_for_java_under_9_removes_all() {
+        let args = vec![
+            "-Xms1G".to_string(),
+            "--add-opens".to_string(),
+            "java.base/java.lang=ALL-UNNAMED".to_string(),
+            "--add-opens=java.base/java.util=ALL-UNNAMED".to_string(),
+            "-cp".to_string(),
+            "x".to_string(),
+        ];
+        let filtered = remove_add_opens_for_java_under_9(args);
+        assert!(!filtered.iter().any(|a| a.contains("--add-opens")));
+        assert!(filtered.contains(&"-Xms1G".to_string()));
+        assert!(filtered.contains(&"-cp".to_string()));
+    }
+
+    #[test]
+    fn ensure_forge_ignore_list_appends_vanilla_client_jar() {
+        let mut args = vec![
+            "-Xms1G".to_string(),
+            "-DignoreList=asm-,forge-,1.20.2-forge-48.0.0.jar".to_string(),
+        ];
+        ensure_forge_ignore_list_includes_vanilla_client_jar(&mut args, "1.20.2");
+        assert!(
+            args[1].contains("1.20.2.jar"),
+            "expected vanilla client jar in ignoreList: {:?}",
+            args[1]
+        );
+        assert!(args[1].contains("1.20.2-forge-48.0.0.jar"));
+    }
+
+    #[test]
+    fn ensure_forge_ignore_list_idempotent() {
+        let mut args = vec!["-DignoreList=foo,1.20.2.jar".to_string()];
+        ensure_forge_ignore_list_includes_vanilla_client_jar(&mut args, "1.20.2");
+        assert_eq!(args[0], "-DignoreList=foo,1.20.2.jar");
+    }
+
+    #[test]
+    fn ensure_forge_safe_opens_adds_missing() {
+        let mut args = vec!["-Xms1G".to_string()];
+        ensure_forge_safe_opens(&mut args);
+        assert!(args.iter().any(|s| s.contains("java.lang.invoke=ALL-UNNAMED")));
+        assert!(args.iter().any(|s| s.contains("java.util.jar=ALL-UNNAMED")));
+    }
+
+    #[test]
+    fn ensure_forge_safe_opens_no_duplicates() {
+        let mut args = vec![
+            "--add-opens".to_string(),
+            "java.base/java.lang.invoke=ALL-UNNAMED".to_string(),
+            "--add-opens".to_string(),
+            "java.base/java.util.jar=ALL-UNNAMED".to_string(),
+        ];
+        ensure_forge_safe_opens(&mut args);
+        let invoke_count = args.iter().filter(|s| s.contains("java.lang.invoke")).count();
+        let jar_count = args.iter().filter(|s| s.contains("java.util.jar")).count();
+        assert_eq!(invoke_count, 1);
+        assert_eq!(jar_count, 1);
+    }
+
+    #[test]
+    fn forge_jvm_args_preserve_cp_xms_xmx_library_path() {
+        let args = vec![
+            "-Xms512M".to_string(),
+            "-Xmx4G".to_string(),
+            "-Djava.library.path=C:\\natives".to_string(),
+            "-cp".to_string(),
+            "a.jar;b.jar".to_string(),
+            "--add-exports".to_string(),
+            "cpw.mods.securejarhandler/cpw.mods=ALL-UNNAMED".to_string(),
+        ];
+        let (filtered, _) = filter_forge_problematic_jvm_args(args);
+        assert!(filtered.iter().any(|a| a.starts_with("-Xms")));
+        assert!(filtered.iter().any(|a| a.starts_with("-Xmx")));
+        assert!(filtered.iter().any(|a| a.contains("java.library.path")));
+        assert!(filtered.contains(&"-cp".to_string()));
+        assert!(filtered.contains(&"a.jar;b.jar".to_string()));
+    }
+
+    #[test]
+    fn is_forge_profile_detects_version_id() {
+        let libs: Vec<Library> = vec![];
+        assert!(is_forge_profile("1.20.3-forge-49.0.2", "net.minecraft.client.main.Main", &libs));
+        assert!(is_forge_profile("1.20.3-forge49.0.2", "x", &libs));
+        assert!(!is_forge_profile("1.20.1", "net.minecraft.client.main.Main", &libs));
+    }
+
+    #[test]
+    fn is_forge_profile_detects_main_class() {
+        let libs: Vec<Library> = vec![];
+        assert!(is_forge_profile("1.20.1", "cpw.mods.bootstraplauncher.BootstrapLauncher", &libs));
+    }
+
+    #[test]
+    fn is_forge_profile_detects_libraries() {
+        let lib: Library = serde_json::from_str(r#"{"name":"cpw.mods:bootstraplauncher:1.2.3"}"#).unwrap();
+        let libs = vec![lib];
+        assert!(is_forge_profile("1.20.1", "net.minecraft.client.main.Main", &libs));
     }
 }
 
@@ -1522,6 +1788,37 @@ struct Library {
     extract: Option<LibraryExtract>,
     #[serde(default)]
     natives: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// Detects Forge profile by version_id, main_class, and libraries.
+/// Covers formats: 1.20.3-forge-49.0.2, 1.20.3-forge49.0.2, etc.
+fn is_forge_profile(version_id: &str, main_class: &str, libraries: &[Library]) -> bool {
+    let version_lower = version_id.to_lowercase();
+    let main_class_lower = main_class.to_lowercase();
+
+    if version_lower.contains("forge") {
+        return true;
+    }
+    if main_class_lower.contains("bootstraplauncher") || main_class_lower.contains("cpw.mods.bootstraplauncher") {
+        return true;
+    }
+    if main_class_lower.contains("forge") && !main_class_lower.contains("neoforge") {
+        return true;
+    }
+
+    for lib in libraries {
+        let name_lower = lib.name.to_lowercase();
+        if name_lower.contains("forge:forge")
+            || name_lower.contains("net.minecraftforge:forge")
+            || name_lower.contains("cpw.mods:bootstraplauncher")
+            || name_lower.contains("cpw.mods:securejarhandler")
+            || (name_lower.starts_with("cpw.mods:") && !name_lower.contains("neoforge"))
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -3205,8 +3502,11 @@ async fn download_forge_installer_once(
         .await
         .map_err(|e| format!("Не удалось создать файл: {e}"))?;
 
+    // Запрашиваем без сжатия (identity) — на некоторых устройствах/прокси
+    // gzip/deflate декомпрессия при стриминге вызывает "error decoding response body"
     let resp = client
         .get(url)
+        .header(ACCEPT_ENCODING, "identity")
         .send()
         .await
         .map_err(|e| format!("Ошибка запроса Forge installer: {e}"))?;
@@ -3238,36 +3538,40 @@ async fn download_forge_installer_once(
     }
 
     let effective_total = content_len;
-    let mut downloaded: u64 = 0;
 
-    let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Err("Загрузка отменена пользователем".to_string());
-        }
-        let chunk = chunk.map_err(|e| format!("Ошибка чтения потока: {e}"))?;
-        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
-            .await
-            .map_err(|e| format!("Ошибка записи: {e}"))?;
-        downloaded += chunk.len() as u64;
-        total_done.fetch_add(chunk.len() as u64, Ordering::SeqCst);
+    // Используем bytes() вместо bytes_stream() — обход бага reqwest с декомпрессией
+    // при стриминге ("error decoding response body" на некоторых устройствах/прокси)
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Ошибка чтения потока: {e}"))?;
 
-        let percent = if effective_total > 0 {
-            downloaded as f32 / effective_total as f32 * 100.0
-        } else {
-            0.0
-        };
-        let _ = app.emit(
-            EVENT_DOWNLOAD_PROGRESS,
-            DownloadProgressPayload {
-                version_id: version_id.to_string(),
-                downloaded,
-                total: effective_total,
-                percent,
-            },
-        );
+    if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err("Загрузка отменена пользователем".to_string());
     }
+
+    tokio::io::AsyncWriteExt::write_all(&mut file, &bytes)
+        .await
+        .map_err(|e| format!("Ошибка записи: {e}"))?;
+
+    let downloaded = bytes.len() as u64;
+    total_done.fetch_add(downloaded, Ordering::SeqCst);
+
+    let percent = if effective_total > 0 {
+        downloaded as f32 / effective_total as f32 * 100.0
+    } else {
+        100.0
+    };
+    let _ = app.emit(
+        EVENT_DOWNLOAD_PROGRESS,
+        DownloadProgressPayload {
+            version_id: version_id.to_string(),
+            downloaded,
+            total: effective_total,
+            percent,
+        },
+    );
 
     drop(file);
     let _ = tokio::fs::remove_file(path).await;
@@ -4937,6 +5241,48 @@ pub async fn install_forge(
         .await?;
     }
 
+    // Pre-download vanilla client.jar via launcher HTTP client (better proxy support than Forge's JVM).
+    // Forge installer ожидает файл в versions/<mc_version>/<mc_version>.jar
+    let vanilla_client_jar = vers_root.join(&mc_version).join(format!("{mc_version}.jar"));
+    if !vanilla_client_jar.exists() {
+        let json_text = tokio::fs::read_to_string(&base_version_json_path)
+            .await
+            .map_err(|e| format!("Не удалось прочитать манифест версии: {e}"))?;
+        let detail: VersionDetail = serde_json::from_str(&json_text)
+            .map_err(|e| format!("Ошибка разбора манифеста версии: {e}"))?;
+        if let Some(ref downloads) = detail.downloads {
+            log_to_console(
+                &app,
+                &format!(
+                    "[Forge] Предзагрузка vanilla client.jar (через прокси лаунчера): {}",
+                    vanilla_client_jar.display()
+                ),
+            );
+            let total_done_pre = Arc::new(AtomicU64::new(0));
+            if let Err(e) = download_file_checked(
+                &installer_client,
+                &downloads.client.url,
+                &vanilla_client_jar,
+                downloads.client.sha1.clone(),
+                &app,
+                &version_id,
+                downloads.client.size,
+                total_done_pre,
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await
+            {
+                log_to_console(
+                    &app,
+                    &format!(
+                        "[Forge] Предзагрузка client.jar не удалась (Forge попробует сам): {e}"
+                    ),
+                );
+                let _ = tokio::fs::remove_file(&vanilla_client_jar).await;
+            }
+        }
+    }
+
     let game_dir = root.clone();
     let java_installer = installer_path.clone();
 
@@ -5109,14 +5455,36 @@ pub async fn install_forge(
 
     let expected_version_json_path =
         vers_root.join(&version_id).join(format!("{version_id}.json"));
-    if !expected_version_json_path.exists() {
-        return Err(format!(
-            "После установки Forge не найден файл версии: {}",
-            expected_version_json_path.display()
-        ));
+    if expected_version_json_path.exists() {
+        return Ok(());
     }
 
-    Ok(())
+    // Установщик Forge для некоторых версий создаёт папку без дефиса: "1.20.3-forge49.0.2"
+    // вместо "1.20.3-forge-49.0.2". Проверяем альтернативное имя и копируем.
+    let alt_folder_name = format!("{mc_version}-forge{_forge_build}");
+    let alt_json_name = format!("{alt_folder_name}.json");
+    let alt_dir = vers_root.join(&alt_folder_name);
+    let alt_json = alt_dir.join(&alt_json_name);
+    if alt_json.exists() {
+        let expected_dir = vers_root.join(&version_id);
+        tokio::fs::create_dir_all(&expected_dir)
+            .await
+            .map_err(|e| format!("Не удалось создать папку версии: {e}"))?;
+        let mut json_content = tokio::fs::read_to_string(&alt_json)
+            .await
+            .map_err(|e| format!("Не удалось прочитать JSON Forge: {e}"))?;
+        json_content = json_content.replace(&alt_folder_name, &version_id);
+        tokio::fs::write(&expected_version_json_path, &json_content)
+            .await
+            .map_err(|e| format!("Не удалось записать JSON версии: {e}"))?;
+        let _ = tokio::fs::remove_dir_all(&alt_dir).await;
+        return Ok(());
+    }
+
+    return Err(format!(
+        "После установки Forge не найден файл версии: {}",
+        expected_version_json_path.display()
+    ));
 }
 
 #[tauri::command]
@@ -5482,17 +5850,27 @@ pub async fn launch_game(
         _ => "natives-linux",
     };
 
+    // Собираем classpath без дубликатов (Forge + parent могут содержать одну и ту же библиотеку,
+    // напр. Guava — дубли приводят к IllegalStateException: Duplicate key в Bootstrap)
     let mut classpath = Vec::new();
+    let mut seen_paths = std::collections::HashSet::<String>::new();
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
         if let Some(ref a) = lib.downloads.artifact {
-            classpath.push(libs_root.join(&a.path));
+            let path = libs_root.join(&a.path);
+            let key = path.to_str().unwrap_or("").replace('\\', "/");
+            if seen_paths.insert(key) {
+                classpath.push(path);
+            }
         }
     }
     if detail.downloads.is_some() || jar_path.exists() {
-        classpath.push(jar_path.clone());
+        let jar_key = jar_path.to_str().unwrap_or("").replace('\\', "/");
+        if seen_paths.insert(jar_key) {
+            classpath.push(jar_path.clone());
+        }
     }
 
     let classpath_str = classpath
@@ -5701,36 +6079,42 @@ pub async fn launch_game(
         }
     }
 
-    let replace = |s: &str| -> String {
-        s.replace("${game_directory}", game_dir_str)
-            .replace("${gameDir}", game_dir_str)
-            .replace("${natives}", natives_str)
-            .replace("${natives_directory}", natives_str)
-            .replace("${classpath}", &classpath_str)
-            .replace("${assetsDir}", assets_str)
-            .replace("${assets_root}", assets_str)
-            .replace("${assets_index_name}", detail.assets.as_deref().unwrap_or(""))
-            .replace("${version_name}", &version_id)
-            .replace("${version}", &version_id)
-            .replace("${auth_player_name}", &auth_name)
-            .replace("${auth_uuid}", &auth_uuid)
-            .replace("${auth_access_token}", &auth_token)
-            .replace("${clientid}", ELY_CLIENT_ID)
-            .replace("${auth_xuid}", "")
-            .replace("${user_type}", &user_type)
-            .replace("${version_type}", "release")
-            .replace("${is_demo_user}", "false")
-            .replace("${launcher_name}", "16Launcher")
-            .replace("${launcher_version}", "2.0.0")
-    };
+    let libs_dir_str = libs_root
+        .to_str()
+        .ok_or("Путь к папке libraries не в UTF-8")?;
+    let classpath_sep = if os_name == "windows" { ";" } else { ":" };
 
+    let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
     let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
-        (jv.major_version, jv.component.clone())
+        let mut major = jv.major_version;
+        let mut component = jv.component.clone();
+        // Forge + Java 21: известный баг (Nashorn/ASM — "Module org.objectweb.asm not found").
+        // Лаунчер автоматически выбирает Java 17 вместо 21 для Forge.
+        if is_forge && major >= 21 {
+            eprintln!(
+                "[Launch] Forge: используем Java 17 вместо {} (обход бага Nashorn/ASM в Java 21)",
+                major
+            );
+            major = 17;
+            component = "java-runtime-gamma".to_string();
+        }
+        (major, component)
     } else {
-        (8, "jre-legacy".to_string())
+        if is_forge {
+            eprintln!("[Launch] Forge без java_version в manifest: используем Java 17");
+            (17, "java-runtime-gamma".to_string())
+        } else {
+            (8, "jre-legacy".to_string())
+        }
     };
     let default_java_path =
         crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+    eprintln!(
+        "[Launch] Java: {} (runtime {} {})",
+        default_java_path.display(),
+        java_major,
+        java_component
+    );
 
     let settings = effective_settings_for_launch();
     let instance_settings_for_launch =
@@ -5742,11 +6126,16 @@ pub async fn launch_game(
     let replace = |s: &str| -> String {
         s.replace("${game_directory}", game_dir_str)
             .replace("${gameDir}", game_dir_str)
+            .replace("${natives}", natives_str)
             .replace("${natives_directory}", natives_str)
             .replace("${classpath}", &classpath_str)
+            .replace("${library_directory}", libs_dir_str)
+            .replace("${classpath_separator}", classpath_sep)
+            .replace("${assetsDir}", assets_str)
             .replace("${assets_root}", assets_str)
             .replace("${assets_index_name}", detail.assets.as_deref().unwrap_or(""))
             .replace("${version_name}", &version_id)
+            .replace("${version}", &version_id)
             .replace("${auth_player_name}", &auth_name)
             .replace("${auth_uuid}", &auth_uuid)
             .replace("${auth_access_token}", &auth_token)
@@ -5785,41 +6174,24 @@ pub async fn launch_game(
                 .collect::<Vec<String>>()
         };
 
-    let looks_like_forge = version_id.contains("-forge-")
-        || detail.main_class.contains("bootstraplauncher")
-        || detail.main_class.contains("forge");
+    if is_forge {
+        ensure_forge_ignore_list_includes_vanilla_client_jar(&mut jvm_args, &effective_jar_version);
+    }
+
+    // Фильтруем --add-exports/--add-opens для cpw.mods.*, org.objectweb.asm, org.openjdk.nashorn.
+    // Эти "модули" — JAR-ы из classpath, не системные; JVM даёт Unknown module / Module not found.
+    let mut jvm_args = if is_forge {
+        filter_forge_problematic_jvm_args(jvm_args).0
+    } else {
+        jvm_args
+    };
+
     let supports_add_opens = java_major >= 9;
     if !supports_add_opens {
-        let mut filtered: Vec<String> = Vec::with_capacity(jvm_args.len());
-        let mut i = 0usize;
-        while i < jvm_args.len() {
-            if jvm_args[i] == "--add-opens" {
-                i += 2;
-                continue;
-            }
-            if jvm_args[i].starts_with("--add-opens=") {
-                i += 1;
-                continue;
-            }
-            filtered.push(jvm_args[i].clone());
-            i += 1;
-        }
-        jvm_args = filtered;
+        jvm_args = remove_add_opens_for_java_under_9(jvm_args);
     }
-    if looks_like_forge && supports_add_opens {
-        let has_invoke_open = jvm_args.iter().any(|s| {
-            s.contains("java.lang.invoke=ALL-UNNAMED") || s.contains("java.base/java.lang.invoke=ALL-UNNAMED")
-        });
-        if !has_invoke_open {
-            jvm_args.push("--add-opens".to_string());
-            jvm_args.push("java.base/java.lang.invoke=ALL-UNNAMED".to_string());
-        }
-
-        let has_jar_open = jvm_args.iter().any(|s| s.contains("java.base/java.util.jar=ALL-UNNAMED"));
-        if !has_jar_open {
-            jvm_args.push("--add-opens".to_string());
-            jvm_args.push("java.base/java.util.jar=ALL-UNNAMED".to_string());
-        }
+    if is_forge && supports_add_opens {
+        ensure_forge_safe_opens(&mut jvm_args);
     }
 
     let mut game_args: Vec<String> = if let Some(ref legacy) = detail.minecraft_arguments {
@@ -5889,7 +6261,7 @@ pub async fn launch_game(
         .unwrap_or_else(|| load_java_settings_internal(&app));
 
     let (java_path, mut jvm_args) = build_java_command(
-        default_java_path,
+        default_java_path.clone(),
         &settings,
         instance_settings_for_launch.as_ref(),
         &java_settings,
@@ -5899,6 +6271,11 @@ pub async fn launch_game(
         &version_id,
         &classpath_str,
         jvm_args,
+        if is_forge {
+            Some(default_java_path)
+        } else {
+            None
+        },
     )?;
 
     if auth_token != "offline" && !auth_token.is_empty() {
@@ -5917,10 +6294,46 @@ pub async fn launch_game(
         }
     }
 
-    eprintln!("[Launch] JVM args: {:?}", jvm_args);
+    // Финальная фильтрация Forge-проблемных аргументов (манифест, user args, instance args).
+    let removed_for_log = if is_forge {
+        let (filtered, removed) = filter_forge_problematic_jvm_args(std::mem::take(&mut jvm_args));
+        jvm_args = filtered;
+        removed
+    } else {
+        Vec::new()
+    };
+
+    eprintln!("[Launch] Forge: {}, Java: {}", is_forge, java_path.display());
+    eprintln!("[Launch] JVM args (final): {:?}", jvm_args);
+    if !removed_for_log.is_empty() {
+        eprintln!(
+            "[Launch] Forge: удалены проблемные JVM args: {:?}",
+            removed_for_log
+        );
+    }
     eprintln!("[Launch] Game args: {:?}", game_args);
 
     let _jar_path_str = jar_path.to_str().ok_or("Путь к jar не в UTF-8")?;
+
+    // Предпроверка доступа — помогает избежать "os error 13" на Android 13 и в ограниченных средах
+    if let Err(e) = std::fs::metadata(&java_path) {
+        if e.kind() == ErrorKind::PermissionDenied {
+            return Err(format!(
+                "Нет доступа к Java (os error 13): {}. Добавьте в исключения антивируса или запустите от имени администратора.",
+                java_path.display()
+            ));
+        }
+        return Err(format!("Java не найдена или недоступна: {} — {e}", java_path.display()));
+    }
+    if let Err(e) = std::fs::metadata(&game_dir_str) {
+        if e.kind() == ErrorKind::PermissionDenied {
+            return Err(format!(
+                "Нет доступа к папке игры (os error 13): {}. Перенесите игру в доступную папку или выдайте разрешения приложению.",
+                game_dir_str
+            ));
+        }
+        return Err(format!("Папка игры недоступна: {} — {e}", game_dir_str));
+    }
 
     let mut cmd = std::process::Command::new(&java_path);
     cmd.args(&jvm_args)
@@ -5932,9 +6345,23 @@ pub async fn launch_game(
 
     let play_start_time = SystemTime::now();
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Не удалось запустить игру (установите Java): {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        // os error 13 = EACCES (Permission Denied) — частые причины: папка в Program Files,
+        // антивирус, ограничения Android 13 / Scoped Storage, OneDrive.
+        if e.kind() == ErrorKind::PermissionDenied {
+            format!(
+                "Отказано в доступе (os error 13). Попробуйте: 1) Запустить лаунчер от имени администратора. \
+                2) Добавить папку игры и Java в исключения антивируса. \
+                3) Перенести игру из Program Files/OneDrive в простую папку (например, C:\\Games). \
+                4) На Android 13: выдать все разрешения приложению и убедиться, что папка игры доступна. \
+                Java: {}, Папка игры: {}",
+                java_path.display(),
+                game_dir_str
+            )
+        } else {
+            format!("Не удалось запустить игру (установите Java): {e}")
+        }
+    })?;
     GAME_PROCESS_PID.store(child.id() as u64, Ordering::SeqCst);
 
     if let Some(stdout) = child.stdout.take() {
