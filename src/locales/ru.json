@@ -381,6 +381,7 @@
       "mods": "Моды",
       "modpacks": "Сборки"
     },
+    "launcherVersionTitle": "Версия лаунчера {{version}}",
     "accounts": {
       "editNickname": "Редактировать никнейм",
       "nicknamePlaceholder": "Игрок",
