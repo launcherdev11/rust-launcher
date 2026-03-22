@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader, ErrorKind};
+use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use rand::distributions::Alphanumeric;
+use flate2::read::GzDecoder;
 use rand::Rng;
 use reqwest::Client;
 use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE};
@@ -58,6 +59,60 @@ fn http_client(use_proxy: bool) -> Client {
     }
 
     builder.build().unwrap_or_else(|_| Client::new())
+}
+
+/// Без авто‑gzip/brotli/deflate: иначе reqwest иногда падает с «error decoding response body»
+/// при скачивании JAR (прокси/CDN и несовпадение Content-Encoding с потоком).
+fn http_client_for_binary_download(use_proxy: bool) -> Client {
+    let _ = dotenvy::dotenv();
+
+    let mut builder = Client::builder()
+        .timeout(Duration::from_secs(300))
+        .connect_timeout(Duration::from_secs(30))
+        .http1_only()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
+
+    if use_proxy {
+        let host = env_var_trim("PROXY_HOST");
+        let port_str = env_var_trim("PROXY_PORT");
+        let user = env_var_trim("PROXY_USER");
+        let pass = env_var_trim("PROXY_PASS");
+
+        if let (Some(host), Some(port_str)) = (host, port_str) {
+            if let Ok(port) = port_str.parse::<u16>() {
+                let proxy_url = match (user, pass) {
+                    (Some(u), Some(p)) => format!(
+                        "http://{}:{}@{}:{}",
+                        encode(&u),
+                        encode(&p),
+                        host,
+                        port
+                    ),
+                    _ => format!("http://{host}:{port}"),
+                };
+
+                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                    builder = builder.proxy(proxy);
+                }
+            }
+        }
+    }
+
+    builder.build().unwrap_or_else(|_| {
+        Client::builder()
+            .timeout(Duration::from_secs(300))
+            .connect_timeout(Duration::from_secs(30))
+            .http1_only()
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36")
+            .build()
+            .unwrap_or_else(|_| Client::new())
+    })
 }
 
 fn env_var_trim(key: &str) -> Option<String> {
@@ -3539,12 +3594,22 @@ async fn download_forge_installer_once(
 
     let effective_total = content_len;
 
-    // Используем bytes() вместо bytes_stream() — обход бага reqwest с декомпрессией
-    // при стриминге ("error decoding response body" на некоторых устройствах/прокси)
-    let bytes = resp
+    // Клиент с gzip(false): тело приходит как в сети; при gzip-магии распаковываем вручную.
+    let mut raw = resp
         .bytes()
         .await
         .map_err(|e| format!("Ошибка чтения потока: {e}"))?;
+
+    if raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b {
+        let mut decoder = GzDecoder::new(raw.as_ref());
+        let mut out = Vec::new();
+        decoder
+            .read_to_end(&mut out)
+            .map_err(|e| format!("Ошибка распаковки gzip (Forge installer): {e}"))?;
+        raw = out.into();
+    }
+
+    let bytes = raw;
 
     if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
         let _ = tokio::fs::remove_file(&tmp_path).await;
@@ -5214,7 +5279,7 @@ pub async fn install_forge(
 
     ensure_launcher_profiles_json(&root, &mc_version)?;
 
-    let installer_client = http_client(true);
+    let installer_client = http_client_for_binary_download(true);
     let installer_dir = launcher_data_dir()?.join("forge_installers").join(&version_id);
     tokio::fs::create_dir_all(&installer_dir)
         .await
