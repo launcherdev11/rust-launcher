@@ -233,6 +233,9 @@ type RemoteNotificationsJsonItem = {
   type?: string;
 };
 
+type RemoteNotificationHyphenKey = "color-msg" | "icon-msg" | "text-msg";
+type RemoteNotificationCamelKey = "colorMsg" | "iconMsg" | "textMsg";
+
 type BottomSocialKind = "discord" | "telegram";
 
 type BottomSocialNotification = {
@@ -268,8 +271,12 @@ function SocialIcon({ kind }: { kind: BottomSocialKind }) {
   );
 }
 
-function getRemoteItemField(item: RemoteNotificationsJsonItem, hyphenKey: string, camelKey: string) {
-  return item[hyphenKey] ?? (item as any)[camelKey];
+function getRemoteItemField(
+  item: RemoteNotificationsJsonItem,
+  hyphenKey: RemoteNotificationHyphenKey,
+  camelKey: RemoteNotificationCamelKey,
+) {
+  return item[hyphenKey] ?? item[camelKey];
 }
 
 function splitTitleAndSubtitle(textMsg: string): { title: string; subtitle?: string } {
