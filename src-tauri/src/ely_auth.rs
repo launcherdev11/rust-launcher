@@ -638,7 +638,6 @@ async fn write_html_response(stream: &mut tokio::net::TcpStream, title: &str, bo
     let _ = stream.write_all(resp.as_bytes()).await;
 }
 
-/// Обрабатывает одно TCP-подключение. `Ok(true)` — OAuth-цикл завершён (успех или ошибка Ely / токена).
 async fn try_process_oauth_connection(
     app: &AppHandle,
     mut stream: tokio::net::TcpStream,

@@ -171,7 +171,6 @@ function hueDegFromWheelClientPos(el: HTMLElement, clientX: number, clientY: num
   return (angleDeg + 90 + 360) % 360;
 }
 
-/** Плавное радужное кольцо (много стопов — меньше «ступенек» на краях). */
 const ACCENT_HUE_RING_STYLE: CSSProperties = {
   backgroundImage: `conic-gradient(from 0deg, ${Array.from({ length: 72 }, (_, i) => {
     const h = (i * 360) / 72;

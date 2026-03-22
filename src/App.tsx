@@ -132,7 +132,6 @@ type Notification = {
   kind?: NotificationKind;
   message: string;
   leaving?: boolean;
-  // For remote notifications coming from notifications.json
   colorMsg?: string;
   iconMsg?: string;
 };
@@ -141,7 +140,6 @@ function appendAlphaToHex(hex: string, alpha01: number): string {
   const a = Math.round(Math.max(0, Math.min(1, alpha01)) * 255)
     .toString(16)
     .padStart(2, "0");
-  // Expect format: #RRGGBB
   return `${hex}${a}`.toUpperCase();
 }
 
@@ -156,7 +154,6 @@ function getTextColorForHexBg(hex: string): "black" | "white" {
   const r = parseInt(raw.slice(0, 2), 16);
   const g = parseInt(raw.slice(2, 4), 16);
   const b = parseInt(raw.slice(4, 6), 16);
-  // Relative luminance shortcut
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luminance > 160 ? "black" : "white";
 }
@@ -167,7 +164,6 @@ function resolveRemoteNotificationIconSrc(iconMsg?: string): string | null {
   if (!v) return null;
   if (/^https?:\/\//i.test(v) || v.startsWith("/")) return v;
 
-  // Accept plain asset filename like "success.png" (existing launcher assets live in /launcher-assets/)
   if (/^[a-zA-Z0-9_-]+\.(png|webp|gif)$/i.test(v)) {
     return `/launcher-assets/${v}`;
   }
@@ -191,13 +187,11 @@ function resolveRemoteNotificationKindFromColorMsg(colorMsg?: string): Notificat
   const c = normalizeOptionalString(colorMsg)?.toLowerCase();
   if (!c) return null;
 
-  // Requested mapping
   if (c === "red") return "error";
   if (c === "green") return "success";
   if (c === "yellow") return "warning";
   if (c === "gray" || c === "grey") return "info";
 
-  // Allow direct system kind names too (future-proof)
   if (c === "info") return "info";
   if (c === "success") return "success";
   if (c === "error") return "error";
@@ -220,8 +214,6 @@ function resolveRemoteNotificationBgStyle(
     return { background, border, textColor };
   }
 
-  // Fallback: use given string as background.
-  // We cannot reliably compute contrast for non-hex colors.
   return {
     background: v,
     border: "rgba(255, 255, 255, 0.35)",
@@ -230,17 +222,14 @@ function resolveRemoteNotificationBgStyle(
 }
 
 type RemoteNotificationsJsonItem = {
-  // Requested keys in notifications.json
   "color-msg"?: string;
   "icon-msg"?: string;
   "text-msg"?: string;
 
-  // Optional camelCase fallbacks (in case you change JSON later)
   colorMsg?: string;
   iconMsg?: string;
   textMsg?: string;
 
-  // Optional placement hint
   type?: string;
 };
 
@@ -280,7 +269,6 @@ function SocialIcon({ kind }: { kind: BottomSocialKind }) {
 }
 
 function getRemoteItemField(item: RemoteNotificationsJsonItem, hyphenKey: string, camelKey: string) {
-  // @ts-expect-error - allow dynamic key access
   return item[hyphenKey] ?? (item as any)[camelKey];
 }
 
@@ -292,10 +280,8 @@ function splitTitleAndSubtitle(textMsg: string): { title: string; subtitle?: str
   return { title: parts[0], subtitle: parts.slice(1).join("\n") };
 }
 
-// Cache-busting helps avoid stale CDN content (jsDelivr caches aggressively).
 const NOTIFICATIONS_CACHE_BUST = `?t=${Date.now()}`;
 const REMOTE_NOTIFICATIONS_URLS = [
-  // raw GitHub often updates faster than jsDelivr CDN
   `https://raw.githubusercontent.com/16steyy/16Launcher-News/main/notifications.json${NOTIFICATIONS_CACHE_BUST}`,
   `https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/notifications.json${NOTIFICATIONS_CACHE_BUST}`,
 ];
@@ -940,7 +926,6 @@ function App() {
     })();
   }, [refreshSettings]);
 
-  // Remote notifications (system + bottom social prompts)
   useEffect(() => {
     if (!settings) return;
     if (didLoadedRemoteNotificationsRef.current) return;
@@ -952,7 +937,6 @@ function App() {
         let lastError: unknown = null;
 
         for (const url of REMOTE_NOTIFICATIONS_URLS) {
-          // If one CDN endpoint hangs, quickly try the next one.
           const requestController = new AbortController();
           const timeoutId = window.setTimeout(() => requestController.abort(), 6500);
 
@@ -966,8 +950,6 @@ function App() {
               throw new Error(`Failed to load notifications: ${response.status}`);
             }
 
-            // Some repo JSON files may contain trailing commas (invalid JSON),
-            // so we parse manually with a small sanitizer.
             const text = await response.text();
             const sanitized = text.replace(/,\s*([}\]])/g, "$1");
             raw = JSON.parse(sanitized) as unknown;
@@ -1028,7 +1010,6 @@ function App() {
           });
         }
 
-        // Mark as loaded only after we successfully fetched + parsed JSON.
         didLoadedRemoteNotificationsRef.current = true;
 
         if (system.length === 0) return;
@@ -1056,14 +1037,12 @@ function App() {
     return () => controller.abort();
   }, [settings]);
 
-  // Bottom-right social prompts (independent from notifications.json)
   useEffect(() => {
     if (didLoadedBottomSocialRef.current) return;
     didLoadedBottomSocialRef.current = true;
 
     const showDiscordInitial = Math.random() < 0.5;
     const showTelegramInitial = Math.random() < 0.5;
-    // Ensure at least one card is shown.
     const showDiscord =
       showDiscordInitial || (!showDiscordInitial && !showTelegramInitial)
         ? showDiscordInitial || Math.random() < 0.5
@@ -1700,7 +1679,6 @@ function App() {
         setIsStopping(true);
         try {
           await invoke("stop_game");
-          // Avoid "crashed" heuristics on the next polling tick.
           lastRunningRef.current = false;
           setGameStatus("stopped");
         } catch (error) {
@@ -1919,7 +1897,6 @@ function App() {
             bgClasses = "bg-amber-500/95 border border-amber-300/70 text-black";
             iconSrc = "/launcher-assets/warn.png";
           } else {
-            // Remote/custom notification rendering
             const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);
             iconSrc = resolvedIcon ?? "/launcher-assets/icon.png";
             const resolvedBg = resolveRemoteNotificationBgStyle(n.colorMsg);
@@ -1930,12 +1907,10 @@ function App() {
                 color: resolvedBg.textColor === "black" ? "#000" : "#fff",
               };
             } else {
-              // If we don't have custom style, fallback to a neutral card.
               bgClasses = "bg-neutral-800/90 border border-white/35 text-white";
             }
           }
 
-          // Allow overriding launcher default icon via icon-msg (e.g. "success.png")
           if (n.iconMsg) {
             const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);
             if (resolvedIcon) iconSrc = resolvedIcon;

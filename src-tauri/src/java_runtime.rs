@@ -144,7 +144,6 @@ fn file_nonempty(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Проверяет, что дерево JDK/JRE рядом с `java` не оборвано на середине (типичный случай: есть javaw, нет jvm.cfg).
 fn runtime_tree_looks_ready(java_home: &Path, major_version: u8) -> bool {
     let jvm_cfg_ok = if major_version >= 9 {
         let p = java_home.join("lib").join("jvm.cfg");
@@ -191,7 +190,6 @@ fn resolve_ready_java_binary(major_version: u8, component: &str) -> Result<Optio
     Ok(Some(java_path))
 }
 
-/// Быстрая проверка уже скачанного файла: размер; для мелких файлов — ещё и SHA1.
 fn cached_file_matches(path: &Path, expected_size: u64, expected_sha1: &str) -> Result<bool, String> {
     let meta = match fs::metadata(path) {
         Ok(m) if m.is_file() => m,
