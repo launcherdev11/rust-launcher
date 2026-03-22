@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -230,6 +232,19 @@ const contentTabLabelsEn: Record<ContentTab, string> = {
   shaderpacks: "Shaders",
 };
 
+function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
+  const okExt = (p: string, exts: string[]) => {
+    const lower = p.toLowerCase();
+    const dot = lower.lastIndexOf(".");
+    if (dot < 0) return false;
+    const ext = lower.slice(dot + 1);
+    return exts.includes(ext);
+  };
+  if (tab === "mods") return paths.filter((p) => okExt(p, ["jar"]));
+  if (tab === "shaderpacks") return paths.filter((p) => okExt(p, ["zip"]));
+  return paths.filter((p) => okExt(p, ["zip", "rar", "7z", "mcpack"]));
+}
+
 export function ModpackTab({
   language,
   showNotification,
@@ -325,6 +340,8 @@ export function ModpackTab({
     Partial<Record<ContentTab, HTMLButtonElement | null>>
   >({});
   const manageContentTabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const manageDropZoneRef = useRef<HTMLDivElement | null>(null);
+  const [isManageDropTarget, setIsManageDropTarget] = useState(false);
   const [manageContentIndicator, setManageContentIndicator] = useState<{
     left: number;
     width: number;
@@ -803,6 +820,38 @@ export function ModpackTab({
     }
   }
 
+  async function addProfileFilesFromPaths(paths: string[]) {
+    if (!selectedProfile || paths.length === 0) return;
+    try {
+      const category =
+        contentTab === "mods"
+          ? "mods"
+          : contentTab === "resourcepacks"
+            ? "resourcepacks"
+            : "shaderpacks";
+      await invoke("add_profile_files", {
+        id: selectedProfile.id,
+        category,
+        files: paths,
+      });
+      await refreshItems(selectedProfile.id, contentTab);
+      showNotification(
+        "success",
+        language === "ru"
+          ? "Файлы добавлены в сборку."
+          : "Files added to profile.",
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        language === "ru"
+          ? "Не удалось добавить файлы."
+          : "Failed to add files.",
+      );
+    }
+  }
+
   async function ensureVersionsLoaded() {
     if (versionOptions.length > 0 || versionsLoading) return;
     setVersionsLoading(true);
@@ -1125,6 +1174,61 @@ export function ModpackTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
+  useEffect(() => {
+    if (activeView !== "manage" || !selectedProfile) return;
+    let unlisten: (() => void) | undefined;
+    const webview = getCurrentWebview();
+    void webview
+      .onDragDropEvent(async (event) => {
+        const p = event.payload;
+        if (p.type === "leave") {
+          setIsManageDropTarget(false);
+          return;
+        }
+        if (p.type === "enter") {
+          return;
+        }
+        const factor = await getCurrentWindow().scaleFactor();
+        const el = manageDropZoneRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const pos = new PhysicalPosition(p.position.x, p.position.y).toLogical(factor);
+        const inside =
+          pos.x >= rect.left &&
+          pos.x <= rect.right &&
+          pos.y >= rect.top &&
+          pos.y <= rect.bottom;
+        if (p.type === "over") {
+          setIsManageDropTarget(inside);
+          return;
+        }
+        if (p.type === "drop") {
+          setIsManageDropTarget(false);
+          if (!inside || !p.paths?.length) return;
+          const filtered = filterPathsForContentTab(contentTab, p.paths);
+          if (filtered.length === 0) {
+            showNotification(
+              "warning",
+              language === "ru"
+                ? "Нет подходящих файлов для этой вкладки (проверьте расширение)."
+                : "No matching files for this tab (check file extensions).",
+            );
+            return;
+          }
+          await addProfileFilesFromPaths(filtered);
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(console.error);
+    return () => {
+      setIsManageDropTarget(false);
+      unlisten?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, selectedProfile?.id, contentTab, language]);
+
   async function handleAddFilesFromPc() {
     if (!selectedProfile) return;
     try {
@@ -1150,24 +1254,7 @@ export function ModpackTab({
             ? (paths as string[])
             : [];
       if (arr.length === 0) return;
-      const category =
-        contentTab === "mods"
-          ? "mods"
-          : contentTab === "resourcepacks"
-            ? "resourcepacks"
-            : "shaderpacks";
-      await invoke("add_profile_files", {
-        id: selectedProfile.id,
-        category,
-        files: arr,
-      });
-      await refreshItems(selectedProfile.id, contentTab);
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Файлы добавлены в сборку."
-          : "Files added to profile.",
-      );
+      await addProfileFilesFromPaths(arr);
     } catch (e) {
       console.error(e);
       showNotification(
@@ -2055,16 +2142,32 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div className="custom-scrollbar -mr-2 flex-1 overflow-y-auto pr-2">
+          <div
+            ref={manageDropZoneRef}
+            className={`custom-scrollbar -mr-2 flex-1 overflow-y-auto rounded-2xl pr-2 transition-colors ${
+              isManageDropTarget
+                ? "bg-purple-500/15 ring-2 ring-purple-400/70 ring-inset"
+                : ""
+            }`}
+          >
             {itemsLoading ? (
               <div className="flex h-32 items-center justify-center text-xs text-white/70">
                 {language === "ru" ? "Загрузка файлов..." : "Loading files..."}
               </div>
             ) : visibleItems.length === 0 ? (
-              <div className="flex h-32 items-center justify-center rounded-2xl bg-black/40 text-xs text-white/60">
-                {language === "ru"
-                  ? "В этой вкладке ещё нет файлов."
-                  : "There are no files in this tab yet."}
+              <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-black/40 px-4 text-center text-xs text-white/60">
+                <div className="max-w-sm space-y-2">
+                  <p>
+                    {language === "ru"
+                      ? "В этой вкладке ещё нет файлов."
+                      : "There are no files in this tab yet."}
+                  </p>
+                  <p className="text-white/45">
+                    {language === "ru"
+                      ? "Перетащите сюда файлы из проводника или используйте «Добавить»."
+                      : "Drag files here from Explorer, or use “Add”."}
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">

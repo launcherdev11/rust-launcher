@@ -58,6 +58,7 @@ type Settings = {
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
+  background_blur_enabled: boolean;
 };
 
 type InstanceProfileSummary = {
@@ -833,6 +834,7 @@ function App() {
     open_launcher_on_profiles_tab: false,
     background_accent_color: "#0b1530",
     background_image_url: null,
+    background_blur_enabled: true,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -1794,15 +1796,23 @@ function App() {
         } as React.CSSProperties
       }
     >
-      <div
-        className="pointer-events-none fixed inset-0 bg-center"
-        style={{
-          backgroundImage: `url(${backgroundImageUrl})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
-      />
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div
+          className="absolute inset-0 bg-center will-change-transform"
+          style={{
+            backgroundImage: `url(${backgroundImageUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            ...(settings?.background_blur_enabled ?? true
+              ? {
+                  filter: "blur(22px)",
+                  transform: "scale(1.08)",
+                }
+              : {}),
+          }}
+        />
+      </div>
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
       <div className="pointer-events-none absolute inset-0">
         <div

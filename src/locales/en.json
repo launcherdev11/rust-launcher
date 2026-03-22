@@ -143,12 +143,17 @@
         "popupTitle": "Accent color",
         "pickColorAria": "Pick color",
         "currentLabel": "Current",
-        "helpText": "Click the circle or edit the HEX code to choose a new color."
+        "svPadLabel": "Saturation & brightness",
+        "svPadAria": "Saturation and brightness for the current hue",
+        "helpText": "Ring: hue. Square: saturation and brightness. You can also type the HEX."
       },
       "backgroundImage": {
         "label": "Background image:",
         "choose": "Choose image",
         "hint": "The file will be copied to the launcher data folder. “Reset” restores the default background."
+      },
+      "backgroundBlur": {
+        "label": "Background blur:"
       },
       "cache": {
         "label": "Launcher cache:",
