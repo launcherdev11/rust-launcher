@@ -153,11 +153,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
+      # Ely.by OAuth: секрет из GitHub Actions (тот же, что в локальном .env), иначе релиз без входа Ely.
       - name: Build Tauri bundles and create Release (with updater artifacts)
         id: tauri_build
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELY_CLIENT_SECRET: ${{ secrets.ELY_CLIENT_SECRET }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:

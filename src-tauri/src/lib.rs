@@ -38,8 +38,22 @@ fn configure_wayland_backend() {
     env::set_var("GDK_BACKEND", "wayland");
 }
 
+fn load_dotenv() {
+    use std::path::Path;
+    let repo_env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env");
+    let _ = dotenvy::from_path(repo_env);
+    let _ = dotenvy::dotenv();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let _ = dotenvy::from_path(dir.join(".env"));
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    load_dotenv();
+
     #[cfg(target_os = "linux")]
     configure_wayland_backend();
 

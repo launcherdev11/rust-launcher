@@ -76,6 +76,14 @@ const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   modpacks: "/launcher-assets/modpack_icon.png",
 };
 
+const NECO_ARC_SECRET_SOUND_SRC =
+  "/launcher-assets/sounds/" + encodeURIComponent("secret (shhh...).mp3");
+const NECO_ARC_SECRET_SOUND_VOLUME = 0.05;
+
+function normalizeNicknameForSecretCheck(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 type VersionSummary = {
   id: string;
   version_type: string;
@@ -538,6 +546,7 @@ function App() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [installPaused, setInstallPaused] = useState(false);
   const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
+  const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
   const didLoadedRemoteNotificationsRef = useRef(false);
@@ -1390,16 +1399,32 @@ function App() {
     })();
   }, [loader, selectedVersion]);
 
+  const maybePlayNecoArcSecret = useCallback((trimmedNickname: string) => {
+    const norm = normalizeNicknameForSecretCheck(trimmedNickname);
+    const prev = lastPersistedNickNormRef.current;
+    lastPersistedNickNormRef.current = norm;
+    if (norm !== "neco arc" || prev === "neco arc") return;
+    try {
+      const audio = new Audio(NECO_ARC_SECRET_SOUND_SRC);
+      audio.volume = Math.min(1, Math.max(0, NECO_ARC_SECRET_SOUND_VOLUME));
+      void audio.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const loadProfile = useCallback(async () => {
     try {
       const p = await invoke<Profile>("get_profile");
+      const nick = p.nickname ?? "";
       setProfile({
-        nickname: p.nickname ?? "",
+        nickname: nick,
         ely_username: p.ely_username ?? null,
         ely_uuid: p.ely_uuid ?? null,
         ms_id_token: p.ms_id_token ?? null,
         mc_uuid: p.mc_uuid ?? null,
       });
+      lastPersistedNickNormRef.current = normalizeNicknameForSecretCheck(nick);
     } catch {
       setProfile({
         nickname: "",
@@ -1408,6 +1433,7 @@ function App() {
         ms_id_token: null,
         mc_uuid: null,
       });
+      lastPersistedNickNormRef.current = "";
     }
   }, []);
 
@@ -1420,10 +1446,13 @@ function App() {
   useEffect(() => {
     const prev = prevActiveItemRef.current;
     prevActiveItemRef.current = activeItem;
-    if (prev === "accounts" && activeItem !== "accounts" && profile.nickname.trim()) {
-      invoke("set_profile", { nickname: profile.nickname.trim() }).catch(console.error);
+    const trimmed = profile.nickname.trim();
+    if (prev === "accounts" && activeItem !== "accounts" && trimmed) {
+      invoke("set_profile", { nickname: trimmed })
+        .then(() => maybePlayNecoArcSecret(trimmed))
+        .catch(console.error);
     }
-  }, [activeItem, profile.nickname]);
+  }, [activeItem, profile.nickname, maybePlayNecoArcSecret]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -1431,19 +1460,23 @@ function App() {
       if (nick) {
         setProfileSaving(true);
         invoke("set_profile", { nickname: nick })
-          .then(() => setProfile((prev) => ({ ...prev, nickname: nick })))
+          .then(() => {
+            setProfile((prev) => ({ ...prev, nickname: nick }));
+            maybePlayNecoArcSecret(nick);
+          })
           .catch(console.error)
           .finally(() => setProfileSaving(false));
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [profile.nickname]);
+  }, [profile.nickname, maybePlayNecoArcSecret]);
 
   const handleSaveNickname = async (nickname: string) => {
     setProfileSaving(true);
     try {
       await invoke("set_profile", { nickname });
       setProfile((prev) => ({ ...prev, nickname }));
+      maybePlayNecoArcSecret(nickname);
       showNotification(
         "success",
         tt("app.accounts.toast.nicknameSaved"),
