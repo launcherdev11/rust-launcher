@@ -63,10 +63,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
+      # Ely.by OAuth: client_secret вшивается при компиляции (option_env). Задайте в репозитории
+      # Settings → Secrets and variables → Actions → ELY_CLIENT_SECRET (как в локальном .env).
       - name: Build and create GitHub release
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELY_CLIENT_SECRET: ${{ secrets.ELY_CLIENT_SECRET }}
         with:
           projectPath: .
           tauriScript: "npm run tauri"

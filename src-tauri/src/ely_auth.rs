@@ -112,10 +112,22 @@ async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
 static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 fn get_client_secret() -> Result<String, String> {
-    std::env::var("ELY_CLIENT_SECRET").map_err(|_| {
-        "Переменная окружения ELY_CLIENT_SECRET не установлена, а Ely.by OAuth2 требует client_secret"
-            .to_string()
-    })
+    if let Ok(s) = std::env::var("ELY_CLIENT_SECRET") {
+        let s = s.trim();
+        if !s.is_empty() {
+            return Ok(s.to_string());
+        }
+    }
+    if let Some(s) = option_env!("ELY_CLIENT_SECRET") {
+        let s = s.trim();
+        if !s.is_empty() {
+            return Ok(s.to_string());
+        }
+    }
+    Err(
+        "Секрет Ely.by OAuth2 не задан: добавьте ELY_CLIENT_SECRET в файл .env в корне проекта (рядом с package.json), либо задайте переменную окружения. Для релизной сборки передайте ELY_CLIENT_SECRET при компиляции (cargo / CI)."
+            .to_string(),
+    )
 }
 
 #[derive(Debug, Deserialize)]
