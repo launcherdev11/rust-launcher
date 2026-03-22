@@ -397,6 +397,7 @@
         "nicknameSaveFailed": "Failed to save nickname.",
         "elyLoggedOut": "You have logged out of Ely.by.",
         "elyLogoutFailed": "Failed to log out from Ely.by.",
+        "elyOpenBrowserFailed": "Could not open the browser for Ely.by sign-in.",
         "msAuthUnavailable": "Microsoft authorization is unavailable.",
         "msLoggedOut": "You have logged out of Microsoft.",
         "msLogoutFailed": "Failed to log out of Microsoft."

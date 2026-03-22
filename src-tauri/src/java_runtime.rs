@@ -3,9 +3,13 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
+use tokio::sync::Mutex;
+
+static JAVA_RUNTIME_INSTALL_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn http_client() -> Client {
     Client::builder()
@@ -128,14 +132,83 @@ struct JavaRuntimeIndexManifest {
     url: String,
 }
 
-fn existing_runtime_java_path(major_version: u8, component: &str) -> Result<Option<PathBuf>, String> {
+fn java_home_from_binary(java_bin: &Path) -> Option<PathBuf> {
+    let bin = java_bin.parent()?;
+    let home = bin.parent()?;
+    Some(home.to_path_buf())
+}
+
+fn file_nonempty(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|m| m.is_file() && m.len() > 0)
+        .unwrap_or(false)
+}
+
+/// Проверяет, что дерево JDK/JRE рядом с `java` не оборвано на середине (типичный случай: есть javaw, нет jvm.cfg).
+fn runtime_tree_looks_ready(java_home: &Path, major_version: u8) -> bool {
+    let jvm_cfg_ok = if major_version >= 9 {
+        let p = java_home.join("lib").join("jvm.cfg");
+        p.is_file() && file_nonempty(&p)
+    } else {
+        [
+            java_home.join("lib").join("amd64").join("jvm.cfg"),
+            java_home.join("lib").join("i386").join("jvm.cfg"),
+            java_home.join("lib").join("jvm.cfg"),
+        ]
+        .iter()
+        .any(|p| p.is_file() && file_nonempty(p))
+    };
+    if !jvm_cfg_ok {
+        return false;
+    }
+    if major_version >= 9 {
+        let modules = java_home.join("lib").join("modules");
+        if !modules.is_file() {
+            return false;
+        }
+        let Ok(len) = fs::metadata(&modules).map(|m| m.len()) else {
+            return false;
+        };
+        if len < 1024 * 1024 {
+            return false;
+        }
+    }
+    true
+}
+
+fn resolve_ready_java_binary(major_version: u8, component: &str) -> Result<Option<PathBuf>, String> {
     let dir = java_runtime_dir(major_version, component)?;
     let java_path = java_binary_path(&dir)?;
-    if java_path.exists() {
-        Ok(Some(java_path))
-    } else {
-        Ok(None)
+    if !java_path.is_file() {
+        return Ok(None);
     }
+    let Some(home) = java_home_from_binary(&java_path) else {
+        return Ok(None);
+    };
+    if !runtime_tree_looks_ready(&home, major_version) {
+        return Ok(None);
+    }
+    Ok(Some(java_path))
+}
+
+/// Быстрая проверка уже скачанного файла: размер; для мелких файлов — ещё и SHA1.
+fn cached_file_matches(path: &Path, expected_size: u64, expected_sha1: &str) -> Result<bool, String> {
+    let meta = match fs::metadata(path) {
+        Ok(m) if m.is_file() => m,
+        _ => return Ok(false),
+    };
+    let len = meta.len();
+    if expected_size > 0 && len != expected_size {
+        return Ok(false);
+    }
+    if !expected_sha1.is_empty() && (expected_size == 0 || len <= 256 * 1024) {
+        let actual = compute_sha1(path)?;
+        return Ok(actual.eq_ignore_ascii_case(expected_sha1));
+    }
+    if expected_size > 0 {
+        return Ok(len == expected_size);
+    }
+    Ok(false)
 }
 
 fn compute_sha1(path: &Path) -> Result<String, String> {
@@ -233,7 +306,9 @@ fn flatten_top_level(tmp_dir: &Path, final_dir: &Path) -> Result<(), String> {
 }
 
 pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<PathBuf, String> {
-    if let Some(path) = existing_runtime_java_path(major_version, component)? {
+    let _install_guard = JAVA_RUNTIME_INSTALL_LOCK.lock().await;
+
+    if let Some(path) = resolve_ready_java_binary(major_version, component)? {
         eprintln!(
             "[JavaRuntime] Используется уже установленный Java {} ({}): {}",
             major_version,
@@ -310,11 +385,28 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
         .await
         .map_err(|e| format!("Ошибка разбора манифеста файлов Java runtime: {e}"))?;
 
+    let mut manifest_files: Vec<(String, JavaRuntimeFileEntry)> =
+        manifest.files.into_iter().collect();
+    manifest_files.sort_by(|(ka, _), (kb, _)| {
+        fn download_bucket(key: &str) -> u8 {
+            if key.starts_with("lib/") || key == "lib" {
+                0
+            } else if key.starts_with("conf/") || key == "conf" {
+                1
+            } else {
+                2
+            }
+        }
+        download_bucket(ka)
+            .cmp(&download_bucket(kb))
+            .then_with(|| ka.cmp(kb))
+    });
+
     let runtime_root = java_runtime_dir(major_version, component)?;
     fs::create_dir_all(&runtime_root)
         .map_err(|e| format!("Не удалось создать папку Java runtime: {e}"))?;
 
-    for (relative_path, entry) in manifest.files {
+    for (relative_path, entry) in manifest_files {
         let entry_type = entry.entry_type.as_deref().unwrap_or("file");
         let dest_path = runtime_root.join(Path::new(&relative_path));
 
@@ -344,8 +436,15 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
             })?;
         }
 
-        if dest_path.exists() {
+        if cached_file_matches(&dest_path, raw.size, &raw.sha1).unwrap_or(false) {
             continue;
+        }
+        if dest_path.exists() {
+            if dest_path.is_file() {
+                let _ = fs::remove_file(&dest_path);
+            } else {
+                let _ = fs::remove_dir_all(&dest_path);
+            }
         }
 
         let mut resp = client
@@ -364,6 +463,7 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
         }
 
         let tmp_path = dest_path.with_extension("download");
+        let _ = fs::remove_file(&tmp_path);
         let mut file = fs::File::create(&tmp_path).map_err(|e| {
             format!(
                 "Не удалось создать файл '{}' для Java runtime: {e}",
@@ -413,10 +513,20 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
     }
 
     let java_path = java_binary_path(&runtime_root)?;
-    if !java_path.exists() {
+    if !java_path.is_file() {
         return Err(format!(
             "После загрузки Java runtime не найден Java бинарник по пути: {}",
             java_path.display()
+        ));
+    }
+    let home = java_home_from_binary(&java_path).ok_or_else(|| {
+        "После загрузки Java runtime не удалось определить корень JDK/JRE (некорректный путь к java)"
+            .to_string()
+    })?;
+    if !runtime_tree_looks_ready(&home, major_version) {
+        return Err(format!(
+            "После загрузки Java runtime дерево JRE неполное (нет jvm.cfg или lib/modules). Удалите папку '{}' и попробуйте снова.",
+            runtime_root.display()
         ));
     }
 
