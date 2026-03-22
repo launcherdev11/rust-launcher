@@ -82,6 +82,7 @@ type ModsTabProps = {
   activeProfileGameVersion?: string | null;
   activeProfileLoader?: string | null;
   onOpenModpacksTab?: () => void;
+  onSelectedModTitleChange?: (title: string | null) => void;
 };
 
 function DownloadStatIcon() {
@@ -113,6 +114,7 @@ export function ModsTab({
   activeProfileGameVersion,
   activeProfileLoader,
   onOpenModpacksTab,
+  onSelectedModTitleChange,
 }: ModsTabProps) {
   const tt = useT(language);
   const [contentProvider] = useState<CurseForgeContentProvider>("modrinth");
@@ -168,6 +170,20 @@ export function ModsTab({
   const [modpackImportProgress, setModpackImportProgress] = useState<
     MrpackImportProgressPayload | null
   >(null);
+
+  useEffect(() => {
+    if (!onSelectedModTitleChange) return;
+    const title =
+      contentProvider === "modrinth"
+        ? modrinthSelectedProject?.title ?? null
+        : curseforgeSelectedProject?.title ?? null;
+    onSelectedModTitleChange(title);
+  }, [
+    contentProvider,
+    modrinthSelectedProject,
+    curseforgeSelectedProject,
+    onSelectedModTitleChange,
+  ]);
 
   const modrinthTabRefs = useRef<
     Partial<Record<ModrinthContentType, HTMLButtonElement | null>>

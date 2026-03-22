@@ -24,7 +24,7 @@ import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
-import { useT } from "./i18n";
+import { useT, t } from "./i18n";
 
 type Profile = {
   nickname: string;
@@ -585,6 +585,7 @@ function App() {
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
+  const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
 
@@ -1203,6 +1204,33 @@ function App() {
       void refreshSettings(activeInstanceProfile?.id ?? undefined);
     }
   }, [activeItem, activeInstanceProfile?.id, refreshSettings]);
+
+  useEffect(() => {
+    let details: string;
+    let state: string | null = null;
+    switch (activeItem) {
+      case "play":
+        details = t(language, "app.discord.play");
+        break;
+      case "settings":
+        details = t(language, "app.discord.settings");
+        break;
+      case "mods":
+        details = t(language, "app.discord.mods");
+        if (discordModsTitle) state = discordModsTitle;
+        break;
+      case "modpacks":
+        details = t(language, "app.discord.modpacks");
+        if (activeInstanceProfile?.name) state = activeInstanceProfile.name;
+        break;
+      case "accounts":
+        details = t(language, "app.discord.accounts");
+        break;
+      default:
+        details = t(language, "app.discord.play");
+    }
+    invoke("discord_presence_update", { details, state }).catch(() => {});
+  }, [activeItem, language, discordModsTitle, activeInstanceProfile?.name]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -2316,6 +2344,7 @@ function App() {
                 activeProfileGameVersion={activeInstanceProfile?.game_version}
                 activeProfileLoader={activeInstanceProfile?.loader}
                 onOpenModpacksTab={() => setActiveItem("modpacks")}
+                onSelectedModTitleChange={setDiscordModsTitle}
               />
             </div>
           ) : activeItem === "modpacks" ? (
