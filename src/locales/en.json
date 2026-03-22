@@ -381,6 +381,7 @@
       "mods": "Mods",
       "modpacks": "Modpacks"
     },
+    "launcherVersionTitle": "Launcher version {{version}}",
     "accounts": {
       "editNickname": "Edit nickname",
       "nicknamePlaceholder": "Player",

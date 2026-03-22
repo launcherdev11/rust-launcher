@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -558,7 +559,20 @@ function App() {
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>("ru");
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [launcherVersion, setLauncherVersion] = useState<string | null>(null);
   const tt = useT(language);
+
+  useEffect(() => {
+    let cancelled = false;
+    getVersion()
+      .then((v) => {
+        if (!cancelled) setLauncherVersion(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const isAuthorized = !!profile.ms_id_token || !!profile.ely_username;
   const displayedNickname =
     profile.nickname.trim() !== ""
@@ -2067,6 +2081,14 @@ function App() {
       >
         <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-white/40 select-none">
           <span>16Launcher</span>
+          {launcherVersion ? (
+            <span
+              className="font-mono text-[11px] font-medium normal-case tracking-normal text-white/35"
+              title={tt("app.launcherVersionTitle", { version: launcherVersion })}
+            >
+              v{launcherVersion}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={() => setShowHelpModal(true)}
