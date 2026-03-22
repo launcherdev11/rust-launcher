@@ -1,5 +1,4 @@
-use std::net::TcpListener;
-use std::io::{Read as IoRead, Write as IoWrite};
+use std::io::Read as IoRead;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -8,8 +7,10 @@ use rand::{distributions::Alphanumeric, Rng};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 
-use crate::game_provider::{get_profile, launcher_data_dir, profile_path, Profile};
+use crate::game_provider::{get_profile, launcher_data_dir, profile_path};
 
 fn http_client() -> Client {
     Client::builder()
@@ -609,48 +610,213 @@ fn parse_query_param(query: &str, key: &str) -> Option<String> {
     None
 }
 
-fn run_local_oauth_server(app: AppHandle) -> Result<(), String> {
-    let listener = TcpListener::bind("127.0.0.1:25568")
-        .map_err(|e| format!("Не удалось запустить локальный HTTP-сервер OAuth2: {e}"))?;
+fn html_escape_body(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '&' => out.push_str("&amp;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
 
-    if let Ok((mut stream, _)) = listener.accept() {
-        let mut buffer = [0u8; 2048];
-        let n = stream
-            .read(&mut buffer)
-            .map_err(|e| format!("Ошибка чтения HTTP-запроса от браузера: {e}"))?;
-        let req = String::from_utf8_lossy(&buffer[..n]);
-        let mut lines = req.lines();
-        if let Some(first_line) = lines.next() {
-            if let Some(rest) = first_line.strip_prefix("GET ") {
-                if let Some(idx) = rest.find(' ') {
-                    let path = &rest[..idx];
-                    if let Some(qidx) = path.find('?') {
-                        let query = &path[qidx + 1..];
-                        if let (Some(code), Some(state)) = (
-                            parse_query_param(query, "code"),
-                            parse_query_param(query, "state"),
-                        ) {
-                            let app_clone = app.clone();
-                            let code_clone = code.clone();
-                            let state_clone = state.clone();
-                            tauri::async_runtime::spawn(async move {
-                                if let Err(e) =
-                                    handle_oauth_callback_internal(&app_clone, code_clone, state_clone).await
-                                {
-                                    eprintln!("[ElyAuth] Ошибка обработки OAuth2 callback: {e}");
-                                }
-                            });
+async fn write_html_response(stream: &mut tokio::net::TcpStream, title: &str, body_html: &str) {
+    let page = format!(
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>{title}</title></head><body>{body_html}</body></html>",
+        title = html_escape_body(title),
+        body_html = body_html
+    );
+    let resp = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+        page.as_bytes().len(),
+        page
+    );
+    let _ = stream.write_all(resp.as_bytes()).await;
+}
 
-                            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><body><h3>Авторизация завершена, вернитесь в лаунчер.</h3></body></html>";
-                            let _ = stream.write_all(response.as_bytes());
-                        }
-                    }
-                }
-            }
+/// Обрабатывает одно TCP-подключение. `Ok(true)` — OAuth-цикл завершён (успех или ошибка Ely / токена).
+async fn try_process_oauth_connection(
+    app: &AppHandle,
+    mut stream: tokio::net::TcpStream,
+) -> Result<bool, String> {
+    let mut buffer = vec![0u8; 8192];
+    let n = stream
+        .read(&mut buffer)
+        .await
+        .map_err(|e| format!("Ошибка чтения HTTP-запроса от браузера: {e}"))?;
+    if n == 0 {
+        let _ = stream
+            .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    }
+
+    let req = String::from_utf8_lossy(&buffer[..n]);
+    let Some(first_line) = req.lines().next() else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    };
+
+    let Some(rest) = first_line.strip_prefix("GET ") else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    };
+
+    let Some(sp) = rest.find(' ') else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    };
+
+    let path = &rest[..sp];
+    let Some(qidx) = path.find('?') else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    };
+
+    let query = &path[qidx + 1..];
+
+    if let Some(err) = parse_query_param(query, "error") {
+        let desc = parse_query_param(query, "error_description").unwrap_or_default();
+        let msg = format!("Ely.by: {err} — {desc}");
+        let _ = app.emit("ely-login-failed", msg.clone());
+        let inner = format!(
+            "<h3>Ошибка авторизации</h3><p>{}</p><p>Можно закрыть вкладку и вернуться в лаунчер.</p>",
+            html_escape_body(&msg)
+        );
+        write_html_response(&mut stream, "Ely.by", &inner).await;
+        return Ok(true);
+    }
+
+    let Some(code) = parse_query_param(query, "code") else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    };
+
+    let Some(state) = parse_query_param(query, "state") else {
+        let _ = stream
+            .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+            .await;
+        return Ok(false);
+    };
+
+    match handle_oauth_callback_internal(app, code, state).await {
+        Ok(()) => {
+            let inner = "<h3>Авторизация завершена, вернитесь в лаунчер.</h3>";
+            write_html_response(&mut stream, "Ely.by", inner).await;
+        }
+        Err(e) => {
+            eprintln!("[ElyAuth] Ошибка обработки OAuth2 callback: {e}");
+            let _ = app.emit("ely-login-failed", e.clone());
+            let inner = format!(
+                "<h3>Не удалось завершить вход</h3><p>{}</p><p>Закройте вкладку и попробуйте снова в лаунчере.</p>",
+                html_escape_body(&e)
+            );
+            write_html_response(&mut stream, "Ely.by", &inner).await;
         }
     }
 
-    Ok(())
+    Ok(true)
+}
+
+async fn run_local_oauth_server_async(app: AppHandle) {
+    let l4 = match TcpListener::bind("127.0.0.1:25568").await {
+        Ok(l) => l,
+        Err(e) => {
+            let msg = format!(
+                "Не удалось открыть порт 127.0.0.1:25568 для входа Ely.by (занят или запрещён брандмауэром): {e}"
+            );
+            eprintln!("[ElyAuth] {msg}");
+            let _ = app.emit("ely-login-failed", msg);
+            return;
+        }
+    };
+
+    let l6 = TcpListener::bind("[::1]:25568").await.ok();
+
+    let start = tokio::time::Instant::now();
+    let max_wait = Duration::from_secs(600);
+
+    loop {
+        let elapsed = start.elapsed();
+        if elapsed >= max_wait {
+            let _ = app.emit(
+                "ely-login-failed",
+                "Время ожидания входа истекло. Закройте вкладку браузера и нажмите «Ely.by» снова.",
+            );
+            return;
+        }
+        let remaining = max_wait - elapsed;
+
+        let accept_fut = async {
+            match &l6 {
+                Some(l6) => tokio::select! {
+                    r = l4.accept() => r,
+                    r = l6.accept() => r,
+                },
+                None => l4.accept().await,
+            }
+        };
+
+        let accept_result = tokio::time::timeout(remaining, accept_fut).await;
+
+        let stream = match accept_result {
+            Err(_) => {
+                let _ = app.emit(
+                    "ely-login-failed",
+                    "Время ожидания входа истекло. Закройте вкладку браузера и нажмите «Ely.by» снова.",
+                );
+                return;
+            }
+            Ok(Err(e)) => {
+                eprintln!("[ElyAuth] accept: {e}");
+                continue;
+            }
+            Ok(Ok((s, _))) => s,
+        };
+
+        match try_process_oauth_connection(&app, stream).await {
+            Ok(true) => return,
+            Ok(false) => continue,
+            Err(e) => {
+                eprintln!("[ElyAuth] {e}");
+                continue;
+            }
+        }
+    }
+}
+
+fn run_local_oauth_server(app: AppHandle) {
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                eprintln!("[ElyAuth] Не удалось создать runtime для OAuth: {e}");
+                let _ = app.emit(
+                    "ely-login-failed",
+                    format!("Внутренняя ошибка лаунчера при входе Ely.by: {e}"),
+                );
+                return;
+            }
+        };
+        rt.block_on(run_local_oauth_server_async(app));
+    });
 }
 
 #[tauri::command]
@@ -661,11 +827,7 @@ pub async fn start_ely_oauth(app: AppHandle) -> Result<String, String> {
     let url = generate_oauth2_url(&state);
 
     let app_clone = app.clone();
-    std::thread::spawn(move || {
-        if let Err(e) = run_local_oauth_server(app_clone) {
-            eprintln!("[ElyAuth] Локальный OAuth2 сервер завершился с ошибкой: {e}");
-        }
-    });
+    run_local_oauth_server(app_clone);
 
     Ok(url)
 }

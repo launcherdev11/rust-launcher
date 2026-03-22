@@ -397,6 +397,7 @@
         "nicknameSaveFailed": "Не удалось сохранить никнейм.",
         "elyLoggedOut": "Вы вышли из аккаунта Ely.by.",
         "elyLogoutFailed": "Не удалось выйти из аккаунта Ely.by.",
+        "elyOpenBrowserFailed": "Не удалось открыть браузер для входа через Ely.by.",
         "msAuthUnavailable": "Авторизация недоступна.",
         "msLoggedOut": "Вы вышли из аккаунта Microsoft.",
         "msLogoutFailed": "Не удалось выйти из аккаунта Microsoft."

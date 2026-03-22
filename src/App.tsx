@@ -1434,8 +1434,14 @@ function App() {
   const handleElyLogin = async () => {
     setElyLoading(true);
     setElyAuthUrl(null);
+    let unlistenOk: (() => void) | undefined;
+    let unlistenFail: (() => void) | undefined;
+    const cleanupElyListeners = () => {
+      unlistenOk?.();
+      unlistenFail?.();
+    };
     try {
-      const unlisten = await listen<Profile>("ely-login-complete", (e) => {
+      unlistenOk = await listen<Profile>("ely-login-complete", (e) => {
         const p = e.payload;
         setProfile({
           nickname: p.nickname ?? "",
@@ -1446,7 +1452,14 @@ function App() {
         });
         setElyLoading(false);
         setElyAuthUrl(null);
-        unlisten();
+        cleanupElyListeners();
+      });
+
+      unlistenFail = await listen<string>("ely-login-failed", (e) => {
+        showNotification("error", e.payload);
+        setElyLoading(false);
+        setElyAuthUrl(null);
+        cleanupElyListeners();
       });
 
       const url = await invoke<string>("start_ely_oauth");
@@ -1455,10 +1468,18 @@ function App() {
         await openUrl(url);
       } catch (e) {
         console.error("Не удалось открыть браузер для Ely.by OAuth:", e);
+        cleanupElyListeners();
+        setElyLoading(false);
+        setElyAuthUrl(null);
+        showNotification(
+          "error",
+          tt("app.accounts.toast.elyOpenBrowserFailed"),
+        );
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       showNotification("error", msg);
+      cleanupElyListeners();
       setElyLoading(false);
       setElyAuthUrl(null);
     }
@@ -2197,9 +2218,11 @@ function App() {
                   )}
                 </div>
               </div>
-              <p className="text-center text-sm text-white/80">
-                {tt("app.accounts.hint")}
-              </p>
+              {!isAuthorized && (
+                <p className="text-center text-sm text-white/80">
+                  {tt("app.accounts.hint")}
+                </p>
+              )}
               <div className="flex flex-wrap items-center justify-center gap-3">
                 {profile.ms_id_token ? (
                   <button
