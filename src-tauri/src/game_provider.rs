@@ -114,8 +114,26 @@ fn http_client_for_binary_download(use_proxy: bool) -> Client {
 }
 
 fn env_var_trim(key: &str) -> Option<String> {
-    env::var(key)
+    // Prefer runtime env (e.g. provided by user's `.env`), but allow
+    // release builds to embed values via `option_env!` (GitHub Actions).
+    let runtime = env::var(key)
         .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if runtime.is_some() {
+        return runtime;
+    }
+
+    let compile_time = match key {
+        "PROXY_HOST" => option_env!("PROXY_HOST"),
+        "PROXY_PORT" => option_env!("PROXY_PORT"),
+        "PROXY_USER" => option_env!("PROXY_USER"),
+        "PROXY_PASS" => option_env!("PROXY_PASS"),
+        "CURSEFORGE_API_KEY" => option_env!("CURSEFORGE_API_KEY"),
+        _ => return None,
+    };
+
+    compile_time
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }
