@@ -33,13 +33,6 @@
     "installed": "установлен",
     "download": "Скачать",
     "noAvailableVersions": "Для этого проекта нет доступных версий.",
-    "provider": {
-      "modrinth": "Modrinth",
-      "curseforge": "CurseForge"
-    },
-    "curseforgeOnlyMods": "CurseForge в этой версии поддерживает только моды.",
-    "searchFailedCurseForge": "Не удалось выполнить поиск на CurseForge.",
-    "nothingFoundCurseForge": "Ничего не найдено для выбранных фильтров CurseForge.",
     "modpackImportSuccess": "Сборка «{{name}}» успешно импортирована.",
     "modpackImport": {
       "title": "Установка сборки…",

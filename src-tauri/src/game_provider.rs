@@ -1,10 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::atomic::{AtomicU64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 use futures_util::StreamExt;
 use rand::distributions::Alphanumeric;
@@ -114,8 +117,6 @@ fn http_client_for_binary_download(use_proxy: bool) -> Client {
 }
 
 fn env_var_trim(key: &str) -> Option<String> {
-    // Prefer runtime env (e.g. provided by user's `.env`), but allow
-    // release builds to embed values via `option_env!` (GitHub Actions).
     let runtime = env::var(key)
         .ok()
         .map(|s| s.trim().to_string())
@@ -129,13 +130,40 @@ fn env_var_trim(key: &str) -> Option<String> {
         "PROXY_PORT" => option_env!("PROXY_PORT"),
         "PROXY_USER" => option_env!("PROXY_USER"),
         "PROXY_PASS" => option_env!("PROXY_PASS"),
-        "CURSEFORGE_API_KEY" => option_env!("CURSEFORGE_API_KEY"),
         _ => return None,
     };
 
     compile_time
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+fn load_project_env_for_runtime() {
+    static ENV_LOADED: OnceLock<()> = OnceLock::new();
+    let _ = ENV_LOADED.get_or_init(|| {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let candidate_paths = [
+            manifest_dir.join(".env"),
+            manifest_dir.join("../.env"),
+            PathBuf::from(".env"),
+        ];
+        for path in candidate_paths {
+            if path.exists() {
+                let _ = dotenvy::from_path(path);
+            }
+        }
+    });
+}
+
+fn normalize_api_key(raw: String) -> String {
+    raw.trim()
+        .trim_matches('\u{feff}')
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim_start_matches("Bearer ")
+        .trim_start_matches("bearer ")
+        .trim()
+        .to_string()
 }
 
 fn build_java_http_proxy_args() -> Vec<String> {
@@ -178,10 +206,24 @@ fn build_java_http_proxy_args() -> Vec<String> {
 
 const PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE: &str = include_str!("../ProxyAuthBootstrap.java");
 
-fn ensure_proxy_auth_bootstrap_jar(installer_jar_path: &Path) -> Result<PathBuf, String> {
+fn ensure_proxy_auth_bootstrap_jar(
+    app: &AppHandle,
+    installer_jar_path: &Path,
+) -> Result<PathBuf, String> {
     let out_dir = launcher_data_dir()?.join("proxy_auth_bootstrap");
     let jar_path = out_dir.join("bootstrap.jar");
     let classes_dir = out_dir.join("classes");
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let bundled_jar = resource_dir.join("bootstrap.jar");
+        if bundled_jar.exists() {
+            std::fs::create_dir_all(&out_dir)
+                .map_err(|e| format!("Не удалось создать папку bootstrap: {e}"))?;
+            std::fs::copy(&bundled_jar, &jar_path)
+                .map_err(|e| format!("Не удалось скопировать bundled bootstrap.jar: {e}"))?;
+            return Ok(jar_path);
+        }
+    }
 
     if jar_path.exists() {
         let jar_list = std::process::Command::new("jar")
@@ -256,6 +298,9 @@ const DEFAULT_DOWNLOAD_RETRIES: usize = 6;
 const FORGE_PROMOTIONS_URL: &str =
     "https://files.minecraftforge.net/maven/net/minecraftforge/forge/promotions_slim.json";
 const FORGE_MAVEN_BASE: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
+const NEOFORGE_MAVEN_METADATA_URL: &str =
+    "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
+const NEOFORGE_MAVEN_BASE: &str = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
 const FORGE_INSTALLER_MIN_BYTES: u64 = 1_000_000;
 const BMCL_MAVEN_BASE: &str = "https://bmclapi2.bangbang93.com/maven";
 const FABRIC_META_LOADERS: &str = "https://meta.fabricmc.net/v2/versions/loader";
@@ -1152,17 +1197,36 @@ pub fn get_effective_settings(profile_id: Option<String>) -> Result<Settings, St
     Ok(effective_settings_for_profile_internal(profile_id))
 }
 
-fn is_javaw_process_running() -> bool {
+fn is_minecraft_java_process_running() -> bool {
     let mut sys = System::new_all();
     sys.refresh_processes(ProcessesToUpdate::All, true);
     for (_pid, process) in sys.processes() {
         let name = process.name().to_string_lossy().to_ascii_lowercase();
-        if name.contains("javaw.exe")
+        if !(name.contains("javaw.exe")
             || name == "javaw"
             || name == "javaw.exe"
             || name.contains("java.exe")
             || name == "java"
-            || name == "java.exe"
+            || name == "java.exe")
+        {
+            continue;
+        }
+
+        // Avoid treating any Java app as a running game process.
+        // We only consider JVMs that look like a Minecraft client launch.
+        let cmd = process
+            .cmd()
+            .iter()
+            .map(|s| s.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase();
+        if cmd.contains("net.minecraft.client.main.main")
+            || cmd.contains("--gamedir")
+            || cmd.contains("minecraft")
+            || cmd.contains("cpw.mods.bootstraplauncher")
+            || cmd.contains("fabric-loader")
+            || cmd.contains("org.quiltmc.loader")
         {
             return true;
         }
@@ -1187,7 +1251,7 @@ pub fn is_game_running_now() -> Result<bool, String> {
         return Ok(false);
     }
 
-    Ok(is_javaw_process_running())
+    Ok(is_minecraft_java_process_running())
 }
 
 #[tauri::command]
@@ -1973,6 +2037,14 @@ pub struct ForgeVersionSummary {
     pub installer_url: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct NeoForgeVersionSummary {
+    pub id: String,
+    pub mc_version: String,
+    pub neoforge_build: String,
+    pub installer_url: String,
+}
+
 fn game_root_dir() -> Result<PathBuf, String> {
     let base = dirs::data_dir().ok_or("Не удалось получить системную папку данных")?;
     Ok(base.join("16Launcher").join("game"))
@@ -2228,6 +2300,36 @@ fn dir_size_and_count(root: &Path) -> (u64, u32) {
     (total_bytes, files_count)
 }
 
+fn find_icon_png_in_profile(root: &Path) -> Option<String> {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let meta = match entry.metadata() {
+                Ok(meta) => meta,
+                Err(_) => continue,
+            };
+            if meta.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let is_icon_png = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.eq_ignore_ascii_case("icon.png"))
+                .unwrap_or(false);
+            if is_icon_png {
+                return path.to_str().map(|s| s.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, String> {
     let root = instances_root_dir()?;
     if !root.exists() {
@@ -2277,12 +2379,7 @@ fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, 
             None => continue,
         };
 
-        let icon_png_path = path.join("icon.png");
-        let icon_path = if icon_png_path.exists() {
-            icon_png_path.to_str().map(|s| s.to_string())
-        } else {
-            cfg.icon_path
-        };
+        let icon_path = find_icon_png_in_profile(&path).or(cfg.icon_path);
 
         out.push(InstanceProfileSummary {
             id: cfg.id,
@@ -3447,6 +3544,16 @@ fn parse_forge_id(id: &str) -> Option<(String, String)> {
     Some((mc.to_string(), forge.to_string()))
 }
 
+fn parse_neoforge_id(id: &str) -> Option<(String, String)> {
+    let mut parts = id.split("-neoforge-");
+    let mc = parts.next()?.trim();
+    let neoforge = parts.next()?.trim();
+    if mc.is_empty() || neoforge.is_empty() {
+        return None;
+    }
+    Some((mc.to_string(), neoforge.to_string()))
+}
+
 async fn file_starts_with_pk(path: &Path) -> Result<bool, String> {
     let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || -> Result<bool, String> {
@@ -4064,182 +4171,6 @@ pub async fn open_game_folder(profile_id: Option<String>) -> Result<(), String> 
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
-struct CurseForgeModsSearchPagination {
-    index: u32,
-    pageSize: u32,
-    resultCount: u32,
-    totalCount: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct CurseForgeModsSearchLogo {
-    thumbnailUrl: Option<String>,
-    url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CurseForgeModsSearchAuthor {
-    id: u64,
-    name: String,
-    url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CurseForgeModsSearchLatestFile {
-    id: u64,
-    fileName: String,
-    downloadUrl: String,
-    gameVersions: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CurseForgeModsSearchItem {
-    id: u64,
-    name: String,
-    slug: String,
-    summary: Option<String>,
-    downloadCount: u64,
-    authors: Vec<CurseForgeModsSearchAuthor>,
-    logo: Option<CurseForgeModsSearchLogo>,
-    latestFiles: Vec<CurseForgeModsSearchLatestFile>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CurseForgeModsSearchResponse {
-    data: Vec<CurseForgeModsSearchItem>,
-    pagination: CurseForgeModsSearchPagination,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CurseForgeFileForUi {
-    id: String,
-    filename: String,
-    downloadUrl: String,
-    gameVersions: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CurseForgeProjectForUi {
-    project_id: String,
-    slug: String,
-    title: String,
-    description: String,
-    icon_url: Option<String>,
-    downloads: u64,
-    author: Option<String>,
-    latest_files: Vec<CurseForgeFileForUi>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CurseForgeModsSearchUi {
-    hits: Vec<CurseForgeProjectForUi>,
-    total_hits: u64,
-}
-
-fn curseforge_mod_loader_param(mod_loader: &str) -> Option<&'static str> {
-    match mod_loader {
-        "forge" => Some("Forge"),
-        "fabric" => Some("Fabric"),
-        "quilt" => Some("Quilt"),
-        "neoforge" => Some("NeoForge"),
-        _ => None,
-    }
-}
-
-#[tauri::command]
-pub async fn search_curseforge_mods(
-    search: String,
-    game_version: String,
-    mod_loader: String,
-    page: u32,
-    page_size: u32,
-) -> Result<CurseForgeModsSearchUi, String> {
-    let api_key = env_var_trim("CURSEFORGE_API_KEY")
-        .ok_or_else(|| "CURSEFORGE_API_KEY не задан в .env".to_string())?;
-
-    let mut params = vec![
-        ("gameId".to_string(), "432".to_string()),
-        ("index".to_string(), page.to_string()),
-        ("pageSize".to_string(), page_size.to_string()),
-    ];
-
-    if !search.trim().is_empty() {
-        params.push(("searchFilter".to_string(), search.trim().to_string()));
-    }
-
-    if !game_version.trim().is_empty() {
-        params.push(("gameVersion".to_string(), game_version.trim().to_string()));
-    }
-
-    if let Some(mod_loader_param) = curseforge_mod_loader_param(mod_loader.as_str()) {
-        params.push(("modLoaderType".to_string(), mod_loader_param.to_string()));
-    }
-
-    let client = http_client(true);
-    let url = "https://api.curseforge.com/v1/mods/search";
-
-    let resp = client
-        .get(url)
-        .header("Accept", "application/json")
-        .header("x-api-key", api_key)
-        .query(&params)
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка запроса CurseForge: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err(format!(
-            "CurseForge вернул ошибку {} при поиске",
-            resp.status()
-        ));
-    }
-
-    let parsed: CurseForgeModsSearchResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("Ошибка разбора CurseForge JSON: {e}"))?;
-
-    let hits = parsed
-        .data
-        .into_iter()
-        .map(|m| {
-            let author = m.authors.first().map(|a| a.name.clone());
-            let icon_url = m
-                .logo
-                .as_ref()
-                .and_then(|l| l.thumbnailUrl.clone().or(l.url.clone()));
-
-            let latest_files = m
-                .latestFiles
-                .into_iter()
-                .map(|f| CurseForgeFileForUi {
-                    id: f.id.to_string(),
-                    filename: f.fileName,
-                    downloadUrl: f.downloadUrl,
-                    gameVersions: f.gameVersions,
-                })
-                .collect::<Vec<_>>();
-
-            CurseForgeProjectForUi {
-                project_id: m.id.to_string(),
-                slug: m.slug,
-                title: m.name,
-                description: m.summary.unwrap_or_default(),
-                icon_url,
-                downloads: m.downloadCount,
-                author,
-                latest_files,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    Ok(CurseForgeModsSearchUi {
-        hits,
-        total_hits: parsed.pagination.totalCount,
-    })
-}
-
 #[tauri::command]
 pub async fn download_modrinth_modpack_and_import(
     app: AppHandle,
@@ -4475,6 +4406,59 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
         .collect();
 
     out.sort_by(|a, b| b.mc_version.cmp(&a.mc_version));
+    Ok(out)
+}
+
+fn parse_neoforge_mc_version(build: &str) -> Option<String> {
+    let mut parts = build.split('.');
+    let major = parts.next()?;
+    let minor = parts.next()?;
+    if !major.chars().all(|c| c.is_ascii_digit()) || !minor.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("1.{major}.{minor}"))
+}
+
+#[tauri::command]
+pub async fn fetch_neoforge_versions() -> Result<Vec<NeoForgeVersionSummary>, String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+
+    let client = http_client(true);
+    let metadata = download_text_with_retries(
+        &client,
+        NEOFORGE_MAVEN_METADATA_URL,
+        DEFAULT_DOWNLOAD_RETRIES,
+    )
+    .await
+    .map_err(|e| format!("Ошибка загрузки NeoForge metadata: {e}"))?;
+
+    let mut out: Vec<NeoForgeVersionSummary> = Vec::new();
+    for entry in metadata.match_indices("<version>") {
+        let start = entry.0 + "<version>".len();
+        let rest = &metadata[start..];
+        let Some(end_rel) = rest.find("</version>") else {
+            continue;
+        };
+        let build = rest[..end_rel].trim();
+        if build.is_empty() || !build.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let Some(mc_version) = parse_neoforge_mc_version(build) else {
+            continue;
+        };
+
+        let id = format!("{mc_version}-neoforge-{build}");
+        let installer_url = format!("{NEOFORGE_MAVEN_BASE}/{build}/neoforge-{build}-installer.jar");
+        out.push(NeoForgeVersionSummary {
+            id,
+            mc_version,
+            neoforge_build: build.to_string(),
+            installer_url,
+        });
+    }
+
+    out.sort_by(|a, b| b.neoforge_build.cmp(&a.neoforge_build));
+    out.dedup_by(|a, b| a.neoforge_build == b.neoforge_build);
     Ok(out)
 }
 
@@ -5256,8 +5240,10 @@ pub async fn install_forge(
 ) -> Result<(), String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
-    let (mc_version, _forge_build) = parse_forge_id(&version_id)
-        .ok_or_else(|| format!("Некорректный id Forge версии: {version_id}"))?;
+    let is_neoforge = version_id.contains("-neoforge-");
+    let (mc_version, forge_build) = parse_forge_id(&version_id)
+        .or_else(|| parse_neoforge_id(&version_id))
+        .ok_or_else(|| format!("Некорректный id версии Forge/NeoForge: {version_id}"))?;
 
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
@@ -5366,10 +5352,18 @@ pub async fn install_forge(
         let has_proxy_auth = proxy_user.is_some() && proxy_pass.is_some();
 
         let bootstrap_jar_path = if has_proxy_auth {
-            Some(
-                ensure_proxy_auth_bootstrap_jar(&java_installer)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            )
+            match ensure_proxy_auth_bootstrap_jar(&app_for_forge_install, &java_installer) {
+                Ok(path) => Some(path),
+                Err(e) => {
+                    let _ = log_to_console(
+                        &app_for_forge_install,
+                        &format!(
+                            "[Forge] ProxyAuth bootstrap недоступен ({e}). Продолжаем без bootstrap (без proxy auth classpath)."
+                        ),
+                    );
+                    None
+                }
+            }
         } else {
             None
         };
@@ -5526,7 +5520,7 @@ pub async fn install_forge(
         return Ok(());
     }
 
-    let alt_folder_name = format!("{mc_version}-forge{_forge_build}");
+    let alt_folder_name = format!("{mc_version}-forge{forge_build}");
     let alt_json_name = format!("{alt_folder_name}.json");
     let alt_dir = vers_root.join(&alt_folder_name);
     let alt_json = alt_dir.join(&alt_json_name);
@@ -5543,6 +5537,68 @@ pub async fn install_forge(
             .await
             .map_err(|e| format!("Не удалось записать JSON версии: {e}"))?;
         let _ = tokio::fs::remove_dir_all(&alt_dir).await;
+        return Ok(());
+    }
+
+    if is_neoforge {
+        let neo_folder_name = format!("neoforge-{forge_build}");
+        let neo_dir = vers_root.join(&neo_folder_name);
+        let neo_json = neo_dir.join(format!("{neo_folder_name}.json"));
+        if neo_json.exists() {
+            let expected_dir = vers_root.join(&version_id);
+            tokio::fs::create_dir_all(&expected_dir)
+                .await
+                .map_err(|e| format!("Не удалось создать папку версии: {e}"))?;
+            let mut json_content = tokio::fs::read_to_string(&neo_json)
+                .await
+                .map_err(|e| format!("Не удалось прочитать JSON NeoForge: {e}"))?;
+            json_content = json_content.replace(&neo_folder_name, &version_id);
+            tokio::fs::write(&expected_version_json_path, &json_content)
+                .await
+                .map_err(|e| format!("Не удалось записать JSON версии: {e}"))?;
+            let _ = tokio::fs::remove_dir_all(&neo_dir).await;
+            return Ok(());
+        }
+    }
+
+    let mut discovered_json: Option<(PathBuf, String)> = None;
+    if let Ok(entries) = std::fs::read_dir(&vers_root) {
+        for entry in entries.flatten() {
+            let dir_path = entry.path();
+            if !dir_path.is_dir() {
+                continue;
+            }
+            let folder_name = match dir_path.file_name().and_then(|n| n.to_str()) {
+                Some(v) => v.to_string(),
+                None => continue,
+            };
+            let folder_lower = folder_name.to_ascii_lowercase();
+            if !folder_lower.contains("forge")
+                || !folder_name.contains(&forge_build)
+                || (!folder_name.contains(&mc_version) && !is_neoforge)
+            {
+                continue;
+            }
+            let candidate_json = dir_path.join(format!("{folder_name}.json"));
+            if candidate_json.exists() {
+                discovered_json = Some((candidate_json, folder_name));
+                break;
+            }
+        }
+    }
+
+    if let Some((source_json_path, source_folder_name)) = discovered_json {
+        let expected_dir = vers_root.join(&version_id);
+        tokio::fs::create_dir_all(&expected_dir)
+            .await
+            .map_err(|e| format!("Не удалось создать папку версии: {e}"))?;
+        let mut json_content = tokio::fs::read_to_string(&source_json_path)
+            .await
+            .map_err(|e| format!("Не удалось прочитать JSON установленной версии: {e}"))?;
+        json_content = json_content.replace(&source_folder_name, &version_id);
+        tokio::fs::write(&expected_version_json_path, &json_content)
+            .await
+            .map_err(|e| format!("Не удалось записать JSON версии: {e}"))?;
         return Ok(());
     }
 
@@ -5787,6 +5843,15 @@ pub async fn install_version(
         .map_err(|e| format!("Не удалось сохранить описание версии: {e}"))?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn install_neoforge(app: AppHandle, version_id: String) -> Result<(), String> {
+    let (_mc_version, neoforge_build) = parse_neoforge_id(&version_id)
+        .ok_or_else(|| format!("Некорректный id NeoForge версии: {version_id}"))?;
+    let installer_url =
+        format!("{NEOFORGE_MAVEN_BASE}/{neoforge_build}/neoforge-{neoforge_build}-installer.jar");
+    install_forge(app, version_id, installer_url).await
 }
 
 #[tauri::command]
@@ -6146,11 +6211,16 @@ pub async fn launch_game(
         .ok_or("Путь к папке libraries не в UTF-8")?;
     let classpath_sep = if os_name == "windows" { ";" } else { ":" };
 
+    let is_neoforge = version_id.to_ascii_lowercase().contains("neoforge")
+        || detail
+            .libraries
+            .iter()
+            .any(|l| l.name.to_ascii_lowercase().contains("net.neoforged:"));
     let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
     let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
         let mut major = jv.major_version;
         let mut component = jv.component.clone();
-        if is_forge && major >= 21 {
+        if is_forge && !is_neoforge && major >= 21 {
             eprintln!(
                 "[Launch] Forge: используем Java 17 вместо {} (обход бага Nashorn/ASM в Java 21)",
                 major
@@ -6160,7 +6230,7 @@ pub async fn launch_game(
         }
         (major, component)
     } else {
-        if is_forge {
+        if is_forge && !is_neoforge {
             eprintln!("[Launch] Forge без java_version в manifest: используем Java 17");
             (17, "java-runtime-gamma".to_string())
         } else {
@@ -6398,6 +6468,11 @@ pub async fn launch_game(
         .current_dir(game_dir_str)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
 
     let play_start_time = SystemTime::now();
 

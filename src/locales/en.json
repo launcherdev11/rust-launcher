@@ -33,13 +33,6 @@
     "installed": "installed",
     "download": "Download",
     "noAvailableVersions": "There are no available versions for this project.",
-    "provider": {
-      "modrinth": "Modrinth",
-      "curseforge": "CurseForge"
-    },
-    "curseforgeOnlyMods": "In this version, CurseForge supports only mods.",
-    "searchFailedCurseForge": "Failed to search on CurseForge.",
-    "nothingFoundCurseForge": "Nothing found for the selected CurseForge filters.",
     "modpackImportSuccess": "Modpack “{{name}}” imported successfully.",
     "modpackImport": {
       "title": "Installing modpack…",

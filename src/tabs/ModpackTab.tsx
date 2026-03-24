@@ -59,6 +59,9 @@ type ModpackTabProps = {
   initialSelectedProfileId?: string | null;
   onOpenModsTab?: () => void;
   onPlaySelectedProfile?: () => void;
+  onProfilesChange?: (profiles: InstanceProfile[]) => void;
+  onTogglePinInSidebar?: (profile: InstanceProfile) => void;
+  isPinnedInSidebar?: (profileId: string) => boolean;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -252,6 +255,9 @@ export function ModpackTab({
   initialSelectedProfileId,
   onOpenModsTab,
   onPlaySelectedProfile,
+  onProfilesChange,
+  onTogglePinInSidebar,
+  isPinnedInSidebar,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -744,6 +750,7 @@ export function ModpackTab({
     try {
       const list = await invoke<InstanceProfile[]>("get_profiles");
       setProfiles(list);
+      onProfilesChange?.(list);
       try {
         const current = await invoke<InstanceProfile | null>("get_selected_profile");
         if (current && current.id) {
@@ -1454,10 +1461,11 @@ export function ModpackTab({
             >
               {filteredProfiles.map((p) => {
                 const isSelected = selectedProfileId === p.id;
+                const isPinned = isPinnedInSidebar?.(p.id) ?? false;
                 return (
                   <div
                     key={p.id}
-                    className={`flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
+                    className={`relative flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
                       isSelected
                         ? "border-emerald-400/80 bg-white/15"
                         : "border-white/10 bg-black/40 hover:border-white/40 hover:bg-black/60"
@@ -1485,7 +1493,7 @@ export function ModpackTab({
                       <img
                         src={resolveIconSrc(getProfileIconPath(p))}
                         alt="icon"
-                        className="absolute inset-0 h-full w-full object-contain"
+                        className="absolute inset-0 h-full w-full object-cover"
                         style={{ display: "none" }}
                         onLoad={(e) => {
                           const img = e.currentTarget;
@@ -1510,6 +1518,13 @@ export function ModpackTab({
                           <span className="truncate text-sm font-semibold text-white">
                             {p.name}
                           </span>
+                          {isPinned && (
+                            <img
+                              src="/launcher-assets/favorite.png"
+                              alt=""
+                              className="h-3.5 w-3.5 object-contain opacity-90"
+                            />
+                          )}
                           {isSelected && (
                             <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
                               {tt("modpacks.list.activeBadge")}
@@ -2249,6 +2264,25 @@ export function ModpackTab({
             >
               <SettingsIcon className="h-3.5 w-3.5" />
               <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                onTogglePinInSidebar?.(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              <span>
+                {(() => {
+                  const pinned = isPinnedInSidebar?.(contextMenu.profileId) ?? false;
+                  if (language === "ru") return pinned ? "Открепить от сайдбара" : "Закрепить в сайдбаре";
+                  return pinned ? "Unpin from sidebar" : "Pin to sidebar";
+                })()}
+              </span>
             </button>
             <button
               type="button"
