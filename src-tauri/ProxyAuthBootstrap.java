@@ -31,7 +31,9 @@ public class ProxyAuthBootstrap {
             System.out.println("[ProxyAuthBootstrap] Proxy auth not configured (missing proxyUser/proxyPass).");
         }
 
-        net.minecraftforge.installer.SimpleInstaller.main(args);
+        Class<?> installerClass = Class.forName("net.minecraftforge.installer.SimpleInstaller");
+        java.lang.reflect.Method mainMethod = installerClass.getMethod("main", String[].class);
+        mainMethod.invoke(null, (Object) args);
     }
 }
 

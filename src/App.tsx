@@ -69,6 +69,11 @@ type InstanceProfileSummary = {
   loader: string;
 };
 
+type InstanceProfileCard = InstanceProfileSummary & {
+  icon_path: string | null;
+  directory: string;
+};
+
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
   settings: "/launcher-assets/settings.png",
@@ -183,6 +188,28 @@ function resolveRemoteNotificationIconSrc(iconMsg?: string): string | null {
   if (lower === "warning" || lower === "warn") return "/launcher-assets/warn.png";
 
   return null;
+}
+
+function resolveProfileIconSrc(iconPath: string): string {
+  if (iconPath.startsWith("http://") || iconPath.startsWith("https://") || iconPath.startsWith("data:")) {
+    return iconPath;
+  }
+  let localPath = iconPath;
+  if (localPath.startsWith("file://")) {
+    localPath = localPath.replace(/^file:\/\//, "");
+  }
+  const normalized = localPath.replace(/\\/g, "/");
+  const driveMatch = normalized.match(/^\/([a-zA-Z]:\/.*)$/);
+  if (driveMatch) {
+    localPath = driveMatch[1];
+  }
+  return convertFileSrc(localPath);
+}
+
+function getProfileIconPath(profile: InstanceProfileCard): string {
+  const baseDir = profile.directory.replace(/\\/g, "/").replace(/\/$/, "");
+  if (profile.icon_path) return profile.icon_path;
+  return `${baseDir}/icon.png`;
 }
 
 function normalizeOptionalString(value?: unknown): string | undefined {
@@ -587,6 +614,27 @@ function App() {
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
+  const [knownProfiles, setKnownProfiles] = useState<InstanceProfileCard[]>([]);
+  const [profilesHydrated, setProfilesHydrated] = useState(false);
+  const [pinnedProfileIds, setPinnedProfileIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("modpacks_sidebar_pins");
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+          .slice(0, 3);
+      }
+    } catch {
+    }
+    return [];
+  });
+  const [pinnedContextMenu, setPinnedContextMenu] = useState<{
+    profileId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
@@ -639,6 +687,126 @@ function App() {
     }
     return result;
   }, [sidebarOrder]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("modpacks_sidebar_pins", JSON.stringify(pinnedProfileIds.slice(0, 3)));
+    } catch {
+    }
+  }, [pinnedProfileIds]);
+
+  const pinnedProfiles = useMemo(() => {
+    const byId = new Map(knownProfiles.map((p) => [p.id, p]));
+    return pinnedProfileIds.map((id) => byId.get(id)).filter((p): p is InstanceProfileCard => !!p).slice(0, 3);
+  }, [knownProfiles, pinnedProfileIds]);
+
+  useEffect(() => {
+    if (!profilesHydrated) return;
+    const knownIds = new Set(knownProfiles.map((p) => p.id));
+    setPinnedProfileIds((prev) => prev.filter((id) => knownIds.has(id)).slice(0, 3));
+  }, [knownProfiles, profilesHydrated]);
+
+  const handleToggleSidebarPin = (profile: InstanceProfileCard) => {
+    setPinnedProfileIds((prev) => {
+      if (prev.includes(profile.id)) return prev.filter((id) => id !== profile.id);
+      if (prev.length >= 3) {
+        showNotification(
+          "warning",
+          language === "ru"
+            ? "Можно закрепить не более 3 сборок."
+            : "You can pin up to 3 profiles.",
+        );
+        return prev;
+      }
+      return [...prev, profile.id];
+    });
+  };
+
+  const handlePlayPinnedProfile = async (profile: InstanceProfileCard) => {
+    try {
+      await invoke("set_selected_profile", { id: profile.id });
+      setActiveInstanceProfile({
+        id: profile.id,
+        name: profile.name,
+        game_version: profile.game_version,
+        loader: profile.loader,
+      });
+      let launchVersionId = profile.game_version;
+      if (profile.loader === "fabric") {
+        const installedFabricId = await invoke<string | null>("get_installed_fabric_profile_id", {
+          gameVersion: profile.game_version,
+        });
+        if (!installedFabricId) {
+          throw new Error(
+            language === "ru"
+              ? "Fabric-профиль не установлен для этой версии."
+              : "Fabric profile is not installed for this version.",
+          );
+        }
+        launchVersionId = installedFabricId;
+      } else if (profile.loader === "quilt") {
+        const installedQuiltId = await invoke<string | null>("get_installed_quilt_profile_id", {
+          gameVersion: profile.game_version,
+        });
+        if (!installedQuiltId) {
+          throw new Error(
+            language === "ru"
+              ? "Quilt-профиль не установлен для этой версии."
+              : "Quilt profile is not installed for this version.",
+          );
+        }
+        launchVersionId = installedQuiltId;
+      }
+      setConsoleLines([]);
+      if (settings?.show_console_on_launch) {
+        setIsConsoleVisible(true);
+      }
+      setGameStatus("running");
+      await invoke("launch_game", {
+        versionId: launchVersionId,
+        versionUrl: null,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showNotification("error", tt("app.errors.launchError", { msg }));
+    }
+  };
+
+  const handleOpenProfileInModpacks = async (profileId: string) => {
+    const profile = knownProfiles.find((p) => p.id === profileId);
+    if (profile) {
+      setActiveInstanceProfile({
+        id: profile.id,
+        name: profile.name,
+        game_version: profile.game_version,
+        loader: profile.loader,
+      });
+    }
+    try {
+      await invoke("set_selected_profile", { id: profileId });
+    } catch {
+    }
+    setActiveItem("modpacks");
+  };
+
+  const handleDeleteProfileFromSidebar = async (profileId: string) => {
+    try {
+      await invoke("delete_profile", { id: profileId });
+      setKnownProfiles((prev) => prev.filter((p) => p.id !== profileId));
+      setPinnedProfileIds((prev) => prev.filter((id) => id !== profileId));
+      if (activeInstanceProfile?.id === profileId) {
+        setActiveInstanceProfile(null);
+      }
+      showNotification("success", language === "ru" ? "Сборка удалена." : "Profile deleted.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification(
+        "error",
+        language === "ru" ? `Не удалось удалить сборку: ${msg}` : `Failed to delete profile: ${msg}`,
+      );
+    }
+  };
 
   const handleModpackProfileSelectionChange = useCallback(
     (
@@ -1190,6 +1358,27 @@ function App() {
         }
       } catch {
         // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await invoke<InstanceProfileCard[]>("get_profiles");
+        setKnownProfiles(
+          list.map((p) => ({
+            id: p.id,
+            name: p.name,
+            game_version: p.game_version,
+            loader: p.loader,
+            icon_path: p.icon_path,
+            directory: p.directory,
+          })),
+        );
+      } catch {
+      } finally {
+        setProfilesHydrated(true);
       }
     })();
   }, []);
@@ -2118,6 +2307,78 @@ function App() {
         </div>
       )}
 
+      {pinnedContextMenu && (
+        <div
+          className="fixed inset-0 z-[320]"
+          onClick={() => setPinnedContextMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setPinnedContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute z-[330] w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            style={{ top: pinnedContextMenu.y, left: pinnedContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
+                setPinnedContextMenu(null);
+                if (!profile) return;
+                void handleOpenProfileInModpacks(profile.id);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <img src="/launcher-assets/settings.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
+                setPinnedContextMenu(null);
+                if (!profile) return;
+                handleToggleSidebarPin(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <img src="/launcher-assets/favorite.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{language === "ru" ? "Открепить от сайдбара" : "Unpin from sidebar"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
+                setPinnedContextMenu(null);
+                if (!profile) return;
+                void handleDeleteProfileFromSidebar(profile.id);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
+            >
+              <img src="/launcher-assets/delete.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{language === "ru" ? "Удалить сборку" : "Delete profile"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPinnedContextMenu(null);
+                void handleOpenProfileInModpacks(pinnedContextMenu.profileId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <img src="/launcher-assets/edit.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{language === "ru" ? "Редактировать сборку" : "Edit profile"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className="relative z-20 flex h-9 items-center justify-between px-4 select-none"
         onMouseDown={handleTitleBarMouseDown}
@@ -2215,6 +2476,77 @@ function App() {
                       {item.id === "modpacks" && <ModpackIcon />}
                     </>
                   )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-40 flex flex-col items-center gap-2">
+            {pinnedProfiles.map((profile) => (
+              <button
+                key={profile.id}
+                type="button"
+                onClick={() => {
+                  void handlePlayPinnedProfile(profile);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setPinnedContextMenu({
+                    profileId: profile.id,
+                    x: e.clientX,
+                    y: e.clientY,
+                  });
+                }}
+                title={profile.name}
+                className="interactive-press group relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-white/20 bg-black/40 hover:bg-black/60"
+              >
+                <div
+                  data-icon-fallback="1"
+                  className="absolute inset-0 flex items-center justify-center"
+                >
+                  <img src="/launcher-assets/mods.png" alt="" className="h-5 w-5 object-contain opacity-80" />
+                </div>
+                <img
+                  src={resolveProfileIconSrc(getProfileIconPath(profile))}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{ display: "none" }}
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    const fallback = img.parentElement?.querySelector('[data-icon-fallback="1"]') as HTMLElement | null;
+                    if (fallback) fallback.style.display = "none";
+                    img.style.display = "block";
+                  }}
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    const fallback = img.parentElement?.querySelector('[data-icon-fallback="1"]') as HTMLElement | null;
+                    if (fallback) fallback.style.display = "flex";
+                    img.style.display = "none";
+                  }}
+                />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
+                  <img
+                    src="/launcher-assets/play.png"
+                    alt=""
+                    className="h-4 w-4 object-contain"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      const fallback = e.currentTarget.parentElement?.querySelector(
+                        '[data-sidebar-play-fallback="1"]',
+                      ) as HTMLElement | null;
+                      if (fallback) fallback.style.display = "block";
+                    }}
+                  />
+                  <svg
+                    data-sidebar-play-fallback="1"
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 fill-current"
+                    style={{ display: "none" }}
+                    aria-hidden="true"
+                  >
+                    <path d="M8 6.5v11l9-5.5-9-5.5z" />
+                  </svg>
                 </div>
               </button>
             ))}
@@ -2369,6 +2701,30 @@ function App() {
               showNotification={showNotification}
               onProfileSelectionChange={handleModpackProfileSelectionChange}
               initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+              onProfilesChange={(profiles) => {
+                setKnownProfiles(
+                  profiles.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    game_version: p.game_version,
+                    loader: p.loader,
+                    icon_path: p.icon_path,
+                    directory: p.directory,
+                  })),
+                );
+                setProfilesHydrated(true);
+              }}
+              onTogglePinInSidebar={(profile) =>
+                handleToggleSidebarPin({
+                  id: profile.id,
+                  name: profile.name,
+                  game_version: profile.game_version,
+                  loader: profile.loader,
+                  icon_path: profile.icon_path,
+                  directory: profile.directory,
+                })
+              }
+              isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
               onOpenModsTab={() => setActiveItem("mods")}
               onPlaySelectedProfile={() => {
                 if (!activeInstanceProfile) {
