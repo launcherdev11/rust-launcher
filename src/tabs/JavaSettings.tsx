@@ -24,7 +24,7 @@ type JavaRuntimeInfo = {
 type JavaSettingsProps = {
   language: Language;
   systemMemoryGb: number;
-  showNotification: (kind: NotificationKind, message: string) => void;
+  showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   profileId?: string | null;
 };
 

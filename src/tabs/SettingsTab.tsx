@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
+import { playTabSwitchSound } from "../uiSounds";
 
 type SettingsTabId = "directories" | "game" | "versions" | "launcher";
 
@@ -27,6 +28,7 @@ type Settings = {
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
+  ui_sounds_enabled: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
@@ -50,7 +52,7 @@ type SettingsTabProps = {
   setSettingsTab: (id: SettingsTabId) => void;
   systemMemoryGb: number;
   updateSettings: (patch: Partial<Settings>) => void;
-  showNotification: (kind: NotificationKind, message: string) => void;
+  showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   SettingsCard: typeof import("../settings-ui/SettingsComponents").SettingsCard;
   SettingsSlider: typeof import("../settings-ui/SettingsComponents").SettingsSlider;
   SettingsToggle: typeof import("../settings-ui/SettingsComponents").SettingsToggle;
@@ -546,6 +548,7 @@ export function SettingsTab({
       showNotification(
         "success",
         tt("settings.versions.installSuccess", { version: version.id }),
+        { sound: true },
       );
       const ids = await invoke<string[]>("list_installed_versions");
       setInstalledVersions(ids);
@@ -726,7 +729,10 @@ export function SettingsTab({
                   ref={(el) => {
                     gameSubTabRefs.current.general = el;
                   }}
-                  onClick={() => setGameSubTab("general")}
+                  onClick={() => {
+                    if ((settings?.ui_sounds_enabled ?? true) && gameSubTab !== "general") playTabSwitchSound();
+                    setGameSubTab("general");
+                  }}
                   className={`interactive-press relative z-10 flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
                     gameSubTab === "general" ? "text-black" : "text-white/70 hover:text-white"
                   }`}
@@ -738,7 +744,10 @@ export function SettingsTab({
                   ref={(el) => {
                     gameSubTabRefs.current.java = el;
                   }}
-                  onClick={() => setGameSubTab("java")}
+                  onClick={() => {
+                    if ((settings?.ui_sounds_enabled ?? true) && gameSubTab !== "java") playTabSwitchSound();
+                    setGameSubTab("java");
+                  }}
                   className={`interactive-press relative z-10 flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
                     gameSubTab === "java" ? "text-black" : "text-white/70 hover:text-white"
                   }`}
@@ -1100,6 +1109,13 @@ export function SettingsTab({
                 onChange={(value: boolean) =>
                   updateSettings({ open_launcher_on_profiles_tab: value })
                 }
+              />
+              <SettingsToggle
+                label={tt("settings.launcher.uiSounds.label")}
+                yesLabel={tt("settings.common.toggle.on")}
+                noLabel={tt("settings.common.toggle.off")}
+                value={settings?.ui_sounds_enabled ?? true}
+                onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
               />
               <div className="mt-3 flex items-center justify-between gap-4">
                 <span className="text-sm text-white/90">
@@ -1524,7 +1540,10 @@ export function SettingsTab({
                 ref={(el) => {
                   settingsTabRefs.current[tab.id] = el;
                 }}
-                onClick={() => setSettingsTab(tab.id)}
+                onClick={() => {
+                  if ((settings?.ui_sounds_enabled ?? true) && settingsTab !== tab.id) playTabSwitchSound();
+                  setSettingsTab(tab.id);
+                }}
                 className={`interactive-press relative z-10 rounded-full px-4 py-1.5 text-xs font-semibold text-center transition-colors ${
                   active
                     ? "text-black"

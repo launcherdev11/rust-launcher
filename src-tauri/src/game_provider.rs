@@ -1006,6 +1006,9 @@ pub struct Settings {
 
     pub open_launcher_on_profiles_tab: bool,
 
+    #[serde(default = "default_ui_sounds_enabled")]
+    pub ui_sounds_enabled: bool,
+
     #[serde(default = "default_interface_language")]
     pub interface_language: String,
 
@@ -1021,6 +1024,10 @@ fn default_interface_language() -> String {
 }
 
 fn default_background_blur_enabled() -> bool {
+    true
+}
+
+fn default_ui_sounds_enabled() -> bool {
     true
 }
 
@@ -1041,6 +1048,7 @@ impl Default for Settings {
             check_updates_on_start: true,
             auto_install_updates: false,
             open_launcher_on_profiles_tab: false,
+            ui_sounds_enabled: true,
             interface_language: "ru".to_string(),
             background_accent_color: "#0b1530".to_string(),
             background_image_url: None,
@@ -3341,6 +3349,55 @@ fn os_info() -> OsInfo {
         name: current_os_name().to_string(),
         arch: current_os_arch().to_string(),
     }
+}
+
+async fn ensure_library_artifacts_present_for_launch(
+    app: &AppHandle,
+    version_id: &str,
+    libs_root: &Path,
+    libraries: &[Library],
+    os_name: &str,
+) -> Result<(), String> {
+    let client = http_client_for_binary_download(true);
+    let total_done = Arc::new(AtomicU64::new(0));
+
+    for lib in libraries {
+        if !library_applies(lib, os_name) {
+            continue;
+        }
+        let Some(ref a) = lib.downloads.artifact else {
+            continue;
+        };
+        let path = libs_root.join(&a.path);
+        if path.exists() {
+            continue;
+        }
+
+        let url = if !a.url.trim().is_empty() {
+            a.url.clone()
+        } else {
+            format!("{}/{}", BMCL_MAVEN_BASE, a.path)
+        };
+
+        eprintln!(
+            "[Launch] Missing library artifact, downloading: {}",
+            path.display()
+        );
+        download_file_checked(
+            &client,
+            &url,
+            &path,
+            a.sha1.clone(),
+            app,
+            version_id,
+            0,
+            total_done.clone(),
+            DEFAULT_DOWNLOAD_RETRIES,
+        )
+        .await?;
+    }
+
+    Ok(())
 }
 
 fn offline_uuid_from_username(name: &str) -> String {
@@ -6012,6 +6069,18 @@ pub async fn launch_game(
     let os_info = os_info();
     let features = GameFeatures::full();
 
+    let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
+    if is_forge {
+        ensure_library_artifacts_present_for_launch(
+            &app,
+            &version_id,
+            &libs_root,
+            &detail.libraries,
+            os_name,
+        )
+        .await?;
+    }
+
     let _native_classifier = match os_name {
         "windows" => "natives-windows",
         "osx" => "natives-macos",
@@ -6255,7 +6324,6 @@ pub async fn launch_game(
             .libraries
             .iter()
             .any(|l| l.name.to_ascii_lowercase().contains("net.neoforged:"));
-    let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
     let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
         let mut major = jv.major_version;
         let mut component = jv.component.clone();

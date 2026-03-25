@@ -123,6 +123,7 @@
         "yes": "Modpacks",
         "no": "Main"
       },
+      "uiSounds": { "label": "Interface sounds:" },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
       "notifyNewMessage": { "label": "Notify about new messages:" },
       "notifySystemMessage": { "label": "Notify about system messages:" },
@@ -184,6 +185,7 @@
       "downloading": "Downloading update... {{percent}}%",
       "installing": "Installing update...",
       "available": "New version {{version}} is available",
+      "released": "Update {{version}} is available",
       "installNow": "Install now",
       "upToDate": "Launcher is up to date"
     }
