@@ -15,6 +15,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
+import { playNotificationSound, playTabSwitchSound, primeUiSounds } from "./uiSounds";
 import {
   SettingsToggle,
   SettingsSlider,
@@ -56,6 +57,7 @@ type Settings = {
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
+  ui_sounds_enabled: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
@@ -147,6 +149,10 @@ type Notification = {
   leaving?: boolean;
   colorMsg?: string;
   iconMsg?: string;
+};
+
+type ShowNotificationOptions = {
+  sound?: boolean;
 };
 
 function appendAlphaToHex(hex: string, alpha01: number): string {
@@ -592,6 +598,25 @@ function App() {
   const tt = useT(language);
 
   useEffect(() => {
+    const onFirstGesture = () => primeUiSounds();
+    window.addEventListener("pointerdown", onFirstGesture, { once: true });
+    window.addEventListener("keydown", onFirstGesture, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", onFirstGesture);
+      window.removeEventListener("keydown", onFirstGesture);
+    };
+  }, []);
+
+  const setActiveItemWithSound = useCallback(
+    (next: SidebarItemId) => {
+      const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
+      if (uiSoundsEnabled && next !== activeItem) playTabSwitchSound();
+      setActiveItem(next);
+    },
+    [activeItem, settings?.ui_sounds_enabled],
+  );
+
+  useEffect(() => {
     let cancelled = false;
     getVersion()
       .then((v) => {
@@ -787,7 +812,7 @@ function App() {
       await invoke("set_selected_profile", { id: profileId });
     } catch {
     }
-    setActiveItem("modpacks");
+    setActiveItemWithSound("modpacks");
   };
 
   const handleDeleteProfileFromSidebar = async (profileId: string) => {
@@ -968,15 +993,24 @@ function App() {
   }, []);
 
   const showNotification = useCallback(
-    (kind: NotificationKind, message: string) => {
+    (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => {
       const id = Date.now() + Math.random();
 
+      const shouldShow =
+        !(settings && !settings.notify_new_message && kind === "info");
+
       setNotifications((prev) => {
-        if (settings && !settings.notify_new_message && kind === "info") {
-          return prev;
-        }
+        if (!shouldShow) return prev;
         return [...prev, { id, kind, message }];
       });
+
+      const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
+      const shouldSound =
+        shouldShow &&
+        uiSoundsEnabled &&
+        (kind === "info" || kind === "error" || options?.sound === true);
+
+      if (shouldSound) playNotificationSound();
 
       setTimeout(() => {
         setNotifications((prev) =>
@@ -1017,6 +1051,7 @@ function App() {
     check_updates_on_start: true,
     auto_install_updates: false,
     open_launcher_on_profiles_tab: false,
+    ui_sounds_enabled: true,
     background_accent_color: "#0b1530",
     background_image_url: null,
     background_blur_enabled: true,
@@ -1057,7 +1092,7 @@ function App() {
         const current = prev ?? defaultSettings;
         const next: Settings = { ...current, ...patch };
         if (patch.open_launcher_on_profiles_tab !== undefined) {
-          setActiveItem(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
+          setActiveItemWithSound(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
         }
         if (useProfile) {
           const profilePatch: Record<string, unknown> = {};
@@ -1090,7 +1125,7 @@ function App() {
         return next;
       });
     },
-    [showSettingsSavedNotification],
+    [showSettingsSavedNotification, setActiveItemWithSound],
   );
 
 
@@ -1199,6 +1234,11 @@ function App() {
         if (system.length === 0) return;
         if (!settings.notify_system_message) return;
 
+        if (settings.ui_sounds_enabled) {
+          const hasNoisyKind = system.some((s) => s.kind === "info" || s.kind === "error");
+          if (hasNoisyKind) playNotificationSound();
+        }
+
         for (const s of system) {
           const id = Date.now() + Math.random();
 
@@ -1225,70 +1265,57 @@ function App() {
     if (didLoadedBottomSocialRef.current) return;
     didLoadedBottomSocialRef.current = true;
 
-    const showDiscordInitial = Math.random() < 0.5;
-    const showTelegramInitial = Math.random() < 0.5;
-    const showDiscord =
-      showDiscordInitial || (!showDiscordInitial && !showTelegramInitial)
-        ? showDiscordInitial || Math.random() < 0.5
-        : false;
-    const showTelegram = !showDiscord && (showTelegramInitial || Math.random() < 0.5);
+    // Show social prompt rarely and randomly, with a simple cooldown.
+    // Goals: not every launch, but predictable "rare" behavior.
+    const STORAGE_LAUNCHES_KEY = "mc16launcher:socialPromptLaunches";
+    const STORAGE_LAST_SHOWN_AT_KEY = "mc16launcher:socialPromptLastShownAt";
 
-    const cards: BottomSocialNotification[] = [];
+    const MIN_LAUNCHES_BETWEEN = 6;
+    const MIN_DAYS_BETWEEN = 5;
+    const CHANCE_PER_ELIGIBLE_LAUNCH = 0.22;
 
-    if (showDiscord) {
-      cards.push({
-        id: Date.now() + Math.random(),
-        kind: "discord",
-        colorMsg: "#5865F2",
-        iconMsg: undefined,
-        messageKey: "app.social.discord",
-      });
-    }
-
-    if (showTelegram) {
-      cards.push({
-        id: Date.now() + Math.random(),
-        kind: "telegram",
-        colorMsg: "#229ED9",
-        iconMsg: undefined,
-        messageKey: "app.social.telegram",
-      });
-    }
-
-    if (cards.length > 0) setBottomSocialNotifications(cards);
-  }, []);
-
-  const checkForUpdate = useCallback(async (silent = false) => {
+    let launches = 0;
+    let lastShownAt = 0;
     try {
-      setUpdateStatus("checking");
-      setUpdateVersion(null);
-      const update = await check();
-      if (update) {
-        setUpdateVersion(update.version);
-        setUpdateStatus("available");
-        if (!silent && settings?.notify_new_update) {
-          showNotification(
-            "info",
-            tt("settings.updates.available", { version: update.version }),
-          );
-        }
-        if (settings?.auto_install_updates) {
-          void installUpdate(update);
-        }
-      } else {
-        setUpdateStatus("up-to-date");
-        if (!silent) {
-          showNotification("info", tt("settings.updates.noneFound"));
-        }
-      }
-    } catch (e) {
-      console.error("Update check failed:", e);
-      setUpdateStatus("error");
-      if (!silent) {
-        showNotification("info", tt("settings.updates.checkFailed"));
-      }
+      launches = Number.parseInt(localStorage.getItem(STORAGE_LAUNCHES_KEY) ?? "0", 10) || 0;
+      lastShownAt = Number.parseInt(localStorage.getItem(STORAGE_LAST_SHOWN_AT_KEY) ?? "0", 10) || 0;
+    } catch {
+      // ignore
     }
-  }, [settings?.notify_new_update, settings?.auto_install_updates, showNotification, tt]);
+
+    launches += 1;
+    try {
+      localStorage.setItem(STORAGE_LAUNCHES_KEY, String(launches));
+    } catch {
+      // ignore
+    }
+
+    const now = Date.now();
+    const minMs = MIN_DAYS_BETWEEN * 24 * 60 * 60 * 1000;
+    const eligible =
+      launches >= MIN_LAUNCHES_BETWEEN &&
+      (lastShownAt <= 0 || now - lastShownAt >= minMs) &&
+      Math.random() < CHANCE_PER_ELIGIBLE_LAUNCH;
+
+    if (!eligible) return;
+
+    const kind: BottomSocialKind = Math.random() < 0.5 ? "discord" : "telegram";
+    const card: BottomSocialNotification = {
+      id: Date.now() + Math.random(),
+      kind,
+      colorMsg: kind === "discord" ? "#5865F2" : "#229ED9",
+      iconMsg: undefined,
+      messageKey: kind === "discord" ? "app.social.discord" : "app.social.telegram",
+    };
+
+    setBottomSocialNotifications([card]);
+    try {
+      localStorage.setItem(STORAGE_LAST_SHOWN_AT_KEY, String(now));
+      localStorage.setItem(STORAGE_LAUNCHES_KEY, "0");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const installUpdate = useCallback(
     async (
@@ -1336,10 +1363,72 @@ function App() {
     [updateVersion, showNotification, tt],
   );
 
+  const checkForUpdate = useCallback(
+    async (options?: { silent?: boolean; source?: "startup" | "manual" }) => {
+      const silent = options?.silent ?? false;
+      const source = options?.source ?? "manual";
+      try {
+        setUpdateStatus("checking");
+        setUpdateVersion(null);
+        const update = await check();
+        if (update) {
+          setUpdateVersion(update.version);
+          setUpdateStatus("available");
+
+          const notifyEnabled = settings?.notify_new_update !== false;
+          const shouldNotifyManual = !silent && notifyEnabled;
+          const shouldNotifyStartup = source === "startup" && notifyEnabled;
+
+          if (shouldNotifyStartup) {
+            const key = "mc16launcher:lastShownUpdateVersion";
+            let lastShown: string | null = null;
+            try {
+              lastShown = localStorage.getItem(key);
+            } catch {
+              lastShown = null;
+            }
+            if (lastShown !== update.version) {
+              showNotification(
+                "info",
+                tt("settings.updates.released", { version: update.version }),
+              );
+              try {
+                localStorage.setItem(key, update.version);
+              } catch {
+                // ignore
+              }
+            }
+          } else if (shouldNotifyManual) {
+            showNotification(
+              "info",
+              tt("settings.updates.available", { version: update.version }),
+            );
+          }
+
+          if (settings?.auto_install_updates) {
+            void installUpdate(update);
+          }
+        } else {
+          setUpdateStatus("up-to-date");
+          if (!silent) {
+            showNotification("info", tt("settings.updates.noneFound"));
+          }
+        }
+      } catch (e) {
+        console.error("Update check failed:", e);
+        setUpdateStatus("error");
+        if (!silent) {
+          showNotification("info", tt("settings.updates.checkFailed"));
+        }
+      }
+    },
+    [settings?.notify_new_update, settings?.auto_install_updates, showNotification, tt, installUpdate],
+  );
+
   useEffect(() => {
     if (settings?.check_updates_on_start === false) return;
     const t = setTimeout(() => {
-      void checkForUpdate(true);
+      void checkForUpdate({ silent: true, source: "startup" });
     }, 2000);
     return () => clearTimeout(t);
   }, [settings?.check_updates_on_start, checkForUpdate]);
@@ -1983,7 +2072,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setFabricProfileId(profileId);
-        showNotification("success", tt("app.toast.downloadFinished"));
+        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
         setIsInstalling(false);
         return;
       } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
@@ -1993,7 +2082,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setQuiltProfileId(profileId);
-        showNotification("success", tt("app.toast.downloadFinished"));
+        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
         setIsInstalling(false);
         return;
       } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
@@ -2009,7 +2098,7 @@ function App() {
         throw new Error("Неизвестный тип версии");
       }
 
-      showNotification("success", tt("app.toast.downloadFinished"));
+      showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
       setInstalledIds((prev) => {
         const next = new Set(prev);
         next.add(selectedVersion.id);
@@ -2450,7 +2539,7 @@ function App() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveItem(item.id)}
+                onClick={() => setActiveItemWithSound(item.id)}
                 title={tt(item.labelKey)}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
@@ -2555,7 +2644,7 @@ function App() {
           <div className="border-t border-white/10 pt-4">
             <button
               type="button"
-              onClick={() => setActiveItem("accounts")}
+              onClick={() => setActiveItemWithSound("accounts")}
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
               }}
@@ -2761,7 +2850,7 @@ function App() {
               updateStatus={updateStatus}
               updateVersion={updateVersion}
               updateDownloadPercent={updateDownloadPercent}
-              onCheckUpdate={() => void checkForUpdate(false)}
+              onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
               onInstallUpdate={() => void installUpdate()}
             />
           ) : (

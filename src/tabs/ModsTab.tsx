@@ -56,7 +56,7 @@ type MrpackImportProgressPayload = {
 };
 
 type ModsTabProps = {
-  showNotification: (kind: NotificationKind, message: string) => void;
+  showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   language: Language;
   activeProfileId?: string | null;
   activeProfileGameVersion?: string | null;

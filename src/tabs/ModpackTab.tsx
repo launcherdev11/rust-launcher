@@ -28,6 +28,8 @@ type Settings = {
   notify_system_message: boolean;
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
+  ui_sounds_enabled: boolean;
+  open_launcher_on_profiles_tab: boolean;
 };
 
 type InstanceProfile = {
@@ -54,7 +56,7 @@ type VersionSummary = {
 
 type ModpackTabProps = {
   language: Language;
-  showNotification: (kind: NotificationKind, message: string) => void;
+  showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   onProfileSelectionChange?: (profile: InstanceProfile | null) => void;
   initialSelectedProfileId?: string | null;
   onOpenModsTab?: () => void;

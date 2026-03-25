@@ -123,6 +123,7 @@
         "yes": "Сборки",
         "no": "Главное"
       },
+      "uiSounds": { "label": "Звук интерфейса:" },
       "notifyNewUpdate": { "label": "Новое обновление:" },
       "notifyNewMessage": { "label": "Новое сообщение:" },
       "notifySystemMessage": { "label": "Системное сообщение:" },
@@ -184,6 +185,7 @@
       "downloading": "Загрузка обновления... {{percent}}%",
       "installing": "Установка обновления...",
       "available": "Доступна новая версия {{version}}",
+      "released": "Вышло обновление {{version}}",
       "installNow": "Установить сейчас",
       "upToDate": "Лаунчер обновлён"
     }
