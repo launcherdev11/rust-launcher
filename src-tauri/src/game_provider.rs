@@ -192,6 +192,11 @@ fn build_java_http_proxy_args() -> Vec<String> {
     if let (Some(user), Some(pass)) = (user, pass) {
         args.push(format!("-DproxyUser={}", user));
         args.push(format!("-DproxyPass={}", pass));
+
+        args.push(format!("-Dhttp.proxyUser={}", user));
+        args.push(format!("-Dhttp.proxyPassword={}", pass));
+        args.push(format!("-Dhttps.proxyUser={}", user));
+        args.push(format!("-Dhttps.proxyPassword={}", pass));
     }
 
     args.push("-Djdk.http.auth.tunneling.disabledSchemes=".to_string());
@@ -215,14 +220,39 @@ fn ensure_proxy_auth_bootstrap_jar(
     let classes_dir = out_dir.join("classes");
 
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let bundled_jar = resource_dir.join("bootstrap.jar");
-        if bundled_jar.exists() {
-            std::fs::create_dir_all(&out_dir)
-                .map_err(|e| format!("Не удалось создать папку bootstrap: {e}"))?;
-            std::fs::copy(&bundled_jar, &jar_path)
-                .map_err(|e| format!("Не удалось скопировать bundled bootstrap.jar: {e}"))?;
-            return Ok(jar_path);
+        let candidates = [
+            resource_dir.join("bootstrap.jar"),
+            resource_dir.join("resources").join("bootstrap.jar"),
+        ];
+        for bundled_jar in &candidates {
+            if bundled_jar.exists() {
+                std::fs::create_dir_all(&out_dir)
+                    .map_err(|e| format!("Не удалось создать папку bootstrap: {e}"))?;
+                std::fs::copy(bundled_jar, &jar_path)
+                    .map_err(|e| format!("Не удалось скопировать bundled bootstrap.jar: {e}"))?;
+                return Ok(jar_path);
+            }
         }
+
+        let mut checked = String::new();
+        for c in &candidates {
+            let _ = std::fmt::Write::write_fmt(
+                &mut checked,
+                format_args!(
+                    "{} exists={}; ",
+                    c.display(),
+                    c.exists()
+                ),
+            );
+        }
+        let _ = log_to_console(
+            app,
+            &format!(
+                "[Forge] bundled bootstrap.jar не найден в resource_dir={} ({}).",
+                resource_dir.display(),
+                checked
+            ),
+        );
     }
 
     if jar_path.exists() {
@@ -248,6 +278,17 @@ fn ensure_proxy_auth_bootstrap_jar(
     let java_path = out_dir.join("ProxyAuthBootstrap.java");
     std::fs::write(&java_path, PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE)
         .map_err(|e| format!("Не удалось сохранить ProxyAuthBootstrap.java: {e}"))?;
+
+    if std::process::Command::new("javac")
+        .arg("-version")
+        .output()
+        .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+    {
+        return Err(
+            "JDK не найден: javac отсутствует, а bundled bootstrap.jar не обнаружен"
+                .to_string(),
+        );
+    }
 
     let javac_out = std::process::Command::new("javac")
         .arg("-encoding")
@@ -1212,8 +1253,6 @@ fn is_minecraft_java_process_running() -> bool {
             continue;
         }
 
-        // Avoid treating any Java app as a running game process.
-        // We only consider JVMs that look like a Minecraft client launch.
         let cmd = process
             .cmd()
             .iter()
