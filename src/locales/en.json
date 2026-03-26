@@ -87,6 +87,12 @@
       "checkGameProcesses": {
         "label": "Check running game processes:"
       },
+      "gameDirectory": {
+        "label": "Game directory:",
+        "choose": "Choose",
+        "defaultPathHint": "Default (launcher data folder)",
+        "hint": ""
+      },
       "windowSize": {
         "label": "Window size on launch:",
         "widthPlaceholder": "Width",
@@ -119,7 +125,7 @@
     },
     "launcher": {
       "openOnProfilesTab": {
-        "label": "Open launcher on profiles/modpacks tab:",
+        "label": "Default tab:",
         "yes": "Modpacks",
         "no": "Main"
       },
@@ -171,6 +177,20 @@
         "button": "Reset launcher settings to defaults",
         "success": "Launcher settings have been reset to default values.",
         "failed": "Failed to reset launcher settings."
+      },
+      "backup": {
+        "title": "Import / export",
+        "hint": "Export saves launcher settings to a file. Import applies settings from a file and overwrites current ones.",
+        "exportButton": "Export settings",
+        "importButton": "Import settings",
+        "exporting": "Exporting…",
+        "importing": "Importing…",
+        "exportSuccess": "Settings exported.",
+        "exportFailed": "Failed to export settings.",
+        "importSuccess": "Settings imported.",
+        "importFailed": "Failed to import settings.",
+        "exportDialogTitle": "Export launcher settings",
+        "importDialogTitle": "Import launcher settings"
       }
     },
     "updates": {

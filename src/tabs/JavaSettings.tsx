@@ -333,7 +333,7 @@ export function JavaSettingsTab({
   const memoryHint = tt("javaSettings.memory.hint");
 
   return (
-    <div className="flex max-h-[360px] flex-col gap-4 overflow-y-auto pr-1">
+    <div className="flex max-h-[clamp(240px,45vh,520px)] flex-col gap-4 overflow-y-auto pr-1">
       {loading ? (
         <div className="flex h-32 items-center justify-center text-sm text-white/70">
           {tt("javaSettings.loading")}

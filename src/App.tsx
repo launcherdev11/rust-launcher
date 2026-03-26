@@ -38,11 +38,12 @@ type Profile = {
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
-type SettingsTabId = "directories" | "game" | "versions" | "launcher";
+type SettingsTabId = "game" | "versions" | "launcher";
 
 type Language = "ru" | "en";
 
 type Settings = {
+  game_directory: string | null;
   ram_mb: number;
   show_console_on_launch: boolean;
   close_launcher_on_game_start: boolean;
@@ -1037,6 +1038,7 @@ function App() {
   }, [tt, showNotification]);
 
   const defaultSettings: Settings = {
+    game_directory: null,
     ram_mb: 4096,
     show_console_on_launch: false,
     close_launcher_on_game_start: false,
@@ -1265,8 +1267,6 @@ function App() {
     if (didLoadedBottomSocialRef.current) return;
     didLoadedBottomSocialRef.current = true;
 
-    // Show social prompt rarely and randomly, with a simple cooldown.
-    // Goals: not every launch, but predictable "rare" behavior.
     const STORAGE_LAUNCHES_KEY = "mc16launcher:socialPromptLaunches";
     const STORAGE_LAST_SHOWN_AT_KEY = "mc16launcher:socialPromptLastShownAt";
 
@@ -2475,12 +2475,37 @@ function App() {
         <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-white/40 select-none">
           <span>16Launcher</span>
           {launcherVersion ? (
-            <span
-              className="font-mono text-[11px] font-medium normal-case tracking-normal text-white/35"
-              title={tt("app.launcherVersionTitle", { version: launcherVersion })}
-            >
-              v{launcherVersion}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className="font-mono text-[11px] font-medium normal-case tracking-normal text-white/35"
+                title={tt("app.launcherVersionTitle", { version: launcherVersion })}
+              >
+                v{launcherVersion}
+              </span>
+              {updateStatus === "up-to-date" ? (
+                <span
+                  className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-emerald-200"
+                  title={language === "ru" ? "У вас последняя версия" : "You have the latest version"}
+                >
+                  LAST
+                </span>
+              ) : updateStatus === "available" ? (
+                <span
+                  className="rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-amber-100"
+                  title={
+                    updateVersion
+                      ? language === "ru"
+                        ? `Доступна новая версия: ${updateVersion}`
+                        : `New version available: ${updateVersion}`
+                      : language === "ru"
+                        ? "Доступна новая версия"
+                        : "New version available"
+                  }
+                >
+                  NOT LAST
+                </span>
+              ) : null}
+            </div>
           ) : null}
           <button
             type="button"

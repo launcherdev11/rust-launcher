@@ -1,4 +1,4 @@
-import { open as openFile } from "@tauri-apps/plugin-dialog";
+import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { CSSProperties } from "react";
@@ -7,13 +7,14 @@ import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 
-type SettingsTabId = "directories" | "game" | "versions" | "launcher";
+type SettingsTabId = "game" | "versions" | "launcher";
 
 type Language = "ru" | "en";
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks";
 
 type Settings = {
+  game_directory: string | null;
   ram_mb: number;
   show_console_on_launch: boolean;
   close_launcher_on_game_start: boolean;
@@ -79,6 +80,14 @@ type DownloadProgressPayload = {
   downloaded: number;
   total: number;
   percent: number;
+};
+
+type LauncherSettingsBackupV1 = {
+  format_version: number;
+  exported_at_ms: number;
+  settings: Settings;
+  java_settings: unknown;
+  sidebar_order?: SidebarItemId[] | null;
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -685,6 +694,68 @@ export function SettingsTab({
     }
   };
 
+  const [isImportingSettings, setIsImportingSettings] = useState(false);
+  const [isExportingSettings, setIsExportingSettings] = useState(false);
+
+  const handleExportSettings = async () => {
+    setIsExportingSettings(true);
+    try {
+      const path = await saveFile({
+        title: tt("settings.launcher.backup.exportDialogTitle"),
+        defaultPath: "16launcher-settings.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path || typeof path !== "string") return;
+      await invoke<string>("export_launcher_settings_backup", {
+        path,
+        sidebarOrder: sidebarOrder,
+      });
+      showNotification("success", tt("settings.launcher.backup.exportSuccess"), { sound: true });
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("settings.launcher.backup.exportFailed"));
+    } finally {
+      setIsExportingSettings(false);
+    }
+  };
+
+  const handleImportSettings = async () => {
+    setIsImportingSettings(true);
+    try {
+      const path = await openFile({
+        title: tt("settings.launcher.backup.importDialogTitle"),
+        multiple: false,
+        directory: false,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path || typeof path !== "string") return;
+      const backup = await invoke<LauncherSettingsBackupV1>("import_launcher_settings_backup", {
+        path,
+      });
+      if (backup?.settings) {
+        updateSettings(backup.settings);
+      }
+      const so = backup?.sidebar_order ?? null;
+      if (Array.isArray(so) && so.length > 0) {
+        const normalized = so
+          .filter((x): x is SidebarItemId => x === "play" || x === "settings" || x === "mods" || x === "modpacks");
+        if (normalized.length > 0) {
+          setSidebarOrder(normalized);
+          try {
+            window.localStorage.setItem("sidebar_order", JSON.stringify(normalized));
+          } catch {
+          }
+        }
+      }
+      showNotification("success", tt("settings.launcher.backup.importSuccess"), { sound: true });
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("settings.launcher.backup.importFailed"));
+    } finally {
+      setIsImportingSettings(false);
+    }
+  };
+
   const moveSidebarItem = (id: SidebarItemId, direction: "up" | "down") => {
     const current = sidebarOrder;
     const idx = current.indexOf(id);
@@ -710,10 +781,16 @@ export function SettingsTab({
   };
 
   return (
-    <div className="flex w-full max-w-3xl flex-1 min-h-0 flex-col">
-      <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden">
-        <div className="w-full min-h-0 overflow-y-auto">
-          <div className="glass-panel w-full px-6 py-5">
+    <div className="flex w-full flex-1 min-h-0 flex-col items-center">
+      <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden px-4">
+        <div
+          className={[
+            "w-full min-h-0 overflow-hidden",
+            "max-w-[clamp(360px,82vw,1200px)]",
+            "max-h-[clamp(260px,78vh,860px)]",
+          ].join(" ")}
+        >
+          <div className="glass-panel h-full w-full overflow-y-auto px-6 py-5">
           {settingsTab === "game" && (
             <SettingsCard title={tt("settings.card.game")}>
               <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1 relative overflow-hidden">
@@ -778,6 +855,55 @@ export function SettingsTab({
                     value={settings?.check_game_processes ?? true}
                     onChange={(value: boolean) => updateSettings({ check_game_processes: value })}
                   />
+
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm text-white/90">
+                          {tt("settings.game.gameDirectory.label")}
+                        </div>
+                        <div className="mt-1 break-all text-[11px] text-white/55">
+                          {settings?.game_directory
+                            ? settings.game_directory
+                            : tt("settings.game.gameDirectory.defaultPathHint")}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                const path = await openFile({
+                                  multiple: false,
+                                  directory: true,
+                                });
+                                if (typeof path === "string" && path.trim()) {
+                                  updateSettings({ game_directory: path });
+                                }
+                              } catch (e) {
+                                console.error(e);
+                              }
+                            })();
+                          }}
+                          className="interactive-press rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/40 hover:bg-black/60"
+                        >
+                          {tt("settings.game.gameDirectory.choose")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!settings?.game_directory}
+                          onClick={() => updateSettings({ game_directory: null })}
+                          className="interactive-press rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                        >
+                          {tt("settings.common.reset")}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px] text-white/45">
+                      {tt("settings.game.gameDirectory.hint")}
+                    </div>
+                  </div>
 
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-sm text-white/90">
@@ -1028,7 +1154,7 @@ export function SettingsTab({
 
           {settingsTab === "launcher" && (
             <SettingsCard title={tt("settings.card.launcher")}>
-              <div className="max-h-[310px] overflow-y-auto pr-1 space-y-3">
+              <div className="max-h-[clamp(220px,45vh,520px)] overflow-y-auto pr-1 space-y-3">
               {onCheckUpdate && (
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-3 space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-white/60">
@@ -1489,19 +1615,42 @@ export function SettingsTab({
                       {tt("settings.launcher.resetSettings.button")}
                     </button>
                   </div>
+                  <div className="pt-2 border-t border-white/10 space-y-2">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      {tt("settings.launcher.backup.title")}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleExportSettings()}
+                        disabled={isExportingSettings}
+                        className="interactive-press inline-flex items-center justify-center rounded-2xl border border-white/25 px-4 py-2 text-xs font-semibold text-white/85 hover:border-white/45 hover:text-white disabled:opacity-60"
+                      >
+                        {isExportingSettings
+                          ? tt("settings.launcher.backup.exporting")
+                          : tt("settings.launcher.backup.exportButton")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleImportSettings()}
+                        disabled={isImportingSettings}
+                        className="interactive-press inline-flex items-center justify-center rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+                      >
+                        {isImportingSettings
+                          ? tt("settings.launcher.backup.importing")
+                          : tt("settings.launcher.backup.importButton")}
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-white/55">
+                      {tt("settings.launcher.backup.hint")}
+                    </div>
+                  </div>
                 </div>
               </div>
               </div>
             </SettingsCard>
           )}
 
-          {settingsTab === "directories" && (
-            <SettingsCard title={tt("settings.card.directories")}>
-              <p className="text-sm text-white/70">
-                {tt("settings.directories.comingSoon")}
-              </p>
-            </SettingsCard>
-          )}
           </div>
         </div>
       </div>
@@ -1517,10 +1666,6 @@ export function SettingsTab({
           />
           {(
             [
-              {
-                id: "directories",
-                label: tt("settings.tab.directories"),
-              },
               { id: "game", label: tt("settings.tab.game") },
               {
                 id: "versions",

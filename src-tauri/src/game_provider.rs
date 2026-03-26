@@ -986,6 +986,8 @@ fn build_java_command(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    #[serde(default)]
+    pub game_directory: Option<String>,
     pub ram_mb: u32,
     pub show_console_on_launch: bool,
     pub close_launcher_on_game_start: bool,
@@ -1034,6 +1036,7 @@ fn default_ui_sounds_enabled() -> bool {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            game_directory: None,
             ram_mb: 4096,
             show_console_on_launch: false,
             close_launcher_on_game_start: false,
@@ -1137,6 +1140,24 @@ fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LauncherSettingsBackupV1 {
+    pub format_version: u32,
+    pub exported_at_ms: u64,
+    pub settings: Settings,
+    pub java_settings: JavaSettings,
+    #[serde(default)]
+    pub sidebar_order: Option<Vec<String>>,
+}
+
+fn now_unix_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 #[tauri::command]
 pub fn get_settings() -> Result<Settings, String> {
     Ok(load_settings_from_disk())
@@ -1152,6 +1173,71 @@ pub fn reset_settings_to_default() -> Result<Settings, String> {
     let defaults = Settings::default();
     save_settings_to_disk(&defaults)?;
     Ok(defaults)
+}
+
+#[tauri::command]
+pub fn export_launcher_settings_backup(
+    app: AppHandle,
+    path: String,
+    sidebar_order: Option<Vec<String>>,
+) -> Result<String, String> {
+    let p = PathBuf::from(path.clone());
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для экспорта: {e}"))?;
+    }
+
+    let settings = load_settings_from_disk();
+    let java_settings = load_java_settings_internal(&app);
+    let backup = LauncherSettingsBackupV1 {
+        format_version: 1,
+        exported_at_ms: now_unix_ms(),
+        settings,
+        java_settings,
+        sidebar_order,
+    };
+
+    let text = serde_json::to_string_pretty(&backup)
+        .map_err(|e| format!("Ошибка сериализации файла экспорта: {e}"))?;
+    std::fs::write(&p, text).map_err(|e| format!("Не удалось записать файл экспорта: {e}"))?;
+    Ok(path)
+}
+
+#[tauri::command]
+pub fn import_launcher_settings_backup(app: AppHandle, path: String) -> Result<LauncherSettingsBackupV1, String> {
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Не удалось прочитать файл импорта: {e}"))?;
+
+    let parsed_backup = serde_json::from_str::<LauncherSettingsBackupV1>(&text).ok();
+    let (mut settings, mut java_settings, sidebar_order) = if let Some(b) = parsed_backup {
+        (b.settings, b.java_settings, b.sidebar_order)
+    } else {
+        let s = serde_json::from_str::<Settings>(&text)
+            .map_err(|e| format!("Файл импорта не распознан (ожидался JSON настроек): {e}"))?;
+        let js = load_java_settings_internal(&app);
+        (s, js, None)
+    };
+
+    if settings.interface_language.trim().is_empty() {
+        settings.interface_language = default_interface_language();
+    }
+    if settings.background_accent_color.trim().is_empty() {
+        settings.background_accent_color = "#0b1530".to_string();
+    }
+    if java_settings.java_path.as_deref().unwrap_or("").trim().is_empty() {
+        java_settings.java_path = None;
+    }
+
+    save_settings_to_disk(&settings)?;
+    save_java_settings_internal(&app, &java_settings)?;
+
+    Ok(LauncherSettingsBackupV1 {
+        format_version: 1,
+        exported_at_ms: now_unix_ms(),
+        settings,
+        java_settings,
+        sidebar_order,
+    })
 }
 
 #[tauri::command]
@@ -2093,6 +2179,14 @@ pub struct NeoForgeVersionSummary {
 }
 
 fn game_root_dir() -> Result<PathBuf, String> {
+    let settings = load_settings_from_disk();
+    if let Some(raw) = settings.game_directory {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+
     let base = dirs::data_dir().ok_or("Не удалось получить системную папку данных")?;
     Ok(base.join("16Launcher").join("game"))
 }
@@ -5437,7 +5531,22 @@ pub async fn install_forge(
 
     let java_http_proxy_args = build_java_http_proxy_args();
 
+    let mut forge_java_bin =
+        crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(name) = forge_java_bin.file_name().and_then(|n| n.to_str()) {
+            if name.eq_ignore_ascii_case("javaw.exe") {
+                let candidate = forge_java_bin.with_file_name("java.exe");
+                if candidate.is_file() {
+                    forge_java_bin = candidate;
+                }
+            }
+        }
+    }
+
     let app_for_forge_install = app.clone();
+    let forge_java_bin_for_thread = forge_java_bin.clone();
     let output = tokio::task::spawn_blocking(move || {
         use std::process::{Command, Stdio};
 
@@ -5469,7 +5578,7 @@ pub async fn install_forge(
         });
 
         let help_output = if let Some(ref classpath) = classpath_opt {
-            let mut cmd_help = Command::new("java");
+            let mut cmd_help = Command::new(&forge_java_bin_for_thread);
             for a in &java_http_proxy_args {
                 cmd_help.arg(a);
             }
@@ -5482,7 +5591,7 @@ pub async fn install_forge(
                 .stderr(Stdio::piped());
             cmd_help.output()
         } else {
-            let mut cmd_help = Command::new("java");
+            let mut cmd_help = Command::new(&forge_java_bin_for_thread);
             for a in &java_http_proxy_args {
                 cmd_help.arg(a);
             }
@@ -5511,7 +5620,7 @@ pub async fn install_forge(
         if has_install_client {
             let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: --installClient");
             if let Some(ref classpath) = classpath_opt {
-                let mut cmd = Command::new("java");
+                let mut cmd = Command::new(&forge_java_bin_for_thread);
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
@@ -5524,7 +5633,7 @@ pub async fn install_forge(
                     .stderr(Stdio::piped());
                 cmd.output()
             } else {
-                let mut cmd = Command::new("java");
+                let mut cmd = Command::new(&forge_java_bin_for_thread);
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
@@ -5539,7 +5648,7 @@ pub async fn install_forge(
         } else if has_install_server {
             let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: --installServer (cwd=game_dir)");
             if let Some(ref classpath) = classpath_opt {
-                let mut cmd = Command::new("java");
+                let mut cmd = Command::new(&forge_java_bin_for_thread);
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
@@ -5552,7 +5661,7 @@ pub async fn install_forge(
                     .stderr(Stdio::piped());
                 cmd.output()
             } else {
-                let mut cmd = Command::new("java");
+                let mut cmd = Command::new(&forge_java_bin_for_thread);
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
@@ -5567,7 +5676,7 @@ pub async fn install_forge(
         } else {
             let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: fallback --installClient");
             if let Some(ref classpath) = classpath_opt {
-                let mut cmd = Command::new("java");
+                let mut cmd = Command::new(&forge_java_bin_for_thread);
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
@@ -5580,7 +5689,7 @@ pub async fn install_forge(
                     .stderr(Stdio::piped());
                 cmd.output()
             } else {
-                let mut cmd = Command::new("java");
+                let mut cmd = Command::new(&forge_java_bin_for_thread);
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
