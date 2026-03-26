@@ -15,6 +15,7 @@ type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
 type Settings = {
+  game_directory: string | null;
   ram_mb: number;
   show_console_on_launch: boolean;
   close_launcher_on_game_start: boolean;

@@ -22,3 +22,5 @@ dist-ssr
 *.sw?
 .env
 .env.*
+
+src-tauri/target

@@ -21,6 +21,7 @@ use game_provider::{
     validate_java_args, detect_java_runtimes, get_profile_java_settings, set_profile_java_settings,
     reset_settings_to_default, get_launcher_cache_size, clear_launcher_cache,
     set_background_image, get_background_data_uri,
+    export_launcher_settings_backup, import_launcher_settings_backup,
     get_profile_play_time_seconds,
 };
 use commands::{list_build_files, preview_export, export_build};
@@ -62,6 +63,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|_app| Ok(()))
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
@@ -129,7 +131,9 @@ pub fn run() {
             get_launcher_cache_size,
             clear_launcher_cache,
             set_background_image,
-            get_background_data_uri
+            get_background_data_uri,
+            export_launcher_settings_backup,
+            import_launcher_settings_backup
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
