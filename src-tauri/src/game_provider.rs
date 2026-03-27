@@ -5624,6 +5624,7 @@ pub async fn install_forge(
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
+                cmd.current_dir(&game_dir);
                 cmd.arg("-cp")
                     .arg(classpath)
                     .arg("ProxyAuthBootstrap")
@@ -5637,6 +5638,7 @@ pub async fn install_forge(
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
+                cmd.current_dir(&game_dir);
                 cmd.arg("-jar")
                     .arg(&java_installer)
                     .arg("--installClient")
@@ -5680,6 +5682,7 @@ pub async fn install_forge(
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
+                cmd.current_dir(&game_dir);
                 cmd.arg("-cp")
                     .arg(classpath)
                     .arg("ProxyAuthBootstrap")
@@ -5693,6 +5696,7 @@ pub async fn install_forge(
                 for a in &java_http_proxy_args {
                     cmd.arg(a);
                 }
+                cmd.current_dir(&game_dir);
                 cmd.arg("-jar")
                     .arg(&java_installer)
                     .arg("--installClient")
