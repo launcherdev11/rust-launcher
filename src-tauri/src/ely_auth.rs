@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::game_provider::{get_profile, launcher_data_dir, profile_path};
+use crate::game_provider::{get_profile, launcher_data_dir, save_full_profile};
 
 fn http_client() -> Client {
     Client::builder()
@@ -596,14 +596,7 @@ async fn handle_oauth_callback_internal(
         profile.ely_client_token = Some(generate_client_token());
     }
 
-    let path = profile_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку профиля: {e}"))?;
-    }
-    let s = serde_json::to_string_pretty(&profile)
-        .map_err(|e| format!("Ошибка сериализации профиля: {e}"))?;
-    std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
+    save_full_profile(&profile).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
 
     let _ = app.emit("ely-login-complete", profile);
 
@@ -878,14 +871,7 @@ pub async fn ely_login_with_password(
     profile.ely_access_token = Some(resp.access_token);
     profile.ely_client_token = Some(resp.client_token);
 
-    let path = profile_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку профиля: {e}"))?;
-    }
-    let s = serde_json::to_string_pretty(&profile)
-        .map_err(|e| format!("Ошибка сериализации профиля: {e}"))?;
-    std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
+    save_full_profile(&profile).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
 
     Ok(())
 }
@@ -907,14 +893,7 @@ pub async fn ely_logout() -> Result<(), String> {
     profile.ely_client_token = None;
     profile.ely_refresh_token = None;
 
-    let path = profile_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку профиля: {e}"))?;
-    }
-    let s = serde_json::to_string_pretty(&profile)
-        .map_err(|e| format!("Ошибка сериализации профиля: {e}"))?;
-    std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
+    save_full_profile(&profile).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
 
     Ok(())
 }
@@ -934,14 +913,7 @@ pub async fn refresh_ely_session_internal() -> Result<(), String> {
         Some(t) if !t.is_empty() => t,
         _ => {
             profile.ely_access_token = None;
-            let path = profile_path()?;
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Не удалось создать папку профиля: {e}"))?;
-            }
-            let s = serde_json::to_string_pretty(&profile)
-                .map_err(|e| format!("Ошибка сериализации профиля: {e}"))?;
-            std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
+            save_full_profile(&profile).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
             return Err("Сессия Ely.by истекла, войдите заново.".to_string());
         }
     };
@@ -952,14 +924,7 @@ pub async fn refresh_ely_session_internal() -> Result<(), String> {
         profile.ely_refresh_token = Some(new_refresh);
     }
 
-    let path = profile_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку профиля: {e}"))?;
-    }
-    let s = serde_json::to_string_pretty(&profile)
-        .map_err(|e| format!("Ошибка сериализации профиля: {e}"))?;
-    std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
+    save_full_profile(&profile).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
 
     Ok(())
 }
@@ -968,4 +933,3 @@ pub async fn refresh_ely_session_internal() -> Result<(), String> {
 pub async fn refresh_ely_session() -> Result<(), String> {
     refresh_ely_session_internal().await
 }
-

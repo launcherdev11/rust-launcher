@@ -23,6 +23,7 @@ use game_provider::{
     set_background_image, get_background_data_uri,
     export_launcher_settings_backup, import_launcher_settings_backup,
     get_profile_play_time_seconds,
+    list_launcher_accounts, switch_launcher_account, remove_launcher_account, add_launcher_account,
 };
 use commands::{list_build_files, preview_export, export_build};
 use ely_auth::{
@@ -133,7 +134,11 @@ pub fn run() {
             set_background_image,
             get_background_data_uri,
             export_launcher_settings_backup,
-            import_launcher_settings_backup
+            import_launcher_settings_backup,
+            list_launcher_accounts,
+            switch_launcher_account,
+            remove_launcher_account,
+            add_launcher_account
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
