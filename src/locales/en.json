@@ -1,6 +1,7 @@
 {
   "common": {
     "cancel": "Cancel",
+    "delete": "Delete",
     "change": "Change",
     "save": "Save",
     "loading": "Loading…",
@@ -68,7 +69,9 @@
       "game": "Game",
       "versions": "Minecraft versions",
       "launcher": "Launcher",
-      "updates": "Launcher updates"
+      "updates": "Launcher updates",
+      "interfaceLanguage": "Interface language",
+      "customization": "Customization"
     },
     "directories": {
       "comingSoon": "Directory settings will be added later."
@@ -398,6 +401,23 @@
     },
     "launcherVersionTitle": "Launcher version {{version}}",
     "accounts": {
+      "managerTitle": "Account manager",
+      "managerSubtitle": "",
+      "currentProfileSection": "Active account",
+      "newAccountNameBase": "Player",
+      "addAccount": "Add account",
+      "sidebarTooltip": "Accounts",
+      "switcherTitle": "Switch account",
+      "switcherHeading": "Accounts",
+      "manageAll": "All accounts & sign-in…",
+      "activeBadge": "active",
+      "kindMicrosoft": "Microsoft",
+      "kindEly": "Ely.by",
+      "kindOffline": "Offline",
+      "savedListTitle": "Saved accounts",
+      "savedListHint": "",
+      "removeTitle": "Remove from launcher",
+      "removeConfirm": "Remove this account from the list? Saved credentials for it will be deleted.",
       "editNickname": "Edit nickname",
       "nicknamePlaceholder": "Player",
       "signedInAsPrefix": "Signed in as: ",
@@ -414,9 +434,12 @@
         "elyLoggedOut": "You have logged out of Ely.by.",
         "elyLogoutFailed": "Failed to log out from Ely.by.",
         "elyOpenBrowserFailed": "Could not open the browser for Ely.by sign-in.",
-        "msAuthUnavailable": "Microsoft authorization is unavailable.",
+        "msAuthUnavailable": "Microsoft authorization is temporarily unavailable.",
         "msLoggedOut": "You have logged out of Microsoft.",
-        "msLogoutFailed": "Failed to log out of Microsoft."
+        "msLogoutFailed": "Failed to log out of Microsoft.",
+        "switched": "Active account changed.",
+        "removed": "Account removed from the list.",
+        "added": "New account created and selected."
       }
     },
     "toast": {
@@ -442,6 +465,7 @@
       "icons": "Icons from",
       "mojangDisclaimer": "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\n\n16Launcher is in no way affiliated with Mojang Studios, nor should it be considered a project endorsed by Mojang Studios.",
       "apis": "We use Modrinth and Ely.by APIs",
+      "reportBug": "Found an error?",
       "close": "Close"
     },
     "playAction": {

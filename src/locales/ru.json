@@ -1,6 +1,7 @@
 {
   "common": {
     "cancel": "Отмена",
+    "delete": "Удалить",
     "change": "Сменить",
     "save": "Сохранить",
     "loading": "Загрузка…",
@@ -68,7 +69,9 @@
       "game": "Игра",
       "versions": "Версии Minecraft",
       "launcher": "Лаунчер",
-      "updates": "Обновления лаунчера"
+      "updates": "Обновления лаунчера",
+      "interfaceLanguage": "Язык интерфейса",
+      "customization": "Кастомизация"
     },
     "directories": {
       "comingSoon": "Настройки директорий будут добавлены позже."
@@ -398,6 +401,23 @@
     },
     "launcherVersionTitle": "Версия лаунчера {{version}}",
     "accounts": {
+      "managerTitle": "Менеджер аккаунтов",
+      "managerSubtitle": "",
+      "currentProfileSection": "Текущий аккаунт",
+      "newAccountNameBase": "Игрок",
+      "addAccount": "Добавить аккаунт",
+      "sidebarTooltip": "Аккаунты",
+      "switcherTitle": "Сменить аккаунт",
+      "switcherHeading": "Аккаунты",
+      "manageAll": "Все аккаунты и вход…",
+      "activeBadge": "активен",
+      "kindMicrosoft": "Microsoft",
+      "kindEly": "Ely.by",
+      "kindOffline": "Офлайн",
+      "savedListTitle": "Сохранённые аккаунты",
+      "savedListHint": "",
+      "removeTitle": "Удалить из лаунчера",
+      "removeConfirm": "Удалить этот аккаунт из списка? Сохранённые для него данные входа будут удалены.",
       "editNickname": "Редактировать никнейм",
       "nicknamePlaceholder": "Игрок",
       "signedInAsPrefix": "Вход: ",
@@ -414,9 +434,12 @@
         "elyLoggedOut": "Вы вышли из аккаунта Ely.by.",
         "elyLogoutFailed": "Не удалось выйти из аккаунта Ely.by.",
         "elyOpenBrowserFailed": "Не удалось открыть браузер для входа через Ely.by.",
-        "msAuthUnavailable": "Авторизация недоступна.",
+        "msAuthUnavailable": "Авторизация временно недоступна.",
         "msLoggedOut": "Вы вышли из аккаунта Microsoft.",
-        "msLogoutFailed": "Не удалось выйти из аккаунта Microsoft."
+        "msLogoutFailed": "Не удалось выйти из аккаунта Microsoft.",
+        "switched": "Активный аккаунт изменён.",
+        "removed": "Аккаунт удалён из списка.",
+        "added": "Создан новый аккаунт и выбран."
       }
     },
     "toast": {
@@ -442,6 +465,7 @@
       "icons": "Иконки взяты с сайта",
       "mojangDisclaimer": "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\n\n16Launcher is in no way affiliated with Mojang Studios, nor should it be considered a project endorsed by Mojang Studios.",
       "apis": "Используем API Modrinth и Ely.by",
+      "reportBug": "Нашли ошибку?",
       "close": "Закрыть"
     },
     "playAction": {
