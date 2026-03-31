@@ -6004,7 +6004,9 @@ pub async fn install_forge(
         return Ok(());
     }
 
-    let alt_folder_name = format!("{mc_version}-forge{forge_build}");
+    // Forge обычно кладёт папку в формате: <mc>-forge-<build>
+    // У вашего предыдущего шаблона отсутствовал дефис после `forge`, из‑за чего альтернативный путь мог не совпадать.
+    let alt_folder_name = format!("{mc_version}-forge-{forge_build}");
     let alt_json_name = format!("{alt_folder_name}.json");
     let alt_dir = vers_root.join(&alt_folder_name);
     let alt_json = alt_dir.join(&alt_json_name);
@@ -6057,15 +6059,43 @@ pub async fn install_forge(
                 None => continue,
             };
             let folder_lower = folder_name.to_ascii_lowercase();
-            if !folder_lower.contains("forge")
-                || !folder_name.contains(&forge_build)
-                || (!folder_name.contains(&mc_version) && !is_neoforge)
-            {
+            let matches = if is_neoforge {
+                folder_lower.contains("neoforge") && folder_name.contains(&forge_build)
+            } else {
+                folder_lower.contains("forge") && folder_name.contains(&forge_build)
+            };
+            if !matches {
                 continue;
             }
-            let candidate_json = dir_path.join(format!("{folder_name}.json"));
-            if candidate_json.exists() {
-                discovered_json = Some((candidate_json, folder_name));
+
+            // Быстрый путь: JSON обычно называется так же, как папка.
+            let exact_json = dir_path.join(format!("{folder_name}.json"));
+            if exact_json.exists() {
+                discovered_json = Some((exact_json, folder_name));
+                break;
+            }
+
+            // Фолбэк: некоторые установщики могут класть JSON с другим именем.
+            // Если внутри папки только один .json — забираем его.
+            let mut json_candidates: Vec<PathBuf> = Vec::new();
+            if let Ok(inner_entries) = std::fs::read_dir(&dir_path) {
+                for inner_entry in inner_entries.flatten() {
+                    let p = inner_entry.path();
+                    if !p.is_file() {
+                        continue;
+                    }
+                    let is_json = p.extension().and_then(|s| s.to_str()).map_or(false, |ext| {
+                        ext.eq_ignore_ascii_case("json")
+                    });
+                    if is_json {
+                        json_candidates.push(p);
+                    }
+                }
+            }
+
+            if json_candidates.len() == 1 {
+                let source_json = json_candidates.pop().expect("len==1 implies pop Some");
+                discovered_json = Some((source_json, folder_name));
                 break;
             }
         }
@@ -6645,6 +6675,7 @@ pub async fn launch_game(
     } else {
         "msa".to_string()
     };
+    let mut auth_is_mojang = false;
 
     if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
         profile.mc_username.as_ref(),
@@ -6670,6 +6701,7 @@ pub async fn launch_game(
             auth_token = mc_access_token.clone();
             user_type = "msa".to_string();
             is_offline = false;
+            auth_is_mojang = true;
         }
     }
 
@@ -6699,6 +6731,7 @@ pub async fn launch_game(
             auth_token = mc_access_token;
             user_type = "msa".to_string();
             is_offline = false;
+            auth_is_mojang = true;
         }
     }
 
@@ -6878,10 +6911,27 @@ pub async fn launch_game(
         game_args = filtered;
     }
 
-    let java_settings = instance_settings_for_launch
+    let mut java_settings = instance_settings_for_launch
         .as_ref()
         .and_then(|s| s.java_settings.clone())
         .unwrap_or_else(|| load_java_settings_internal(&app));
+
+    let profile_has_own_java_settings = instance_settings_for_launch
+        .as_ref()
+        .and_then(|s| s.java_settings.as_ref())
+        .is_some();
+    let profile_ram_mb_in_file = instance_settings_for_launch
+        .as_ref()
+        .and_then(|s| s.ram_mb)
+        .is_some();
+
+    if profile_ram_mb_in_file {
+        java_settings.xms = None;
+        java_settings.xmx = None;
+    } else if !profile_has_own_java_settings {
+        java_settings.xms = None;
+        java_settings.xmx = None;
+    }
 
     let (java_path, mut jvm_args) = build_java_command(
         default_java_path.clone(),
@@ -6901,7 +6951,7 @@ pub async fn launch_game(
         },
     )?;
 
-    if auth_token != "offline" && !auth_token.is_empty() {
+    if auth_token != "offline" && !auth_token.is_empty() && !auth_is_mojang {
         match ensure_authlib_injector().await {
             Ok(path) => {
                 let agent_path = path.to_string_lossy().replace('\\', "/");
