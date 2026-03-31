@@ -164,6 +164,79 @@ type GameConsoleLine = GameConsoleLinePayload & {
   id: number;
 };
 
+type GameConsoleSession = {
+  id: string;
+  startedAt: number;
+  endedAt?: number;
+  lines: GameConsoleLine[];
+};
+
+const GAME_CONSOLE_STORAGE_KEY = "game_console_persist_v1";
+const MAX_CONSOLE_LINES = 2000;
+const MAX_ARCHIVED_SESSIONS = 25;
+
+function loadPersistedGameConsole(): {
+  lines: GameConsoleLine[];
+  sessions: GameConsoleSession[];
+} {
+  if (typeof window === "undefined") {
+    return { lines: [], sessions: [] };
+  }
+  try {
+    const raw = window.localStorage.getItem(GAME_CONSOLE_STORAGE_KEY);
+    if (!raw) return { lines: [], sessions: [] };
+    const data = JSON.parse(raw) as {
+      lines?: unknown;
+      sessions?: unknown;
+    };
+    const normalizeLine = (l: unknown, i: number): GameConsoleLine | null => {
+      if (!l || typeof l !== "object") return null;
+      const o = l as Record<string, unknown>;
+      const line = typeof o.line === "string" ? o.line : "";
+      const source = o.source === "stderr" ? "stderr" : "stdout";
+      const id =
+        typeof o.id === "number" && Number.isFinite(o.id)
+          ? o.id
+          : Date.now() + i + Math.random();
+      return { id, line, source };
+    };
+    const linesRaw = Array.isArray(data.lines) ? data.lines : [];
+    const lines = linesRaw
+      .map((l, i) => normalizeLine(l, i))
+      .filter((x): x is GameConsoleLine => x !== null)
+      .slice(-MAX_CONSOLE_LINES);
+
+    const sessionsRaw = Array.isArray(data.sessions) ? data.sessions : [];
+    const sessions: GameConsoleSession[] = sessionsRaw
+      .flatMap((s, si): GameConsoleSession[] => {
+        if (!s || typeof s !== "object") return [];
+        const o = s as Record<string, unknown>;
+        const id = typeof o.id === "string" ? o.id : `${Date.now()}-${si}`;
+        const startedAt =
+          typeof o.startedAt === "number" && Number.isFinite(o.startedAt)
+            ? o.startedAt
+            : Date.now();
+        const endedAt =
+          typeof o.endedAt === "number" && Number.isFinite(o.endedAt)
+            ? o.endedAt
+            : undefined;
+        const lr = Array.isArray(o.lines) ? o.lines : [];
+        const slines = lr
+          .map((l, i) => normalizeLine(l, i + si * 1000))
+          .filter((x): x is GameConsoleLine => x !== null)
+          .slice(-MAX_CONSOLE_LINES);
+        const session: GameConsoleSession = { id, startedAt, lines: slines };
+        if (endedAt !== undefined) session.endedAt = endedAt;
+        return [session];
+      })
+      .slice(0, MAX_ARCHIVED_SESSIONS);
+
+    return { lines, sessions };
+  } catch {
+    return { lines: [], sessions: [] };
+  }
+}
+
 type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -576,8 +649,16 @@ function App() {
   }, [updateSidebarIndicator]);
 
   useEffect(() => {
-    window.addEventListener("resize", updateSidebarIndicator);
-    return () => window.removeEventListener("resize", updateSidebarIndicator);
+    let raf = 0;
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateSidebarIndicator);
+    };
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [updateSidebarIndicator]);
 
   useEffect(() => {
@@ -742,7 +823,13 @@ function App() {
   const activeAccountLabel =
     activeAccountFromList?.label ?? (displayedNickname.trim() || "—");
   const activeAccountKind = activeAccountFromList?.kind ?? "offline";
-  const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>([]);
+  const initialPersistedConsole = useMemo(() => loadPersistedGameConsole(), []);
+  const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>(
+    initialPersistedConsole.lines,
+  );
+  const [consoleHistorySessions, setConsoleHistorySessions] = useState<GameConsoleSession[]>(
+    initialPersistedConsole.sessions,
+  );
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
   const [isStopping, setIsStopping] = useState(false);
@@ -805,6 +892,23 @@ function App() {
       setHeadImgSrc(stevePlaceholderSrc);
     }
   }, [headImgSrc, stevePlaceholderSrc]);
+
+  const archiveCurrentConsoleAndClear = useCallback(() => {
+    setConsoleLines((prev) => {
+      if (prev.length > 0) {
+        const session: GameConsoleSession = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+          lines: prev.slice(-MAX_CONSOLE_LINES),
+        };
+        setConsoleHistorySessions((sessionsPrev) =>
+          [session, ...sessionsPrev].slice(0, MAX_ARCHIVED_SESSIONS),
+        );
+      }
+      return [];
+    });
+  }, []);
 
   const orderedSidebarItems = useMemo(() => {
     const byId = new Map(sidebarItems.map((i) => [i.id, i]));
@@ -893,7 +997,7 @@ function App() {
         }
         launchVersionId = installedQuiltId;
       }
-      setConsoleLines([]);
+      archiveCurrentConsoleAndClear();
       if (settings?.show_console_on_launch) {
         setIsConsoleVisible(true);
       }
@@ -1089,7 +1193,9 @@ function App() {
                 source,
               },
             ];
-            return next.length > 1000 ? next.slice(next.length - 1000) : next;
+            return next.length > MAX_CONSOLE_LINES
+              ? next.slice(next.length - MAX_CONSOLE_LINES)
+              : next;
           });
         });
       } catch (e) {
@@ -1101,6 +1207,23 @@ function App() {
       if (unlisten) unlisten();
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          GAME_CONSOLE_STORAGE_KEY,
+          JSON.stringify({
+            lines: consoleLines.slice(-MAX_CONSOLE_LINES),
+            sessions: consoleHistorySessions.slice(0, MAX_ARCHIVED_SESSIONS),
+          }),
+        );
+      } catch {
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [consoleLines, consoleHistorySessions]);
 
   const showNotification = useCallback(
     (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => {
@@ -2213,7 +2336,7 @@ function App() {
             : loader === "quilt" && quiltProfileId
               ? quiltProfileId
               : selectedVersion.id;
-        setConsoleLines([]);
+        archiveCurrentConsoleAndClear();
         if (settings?.show_console_on_launch) {
           setIsConsoleVisible(true);
         }
@@ -3249,7 +3372,7 @@ function App() {
               />
             </div>
           ) : activeItem === "modpacks" ? (
-          <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-start self-stretch">
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4">
             <ModpackTab
               language={language}
               showNotification={showNotification}
@@ -3290,6 +3413,10 @@ function App() {
                 }
                 void handlePrimaryClick();
               }}
+              gameStatus={gameStatus}
+              consoleLines={consoleLines}
+              consoleHistorySessions={consoleHistorySessions}
+              onClearConsole={handleClearConsole}
             />
           </div>
           ) : activeItem === "settings" ? (

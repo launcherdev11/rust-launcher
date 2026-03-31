@@ -258,7 +258,11 @@ export function SettingsTab({
   const [isResettingSettings, setIsResettingSettings] = useState(false);
 
   useLayoutEffect(() => {
+    let raf = 0;
+    let cancelled = false;
+
     const updateIndicator = () => {
+      if (cancelled) return;
       const el = settingsTabRefs.current[settingsTab];
       if (el) {
         setSettingsIndicator({
@@ -268,13 +272,26 @@ export function SettingsTab({
       }
     };
 
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateIndicator);
+    };
+
     updateIndicator();
-    window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [settingsTab]);
 
   useLayoutEffect(() => {
+    let raf = 0;
+    let cancelled = false;
+
     const updateIndicator = () => {
+      if (cancelled) return;
       const el = gameSubTabRefs.current[gameSubTab];
       if (el) {
         setGameSubIndicator({
@@ -284,9 +301,18 @@ export function SettingsTab({
       }
     };
 
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateIndicator);
+    };
+
     updateIndicator();
-    window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [gameSubTab, settingsTab]);
 
   useLayoutEffect(() => {

@@ -1,4 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -55,6 +65,21 @@ type VersionSummary = {
   release_time: string;
 };
 
+type GameConsoleLine = {
+  id: number;
+  line: string;
+  source: "stdout" | "stderr";
+};
+
+type GameConsoleSession = {
+  id: string;
+  startedAt: number;
+  endedAt?: number;
+  lines: GameConsoleLine[];
+};
+
+type GameStatus = "idle" | "running" | "stopped" | "crashed";
+
 type ModpackTabProps = {
   language: Language;
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
@@ -65,6 +90,10 @@ type ModpackTabProps = {
   onProfilesChange?: (profiles: InstanceProfile[]) => void;
   onTogglePinInSidebar?: (profile: InstanceProfile) => void;
   isPinnedInSidebar?: (profileId: string) => boolean;
+  gameStatus?: GameStatus;
+  consoleLines?: GameConsoleLine[];
+  consoleHistorySessions?: GameConsoleSession[];
+  onClearConsole?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -251,6 +280,14 @@ function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
   return paths.filter((p) => okExt(p, ["zip", "rar", "7z", "mcpack"]));
 }
 
+const MANAGE_ACTION_BTN_CLASS =
+  "interactive-press inline-flex h-9 w-[8.75rem] shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-2xl px-2 py-2 text-xs font-semibold text-white";
+
+const MODPACK_MANAGE_SPLIT_STORAGE_KEY = "modpack_manage_main_width_frac";
+const MODPACK_MANAGE_SPLIT_MIN = 0.34;
+const MODPACK_MANAGE_SPLIT_MAX = 0.88;
+const MODPACK_MANAGE_SPLIT_DEFAULT = 0.68;
+
 export function ModpackTab({
   language,
   showNotification,
@@ -261,6 +298,10 @@ export function ModpackTab({
   onProfilesChange,
   onTogglePinInSidebar,
   isPinnedInSidebar,
+  gameStatus = "idle",
+  consoleLines = [],
+  consoleHistorySessions = [],
+  onClearConsole,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -322,6 +363,8 @@ export function ModpackTab({
   const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
   const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
+  const profileRamSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileRamPendingRef = useRef<{ profileId: string; mb: number } | null>(null);
 
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
@@ -355,6 +398,197 @@ export function ModpackTab({
     left: number;
     width: number;
   }>({ left: 0, width: 0 });
+
+  const [manageConsoleExpanded, setManageConsoleExpanded] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return window.localStorage.getItem("modpack_manage_console_expanded") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [selectedLogSessionId, setSelectedLogSessionId] = useState<"live" | string>(
+    "live",
+  );
+  const [isCopyingConsole, setIsCopyingConsole] = useState(false);
+  const [isConsoleCopied, setIsConsoleCopied] = useState(false);
+
+  const [manageMainWidthFrac, setManageMainWidthFrac] = useState(() => {
+    if (typeof window === "undefined") return MODPACK_MANAGE_SPLIT_DEFAULT;
+    try {
+      const raw = window.localStorage.getItem(MODPACK_MANAGE_SPLIT_STORAGE_KEY);
+      const v = raw == null ? Number.NaN : Number.parseFloat(raw);
+      if (
+        Number.isFinite(v) &&
+        v >= MODPACK_MANAGE_SPLIT_MIN &&
+        v <= MODPACK_MANAGE_SPLIT_MAX
+      ) {
+        return v;
+      }
+    } catch {
+    }
+    return MODPACK_MANAGE_SPLIT_DEFAULT;
+  });
+  const [isManageSplitDragging, setIsManageSplitDragging] = useState(false);
+  const manageSplitRowRef = useRef<HTMLDivElement | null>(null);
+  const manageSplitHandleRef = useRef<HTMLDivElement | null>(null);
+  const manageSplitDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startFrac: number;
+    rowWidth: number;
+  } | null>(null);
+
+  const onManageSplitPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const row = manageSplitRowRef.current;
+      if (!row) return;
+      if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
+        return;
+      }
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      manageSplitDragRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startFrac: manageMainWidthFrac,
+        rowWidth: Math.max(1, rect.width),
+      };
+      setIsManageSplitDragging(true);
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+      }
+    },
+    [manageMainWidthFrac],
+  );
+
+  useEffect(() => {
+    if (!isManageSplitDragging) return;
+    const handleEl = manageSplitHandleRef.current;
+
+    const onMove = (e: PointerEvent) => {
+      const d = manageSplitDragRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      const row = manageSplitRowRef.current;
+      const rowWidth = row ? Math.max(1, row.getBoundingClientRect().width) : d.rowWidth;
+      const delta = e.clientX - d.startX;
+      let next = d.startFrac + delta / rowWidth;
+      next = Math.min(MODPACK_MANAGE_SPLIT_MAX, Math.max(MODPACK_MANAGE_SPLIT_MIN, next));
+      setManageMainWidthFrac(next);
+    };
+
+    const finish = (e: PointerEvent) => {
+      const d = manageSplitDragRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      manageSplitDragRef.current = null;
+      setIsManageSplitDragging(false);
+      if (handleEl) {
+        try {
+          handleEl.releasePointerCapture(e.pointerId);
+        } catch {
+        }
+      }
+      setManageMainWidthFrac((frac) => {
+        try {
+          window.localStorage.setItem(MODPACK_MANAGE_SPLIT_STORAGE_KEY, String(frac));
+        } catch {
+        }
+        return frac;
+      });
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    };
+  }, [isManageSplitDragging]);
+
+  useEffect(() => {
+    if (!isManageSplitDragging) return;
+    const prev = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    return () => {
+      document.body.style.userSelect = prev;
+    };
+  }, [isManageSplitDragging]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "modpack_manage_console_expanded",
+        manageConsoleExpanded ? "1" : "0",
+      );
+    } catch {
+    }
+  }, [manageConsoleExpanded]);
+
+  useEffect(() => {
+    if (selectedLogSessionId === "live") return;
+    const exists = consoleHistorySessions.some((s) => s.id === selectedLogSessionId);
+    if (!exists) setSelectedLogSessionId("live");
+  }, [consoleHistorySessions, selectedLogSessionId]);
+
+  const displayedConsoleLines = useMemo(() => {
+    if (selectedLogSessionId === "live") return consoleLines;
+    return consoleHistorySessions.find((s) => s.id === selectedLogSessionId)?.lines ?? [];
+  }, [selectedLogSessionId, consoleLines, consoleHistorySessions]);
+
+  const consoleTextForCopy = useMemo(
+    () => displayedConsoleLines.map((e) => e.line).join("\n"),
+    [displayedConsoleLines],
+  );
+
+  const manageConsoleStatusDotClass = useMemo(() => {
+    if (selectedLogSessionId !== "live") return "bg-gray-500";
+    if (gameStatus === "running") return "bg-emerald-400";
+    if (gameStatus === "crashed") return "bg-red-500";
+    if (gameStatus === "stopped") return "bg-sky-400";
+    return "bg-gray-500";
+  }, [selectedLogSessionId, gameStatus]);
+
+  const handleCopyManageConsole = useCallback(async () => {
+    if (isCopyingConsole) return;
+    setIsCopyingConsole(true);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(consoleTextForCopy);
+      ok = true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = consoleTextForCopy;
+        ta.style.position = "fixed";
+        ta.style.left = "-10000px";
+        ta.style.top = "-10000px";
+        ta.setAttribute("readonly", "true");
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+      }
+    } finally {
+      setIsCopyingConsole(false);
+    }
+    if (ok) {
+      setIsConsoleCopied(true);
+      window.setTimeout(() => setIsConsoleCopied(false), 1200);
+    }
+  }, [consoleTextForCopy, isCopyingConsole]);
+
+  function formatLogSessionOptionLabel(session: GameConsoleSession): string {
+    const d = new Date(session.endedAt ?? session.startedAt);
+    const ds = language === "ru" ? d.toLocaleString("ru-RU") : d.toLocaleString("en-GB");
+    return language === "ru" ? `Архив: ${ds}` : `Archive: ${ds}`;
+  }
 
   const selectedProfile = useMemo(
     () => profiles.find((p) => p.id === selectedProfileId) ?? null,
@@ -577,6 +811,11 @@ export function ModpackTab({
   }, [isExportOpen, language, showNotification]);
 
   async function openProfileSettings(profileId: string) {
+    profileRamPendingRef.current = null;
+    if (profileRamSaveTimerRef.current !== null) {
+      clearTimeout(profileRamSaveTimerRef.current);
+      profileRamSaveTimerRef.current = null;
+    }
     setSelectedProfileId(profileId);
     setActiveView("manage");
     setProfileSettingsTab("general");
@@ -603,7 +842,12 @@ export function ModpackTab({
     }
   }
 
-  async function patchProfileGameSettings(profileId: string, patch: Partial<Settings>) {
+  async function patchProfileGameSettings(
+    profileId: string,
+    patch: Partial<Settings>,
+    opts?: { notifySuccess?: boolean },
+  ) {
+    const notifySuccess = opts?.notifySuccess !== false;
     setProfileEffectiveSettings((prev) => (prev ? { ...prev, ...patch } : prev));
     const profilePatch: Record<string, unknown> = {};
     if (patch.ram_mb !== undefined) profilePatch.ram_mb = patch.ram_mb;
@@ -615,10 +859,9 @@ export function ModpackTab({
       profilePatch.check_game_processes = patch.check_game_processes;
     try {
       await invoke("update_profile_settings", { id: profileId, patch: profilePatch });
-      showNotification(
-        "success",
-        tt("modpacks.profileSettings.saved"),
-      );
+      if (notifySuccess) {
+        showNotification("success", tt("modpacks.profileSettings.saved"));
+      }
     } catch (e) {
       console.error(e);
       showNotification(
@@ -627,6 +870,43 @@ export function ModpackTab({
       );
     }
   }
+
+  function clearProfileRamSaveDebounce() {
+    if (profileRamSaveTimerRef.current !== null) {
+      clearTimeout(profileRamSaveTimerRef.current);
+      profileRamSaveTimerRef.current = null;
+    }
+  }
+
+  function scheduleProfileRamSave(profileId: string, ramMb: number) {
+    profileRamPendingRef.current = { profileId, mb: ramMb };
+    clearProfileRamSaveDebounce();
+    profileRamSaveTimerRef.current = setTimeout(() => {
+      profileRamSaveTimerRef.current = null;
+      const pending = profileRamPendingRef.current;
+      if (!pending) return;
+      profileRamPendingRef.current = null;
+      void patchProfileGameSettings(pending.profileId, { ram_mb: pending.mb });
+    }, 450);
+  }
+
+  function commitProfileRamSaveNow(profileId: string, ramMb: number) {
+    clearProfileRamSaveDebounce();
+    profileRamPendingRef.current = null;
+    void patchProfileGameSettings(profileId, { ram_mb: ramMb });
+  }
+
+  function closeProfileSettingsModal() {
+    clearProfileRamSaveDebounce();
+    const pending = profileRamPendingRef.current;
+    profileRamPendingRef.current = null;
+    if (pending) {
+      void patchProfileGameSettings(pending.profileId, { ram_mb: pending.mb });
+    }
+    setIsProfileSettingsOpen(false);
+  }
+
+  useEffect(() => () => clearProfileRamSaveDebounce(), []);
 
   useEffect(() => {
     if (!initialSelectedProfileId) return;
@@ -662,7 +942,11 @@ export function ModpackTab({
 
   useEffect(() => {
     if (!isExportOpen) return;
+    let raf = 0;
+    let cancelled = false;
+
     const updateIndicator = () => {
+      if (cancelled) return;
       const el = exportFormatTabRefs.current[exportFormat];
       if (el) {
         setExportFormatIndicator({
@@ -671,9 +955,19 @@ export function ModpackTab({
         });
       }
     };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateIndicator);
+    };
+
     updateIndicator();
-    window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [isExportOpen, exportFormat]);
 
   useLayoutEffect(() => {
@@ -1877,8 +2171,8 @@ export function ModpackTab({
         : items.filter((name) => name.toLowerCase().includes(searchValue));
 
     return (
-      <div className="flex w-full flex-col gap-4">
-        <div className="flex items-center justify-between gap-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+        <div className="flex shrink-0 items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
               <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
@@ -1999,61 +2293,81 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setActiveView("list")}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={language === "ru" ? "К списку сборок" : "Back to list"}
             >
-              <span>{language === "ru" ? "К списку сборок" : "Back to list"}</span>
+              <span className="truncate">
+                {language === "ru" ? "К списку сборок" : "Back to list"}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => void handleOpenFolder()}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={language === "ru" ? "Открыть папку" : "Open folder"}
             >
-              <FolderIcon className="h-4 w-4" />
-              <span>{language === "ru" ? "Открыть папку" : "Open folder"}</span>
+              <FolderIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {language === "ru" ? "Открыть папку" : "Open folder"}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => void openExportModal()}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={language === "ru" ? "Экспортировать сборку" : "Export build"}
             >
-              <ExportIcon className="h-4 w-4" />
-              <span>{language === "ru" ? "Экспорт" : "Export"}</span>
+              <ExportIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {language === "ru" ? "Экспорт" : "Export"}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => void openProfileSettings(selectedProfile.id)}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={language === "ru" ? "Настройки сборки" : "Profile settings"}
             >
               <img
                 src="/launcher-assets/setttings.png"
                 alt=""
-                className="h-4 w-4 object-contain"
+                className="h-4 w-4 shrink-0 object-contain"
                 onError={(e) => {
                   const img = e.currentTarget;
                   img.style.display = "none";
                 }}
               />
-              <SettingsIcon className="h-4 w-4" />
-              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+              <SettingsIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {language === "ru" ? "Настройки" : "Settings"}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
-              className="interactive-press inline-flex items-center gap-2 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90"
+              className={`${MANAGE_ACTION_BTN_CLASS} accent-bg shadow-soft hover:opacity-90`}
+              title={language === "ru" ? "Выбрать сборку" : "Select profile"}
             >
-              <Download className="h-4 w-4" />
-              <span>{language === "ru" ? "Выбрать" : "Select"}</span>
+              <Download className="h-4 w-4 shrink-0" />
+              <span className="truncate">{language === "ru" ? "Выбрать" : "Select"}</span>
             </button>
           </div>
         </div>
 
-          <div className="glass-panel flex flex-1 flex-col">
+        <div
+          ref={manageSplitRowRef}
+          className="flex min-h-0 w-full flex-1 flex-col gap-3 lg:min-h-[min(36rem,calc(100vh-7.5rem))] lg:flex-row lg:items-stretch lg:gap-0"
+          style={
+            {
+              ["--modpack-main-frac" as string]: String(manageMainWidthFrac),
+            } as CSSProperties
+          }
+        >
+          <div className="glass-panel flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:flex-none lg:shrink-0 lg:pr-2 lg:[flex-basis:calc(var(--modpack-main-frac,0.68)*100%)]">
           <div className="mb-3 flex items-center gap-3">
             <div className="flex flex-1 items-center gap-3 rounded-2xl border border-white/15 bg-black/35 px-4 py-2 shadow-soft backdrop-blur-xl">
               <SearchIcon className="h-4 w-4" />
@@ -2157,14 +2471,15 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div
-            ref={manageDropZoneRef}
-            className={`custom-scrollbar -mr-2 flex-1 overflow-y-auto rounded-2xl pr-2 transition-colors ${
-              isManageDropTarget
-                ? "bg-purple-500/15 ring-2 ring-purple-400/70 ring-inset"
-                : ""
-            }`}
-          >
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              ref={manageDropZoneRef}
+              className={`custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl bg-black/35 p-2.5 shadow-inner transition-colors ${
+                isManageDropTarget
+                  ? "bg-purple-500/15 ring-2 ring-purple-400/70 ring-inset"
+                  : ""
+              }`}
+            >
             {itemsLoading ? (
               <div className="flex h-32 items-center justify-center text-xs text-white/70">
                 {language === "ru" ? "Загрузка файлов..." : "Loading files..."}
@@ -2217,14 +2532,148 @@ export function ModpackTab({
                 ))}
               </div>
             )}
+            </div>
           </div>
+        </div>
+
+        <div
+          ref={manageSplitHandleRef}
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={Math.round(manageMainWidthFrac * 100)}
+          aria-valuemin={Math.round(MODPACK_MANAGE_SPLIT_MIN * 100)}
+          aria-valuemax={Math.round(MODPACK_MANAGE_SPLIT_MAX * 100)}
+          aria-label={
+            language === "ru"
+              ? "Перетащите, чтобы изменить ширину списка и консоли"
+              : "Drag to resize the list and console"
+          }
+          title={
+            language === "ru"
+              ? "Тяните, чтобы сделать список шире или уже"
+              : "Drag to widen or narrow the list"
+          }
+          onPointerDown={onManageSplitPointerDown}
+          className={`hidden lg:flex lg:w-2 lg:shrink-0 lg:cursor-col-resize lg:select-none lg:touch-none lg:flex-col lg:items-center lg:justify-center lg:self-stretch ${
+            isManageSplitDragging ? "lg:bg-white/25" : "lg:bg-transparent lg:hover:bg-white/10"
+          }`}
+        >
+          <span className="pointer-events-none h-24 w-1 rounded-full bg-white/35 shadow-sm" />
+        </div>
+
+        <div className="glass-panel relative z-10 flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border border-white/12 bg-black/65 px-3 py-3 shadow-soft backdrop-blur-xl max-h-[min(42rem,calc(100vh-6rem))] lg:sticky lg:top-2 lg:mt-0 lg:min-w-[11rem] lg:flex-1 lg:self-stretch lg:shadow-lg">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${manageConsoleStatusDotClass} ${
+                  selectedLogSessionId === "live" && gameStatus === "running"
+                    ? "animate-pulse"
+                    : ""
+                }`}
+              />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                {tt("play.console.title")}
+              </span>
+              <select
+                value={selectedLogSessionId}
+                onChange={(e) => setSelectedLogSessionId(e.target.value)}
+                className="max-w-[min(100%,15rem)] rounded-2xl border border-white/15 bg-black/50 px-2 py-1 text-[11px] text-white/85 focus:outline-none focus:ring-1 focus:ring-white/30"
+              >
+                <option value="live">
+                  {language === "ru" ? "Текущий вывод" : "Current output"}
+                </option>
+                {consoleHistorySessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {formatLogSessionOptionLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedLogSessionId === "live") onClearConsole?.();
+                }}
+                disabled={selectedLogSessionId !== "live"}
+                className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                title={
+                  selectedLogSessionId !== "live"
+                    ? language === "ru"
+                      ? "Очистка только для текущего вывода"
+                      : "Clear only applies to current output"
+                    : undefined
+                }
+              >
+                {tt("play.console.clear")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setManageConsoleExpanded((v) => !v)}
+                className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
+              >
+                {manageConsoleExpanded
+                  ? tt("play.console.hide")
+                  : tt("play.console.show")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyManageConsole()}
+                disabled={isCopyingConsole}
+                className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20 disabled:opacity-50"
+                title={
+                  isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")
+                }
+                aria-label={tt("app.toast.copy")}
+              >
+                <img
+                  src="/launcher-assets/copy.png"
+                  alt=""
+                  className="h-4 w-4 object-contain"
+                />
+              </button>
+            </div>
+          </div>
+
+          {manageConsoleExpanded && (
+            <div className="mt-1 flex min-h-0 flex-1 flex-col">
+              {displayedConsoleLines.length > 0 ? (
+                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80 sm:min-h-[12rem]">
+                  {displayedConsoleLines.map((entry, idx) => (
+                    <div
+                      key={`${selectedLogSessionId}-${idx}`}
+                      className={`whitespace-pre break-all ${
+                        entry.source === "stderr" ? "text-red-300" : "text-emerald-200"
+                      }`}
+                    >
+                      {entry.line}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-24 w-full shrink-0 items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60 lg:flex-1">
+                  {tt("play.console.empty")}
+                </div>
+              )}
+              <p className="mt-2 shrink-0 text-[10px] text-white/40">
+                {language === "ru"
+                  ? "Между списком и консолью можно тянуть разделитель — ширина сохраняется. Лог хранится между перезапусками; перед новым запуском вывод уходит в «Архив»."
+                  : "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived."}
+              </p>
+            </div>
+          )}
+        </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex w-full max-w-5xl flex-1 flex-col gap-4">
+    <div
+      className={`flex w-full flex-1 flex-col gap-4 ${
+        activeView === "manage" ? "max-w-none min-h-0 self-stretch px-0 sm:px-1" : "max-w-5xl"
+      }`}
+    >
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-white">{headerTitle}</h1>
       </div>
@@ -2390,7 +2839,7 @@ export function ModpackTab({
       {isProfileSettingsOpen && selectedProfile && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setIsProfileSettingsOpen(false)}
+          onClick={closeProfileSettingsModal}
         >
           <div
             className="glass-panel w-full max-w-3xl rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
@@ -2408,7 +2857,7 @@ export function ModpackTab({
               <button
                 type="button"
                 className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
-                onClick={() => setIsProfileSettingsOpen(false)}
+                onClick={closeProfileSettingsModal}
               >
                 {language === "ru" ? "Закрыть" : "Close"}
               </button>
@@ -2442,56 +2891,43 @@ export function ModpackTab({
             {profileSettingsTab === "general" ? (
               <div className="max-h-[420px] overflow-y-auto pr-1">
                 <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
-                  <div className="mb-2 text-xs text-white/60">
+                  <div className="mb-3 text-xs text-white/60">
                     {language === "ru"
                       ? "Эти параметры применяются только к выбранной сборке и используются при запуске игры."
                       : "These settings apply only to this profile and are used on launch."}
                   </div>
-                  <SettingsToggle
-                    label={
-                      language === "ru"
-                        ? "Консоль при запуске:"
-                        : "Show console on game start:"
-                    }
-                    yesLabel={language === "ru" ? "Да" : "On"}
-                    noLabel={language === "ru" ? "Нет" : "Off"}
-                    value={profileEffectiveSettings?.show_console_on_launch ?? false}
-                    onChange={(value: boolean) =>
-                      void patchProfileGameSettings(selectedProfile.id, {
-                        show_console_on_launch: value,
-                      })
-                    }
-                  />
-                  <SettingsToggle
-                    label={
-                      language === "ru"
-                        ? "Закрывать лаунчер при запуске игры:"
-                        : "Close launcher when game starts:"
-                    }
-                    yesLabel={language === "ru" ? "Да" : "Yes"}
-                    noLabel={language === "ru" ? "Нет" : "No"}
-                    value={profileEffectiveSettings?.close_launcher_on_game_start ?? false}
-                    onChange={(value: boolean) =>
-                      void patchProfileGameSettings(selectedProfile.id, {
-                        close_launcher_on_game_start: value,
-                      })
-                    }
-                  />
-                  <SettingsToggle
-                    label={
-                      language === "ru"
-                        ? "Проверять запущенные процессы игры:"
-                        : "Check running game processes:"
-                    }
-                    yesLabel={language === "ru" ? "Да" : "Yes"}
-                    noLabel={language === "ru" ? "Нет" : "No"}
-                    value={profileEffectiveSettings?.check_game_processes ?? true}
-                    onChange={(value: boolean) =>
-                      void patchProfileGameSettings(selectedProfile.id, {
-                        check_game_processes: value,
-                      })
-                    }
-                  />
+                  <div className="flex flex-col gap-4">
+                    <SettingsToggle
+                      label={
+                        language === "ru"
+                          ? "Закрывать лаунчер при запуске игры:"
+                          : "Close launcher when game starts:"
+                      }
+                      yesLabel={language === "ru" ? "Да" : "Yes"}
+                      noLabel={language === "ru" ? "Нет" : "No"}
+                      value={profileEffectiveSettings?.close_launcher_on_game_start ?? false}
+                      onChange={(value: boolean) =>
+                        void patchProfileGameSettings(selectedProfile.id, {
+                          close_launcher_on_game_start: value,
+                        })
+                      }
+                    />
+                    <SettingsToggle
+                      label={
+                        language === "ru"
+                          ? "Проверять запущенные процессы игры:"
+                          : "Check running game processes:"
+                      }
+                      yesLabel={language === "ru" ? "Да" : "Yes"}
+                      noLabel={language === "ru" ? "Нет" : "No"}
+                      value={profileEffectiveSettings?.check_game_processes ?? true}
+                      onChange={(value: boolean) =>
+                        void patchProfileGameSettings(selectedProfile.id, {
+                          check_game_processes: value,
+                        })
+                      }
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
@@ -2503,10 +2939,15 @@ export function ModpackTab({
                       1,
                       Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
                     )}
-                    onChange={(value: number) =>
-                      void patchProfileGameSettings(selectedProfile.id, {
-                        ram_mb: Math.max(1, value) * 1024,
-                      })
+                    onChange={(value: number) => {
+                      const ramMb = Math.max(1, value) * 1024;
+                      setProfileEffectiveSettings((prev) =>
+                        prev ? { ...prev, ram_mb: ramMb } : prev,
+                      );
+                      scheduleProfileRamSave(selectedProfile.id, ramMb);
+                    }}
+                    onChangeCommitted={(value: number) =>
+                      commitProfileRamSaveNow(selectedProfile.id, Math.max(1, value) * 1024)
                     }
                     right={
                       <span className="text-sm font-semibold text-white/90">
