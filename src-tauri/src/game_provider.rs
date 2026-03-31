@@ -27,6 +27,8 @@ use urlencoding::encode;
 
 use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 
+const ELY_AUTHLIB_INJECTOR_TARGET: &str = "ely.by";
+
 fn http_client(use_proxy: bool) -> Client {
     let _ = dotenvy::dotenv();
 
@@ -153,6 +155,27 @@ fn load_project_env_for_runtime() {
             }
         }
     });
+}
+
+#[cfg(target_os = "linux")]
+fn apply_linux_display_env(cmd: &mut std::process::Command) {
+    let xdg_session_type = env::var("XDG_SESSION_TYPE")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let has_wayland = env::var_os("WAYLAND_DISPLAY").is_some() || xdg_session_type == "wayland";
+
+    if has_wayland {
+        if env::var_os("WINIT_UNIX_BACKEND").is_none() {
+            cmd.env("WINIT_UNIX_BACKEND", "wayland");
+        }
+        if env::var_os("GDK_BACKEND").is_none() {
+            cmd.env("GDK_BACKEND", "wayland,x11");
+        }
+    }
+
+    if env::var_os("_JAVA_AWT_WM_NONREPARENTING").is_none() {
+        cmd.env("_JAVA_AWT_WM_NONREPARENTING", "1");
+    }
 }
 
 fn normalize_api_key(raw: String) -> String {
@@ -1354,13 +1377,18 @@ fn is_minecraft_java_process_running() -> bool {
             .collect::<Vec<_>>()
             .join(" ")
             .to_ascii_lowercase();
-        if cmd.contains("net.minecraft.client.main.main")
+
+        let looks_like_client_launch = cmd.contains("net.minecraft.client.main.main")
             || cmd.contains("--gamedir")
-            || cmd.contains("minecraft")
             || cmd.contains("cpw.mods.bootstraplauncher")
             || cmd.contains("fabric-loader")
             || cmd.contains("org.quiltmc.loader")
-        {
+            || cmd.contains("minecraft.client.main")
+            || (cmd.contains("main")
+                && cmd.contains("minecraft")
+                && (cmd.contains("natives") || cmd.contains("--accessToken")));
+
+        if looks_like_client_launch {
             return true;
         }
     }
@@ -6004,8 +6032,6 @@ pub async fn install_forge(
         return Ok(());
     }
 
-    // Forge обычно кладёт папку в формате: <mc>-forge-<build>
-    // У вашего предыдущего шаблона отсутствовал дефис после `forge`, из‑за чего альтернативный путь мог не совпадать.
     let alt_folder_name = format!("{mc_version}-forge-{forge_build}");
     let alt_json_name = format!("{alt_folder_name}.json");
     let alt_dir = vers_root.join(&alt_folder_name);
@@ -6068,15 +6094,12 @@ pub async fn install_forge(
                 continue;
             }
 
-            // Быстрый путь: JSON обычно называется так же, как папка.
             let exact_json = dir_path.join(format!("{folder_name}.json"));
             if exact_json.exists() {
                 discovered_json = Some((exact_json, folder_name));
                 break;
             }
 
-            // Фолбэк: некоторые установщики могут класть JSON с другим именем.
-            // Если внутри папки только один .json — забираем его.
             let mut json_candidates: Vec<PathBuf> = Vec::new();
             if let Ok(inner_entries) = std::fs::read_dir(&dir_path) {
                 for inner_entry in inner_entries.flatten() {
@@ -6673,39 +6696,54 @@ pub async fn launch_game(
     let mut user_type: String = if is_offline {
         "legacy".to_string()
     } else {
-        "msa".to_string()
+        "mojang".to_string()
     };
     let mut auth_is_mojang = false;
 
-    if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
-        profile.mc_username.as_ref(),
-        profile.mc_uuid.as_ref(),
-        profile.mc_access_token.as_ref(),
-    ) {
-        if !mc_access_token.is_empty() {
-            auth_name = mc_name.clone();
-            auth_uuid = if mc_uuid.contains('-') {
-                mc_uuid.clone()
-            } else if mc_uuid.len() == 32 {
-                format!(
-                    "{}-{}-{}-{}-{}",
-                    &mc_uuid[0..8],
-                    &mc_uuid[8..12],
-                    &mc_uuid[12..16],
-                    &mc_uuid[16..20],
-                    &mc_uuid[20..32]
-                )
-            } else {
-                mc_uuid.clone()
-            };
-            auth_token = mc_access_token.clone();
-            user_type = "msa".to_string();
-            is_offline = false;
-            auth_is_mojang = true;
+    let has_valid_ely_session = !is_offline
+        && profile
+            .ely_access_token
+            .as_deref()
+            .map(|s| !s.is_empty() && s != "0")
+            .unwrap_or(false)
+        && profile
+            .ely_uuid
+            .as_deref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+
+    if !has_valid_ely_session {
+        if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
+            profile.mc_username.as_ref(),
+            profile.mc_uuid.as_ref(),
+            profile.mc_access_token.as_ref(),
+        ) {
+            if !mc_access_token.is_empty() {
+                auth_name = mc_name.clone();
+                auth_uuid = if mc_uuid.contains('-') {
+                    mc_uuid.clone()
+                } else if mc_uuid.len() == 32 {
+                    format!(
+                        "{}-{}-{}-{}-{}",
+                        &mc_uuid[0..8],
+                        &mc_uuid[8..12],
+                        &mc_uuid[12..16],
+                        &mc_uuid[16..20],
+                        &mc_uuid[20..32]
+                    )
+                } else {
+                    mc_uuid.clone()
+                };
+                auth_token = mc_access_token.clone();
+                user_type = "msa".to_string();
+                is_offline = false;
+                auth_is_mojang = true;
+            }
         }
     }
 
-    if profile
+    if !has_valid_ely_session
+        && profile
         .mc_access_token
         .as_deref()
         .filter(|s| !s.is_empty())
@@ -6959,7 +6997,10 @@ pub async fn launch_game(
                     "[ElyAuth] Используется authlib-injector: {}",
                     agent_path
                 );
-                jvm_args.insert(0, format!("-javaagent:{}=ely.by", agent_path));
+                jvm_args.insert(
+                    0,
+                    format!("-javaagent:{}={}", agent_path, ELY_AUTHLIB_INJECTOR_TARGET),
+                );
             }
             Err(e) => {
                 eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
@@ -7013,6 +7054,8 @@ pub async fn launch_game(
         .current_dir(game_dir_str)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    #[cfg(target_os = "linux")]
+    apply_linux_display_env(&mut cmd);
     #[cfg(windows)]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;

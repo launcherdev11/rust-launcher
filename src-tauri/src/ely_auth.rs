@@ -589,6 +589,12 @@ async fn handle_oauth_callback_internal(
     profile.ely_username = Some(account.username);
     profile.ely_uuid = Some(account.uuid.replace('-', ""));
     profile.ely_access_token = Some(token.access_token);
+    profile.ms_access_token = None;
+    profile.ms_refresh_token = None;
+    profile.ms_id_token = None;
+    profile.mc_uuid = None;
+    profile.mc_username = None;
+    profile.mc_access_token = None;
     if let Some(r) = token.refresh_token {
         profile.ely_refresh_token = Some(r);
     }
@@ -870,6 +876,12 @@ pub async fn ely_login_with_password(
     profile.ely_uuid = Some(resp.selected_profile.id.clone());
     profile.ely_access_token = Some(resp.access_token);
     profile.ely_client_token = Some(resp.client_token);
+    profile.ms_access_token = None;
+    profile.ms_refresh_token = None;
+    profile.ms_id_token = None;
+    profile.mc_uuid = None;
+    profile.mc_username = None;
+    profile.mc_access_token = None;
 
     save_full_profile(&profile).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
 

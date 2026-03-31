@@ -56,7 +56,6 @@ body {
   @apply text-accentGreen;
 }
 
-/* Лёгкая анимация нажатия для интерактивных элементов */
 .interactive-press {
   transition:
     transform 120ms ease-out,
@@ -75,12 +74,10 @@ body {
   box-shadow: 0 0 0 rgba(0, 0, 0, 0);
 }
 
-/* Кнопки, которые не должны смещаться при наведении */
 .interactive-press.no-shift:hover {
   transform: none;
 }
 
-/* Плавное появление содержимого вкладок / основных экранов */
 @keyframes tab-fade-in {
   from {
     opacity: 0;
@@ -133,7 +130,6 @@ body {
   animation: notification-slide-up 0.18s ease-in forwards;
 }
 
-/* Скроллбары (списки модов/версий и т.п.) */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;

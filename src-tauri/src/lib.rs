@@ -34,10 +34,30 @@ use ms_auth::{ms_logout, start_ms_oauth};
 use discord_rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 
 #[cfg(target_os = "linux")]
-fn configure_wayland_backend() {
+fn configure_linux_display_backend() {
     use std::env;
-    env::set_var("WINIT_UNIX_BACKEND", "wayland");
-    env::set_var("GDK_BACKEND", "wayland");
+
+    let xdg_session_type = env::var("XDG_SESSION_TYPE")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let has_wayland = env::var_os("WAYLAND_DISPLAY").is_some() || xdg_session_type == "wayland";
+    let has_x11 = env::var_os("DISPLAY").is_some() || xdg_session_type == "x11";
+
+    if env::var_os("WINIT_UNIX_BACKEND").is_none() {
+        if has_x11 {
+            env::set_var("WINIT_UNIX_BACKEND", "x11");
+        } else if has_wayland {
+            env::set_var("WINIT_UNIX_BACKEND", "wayland");
+        }
+    }
+
+    if env::var_os("GDK_BACKEND").is_none() {
+        if has_x11 {
+            env::set_var("GDK_BACKEND", "x11,wayland");
+        } else if has_wayland {
+            env::set_var("GDK_BACKEND", "wayland,x11");
+        }
+    }
 }
 
 fn load_dotenv() {
@@ -57,7 +77,7 @@ pub fn run() {
     load_dotenv();
 
     #[cfg(target_os = "linux")]
-    configure_wayland_backend();
+    configure_linux_display_backend();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
