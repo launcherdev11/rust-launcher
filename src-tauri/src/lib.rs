@@ -58,6 +58,29 @@ fn configure_linux_display_backend() {
             env::set_var("GDK_BACKEND", "wayland,x11");
         }
     }
+
+    // Work around white-screen rendering regressions on some Linux stacks
+    // (notably Wayland/NVIDIA combinations in WebKitGTK).
+    if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+    if env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn configure_windows_webview_memory() {
+    use std::env;
+
+    // Limit default WebView2 memory growth for launcher-like workloads.
+    // Users can still override this variable manually if needed.
+    if env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+        env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--renderer-process-limit=2 --process-per-site --js-flags=--max-old-space-size=192 --disk-cache-size=33554432 --media-cache-size=8388608",
+        );
+    }
 }
 
 fn load_dotenv() {
@@ -78,6 +101,8 @@ pub fn run() {
 
     #[cfg(target_os = "linux")]
     configure_linux_display_backend();
+    #[cfg(target_os = "windows")]
+    configure_windows_webview_memory();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -162,9 +187,16 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_handle, event| {
-            if matches!(event, tauri::RunEvent::Exit) {
+        .run(|app_handle, event| match event {
+            tauri::RunEvent::WindowEvent { label, event, .. } => {
+                if label == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                    discord_presence_shutdown();
+                    app_handle.exit(0);
+                }
+            }
+            tauri::RunEvent::Exit => {
                 discord_presence_shutdown();
             }
+            _ => {}
         });
 }
