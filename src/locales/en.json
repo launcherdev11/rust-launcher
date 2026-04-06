@@ -124,7 +124,17 @@
       "loadFailed": "Failed to load Minecraft versions list.",
       "refreshFailed": "Failed to refresh versions list.",
       "installSuccess": "Version {{version}} installed successfully.",
-      "installFailed": "Failed to install version {{version}}."
+      "installFailed": "Failed to install version {{version}}.",
+      "verify": {
+        "button": "Check files",
+        "checking": "Checking...",
+        "ok": "Files for version {{version}} are intact.",
+        "failed": "Failed to verify files for version {{version}}.",
+        "promptText": "Issues were found in version {{version}}: missing {{missing}}, corrupted {{corrupted}} (checked {{checked}}). Overwrite files to restore proper operation?",
+        "rewriteButton": "Overwrite",
+        "rewritten": "Files for version {{version}} were overwritten.",
+        "skipPrompt": "Do not show this warning again"
+      }
     },
     "launcher": {
       "openOnProfilesTab": {

@@ -84,6 +84,13 @@ type DownloadProgressPayload = {
   percent: number;
 };
 
+type VersionIntegrityCheckResult = {
+  is_ok: boolean;
+  checked_files: number;
+  missing_files: number;
+  corrupted_files: number;
+};
+
 type LauncherSettingsBackupV1 = {
   format_version: number;
   exported_at_ms: number;
@@ -221,6 +228,19 @@ export function SettingsTab({
   const [installedVersions, setInstalledVersions] = useState<string[]>([]);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null);
+  const [checkingVersionId, setCheckingVersionId] = useState<string | null>(null);
+  const [repairPrompt, setRepairPrompt] = useState<{
+    version: VersionSummary;
+    result: VersionIntegrityCheckResult;
+  } | null>(null);
+  const [skipRepairPrompt, setSkipRepairPrompt] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("skip_version_repair_prompt") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgressPayload>>(
     {},
   );
@@ -575,18 +595,23 @@ export function SettingsTab({
     };
   }, []);
 
-  const handleInstallVersion = async (version: VersionSummary) => {
+  const handleInstallVersion = async (
+    version: VersionSummary,
+    options?: { silentSuccess?: boolean },
+  ) => {
     try {
       setInstallingVersionId(version.id);
       await invoke("install_version", {
-        version_id: version.id,
-        version_url: version.url,
+        versionId: version.id,
+        versionUrl: version.url,
       });
-      showNotification(
-        "success",
-        tt("settings.versions.installSuccess", { version: version.id }),
-        { sound: true },
-      );
+      if (!options?.silentSuccess) {
+        showNotification(
+          "success",
+          tt("settings.versions.installSuccess", { version: version.id }),
+          { sound: true },
+        );
+      }
       const ids = await invoke<string[]>("list_installed_versions");
       setInstalledVersions(ids);
     } catch (e) {
@@ -597,6 +622,53 @@ export function SettingsTab({
       );
     } finally {
       setInstallingVersionId(null);
+    }
+  };
+
+  const handleCheckVersionFiles = async (version: VersionSummary) => {
+    try {
+      setCheckingVersionId(version.id);
+      const result = await invoke<VersionIntegrityCheckResult>("check_version_files_integrity", {
+        versionId: version.id,
+        versionUrl: version.url,
+      });
+      if (result.is_ok) {
+        showNotification(
+          "success",
+          tt("settings.versions.verify.ok", { version: version.id }),
+          { sound: true },
+        );
+        return;
+      }
+
+      if (skipRepairPrompt) {
+        await handleInstallVersion(version, { silentSuccess: true });
+        showNotification(
+          "warning",
+          tt("settings.versions.verify.rewritten", { version: version.id }),
+          { sound: true },
+        );
+        return;
+      }
+
+      setRepairPrompt({ version, result });
+    } catch (e) {
+      console.error("Failed to verify version files:", e);
+      showNotification(
+        "error",
+        tt("settings.versions.verify.failed", { version: version.id }),
+      );
+    } finally {
+      setCheckingVersionId(null);
+    }
+  };
+
+  const handleSkipRepairPromptToggle = (value: boolean) => {
+    setSkipRepairPrompt(value);
+    try {
+      window.localStorage.setItem("skip_version_repair_prompt", value ? "1" : "0");
+    } catch {
+      // ignore
     }
   };
 
@@ -810,6 +882,62 @@ export function SettingsTab({
 
   return (
     <div className="flex w-full flex-1 min-h-0 flex-col items-center">
+      {repairPrompt && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setRepairPrompt(null)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 text-sm text-white/90">
+              {tt("settings.versions.verify.promptText", {
+                version: repairPrompt.version.id,
+                checked: repairPrompt.result.checked_files,
+                missing: repairPrompt.result.missing_files,
+                corrupted: repairPrompt.result.corrupted_files,
+              })}
+            </p>
+            <label className="mb-4 flex items-center gap-2 text-[11px] text-white/70">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-white"
+                checked={skipRepairPrompt}
+                onChange={(e) => handleSkipRepairPromptToggle(e.target.checked)}
+              />
+              <span>{tt("settings.versions.verify.skipPrompt")}</span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRepairPrompt(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = repairPrompt.version;
+                  setRepairPrompt(null);
+                  void (async () => {
+                    await handleInstallVersion(target, { silentSuccess: true });
+                    showNotification(
+                      "warning",
+                      tt("settings.versions.verify.rewritten", { version: target.id }),
+                      { sound: true },
+                    );
+                  })();
+                }}
+                className="interactive-press rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+              >
+                {tt("settings.versions.verify.rewriteButton")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden px-4">
         <div
           className={[
@@ -1168,6 +1296,22 @@ export function SettingsTab({
                                     ? tt("settings.versions.action.reinstall")
                                     : tt("settings.versions.action.install")}
                               </button>
+                              {installed && (
+                                <button
+                                  type="button"
+                                  disabled={checkingVersionId === v.id || installingVersionId === v.id}
+                                  onClick={() => void handleCheckVersionFiles(v)}
+                                  className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+                                    checkingVersionId === v.id
+                                      ? "cursor-default bg-white/10 text-white/60"
+                                      : "border border-white/25 text-white/80 hover:border-white/40 hover:text-white"
+                                  }`}
+                                >
+                                  {checkingVersionId === v.id
+                                    ? tt("settings.versions.verify.checking")
+                                    : tt("settings.versions.verify.button")}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
