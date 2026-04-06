@@ -1929,6 +1929,14 @@ pub struct VersionSummary {
     pub release_time: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct VersionIntegrityCheckResult {
+    pub is_ok: bool,
+    pub checked_files: u32,
+    pub missing_files: u32,
+    pub corrupted_files: u32,
+}
+
 impl From<ManifestVersion> for VersionSummary {
     fn from(v: ManifestVersion) -> Self {
         Self {
@@ -3848,16 +3856,20 @@ fn library_applies(lib: &Library, os_name: &str) -> bool {
     if lib.rules.is_empty() {
         return true;
     }
+    let current_arch = std::env::consts::ARCH;
     let mut allowed = false;
     for r in &lib.rules {
-        let matches_os = r
-            .os
-            .as_ref()
-            .and_then(|o| o.name.as_deref())
-            .map(|n| n == os_name)
-            .unwrap_or(true);
-        if !matches_os {
-            continue;
+        if let Some(rule_os) = r.os.as_ref() {
+            if let Some(name) = rule_os.name.as_deref() {
+                if name != os_name {
+                    continue;
+                }
+            }
+            if let Some(arch) = rule_os.arch.as_deref() {
+                if !current_arch.contains(arch) {
+                    continue;
+                }
+            }
         }
         match r.action.as_str() {
             "allow" => allowed = true,
@@ -3866,6 +3878,188 @@ fn library_applies(lib: &Library, os_name: &str) -> bool {
         }
     }
     allowed
+}
+
+fn parse_library_coords(name: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = name.splitn(3, ':');
+    let group = parts.next()?;
+    let artifact = parts.next()?;
+    let version = parts.next()?;
+    if group.is_empty() || artifact.is_empty() || version.is_empty() {
+        return None;
+    }
+    Some((group, artifact, version))
+}
+
+fn compare_version_like(a: &str, b: &str) -> std::cmp::Ordering {
+    let av = a
+        .split(|c: char| !(c.is_ascii_alphanumeric()))
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>();
+    let bv = b
+        .split(|c: char| !(c.is_ascii_alphanumeric()))
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>();
+    let n = av.len().max(bv.len());
+    for i in 0..n {
+        let aa = av.get(i).copied().unwrap_or("0");
+        let bb = bv.get(i).copied().unwrap_or("0");
+        let ord = match (aa.parse::<u64>(), bb.parse::<u64>()) {
+            (Ok(na), Ok(nb)) => na.cmp(&nb),
+            _ => aa.cmp(bb),
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+fn native_classifier_candidates(lib: &Library, os_name: &str) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    let is_64 = std::env::consts::ARCH == "x86_64";
+    let base = match os_name {
+        "windows" => "natives-windows",
+        "osx" => "natives-macos",
+        _ => "natives-linux",
+    };
+    out.push(base.to_string());
+    if os_name == "windows" {
+        if is_64 {
+            out.push("natives-windows-64".to_string());
+            out.push("natives-windows-x86_64".to_string());
+        } else {
+            out.push("natives-windows-32".to_string());
+            out.push("natives-windows-x86".to_string());
+        }
+    }
+    if let Some(map) = &lib.natives {
+        if let Some(value) = map.get(os_name).and_then(|v| v.as_str()) {
+            let replaced = value.replace("${arch}", if is_64 { "64" } else { "32" });
+            out.push(replaced);
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn is_probably_native_jar_path(rel_path: &str) -> bool {
+    let p = rel_path.replace('\\', "/").to_ascii_lowercase();
+    p.ends_with(".jar") && p.contains("-natives-")
+}
+
+fn resolve_native_artifact<'a>(lib: &'a Library, os_name: &str) -> Option<&'a LibraryArtifact> {
+    let classifiers = lib.downloads.classifiers.as_ref()?;
+    for key in native_classifier_candidates(lib, os_name) {
+        if let Some(artifact) = classifiers.get(&key) {
+            return Some(artifact);
+        }
+    }
+    None
+}
+
+fn is_release_1_17_or_newer(version_id: &str) -> bool {
+    let normalized = version_id
+        .split_once('-')
+        .map(|(base, _)| base)
+        .unwrap_or(version_id);
+    let mut parts = normalized.split('.');
+    let major = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let minor = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    major > 1 || (major == 1 && minor >= 17)
+}
+
+fn lwjgl_fallback_modules() -> &'static [&'static str] {
+    &[
+        "lwjgl",
+        "lwjgl-glfw",
+        "lwjgl-openal",
+        "lwjgl-opengl",
+        "lwjgl-stb",
+        "lwjgl-freetype",
+        "lwjgl-tinyfd",
+    ]
+}
+
+async fn ensure_lwjgl_fallback_for_modern_versions(
+    app: &AppHandle,
+    version_id: &str,
+    libs_root: &Path,
+    classpath: &mut Vec<PathBuf>,
+    seen_paths: &mut HashSet<String>,
+    os_name: &str,
+) -> Result<(), String> {
+    if !is_release_1_17_or_newer(version_id) {
+        return Ok(());
+    }
+    let has_lwjgl_glfw = classpath.iter().any(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.starts_with("lwjgl-glfw-"))
+            .unwrap_or(false)
+    });
+    if has_lwjgl_glfw {
+        return Ok(());
+    }
+    let lwjgl_version = "3.3.3";
+    let native_classifier = match os_name {
+        "windows" => "natives-windows",
+        "osx" => "natives-macos",
+        _ => "natives-linux",
+    };
+    let client = http_client_for_binary_download(true);
+    let total_done = Arc::new(AtomicU64::new(0));
+    log_to_console(
+        app,
+        &format!(
+            "[Launch] LWJGL fallback активирован для {version_id}: докачка {lwjgl_version}"
+        ),
+    );
+    for module in lwjgl_fallback_modules() {
+        let rel = format!("org/lwjgl/{module}/{lwjgl_version}/{module}-{lwjgl_version}.jar");
+        let path = libs_root.join(&rel);
+        if !path.exists() {
+            let url = format!("{BMCL_MAVEN_BASE}/{rel}");
+            download_file_checked(
+                &client,
+                &url,
+                &path,
+                None,
+                app,
+                version_id,
+                0,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+        }
+        let key = path.to_str().unwrap_or("").replace('\\', "/");
+        if seen_paths.insert(key) {
+            classpath.push(path);
+        }
+
+        let native_rel = format!(
+            "org/lwjgl/{module}/{lwjgl_version}/{module}-{lwjgl_version}-{native_classifier}.jar"
+        );
+        let native_path = libs_root.join(&native_rel);
+        if !native_path.exists() {
+            let url = format!("{BMCL_MAVEN_BASE}/{native_rel}");
+            let _ = download_file_checked(
+                &client,
+                &url,
+                &native_path,
+                None,
+                app,
+                version_id,
+                0,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await;
+        }
+    }
+    Ok(())
 }
 
 pub fn resolve_arguments(
@@ -4834,6 +5028,81 @@ pub async fn fetch_all_versions() -> Result<Vec<VersionSummary>, String> {
 }
 
 #[tauri::command]
+pub async fn check_version_files_integrity(
+    version_id: String,
+    version_url: String,
+) -> Result<VersionIntegrityCheckResult, String> {
+    let client = http_client(false);
+    let version_json_text =
+        download_text_with_retries(&client, &version_url, DEFAULT_DOWNLOAD_RETRIES).await?;
+    let detail: VersionDetail = serde_json::from_str(&version_json_text)
+        .map_err(|e| format!("Ошибка разбора описания версии: {e}"))?;
+    let downloads = detail
+        .downloads
+        .as_ref()
+        .ok_or("Описание версии не содержит downloads (не ванильная версия)")?;
+
+    let root = game_root_dir()?;
+    let libs_root = libraries_dir()?;
+    let vers_root = versions_dir()?;
+    let os_name = current_os_name();
+
+    let mut checked_files: u32 = 0;
+    let mut missing_files: u32 = 0;
+    let mut corrupted_files: u32 = 0;
+
+    let mut check_one = |path: &Path, expected_sha1: Option<&str>| {
+        checked_files = checked_files.saturating_add(1);
+        if !path.exists() {
+            missing_files = missing_files.saturating_add(1);
+            return;
+        }
+        if let Some(expected) = expected_sha1 {
+            let expected_lc = expected.trim().to_ascii_lowercase();
+            if expected_lc.len() == 40 {
+                if let Ok(actual) = std::fs::read(path).map(|bytes| sha1_hex_of_bytes(&bytes)) {
+                    if actual != expected_lc {
+                        corrupted_files = corrupted_files.saturating_add(1);
+                    }
+                } else {
+                    corrupted_files = corrupted_files.saturating_add(1);
+                }
+            }
+        }
+    };
+
+    let version_json_path = vers_root.join(&version_id).join(format!("{version_id}.json"));
+    check_one(&version_json_path, None);
+
+    let client_jar = root.join(format!("{version_id}.jar"));
+    check_one(&client_jar, downloads.client.sha1.as_deref());
+
+    for lib in &detail.libraries {
+        if !library_applies(lib, os_name) {
+            continue;
+        }
+
+        if let Some(ref artifact) = lib.downloads.artifact {
+            let path = libs_root.join(&artifact.path);
+            check_one(&path, artifact.sha1.as_deref());
+        }
+
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let path = libs_root.join(&nat.path);
+            check_one(&path, nat.sha1.as_deref());
+        }
+    }
+
+    let is_ok = missing_files == 0 && corrupted_files == 0;
+    Ok(VersionIntegrityCheckResult {
+        is_ok,
+        checked_files,
+        missing_files,
+        corrupted_files,
+    })
+}
+
+#[tauri::command]
 pub async fn fetch_vanilla_releases() -> Result<Vec<VersionSummary>, String> {
     let mut versions = load_all_versions().await?;
     versions.retain(|v| v.version_type == "release");
@@ -5231,15 +5500,8 @@ pub async fn install_fabric(
         if let Some(ref a) = lib.downloads.artifact {
             total_size = total_size.saturating_add(a.size);
         }
-        let native_classifier = match os_name {
-            "windows" => "natives-windows",
-            "osx" => "natives-macos",
-            _ => "natives-linux",
-        };
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(ref nat) = classifiers.get(native_classifier) {
-                total_size = total_size.saturating_add(nat.size);
-            }
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            total_size = total_size.saturating_add(nat.size);
         }
     }
     if let Some(ref ai) = mojang_detail.asset_index {
@@ -6250,12 +6512,6 @@ pub async fn install_version(
         .await
         .map_err(|e| format!("Не удалось создать папку natives: {e}"))?;
 
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
-
     log_to_console(&app, "[Vanilla] Загрузка библиотек и natives (параллельно)");
     let sem = Arc::new(Semaphore::new(DEFAULT_DOWNLOAD_CONCURRENCY));
     let mut tasks = futures_util::stream::FuturesUnordered::new();
@@ -6299,44 +6555,42 @@ pub async fn install_version(
             }));
         }
 
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let dest = libs_root.join(&nat.path);
-                if dest.exists() {
-                    let natives_dir2 = natives_dir.clone();
-                    let dest2 = dest.clone();
-                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest2, &natives_dir2)).await;
-                } else {
-                    let url = nat.url.clone();
-                    let expected = nat.sha1.clone();
-                    let client2 = client.clone();
-                    let app2 = app.clone();
-                    let sem2 = sem.clone();
-                    let total_done2 = total_done.clone();
-                    let vid = version_id.clone();
-                    let natives_dir2 = natives_dir.clone();
-                    tasks.push(tokio::spawn(async move {
-                        let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
-                        let expected2 = match expected {
-                            Some(s) => Some(s),
-                            None => try_fetch_remote_sha1(&client2, &url).await,
-                        };
-                        download_file_checked(
-                            &client2,
-                            &url,
-                            &dest,
-                            expected2,
-                            &app2,
-                            &vid,
-                            total_size,
-                            total_done2,
-                            DEFAULT_DOWNLOAD_RETRIES,
-                        )
-                        .await?;
-                        let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &natives_dir2)).await;
-                        Ok::<(), String>(())
-                    }));
-                }
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let dest = libs_root.join(&nat.path);
+            if dest.exists() {
+                let natives_dir2 = natives_dir.clone();
+                let dest2 = dest.clone();
+                let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest2, &natives_dir2)).await;
+            } else {
+                let url = nat.url.clone();
+                let expected = nat.sha1.clone();
+                let client2 = client.clone();
+                let app2 = app.clone();
+                let sem2 = sem.clone();
+                let total_done2 = total_done.clone();
+                let vid = version_id.clone();
+                let natives_dir2 = natives_dir.clone();
+                tasks.push(tokio::spawn(async move {
+                    let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
+                    let expected2 = match expected {
+                        Some(s) => Some(s),
+                        None => try_fetch_remote_sha1(&client2, &url).await,
+                    };
+                    download_file_checked(
+                        &client2,
+                        &url,
+                        &dest,
+                        expected2,
+                        &app2,
+                        &vid,
+                        total_size,
+                        total_done2,
+                        DEFAULT_DOWNLOAD_RETRIES,
+                    )
+                    .await?;
+                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &natives_dir2)).await;
+                    Ok::<(), String>(())
+                }));
             }
         }
     }
@@ -6511,31 +6765,27 @@ pub async fn launch_game(
     let features = GameFeatures::full();
 
     let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
-    if is_forge {
-        ensure_library_artifacts_present_for_launch(
-            &app,
-            &version_id,
-            &libs_root,
-            &detail.libraries,
-            os_name,
-        )
-        .await?;
-    }
-
-    let _native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
+    ensure_library_artifacts_present_for_launch(
+        &app,
+        &version_id,
+        &libs_root,
+        &detail.libraries,
+        os_name,
+    )
+    .await?;
 
     let mut classpath = Vec::new();
     let mut seen_paths = std::collections::HashSet::<String>::new();
     let mut ga_to_index = std::collections::HashMap::<String, usize>::new();
+    let mut ga_to_version = std::collections::HashMap::<String, String>::new();
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
         if let Some(ref a) = lib.downloads.artifact {
+            if is_probably_native_jar_path(&a.path) {
+                continue;
+            }
             let path = libs_root.join(&a.path);
             let key = path.to_str().unwrap_or("").replace('\\', "/");
             let ga_key = {
@@ -6550,9 +6800,27 @@ pub async fn launch_game(
             if let Some(ga_key) = ga_key {
                 if let Some(idx) = ga_to_index.get(&ga_key).copied() {
                     if seen_paths.insert(key) {
-                        classpath[idx] = path;
+                        let current_version = ga_to_version.get(&ga_key).cloned().unwrap_or_default();
+                        let new_version = parse_library_coords(&lib.name)
+                            .map(|(_, _, v)| v.to_string())
+                            .unwrap_or_default();
+                        let should_replace = if ga_key.starts_with("org.lwjgl:") {
+                            compare_version_like(&new_version, &current_version)
+                                != std::cmp::Ordering::Less
+                        } else {
+                            true
+                        };
+                        if should_replace {
+                            classpath[idx] = path;
+                            if !new_version.is_empty() {
+                                ga_to_version.insert(ga_key.clone(), new_version);
+                            }
+                        }
                     }
                 } else if seen_paths.insert(key.clone()) {
+                    if let Some((_, _, version)) = parse_library_coords(&lib.name) {
+                        ga_to_version.insert(ga_key.clone(), version.to_string());
+                    }
                     ga_to_index.insert(ga_key, classpath.len());
                     classpath.push(path);
                 }
@@ -6567,6 +6835,15 @@ pub async fn launch_game(
             classpath.push(jar_path.clone());
         }
     }
+    ensure_lwjgl_fallback_for_modern_versions(
+        &app,
+        &effective_jar_version,
+        &libs_root,
+        &mut classpath,
+        &mut seen_paths,
+        os_name,
+    )
+    .await?;
 
     let classpath_str = classpath
         .iter()
@@ -6580,21 +6857,22 @@ pub async fn launch_game(
     let natives_dir = vers_root.join(&version_id).join("natives");
     std::fs::create_dir_all(&natives_dir)
         .map_err(|e| format!("Не удалось создать папку natives при запуске: {e}"))?;
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let path = libs_root.join(&nat.path);
+        if let Some(a) = &lib.downloads.artifact {
+            if is_probably_native_jar_path(&a.path) {
+                let path = libs_root.join(&a.path);
                 if path.exists() {
                     let _ = extract_natives_jar(&path, &natives_dir);
                 }
+            }
+        }
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let path = libs_root.join(&nat.path);
+            if path.exists() {
+                let _ = extract_natives_jar(&path, &natives_dir);
             }
         }
     }
@@ -6622,45 +6900,67 @@ pub async fn launch_game(
             if !library_applies(lib, os_name) {
                 continue;
             }
-            if let Some(ref classifiers) = lib.downloads.classifiers {
-                if let Some(nat) = classifiers.get(native_classifier) {
-                    let path = libs_root.join(&nat.path);
-                    if !path.exists() {
-                        if let Some(parent) = path.parent() {
-                            std::fs::create_dir_all(parent).map_err(|e| {
-                                format!("Не удалось создать папку для natives '{}': {e}", parent.display())
-                            })?;
-                        }
-                        let nat_url = format!("{}/{}", BMCL_MAVEN_BASE, nat.path);
-                        let mut resp = client
-                            .get(&nat_url)
-                            .send()
-                            .await
-                            .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
-                        if !resp.status().is_success() {
-                            return Err(format!(
-                                "Сервер вернул ошибку {} при загрузке natives '{}'",
-                                resp.status(),
-                                nat_url
-                            ));
-                        }
-                        let mut file = std::fs::File::create(&path)
-                            .map_err(|e| format!("Ошибка создания файла natives '{}': {e}", path.display()))?;
-                        while let Some(chunk) = resp
-                            .chunk()
-                            .await
-                            .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat_url))?
-                        {
-                            use std::io::Write;
-                            file.write_all(&chunk)
-                                .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
-                        }
+            if let Some(a) = &lib.downloads.artifact {
+                if is_probably_native_jar_path(&a.path) {
+                    let path = libs_root.join(&a.path);
+                    if path.exists() {
+                        let _ = extract_natives_jar(&path, &natives_dir);
                     }
-                    let _ = extract_natives_jar(&path, &natives_dir);
                 }
+            }
+            if let Some(nat) = resolve_native_artifact(lib, os_name) {
+                let path = libs_root.join(&nat.path);
+                if !path.exists() {
+                    if let Some(parent) = path.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| {
+                            format!("Не удалось создать папку для natives '{}': {e}", parent.display())
+                        })?;
+                    }
+                    let nat_url = format!("{}/{}", BMCL_MAVEN_BASE, nat.path);
+                    let mut resp = client
+                        .get(&nat_url)
+                        .send()
+                        .await
+                        .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
+                    if !resp.status().is_success() {
+                        return Err(format!(
+                            "Сервер вернул ошибку {} при загрузке natives '{}'",
+                            resp.status(),
+                            nat_url
+                        ));
+                    }
+                    let mut file = std::fs::File::create(&path)
+                        .map_err(|e| format!("Ошибка создания файла natives '{}': {e}", path.display()))?;
+                    while let Some(chunk) = resp
+                        .chunk()
+                        .await
+                        .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat_url))?
+                    {
+                        use std::io::Write;
+                        file.write_all(&chunk)
+                            .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
+                    }
+                }
+                let _ = extract_natives_jar(&path, &natives_dir);
             }
         }
     }
+    let lwjgl_in_cp: Vec<String> = classpath
+        .iter()
+        .filter_map(|p| {
+            let s = p.to_string_lossy().replace('\\', "/");
+            if s.contains("/org/lwjgl/") {
+                Some(s)
+            } else {
+                None
+            }
+        })
+        .collect();
+    log_to_console(&app, &format!("[Launch] LWJGL в classpath: {}", lwjgl_in_cp.join(" | ")));
+    log_to_console(
+        &app,
+        &format!("[Launch] LWJGL natives dir: {}", natives_dir.display()),
+    );
     let natives_str = natives_dir.to_str().unwrap_or("");
     let assets_root = root.join("assets");
     let assets_str = assets_root.to_str().unwrap_or("");

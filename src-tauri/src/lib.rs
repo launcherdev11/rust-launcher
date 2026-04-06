@@ -7,7 +7,7 @@ mod discord_rpc;
 
 use game_provider::{
     cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
-    fetch_neoforge_versions,
+    fetch_neoforge_versions, check_version_files_integrity,
     fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
     get_installed_quilt_profile_id, get_profile, get_profiles, get_selected_profile,
     install_fabric, install_forge, install_neoforge, install_quilt, install_version, launch_game,
@@ -114,6 +114,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
             fetch_all_versions,
+            check_version_files_integrity,
             fetch_vanilla_releases,
             fetch_fabric_loaders,
             fetch_forge_versions,

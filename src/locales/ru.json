@@ -124,7 +124,17 @@
       "loadFailed": "Не удалось загрузить список версий Minecraft.",
       "refreshFailed": "Не удалось обновить список версий.",
       "installSuccess": "Версия {{version}} успешно установлена.",
-      "installFailed": "Не удалось установить версию {{version}}."
+      "installFailed": "Не удалось установить версию {{version}}.",
+      "verify": {
+        "button": "Проверить файлы",
+        "checking": "Проверка...",
+        "ok": "Файлы версии {{version}} в порядке.",
+        "failed": "Не удалось проверить файлы версии {{version}}.",
+        "promptText": "Для версии {{version}} найдены проблемы: отсутствует {{missing}}, повреждено {{corrupted}} (проверено {{checked}}). Перезаписать файлы для корректной работы?",
+        "rewriteButton": "Перезаписать",
+        "rewritten": "Файлы версии {{version}} перезаписаны.",
+        "skipPrompt": "Больше не показывать это предупреждение"
+      }
     },
     "launcher": {
       "openOnProfilesTab": {
