@@ -631,15 +631,15 @@ pub struct PlaytimeUpdatedPayload {
 #[serde(default)]
 pub struct JavaSettings {
     pub use_custom_jvm_args: bool,
-    ///явный путь к java/javaw.по дефолту офиц runtime Mojang.
+    ///явный путь к java/javaw.по дефолту офиц runtime Mojang
     pub java_path: Option<String>,
-    ///мин. объем памяти xms (1G\1024M).
+    ///мин. объем памяти xms (1G\1024M)
     pub xms: Option<String>,
-    ///макс объем памяти xmx (4G\4096M).
+    ///макс объем памяти xmx (4G\4096M)
     pub xmx: Option<String>,
     ///доп JVM аргументы
     pub jvm_args: Option<String>,
-    ///имя пресета ("balanced", "performance", "low_memory").
+    ///имя пресета ("balanced", "performance", "low_memory")
     pub preset: Option<String>,
 }
 
@@ -658,11 +658,11 @@ impl Default for JavaSettings {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JavaRuntimeInfo {
-    ///полный путь к java/javaw.
+    ///полный путь к java/javaw
     pub path: String,
-    ///строка с версией из `java -version`.
+    ///строка с версией из `java -version`
     pub version: String,
-    ///краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.).
+    ///краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.)
     pub source: String,
 }
 
@@ -6530,6 +6530,7 @@ pub async fn launch_game(
 
     let mut classpath = Vec::new();
     let mut seen_paths = std::collections::HashSet::<String>::new();
+    let mut ga_to_index = std::collections::HashMap::<String, usize>::new();
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
@@ -6537,7 +6538,25 @@ pub async fn launch_game(
         if let Some(ref a) = lib.downloads.artifact {
             let path = libs_root.join(&a.path);
             let key = path.to_str().unwrap_or("").replace('\\', "/");
-            if seen_paths.insert(key) {
+            let ga_key = {
+                let mut parts = lib.name.split(':');
+                match (parts.next(), parts.next()) {
+                    (Some(group), Some(artifact)) if !group.is_empty() && !artifact.is_empty() => {
+                        Some(format!("{group}:{artifact}"))
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(ga_key) = ga_key {
+                if let Some(idx) = ga_to_index.get(&ga_key).copied() {
+                    if seen_paths.insert(key) {
+                        classpath[idx] = path;
+                    }
+                } else if seen_paths.insert(key.clone()) {
+                    ga_to_index.insert(ga_key, classpath.len());
+                    classpath.push(path);
+                }
+            } else if seen_paths.insert(key) {
                 classpath.push(path);
             }
         }
