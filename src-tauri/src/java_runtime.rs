@@ -98,6 +98,8 @@ struct JavaRuntimeFileEntry {
     downloads: Option<JavaRuntimeDownloads>,
     #[serde(rename = "type", default)]
     entry_type: Option<String>,
+    #[serde(default)]
+    executable: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -224,6 +226,27 @@ fn compute_sha1(path: &Path) -> Result<String, String> {
         hasher.update(&buf[..n]);
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(unix)]
+fn apply_unix_executable_flag(path: &Path, executable: bool) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = fs::metadata(path)
+        .map_err(|e| format!("Не удалось прочитать права файла '{}': {e}", path.display()))?
+        .permissions();
+    let mut mode = perms.mode();
+    if executable {
+        mode |= 0o111;
+    } else {
+        mode &= !0o111;
+    }
+    perms.set_mode(mode);
+    fs::set_permissions(path, perms).map_err(|e| {
+        format!(
+            "Не удалось применить права к файлу Java runtime '{}': {e}",
+            path.display()
+        )
+    })
 }
 
 fn unzip_to_dir(zip_path: &Path, out_dir: &Path) -> Result<(), String> {
@@ -424,6 +447,7 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
                 continue;
             }
         };
+        let should_be_executable = entry.executable;
 
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
@@ -435,6 +459,10 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
         }
 
         if cached_file_matches(&dest_path, raw.size, &raw.sha1).unwrap_or(false) {
+            #[cfg(unix)]
+            if should_be_executable {
+                apply_unix_executable_flag(&dest_path, true)?;
+            }
             continue;
         }
         if dest_path.exists() {
@@ -508,6 +536,10 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
                 e
             )
         })?;
+        #[cfg(unix)]
+        if should_be_executable {
+            apply_unix_executable_flag(&dest_path, true)?;
+        }
     }
 
     let java_path = java_binary_path(&runtime_root)?;
