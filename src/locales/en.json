@@ -397,7 +397,8 @@
       "play": "Play",
       "settings": "Settings",
       "mods": "Mods",
-      "modpacks": "Modpacks"
+      "modpacks": "Modpacks",
+      "friends": "Friends"
     },
     "launcherVersionTitle": "Launcher version {{version}}",
     "accounts": {

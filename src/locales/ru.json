@@ -397,7 +397,8 @@
       "play": "Играть",
       "settings": "Настройки",
       "mods": "Моды",
-      "modpacks": "Сборки"
+      "modpacks": "Сборки",
+      "friends": "Друзья"
     },
     "launcherVersionTitle": "Версия лаунчера {{version}}",
     "accounts": {

@@ -13,7 +13,7 @@ type SettingsTabId = "game" | "versions" | "launcher";
 
 type Language = "ru" | "en";
 
-type SidebarItemId = "play" | "settings" | "mods" | "modpacks";
+type SidebarItemId = "play" | "settings" | "friends" | "mods" | "modpacks";
 
 type Settings = {
   game_directory: string | null;
@@ -702,7 +702,7 @@ export function SettingsTab({
       }
       const defaults = await invoke<Settings>("reset_settings_to_default");
       updateSettings(defaults);
-      setSidebarOrder(["play", "settings", "mods", "modpacks"]);
+      setSidebarOrder(["play", "settings", "friends", "mods", "modpacks"]);
       try {
         window.localStorage.removeItem("sidebar_order");
       } catch {
@@ -766,7 +766,14 @@ export function SettingsTab({
       const so = backup?.sidebar_order ?? null;
       if (Array.isArray(so) && so.length > 0) {
         const normalized = so
-          .filter((x): x is SidebarItemId => x === "play" || x === "settings" || x === "mods" || x === "modpacks");
+          .filter(
+            (x): x is SidebarItemId =>
+              x === "play" ||
+              x === "settings" ||
+              x === "friends" ||
+              x === "mods" ||
+              x === "modpacks",
+          );
         if (normalized.length > 0) {
           setSidebarOrder(normalized);
           try {
@@ -1586,6 +1593,8 @@ export function SettingsTab({
                               ? "app.sidebar.play"
                               : id === "settings"
                                 ? "app.sidebar.settings"
+                                : id === "friends"
+                                  ? "app.sidebar.friends"
                                 : id === "mods"
                                   ? "app.sidebar.mods"
                                   : "app.sidebar.modpacks",
