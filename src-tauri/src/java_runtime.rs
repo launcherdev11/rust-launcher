@@ -590,7 +590,7 @@ pub fn ensure_executable(path: &Path) -> Result<(), String> {
             fs::set_permissions(path, perms)
                 .map_err(|e| format!("Failed to set permissions for {:?}: {}", path, e))?;
             
-            log::debug!("Set execute permission for {:?}", path);
+            eprintln!("[JavaRuntime] Set execute permission for {:?}", path);
         }
     }
 
