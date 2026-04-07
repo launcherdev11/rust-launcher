@@ -1,3 +1,4 @@
+use std::io::Read; 
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -20,7 +21,6 @@ fn http_client() -> Client {
         .unwrap_or_else(|_| Client::new())
 }
 
-// Constants
 pub const ELY_CLIENT_ID: &str = "16launcher4";
 pub const OAUTH2_AUTH_URL: &str = "https://account.ely.by/oauth2/v1";
 pub const OAUTH2_TOKEN_URL: &str = "https://account.ely.by/api/oauth2/v1/token";
@@ -29,106 +29,14 @@ pub const YGGDRASIL_REFRESH_URL: &str = "https://authserver.ely.by/auth/refresh"
 pub const YGGDRASIL_VALIDATE_URL: &str = "https://authserver.ely.by/auth/validate";
 pub const YGGDRASIL_INVALIDATE_URL: &str = "https://authserver.ely.by/auth/invalidate";
 pub const REDIRECT_URI: &str = "http://localhost:25568/callback";
+const AUTHLIB_INJECTOR_GITHUB_URL: &str = "https://github.com/yushijinhun/authlib-injector";
 const AUTHLIB_INJECTOR_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest";
 
-// Models
 #[derive(Debug, Deserialize)]
 struct GithubRelease { assets: Vec<GithubReleaseAsset> }
 #[derive(Debug, Deserialize)]
 struct GithubReleaseAsset { name: String, browser_download_url: String }
-
-#[derive(Debug, Deserialize)]
-pub struct OAuth2TokenResponse {
-    pub access_token: String,
-    #[serde(default)] pub refresh_token: Option<String>,
-    pub token_type: String, pub expires_in: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct OAuth2TokenRequest<'a> {
-    client_id: &'a str, client_secret: String, redirect_uri: &'a str,
-    grant_type: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")] code: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")] refresh_token: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")] scope: Option<&'a str>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AccountInfo {
-    pub id: u64, pub uuid: String, pub username: String,
-    #[serde(default)] pub email: Option<String>,
-    #[serde(default)] pub preferredLanguage: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct YggdrasilAuthRequest<'a> {
-    username: &'a str, password: &'a str,
-    #[serde(rename = "clientToken")] client_token: &'a str,
-    #[serde(rename = "requestUser")] request_user: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct YggdrasilProfile { pub id: String, pub name: String }
-#[derive(Debug, Deserialize)]
-pub struct YggdrasilUserProperty { pub name: String, pub value: String }
-#[derive(Debug, Deserialize)]
-pub struct YggdrasilUser {
-    pub id: String, pub username: String,
-    #[serde(default)] pub properties: Vec<YggdrasilUserProperty>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct YggdrasilAuthResponse {
-    #[serde(rename = "accessToken")] pub access_token: String,
-    #[serde(rename = "clientToken")] pub client_token: String,
-    #[serde(default)] pub availableProfiles: Vec<YggdrasilProfile>,
-    #[serde(rename = "selectedProfile")] pub selected_profile: YggdrasilProfile,
-    #[serde(default)] pub user: Option<YggdrasilUser>,
-}
-
-#[derive(Debug, Deserialize)]
-struct YggdrasilError { error: String, #[serde(rename = "errorMessage")] error_message: String }
-
-#[derive(Debug, Serialize)]
-struct YggdrasilRefreshRequest<'a> {
-    #[serde(rename = "accessToken")] access_token: &'a str,
-    #[serde(rename = "clientToken")] client_token: &'a str,
-    #[serde(rename = "requestUser")] request_user: bool,
-}
-#[derive(Debug, Serialize)]
-struct YggdrasilValidateRequest<'a> { #[serde(rename = "accessToken")] access_token: &'a str }
-#[derive(Debug, Serialize)]
-struct YggdrasilInvalidateRequest<'a> {
-    #[serde(rename = "accessToken")] access_token: &'a str,
-    #[serde(rename = "clientToken")] client_token: &'a str,
-}
-
-// State
-static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
-
-// Helpers
-fn get_client_secret() -> Result<String, String> {
-    std::env::var("ELY_CLIENT_SECRET")
-        .or_else(|_| option_env!("ELY_CLIENT_SECRET").map(String::from).ok_or(()))
-        .map(|s| s.trim().to_string())
-        .and_then(|s| if s.is_empty() { Err(()) } else { Ok(s) })
-        .map_err(|_| "Секрет Ely.by OAuth2 не задан: добавьте ELY_CLIENT_SECRET в .env или переменные окружения.".to_string())
-}
-
-fn gen_random_str(len: usize) -> String {
-    rand::thread_rng().sample_iter(&Alphanumeric).take(len).map(char::from).collect()
-}
-
-async fn handle_resp<T>(resp: reqwest::Response, err_ctx: &str) -> Result<T, String>
-where T: for<'de> Deserialize<'de> {
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_else(|_| "<no body>".into());
-        return Err(format!("{err_ctx}: {} — {}", status, text));
-    }
-    resp.json::<T>().await.map_err(|e| format!("Ошибка парсинга {err_ctx}: {e}"))
-}
 
 async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
     let client = http_client();
@@ -146,7 +54,90 @@ async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-// Public API Implementation
+static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
+fn get_client_secret() -> Result<String, String> {
+    std::env::var("ELY_CLIENT_SECRET")
+        .or_else(|_| option_env!("ELY_CLIENT_SECRET").map(String::from).ok_or(()))
+        .map(|s| s.trim().to_string())
+        .and_then(|s| if s.is_empty() { Err(()) } else { Ok(s) })
+        .map_err(|_| "Секрет Ely.by OAuth2 не задан.".to_string())
+}
+
+fn gen_random_str(len: usize) -> String {
+    rand::thread_rng().sample_iter(&Alphanumeric).take(len).map(char::from).collect()
+}
+
+async fn handle_resp<T>(resp: reqwest::Response, err_ctx: &str) -> Result<T, String>
+where T: for<'de> Deserialize<'de> {
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_else(|_| "<no body>".into());
+        return Err(format!("{err_ctx}: {} — {}", status, text));
+    }
+    resp.json::<T>().await.map_err(|e| format!("Ошибка парсинга {err_ctx}: {e}"))
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct OAuth2TokenResponse {
+    pub access_token: String,
+    #[serde(default)] pub refresh_token: Option<String>,
+    pub token_type: String, pub expires_in: u64,
+}
+#[derive(Debug, Serialize)]
+struct OAuth2TokenRequest<'a> {
+    client_id: &'a str, client_secret: String, redirect_uri: &'a str,
+    grant_type: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")] code: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")] refresh_token: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")] scope: Option<&'a str>,
+}
+#[derive(Debug, Deserialize)]
+pub struct AccountInfo {
+    pub id: u64, pub uuid: String, pub username: String,
+    #[serde(default)] pub email: Option<String>,
+    #[serde(default)] pub preferredLanguage: Option<String>,
+}
+#[derive(Debug, Serialize)]
+struct YggdrasilAuthRequest<'a> {
+    username: &'a str, password: &'a str,
+    #[serde(rename = "clientToken")] client_token: &'a str,
+    #[serde(rename = "requestUser")] request_user: bool,
+}
+#[derive(Debug, Deserialize)]
+pub struct YggdrasilProfile { pub id: String, pub name: String }
+#[derive(Debug, Deserialize)]
+pub struct YggdrasilUserProperty { pub name: String, pub value: String }
+#[derive(Debug, Deserialize)]
+pub struct YggdrasilUser {
+    pub id: String, pub username: String,
+    #[serde(default)] pub properties: Vec<YggdrasilUserProperty>,
+}
+#[derive(Debug, Deserialize)]
+pub struct YggdrasilAuthResponse {
+    #[serde(rename = "accessToken")] pub access_token: String,
+    #[serde(rename = "clientToken")] pub client_token: String,
+    #[serde(default)] pub availableProfiles: Vec<YggdrasilProfile>,
+    #[serde(rename = "selectedProfile")] pub selected_profile: YggdrasilProfile,
+    #[serde(default)] pub user: Option<YggdrasilUser>,
+}
+#[derive(Debug, Deserialize)]
+struct YggdrasilError { error: String, #[serde(rename = "errorMessage")] error_message: String }
+#[derive(Debug, Serialize)]
+struct YggdrasilRefreshRequest<'a> {
+    #[serde(rename = "accessToken")] access_token: &'a str,
+    #[serde(rename = "clientToken")] client_token: &'a str,
+    #[serde(rename = "requestUser")] request_user: bool,
+}
+#[derive(Debug, Serialize)]
+struct YggdrasilValidateRequest<'a> { #[serde(rename = "accessToken")] access_token: &'a str }
+#[derive(Debug, Serialize)]
+struct YggdrasilInvalidateRequest<'a> {
+    #[serde(rename = "accessToken")] access_token: &'a str,
+    #[serde(rename = "clientToken")] client_token: &'a str,
+}
+
 
 pub fn generate_oauth2_url(state: &str) -> String {
     let scopes = "minecraft_server_session account_info offline_access";
@@ -196,23 +187,17 @@ pub async fn yggdrasil_authenticate(username: &str, password: &str, client_token
     if resp.status().is_success() {
         return handle_resp(resp, "Ely.by authenticate").await;
     }
-    
+
+    let status = resp.status(); 
     let text = resp.text().await.unwrap_or_else(|_| "<no body>".into());
+    
     if let Ok(err) = serde_json::from_str::<YggdrasilError>(&text) {
         if err.error == "ForbiddenOperationException" && err.error_message.contains("two factor") {
             return Err("ELYBY_2FA_REQUIRED".into());
         }
         return Err(format!("Ошибка Ely.by: {} — {}", err.error, err.error_message));
     }
-    Err(format!("Ely.by authenticate error {}: {}", resp.status(), text))
-}
-
-pub async fn yggdrasil_refresh(access_token: &str, client_token: &str) -> Result<YggdrasilAuthResponse, String> {
-    let resp = http_client()
-        .post(YGGDRASIL_REFRESH_URL)
-        .json(&YggdrasilRefreshRequest { access_token, client_token, request_user: true })
-        .send().await.map_err(|e| e.to_string())?;
-    handle_resp(resp, "Ely.by refresh").await
+    Err(format!("Ely.by authenticate error {}: {}", status, text))
 }
 
 pub async fn yggdrasil_validate(access_token: &str) -> Result<bool, String> {
@@ -222,10 +207,11 @@ pub async fn yggdrasil_validate(access_token: &str) -> Result<bool, String> {
         .send().await.map_err(|e| e.to_string())?;
     
     if resp.status().is_success() { return Ok(true); }
-    if resp.status().as_u16() == 400 || resp.status().as_u16() == 401 { return Ok(false); }
-    
+    let status = resp.status(); 
     let text = resp.text().await.unwrap_or_else(|_| "<no body>".into());
-    Err(format!("Ely.by validate error {}: {}", resp.status(), text))
+    
+    if status.as_u16() == 400 || status.as_u16() == 401 { return Ok(false); }
+    Err(format!("Ely.by validate error {}: {}", status, text))
 }
 
 pub async fn yggdrasil_invalidate(access_token: &str, client_token: &str) -> Result<(), String> {
@@ -235,8 +221,9 @@ pub async fn yggdrasil_invalidate(access_token: &str, client_token: &str) -> Res
         .send().await.map_err(|e| e.to_string())?;
     
     if resp.status().is_success() { return Ok(()); }
+    let status = resp.status(); 
     let text = resp.text().await.unwrap_or_else(|_| "<no body>".into());
-    Err(format!("Ely.by invalidate error {}: {}", resp.status(), text))
+    Err(format!("Ely.by invalidate error {}: {}", status, text))
 }
 
 fn store_oauth_state(state: String) {
@@ -262,11 +249,12 @@ pub async fn ensure_authlib_injector() -> Result<std::path::PathBuf, String> {
     tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
     let bytes = download_authlib_injector_jar_bytes().await?;
     if bytes.len() < 2 || &bytes[..2] != b"PK" {
-        return Err("Скачанный файл не является valid JAR (PK signature missing).".into());
+        return Err("Скачанный файл не является valid JAR.".into());
     }
     tokio::fs::write(&jar_path, &bytes).await.map_err(|e| e.to_string())?;
     Ok(jar_path)
 }
+
 
 async fn handle_oauth_callback_internal(app: &AppHandle, code: String, state: String) -> Result<(), String> {
     let saved = take_oauth_state().ok_or("OAuth2 state не найден")?;
@@ -282,7 +270,6 @@ async fn handle_oauth_callback_internal(app: &AppHandle, code: String, state: St
     profile.ely_refresh_token = token.refresh_token;
     profile.ely_client_token.get_or_insert_with(|| gen_random_str(32));
     
-    // Clear MS/MC fields
     profile.ms_access_token = None; profile.ms_refresh_token = None; profile.ms_id_token = None;
     profile.mc_uuid = None; profile.mc_username = None; profile.mc_access_token = None;
 
@@ -387,7 +374,7 @@ async fn run_local_oauth_server_async(app: AppHandle) {
             Ok(Ok((stream, _))) => {
                 if let Err(e) = try_process_oauth_connection(&app, stream).await {
                     eprintln!("[ElyAuth] Process: {e}");
-                } else { return; } // Success or handled failure, stop server
+                } else { return; }
             }
         }
     }
