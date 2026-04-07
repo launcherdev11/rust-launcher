@@ -7307,7 +7307,16 @@ pub async fn launch_game(
             None
         },
     )?;
-
+    // Fix for SE: Ensure Java binary has ex permissions (os error 13)
+    #[cfg(unix)]
+    {
+        if let Err(e) = crate::java_runtime::ensure_executable(&java_path) {
+            eprintln!("[Launch] Warning: Failed to set execute permission for {}: {}", java_path.display(), e);
+        } else {
+            // Opt()
+            // eprintln!("[Launch] Verified/Fixed execute permission for {}", java_path.display());
+        }
+    }
     if auth_token != "offline" && !auth_token.is_empty() && !auth_is_mojang {
         match ensure_authlib_injector().await {
             Ok(path) => {
