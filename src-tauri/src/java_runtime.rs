@@ -9,6 +9,9 @@ use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use tokio::sync::Mutex;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 static JAVA_RUNTIME_INSTALL_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn http_client() -> Client {
@@ -570,3 +573,26 @@ pub async fn ensure_java_runtime(major_version: u8, component: &str) -> Result<P
     Ok(java_path)
 }
 
+pub fn ensure_executable(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!("File does not exist: {:?}", path));
+    }
+
+    #[cfg(unix)] // Only apply on Unix-like systems
+    {
+        let metadata = fs::metadata(path)
+            .map_err(|e| format!("Failed to read metadata for {:?}: {}", path, e))?;
+        
+        let mut perms = metadata.permissions();
+        let mode = perms.mode();
+        if mode & 0o100 == 0 { // 0o100 is the owner execute bit
+            perms.set_mode(mode | 0o100);
+            fs::set_permissions(path, perms)
+                .map_err(|e| format!("Failed to set permissions for {:?}: {}", path, e))?;
+            
+            log::debug!("Set execute permission for {:?}", path);
+        }
+    }
+
+    Ok(())
+}
