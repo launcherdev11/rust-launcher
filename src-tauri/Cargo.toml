@@ -1,8 +1,8 @@
 [package]
 name = "mc16launcher"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "2.0.16"
+description = "An optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings."
+authors = ["launcherdev11"]
 edition = "2021"
 
 
