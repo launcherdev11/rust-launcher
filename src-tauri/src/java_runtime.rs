@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::fs::{self, File, Permissions};
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -26,7 +25,7 @@ fn http_client() -> Client {
 
 fn launcher_root() -> Result<PathBuf, String> {
     dirs::data_dir()
-        .ok_or("Не удалось получить папку данных")
+        .ok_or_else(|| "Не удалось получить папку данных".to_string())
         .map(|p| p.join("16Launcher"))
 }
 
@@ -66,7 +65,7 @@ fn detect_platform() -> Result<&'static str, String> {
 #[derive(Debug, Deserialize)]
 struct JavaIndex {
     #[serde(flatten)]
-    platforms: HashMap<String, HashMap<String, Vec<IndexEntry>>>,
+    platforms: std::collections::HashMap<String, std::collections::HashMap<String, Vec<IndexEntry>>>,
 }
 #[derive(Debug, Deserialize)]
 struct IndexEntry { manifest: ManifestUrl }
@@ -75,7 +74,7 @@ struct ManifestUrl { url: String }
 
 #[derive(Debug, Deserialize)]
 struct FileManifest {
-    files: HashMap<String, FileEntry>,
+    files: std::collections::HashMap<String, FileEntry>,
 }
 #[derive(Debug, Deserialize)]
 struct FileEntry {
@@ -211,7 +210,7 @@ fn flatten_archive(tmp: &Path, final_dir: &Path) -> Result<(), String> {
         fs::create_dir_all(final_dir).map_err(|e| e.to_string())?;
         for child in fs::read_dir(&inner).map_err(|e| e.to_string())? {
             let child = child.map_err(|e| e.to_string())?;
-            let name = child.file_name().ok_or("Bad filename")?;
+            let name = child.file_name().to_string_lossy().to_string();
             fs::rename(child.path(), final_dir.join(name)).map_err(|e| e.to_string())?;
         }
         fs::remove_dir_all(tmp).map_err(|e| e.to_string())?;
@@ -234,7 +233,6 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
 
     let client = http_client();
     
-    // Fetch Index
     let index: JavaIndex = client.get(INDEX_URL).send().await
         .map_err(|e| e.to_string())?
         .error_for_status()
@@ -248,7 +246,6 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
         .map(|e| e.manifest.url.clone())
         .ok_or_else(|| format!("Java не найдена для {platform}/{component}"))?;
 
-    // Fetch Manifest
     let manifest: FileManifest = client.get(&manifest_url).send().await
         .map_err(|e| e.to_string())?
         .error_for_status()
@@ -258,7 +255,6 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
     let root = runtime_dir(major, component)?;
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
 
-    // Sort files: lib/conf first
     let mut files: Vec<_> = manifest.files.into_iter().collect();
     files.sort_by_key(|(k, _)| {
         if k.starts_with("lib/") { 0 } else if k.starts_with("conf/") { 1 } else { 2 }
@@ -285,7 +281,6 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
             continue;
         }
 
-        // Cleanup partial
         let _ = if dest.is_file() { fs::remove_file(&dest) } else { fs::remove_dir_all(&dest) };
 
         let tmp = dest.with_extension("download");
@@ -325,7 +320,7 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
     
     let home = java_home_from_bin(&bin).ok_or("Не удалось определить JAVA_HOME")?;
     if !is_runtime_ready(&home, major) {
-        return Err("Установленная Java повреждена (неполное дерево)".into());
+        return Err("Установленная Java повреждена".into());
     }
 
     eprintln!("[Java] Готово: {}", bin.display());

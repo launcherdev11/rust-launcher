@@ -9,7 +9,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-use crate::game_provider::{get_profile, save_full_profile, Profile};
+use crate::game_provider::{get_profile, save_full_profile};
 
 fn http_client() -> Client {
     Client::builder()
@@ -20,7 +20,6 @@ fn http_client() -> Client {
         .unwrap_or_else(|_| Client::new())
 }
 
-// Constants
 pub const MS_CLIENT_ID: &str = "4ce834ee-3152-443c-b0b4-f266c19efd06";
 pub const MS_OAUTH2_AUTH_URL: &str = "https://login.live.com/oauth20_authorize.srf";
 pub const MS_OAUTH2_TOKEN_URL: &str = "https://login.live.com/oauth20_token.srf";
@@ -28,7 +27,6 @@ pub const MS_REDIRECT_URI: &str = "http://localhost:1420";
 
 static MS_OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
-// Helpers
 fn gen_state() -> String {
     rand::thread_rng().sample_iter(&Alphanumeric).take(32).map(char::from).collect()
 }
@@ -68,7 +66,6 @@ where T: for<'de> Deserialize<'de> {
     resp.json::<T>().await.map_err(|e| format!("Parse error {ctx}: {e}"))
 }
 
-// Models
 #[derive(Debug, Deserialize)]
 struct MsTokenResponse {
     access_token: String,
@@ -125,8 +122,6 @@ struct McLoginResp { access_token: String, expires_in: u64 }
 #[derive(Debug, Deserialize)]
 struct McProfile { id: String, name: String }
 
-// Logic
-
 async fn exchange_code(code: String) -> Result<MsTokenResponse, String> {
     let secret = std::env::var("MS_CLIENT_SECRET").ok();
     let body = MsTokenRequest {
@@ -140,7 +135,6 @@ async fn exchange_code(code: String) -> Result<MsTokenResponse, String> {
 pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, String, String), String> {
     let client = http_client();
 
-    // XBL
     let xbl_req = XblReq {
         rp: "http://auth.xboxlive.com".into(), tt: "JWT".into(),
         props: XblProps { auth_method: "RPS".into(), site_name: "user.auth.xboxlive.com".into(), rps_ticket: format!("d={}", ms_token) },
@@ -153,7 +147,6 @@ pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, Stri
     let uhs = xbl.DisplayClaims.xui.first().ok_or("No UHS in XBL response")?.uhs.clone();
     let xbl_token = xbl.Token;
 
-    // XSTS
     let xsts_req = XstsReq {
         rp: "rp://api.minecraftservices.com/".into(), tt: "JWT".into(),
         props: XstsProps { sid: "RETAIL".into(), tokens: vec![xbl_token] },
@@ -165,14 +158,12 @@ pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, Stri
 
     let identity = format!("XBL3.0 x={};{}", uhs, xsts.Token);
 
-    // MC Login
     let mc_login: McLoginResp = handle_resp(
         client.post("https://api.minecraftservices.com/authentication/login_with_xbox")
             .json(&McLoginReq { identityToken: identity }).send().await.map_err(|e| e.to_string())?,
         "MC login_with_xbox"
     ).await?;
 
-    // MC Profile
     let mc_prof: McProfile = handle_resp(
         client.get("https://api.minecraftservices.com/minecraft/profile")
             .bearer_auth(&mc_login.access_token).send().await.map_err(|e| e.to_string())?,

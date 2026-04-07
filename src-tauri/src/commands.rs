@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use ignore::gitignore::GitignoreBuilder;
@@ -9,7 +9,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::game_provider::{instance_dir_for_id, InstanceConfig};
 
-// Models
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileNode {
     pub path: String, pub name: String, pub is_dir: bool, pub size: u64,
@@ -22,15 +22,12 @@ pub struct PreviewResult { pub files: Vec<PreviewFile>, pub total_bytes: u64 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportResult { pub path: String, pub skipped_files: Vec<String> }
 
-// Helpers
-fn io_err(e: io::Error) -> String { e.to_string() }
-
 fn to_rel_slash(root: &Path, p: &Path) -> Result<String, String> {
-    p.strip_prefix(root)
+    Ok(p.strip_prefix(root)
         .map_err(|_| "Bad prefix")?
         .to_str()
-        .ok_or("Invalid UTF-8")
-        .map(|s| s.replace('\\', "/").trim_start_matches("./").to_string())
+        .ok_or_else(|| "Invalid UTF-8".to_string())?
+        .replace('\\', "/").trim_start_matches("./").to_string())
         .map(|s| if s.is_empty() { ".".into() } else { s })
 }
 
@@ -52,8 +49,8 @@ fn is_ignored(gi: &ignore::gitignore::Gitignore, root: &Path, p: &Path) -> bool 
 
 fn scan_dir(root: &Path, cur: &Path) -> Result<Vec<FileNode>, String> {
     let mut nodes = Vec::new();
-    for entry in std::fs::read_dir(cur).map_err(io_err)? {
-        let e = entry.map_err(io_err)?;
+    for entry in std::fs::read_dir(cur).map_err(|e| e.to_string())? {
+        let e = entry.map_err(|e| e.to_string())?;
         let p = e.path();
         let name = e.file_name().to_string_lossy().to_string();
         let meta = match e.metadata() { Ok(m) => m, Err(_) => continue };
@@ -120,7 +117,7 @@ fn load_cfg(root: &Path) -> Option<InstanceConfig> {
         .and_then(|s| serde_json::from_str(&s).ok())
 }
 
-fn build_manifest(id: &str, cfg: Option<&InstanceConfig>, files: &[(PathBuf, String, u64)]) -> Result<Vec<u8>, String> {
+fn build_manifest(id: &str, cfg: Option<&InstanceConfig>, _files: &[(PathBuf, String, u64)]) -> Result<Vec<u8>, String> {
     let name = cfg.map(|c| c.name.clone()).unwrap_or_else(|| id.into());
     let ver = cfg.map(|c| c.game_version.clone()).unwrap_or_default();
     let loader = cfg.map(|c| c.loader.clone()).unwrap_or_else(|| "vanilla".into());
@@ -144,15 +141,12 @@ fn build_manifest(id: &str, cfg: Option<&InstanceConfig>, files: &[(PathBuf, Str
 fn get_out_path(fmt: &str, opt: Option<String>, id: &str, cfg: Option<&InstanceConfig>) -> Result<PathBuf, String> {
     if let Some(p) = opt { return Ok(PathBuf::from(p)); }
     let base = dirs::download_dir().or_else(dirs::desktop_dir).ok_or("No download/desktop dir")?;
-    let safe = cfg.map(|c| c.name).unwrap_or_else(|| id.into())
+    
+    let safe = cfg.map(|c| c.name.clone()).unwrap_or_else(|| id.into())
         .replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
     let ext = if fmt == "mrpack" { "mrpack" } else { "zip" };
     Ok(base.join(format!("{safe}-{id}.{ext}")))
 }
-
-fn is_no_space(e: &io::Error) -> bool { e.raw_os_error() == Some(112) }
-
-// Commands
 
 #[tauri::command]
 pub fn list_build_files(build_id: String) -> Result<Vec<FileNode>, String> {
@@ -187,7 +181,7 @@ pub fn export_build(
 
     let cfg = load_cfg(&root);
     let out_path = get_out_path(fmt, out_path, &build_id, cfg.as_ref())?;
-    if let Some(p) = out_path.parent() { std::fs::create_dir_all(p).map_err(io_err)?; }
+    if let Some(p) = out_path.parent() { std::fs::create_dir_all(p).map_err(|e| e.to_string())?; }
 
     let files = collect_files(&root, &selected, &ignores)?;
     let mut total: u64 = files.iter().map(|(_, _, s)| *s).sum();
@@ -199,7 +193,7 @@ pub fn export_build(
     } else { None };
 
     let f = File::create(&out_path).map_err(|e| {
-        if is_no_space(&e) { "Недостаточно места".into() } else { io_err(e) }
+        if e.raw_os_error() == Some(112) { "Недостаточно места".into() } else { e.to_string() }
     })?;
 
     let mut writer = zip::ZipWriter::new(f);
@@ -214,8 +208,9 @@ pub fn export_build(
     };
 
     if let Some(mb) = &manifest {
-        writer.start_file("modrinth.index.json", opts).map_err(io_err)?;
-        writer.write_all(mb).map_err(io_err)?;
+        
+        writer.start_file("modrinth.index.json", opts).map_err(|e| e.to_string())?;
+        writer.write_all(mb).map_err(|e| e.to_string())?;
         written += mb.len() as u64;
         emit_prog("modrinth.index.json", written);
     }
@@ -247,7 +242,7 @@ pub fn export_build(
         if !ok { skipped.push(rel); }
     }
 
-    writer.finish().map_err(io_err)?;
+    writer.finish().map_err(|e| e.to_string())?;
     
     let path_str = out_path.to_str().ok_or("Invalid path")?.to_string();
     let _ = app.emit("export-finished", serde_json::json!({
