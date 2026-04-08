@@ -1,8 +1,8 @@
 [package]
 name = "mc16launcher"
-version = "2.0.19"
+version = "2.0.20"
 description = "An optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings."
-authors = ["launcherdev11"]
+authors = ["16steyy"]
 edition = "2021"
 
 
