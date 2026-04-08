@@ -835,7 +835,7 @@ fn build_java_command(
     mut jvm_args: Vec<String>,
     force_java_path: Option<PathBuf>,
 ) -> Result<(PathBuf, Vec<String>), String> {
-    let java_path = if let Some(forced) = force_java_path {
+    let mut java_path = if let Some(forced) = force_java_path {
         forced
     } else if let Some(custom) = java_settings
         .java_path
@@ -6094,7 +6094,7 @@ pub async fn install_forge(
 
     let java_http_proxy_args = build_java_http_proxy_args();
 
-    let forge_java_bin =
+    let mut forge_java_bin =
         crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
     #[cfg(target_os = "windows")]
     {
@@ -6969,7 +6969,7 @@ pub async fn launch_game(
 
     let profile = get_profile().unwrap_or_default();
 
-    let mut is_offline = profile
+    let is_offline = profile
         .ely_access_token
         .as_deref()
         .map(|s| s.is_empty() || s == "0")
@@ -7052,7 +7052,6 @@ pub async fn launch_game(
                 };
                 auth_token = mc_access_token.clone();
                 user_type = "msa".to_string();
-                is_offline = false;
                 auth_is_mojang = true;
             }
         }

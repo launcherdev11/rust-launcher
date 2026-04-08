@@ -41,15 +41,11 @@ xcode-select --install
 Clone the repository and install Node.js dependencies:
 
 ```bash
-git clone https://github.com/trassert/rust-launcher.git
-cd rust-launcher
+cd mc16launcher
 
-# Install frontend dependencies
 npm install
 
-# Frontend build
 npm run build
 
-# Build full
 npm run tauri build
 ```
