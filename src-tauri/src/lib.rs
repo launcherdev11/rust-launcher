@@ -9,7 +9,7 @@ use game_provider::{
     cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
     fetch_neoforge_versions, check_version_files_integrity,
     fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
-    get_installed_quilt_profile_id, get_profile, get_profiles, get_selected_profile,
+    get_installed_quilt_profile_id, get_profile, get_profiles,
     install_fabric, install_forge, install_neoforge, install_quilt, install_version, launch_game,
     list_installed_fabric_game_versions, list_installed_quilt_game_versions, list_installed_versions,
     open_game_folder, open_profile_folder, reset_download_cancel,

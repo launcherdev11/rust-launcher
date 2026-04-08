@@ -835,7 +835,7 @@ fn build_java_command(
     mut jvm_args: Vec<String>,
     force_java_path: Option<PathBuf>,
 ) -> Result<(PathBuf, Vec<String>), String> {
-    let mut java_path = if let Some(forced) = force_java_path {
+    let java_path = if let Some(forced) = force_java_path {
         forced
     } else if let Some(custom) = java_settings
         .java_path
@@ -2797,10 +2797,10 @@ fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, 
         if !path.is_dir() {
             continue;
         }
-        let id = match path.file_name().and_then(|n| n.to_str()) {
+        let _id = match path.file_name().and_then(|n| n.to_str()) {
             Some(id) if !id.is_empty() => id.to_string(),
             _ => continue,
-        };
+        }; // unused
         let config_path = path.join("config.json");
         if !config_path.exists() {
             continue;
@@ -3437,7 +3437,6 @@ pub async fn import_mrpack(
             }
             let mut out =
                 std::fs::File::create(&dest).map_err(|e| format!("Не удалось создать файл override: {e}"))?;
-            use std::io::Write;
             std::io::copy(&mut entry, &mut out)
                 .map_err(|e| format!("Ошибка распаковки override: {e}"))?;
         }
@@ -3611,7 +3610,6 @@ pub async fn import_mrpack_as_new_profile(
             }
             let mut out =
                 std::fs::File::create(&dest).map_err(|e| format!("Не удалось создать файл override: {e}"))?;
-            use std::io::Read;
             std::io::copy(&mut entry, &mut out)
                 .map_err(|e| format!("Ошибка распаковки override: {e}"))?;
         }
@@ -4631,7 +4629,7 @@ async fn download_assets(
     app: &AppHandle,
     version_id: &str,
     total_size: u64,
-    mut total_downloaded: u64,
+    total_downloaded: u64,
 ) -> Result<(), String> {
     let assets_root = root.join("assets");
     let indexes_dir = assets_root.join("indexes");
@@ -6096,7 +6094,7 @@ pub async fn install_forge(
 
     let java_http_proxy_args = build_java_http_proxy_args();
 
-    let mut forge_java_bin =
+    let forge_java_bin =
         crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
     #[cfg(target_os = "windows")]
     {
@@ -6506,7 +6504,6 @@ pub async fn install_version(
     )
     .await?;
 
-    //библиотеки
     let natives_dir = vers_root.join(&version_id).join("natives");
     tokio::fs::create_dir_all(&natives_dir)
         .await
@@ -7087,7 +7084,7 @@ pub async fn launch_game(
             }
             auth_token = mc_access_token;
             user_type = "msa".to_string();
-            is_offline = false;
+            // is_offline = false;
             auth_is_mojang = true;
         }
     }
@@ -7307,7 +7304,16 @@ pub async fn launch_game(
             None
         },
     )?;
-
+    // Fix for SE: Ensure Java binary has ex permissions (os error 13)
+    #[cfg(unix)]
+    {
+        if let Err(e) = crate::java_runtime::ensure_executable(&java_path) {
+            eprintln!("[Launch] Warning: Failed to set execute permission for {}: {}", java_path.display(), e);
+        } else {
+            // Opt()
+            // eprintln!("[Launch] Verified/Fixed execute permission for {}", java_path.display());
+        }
+    }
     if auth_token != "offline" && !auth_token.is_empty() && !auth_is_mojang {
         match ensure_authlib_injector().await {
             Ok(path) => {
