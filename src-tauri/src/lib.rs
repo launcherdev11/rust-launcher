@@ -59,8 +59,6 @@ fn configure_linux_display_backend() {
         }
     }
 
-    // Work around white-screen rendering regressions on some Linux stacks
-    // (notably Wayland/NVIDIA combinations in WebKitGTK).
     if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
@@ -73,8 +71,6 @@ fn configure_linux_display_backend() {
 fn configure_windows_webview_memory() {
     use std::env;
 
-    // Limit default WebView2 memory growth for launcher-like workloads.
-    // Users can still override this variable manually if needed.
     if env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
         env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
