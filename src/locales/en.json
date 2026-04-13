@@ -112,6 +112,7 @@
       "showSnapshots": { "label": "Show snapshot versions:" },
       "showAlpha": { "label": "Show Alpha versions:" },
       "forgeIpv6Download": { "label": "Download versions via IPv6 proxy:" },
+      "forgeProxyFallback": { "label": "Use proxy fallback:" },
       "available": { "label": "Available versions:" },
       "refresh": "Refresh",
       "loading": "Loading versions list...",
