@@ -1081,6 +1081,8 @@ pub struct Settings {
     pub show_alpha_versions: bool,
     #[serde(default)]
     pub forge_ipv6_download: bool,
+    #[serde(default = "default_forge_proxy_fallback_enabled")]
+    pub forge_proxy_fallback: bool,
 
     pub notify_new_update: bool,
     pub notify_new_message: bool,
@@ -1112,6 +1114,10 @@ fn default_background_blur_enabled() -> bool {
     true
 }
 
+fn default_forge_proxy_fallback_enabled() -> bool {
+    true
+}
+
 fn default_ui_sounds_enabled() -> bool {
     true
 }
@@ -1129,6 +1135,7 @@ impl Default for Settings {
             show_snapshots: false,
             show_alpha_versions: false,
             forge_ipv6_download: false,
+            forge_proxy_fallback: true,
             notify_new_update: true,
             notify_new_message: true,
             notify_system_message: true,
@@ -5178,10 +5185,23 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
 
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
-    let client = http_client(true);
-    let text = download_text_with_retries(&client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
-        .await
-        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
+    let settings = load_settings_from_disk();
+    let direct_client = http_client(false);
+    let text = match download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES).await {
+        Ok(text) => text,
+        Err(direct_err) => {
+            if settings.forge_proxy_fallback {
+                let proxy_client = http_client(true);
+                download_text_with_retries(&proxy_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
+                    .await
+                    .map_err(|proxy_err| format!(
+                        "Ошибка загрузки Forge promotions без прокси: {direct_err}; через прокси: {proxy_err}"
+                    ))?
+            } else {
+                return Err(format!("Ошибка загрузки Forge promotions: {direct_err}"));
+            }
+        }
+    };
 
     let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
@@ -6083,7 +6103,7 @@ pub async fn install_forge(
     ensure_launcher_profiles_json(&root, &mc_version)?;
 
     let launcher_settings = load_settings_from_disk();
-    let installer_client = if launcher_settings.forge_ipv6_download {
+    let installer_client_primary = if launcher_settings.forge_ipv6_download {
         http_client_for_binary_download_with_preferred_proxy_host(true, true)
     } else {
         http_client_for_binary_download_with_preferred_proxy_host(true, false)
@@ -6103,15 +6123,81 @@ pub async fn install_forge(
 
     let total_done = Arc::new(AtomicU64::new(0));
     if need_download {
-        let _ = download_forge_installer_once(
-            &installer_client,
+        let mut download_error = match download_forge_installer_once(
+            &installer_client_primary,
             &installer_url,
             &installer_path,
             &app,
             &version_id,
-            total_done,
+            total_done.clone(),
         )
-        .await?;
+        .await
+        {
+            Ok(downloaded) => {
+                let _ = downloaded;
+                None
+            }
+            Err(e) => Some(e),
+        };
+
+        if let Some(primary_error) = download_error.take() {
+            if launcher_settings.forge_proxy_fallback {
+                let _ = log_to_console(
+                    &app,
+                    &format!("[Forge] Основная загрузка installer не удалась: {primary_error}. Пробуем fallback."),
+                );
+
+                let mut fallback_errors: Vec<String> = vec![primary_error];
+
+                if launcher_settings.forge_ipv6_download {
+                    let fallback_proxy_client =
+                        http_client_for_binary_download_with_preferred_proxy_host(true, false);
+                    match download_forge_installer_once(
+                        &fallback_proxy_client,
+                        &installer_url,
+                        &installer_path,
+                        &app,
+                        &version_id,
+                        total_done.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            fallback_errors.clear();
+                        }
+                        Err(e) => fallback_errors.push(format!("fallback proxy: {e}")),
+                    }
+                }
+
+                if !fallback_errors.is_empty() {
+                    let fallback_direct_client = http_client_for_binary_download(false);
+                    match download_forge_installer_once(
+                        &fallback_direct_client,
+                        &installer_url,
+                        &installer_path,
+                        &app,
+                        &version_id,
+                        total_done.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            fallback_errors.clear();
+                        }
+                        Err(e) => fallback_errors.push(format!("fallback direct: {e}")),
+                    }
+                }
+
+                if !fallback_errors.is_empty() {
+                    return Err(format!(
+                        "Ошибка скачивания Forge installer. Попытки: {}",
+                        fallback_errors.join(" | ")
+                    ));
+                }
+            } else {
+                return Err(primary_error);
+            }
+        }
     }
 
 
@@ -6132,7 +6218,7 @@ pub async fn install_forge(
             );
             let total_done_pre = Arc::new(AtomicU64::new(0));
             if let Err(e) = download_file_checked(
-                &installer_client,
+                &installer_client_primary,
                 &downloads.client.url,
                 &vanilla_client_jar,
                 downloads.client.sha1.clone(),
