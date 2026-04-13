@@ -26,6 +26,7 @@ type Settings = {
   show_snapshots: boolean;
   show_alpha_versions: boolean;
   forge_ipv6_download: boolean;
+  forge_proxy_fallback: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;
@@ -1194,6 +1195,13 @@ export function SettingsTab({
                 noLabel={tt("settings.common.no")}
                 value={settings?.forge_ipv6_download ?? false}
                 onChange={(value: boolean) => updateSettings({ forge_ipv6_download: value })}
+              />
+              <SettingsToggle
+                label={tt("settings.versions.forgeProxyFallback.label")}
+                yesLabel={tt("settings.common.yes")}
+                noLabel={tt("settings.common.no")}
+                value={settings?.forge_proxy_fallback ?? false}
+                onChange={(value: boolean) => updateSettings({ forge_proxy_fallback: value })}
               />
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-white/90">
