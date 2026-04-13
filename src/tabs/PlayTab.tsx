@@ -374,7 +374,7 @@ export function PlayTab({
   const looksLikeSnapshot = (s: string): boolean => {
     const v = s.trim();
     if (!v) return false;
-    if (/^\d{2}w\d{2}[a-z]$/i.test(v)) return true; // 24w14a
+    if (/^\d{2}w\d{2}[a-z]$/i.test(v)) return true;
     if (/^\d+\.\d+(\.\d+)?-pre\d+$/i.test(v)) return true;
     if (/^\d+\.\d+(\.\d+)?-rc\d+$/i.test(v)) return true;
     if (/^\d+\.\d+(\.\d+)?-snapshot$/i.test(v)) return true;
