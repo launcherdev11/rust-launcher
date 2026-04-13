@@ -25,6 +25,7 @@ type Settings = {
   resolution_height: number | null;
   show_snapshots: boolean;
   show_alpha_versions: boolean;
+  forge_ipv6_download: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;
@@ -1186,6 +1187,13 @@ export function SettingsTab({
                 noLabel={tt("settings.common.no")}
                 value={settings?.show_alpha_versions ?? false}
                 onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
+              />
+              <SettingsToggle
+                label={tt("settings.versions.forgeIpv6Download.label")}
+                yesLabel={tt("settings.common.yes")}
+                noLabel={tt("settings.common.no")}
+                value={settings?.forge_ipv6_download ?? false}
+                onChange={(value: boolean) => updateSettings({ forge_ipv6_download: value })}
               />
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-white/90">

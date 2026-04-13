@@ -59,6 +59,7 @@ type Settings = {
   resolution_height: number | null;
   show_snapshots: boolean;
   show_alpha_versions: boolean;
+  forge_ipv6_download: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;
@@ -1279,6 +1280,7 @@ function App() {
     resolution_height: null,
     show_snapshots: false,
     show_alpha_versions: false,
+    forge_ipv6_download: false,
     notify_new_update: true,
     notify_new_message: true,
     notify_system_message: true,
