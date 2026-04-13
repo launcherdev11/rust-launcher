@@ -38,22 +38,23 @@ fn http_client(use_proxy: bool) -> Client {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
 
     if use_proxy {
-        let host = env_var_trim("PROXY_HOST");
+        let host = preferred_proxy_host(false);
         let port_str = env_var_trim("PROXY_PORT");
         let user = env_var_trim("PROXY_USER");
         let pass = env_var_trim("PROXY_PASS");
 
         if let (Some(host), Some(port_str)) = (host, port_str) {
             if let Ok(port) = port_str.parse::<u16>() {
+                let proxy_host = normalize_proxy_host_for_url(&host);
                 let proxy_url = match (user, pass) {
                     (Some(u), Some(p)) => format!(
                         "http://{}:{}@{}:{}",
                         encode(&u),
                         encode(&p),
-                        host,
+                        proxy_host,
                         port
                     ),
-                    _ => format!("http://{host}:{port}"),
+                    _ => format!("http://{proxy_host}:{port}"),
                 };
 
                 if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
@@ -66,7 +67,10 @@ fn http_client(use_proxy: bool) -> Client {
     builder.build().unwrap_or_else(|_| Client::new())
 }
 
-fn http_client_for_binary_download(use_proxy: bool) -> Client {
+fn http_client_for_binary_download_with_preferred_proxy_host(
+    use_proxy: bool,
+    prefer_ipv6: bool,
+) -> Client {
     let _ = dotenvy::dotenv();
 
     let mut builder = Client::builder()
@@ -79,22 +83,23 @@ fn http_client_for_binary_download(use_proxy: bool) -> Client {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
 
     if use_proxy {
-        let host = env_var_trim("PROXY_HOST");
+        let host = preferred_proxy_host(prefer_ipv6);
         let port_str = env_var_trim("PROXY_PORT");
         let user = env_var_trim("PROXY_USER");
         let pass = env_var_trim("PROXY_PASS");
 
         if let (Some(host), Some(port_str)) = (host, port_str) {
             if let Ok(port) = port_str.parse::<u16>() {
+                let proxy_host = normalize_proxy_host_for_url(&host);
                 let proxy_url = match (user, pass) {
                     (Some(u), Some(p)) => format!(
                         "http://{}:{}@{}:{}",
                         encode(&u),
                         encode(&p),
-                        host,
+                        proxy_host,
                         port
                     ),
-                    _ => format!("http://{host}:{port}"),
+                    _ => format!("http://{proxy_host}:{port}"),
                 };
 
                 if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
@@ -118,6 +123,10 @@ fn http_client_for_binary_download(use_proxy: bool) -> Client {
     })
 }
 
+fn http_client_for_binary_download(use_proxy: bool) -> Client {
+    http_client_for_binary_download_with_preferred_proxy_host(use_proxy, false)
+}
+
 fn env_var_trim(key: &str) -> Option<String> {
     let runtime = env::var(key)
         .ok()
@@ -130,6 +139,8 @@ fn env_var_trim(key: &str) -> Option<String> {
     let compile_time = match key {
         "PROXY_HOST" => option_env!("PROXY_HOST"),
         "PROXY_PORT" => option_env!("PROXY_PORT"),
+        "PROXY_HOSTS" => option_env!("PROXY_HOSTS"),
+        "PROXY_HOST_FORGE_IPV6" => option_env!("PROXY_HOST_FORGE_IPV6"),
         "PROXY_USER" => option_env!("PROXY_USER"),
         "PROXY_PASS" => option_env!("PROXY_PASS"),
         _ => return None,
@@ -138,6 +149,49 @@ fn env_var_trim(key: &str) -> Option<String> {
     compile_time
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+fn parse_proxy_hosts_csv(raw: &str) -> Vec<String> {
+    raw.split([',', ';'])
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn is_ipv6_host_literal(raw: &str) -> bool {
+    let candidate = raw.trim().trim_start_matches('[').trim_end_matches(']');
+    candidate.contains(':')
+}
+
+fn normalize_proxy_host_for_url(raw: &str) -> String {
+    let host = raw.trim();
+    if is_ipv6_host_literal(host) && !host.starts_with('[') && !host.ends_with(']') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+fn preferred_proxy_host(prefer_ipv6: bool) -> Option<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    if prefer_ipv6 {
+        if let Some(v) = env_var_trim("PROXY_HOST_FORGE_IPV6") {
+            candidates.push(v);
+        }
+    }
+    if let Some(v) = env_var_trim("PROXY_HOST") {
+        candidates.push(v);
+    }
+    if let Some(v) = env_var_trim("PROXY_HOSTS") {
+        candidates.extend(parse_proxy_hosts_csv(&v));
+    }
+
+    if prefer_ipv6 {
+        if let Some(found) = candidates.iter().find(|h| is_ipv6_host_literal(h)) {
+            return Some(found.clone());
+        }
+    }
+    candidates.into_iter().find(|h| !h.trim().is_empty())
 }
 
 fn load_project_env_for_runtime() {
@@ -189,10 +243,10 @@ fn normalize_api_key(raw: String) -> String {
         .to_string()
 }
 
-fn build_java_http_proxy_args() -> Vec<String> {
+fn build_java_http_proxy_args_with_preferred_host(prefer_ipv6: bool) -> Vec<String> {
     let _ = dotenvy::dotenv();
 
-    let host = env_var_trim("PROXY_HOST");
+    let host = preferred_proxy_host(prefer_ipv6);
     let port_str = env_var_trim("PROXY_PORT");
     let (host, port) = match (host, port_str) {
         (Some(h), Some(p)) => match p.parse::<u16>() {
@@ -230,6 +284,10 @@ fn build_java_http_proxy_args() -> Vec<String> {
     args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());   //10 мин
 
     args
+}
+
+fn build_java_http_proxy_args() -> Vec<String> {
+    build_java_http_proxy_args_with_preferred_host(false)
 }
 
 const PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE: &str = include_str!("../ProxyAuthBootstrap.java");
@@ -1021,6 +1079,8 @@ pub struct Settings {
 
     pub show_snapshots: bool,
     pub show_alpha_versions: bool,
+    #[serde(default)]
+    pub forge_ipv6_download: bool,
 
     pub notify_new_update: bool,
     pub notify_new_message: bool,
@@ -1068,6 +1128,7 @@ impl Default for Settings {
             resolution_height: None,
             show_snapshots: false,
             show_alpha_versions: false,
+            forge_ipv6_download: false,
             notify_new_update: true,
             notify_new_message: true,
             notify_system_message: true,
@@ -6021,7 +6082,12 @@ pub async fn install_forge(
 
     ensure_launcher_profiles_json(&root, &mc_version)?;
 
-    let installer_client = http_client_for_binary_download(true);
+    let launcher_settings = load_settings_from_disk();
+    let installer_client = if launcher_settings.forge_ipv6_download {
+        http_client_for_binary_download_with_preferred_proxy_host(true, true)
+    } else {
+        http_client_for_binary_download_with_preferred_proxy_host(true, false)
+    };
     let installer_dir = launcher_data_dir()?.join("forge_installers").join(&version_id);
     tokio::fs::create_dir_all(&installer_dir)
         .await
@@ -6092,7 +6158,8 @@ pub async fn install_forge(
     let game_dir = root.clone();
     let java_installer = installer_path.clone();
 
-    let java_http_proxy_args = build_java_http_proxy_args();
+    let java_http_proxy_args =
+        build_java_http_proxy_args_with_preferred_host(launcher_settings.forge_ipv6_download);
 
     let mut forge_java_bin =
         crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;

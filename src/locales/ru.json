@@ -111,6 +111,7 @@
     "versions": {
       "showSnapshots": { "label": "Показывать снапшоты:" },
       "showAlpha": { "label": "Показывать Alpha версии:" },
+      "forgeIpv6Download": { "label": "Скачивать версии через IPv6-прокси:" },
       "available": { "label": "Доступные версии:" },
       "refresh": "Обновить",
       "loading": "Загрузка списка версий...",
