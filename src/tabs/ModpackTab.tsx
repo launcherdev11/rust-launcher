@@ -2171,8 +2171,8 @@ export function ModpackTab({
         : items.filter((name) => name.toLowerCase().includes(searchValue));
 
     return (
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
+      <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
           <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3">
             <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
               <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
@@ -2360,7 +2360,7 @@ export function ModpackTab({
 
         <div
           ref={manageSplitRowRef}
-          className="flex min-h-0 w-full flex-1 flex-col gap-3 lg:min-h-[min(36rem,calc(100vh-7.5rem))] lg:flex-row lg:items-stretch lg:gap-0"
+          className="flex min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-0"
           style={
             {
               ["--modpack-main-frac" as string]: String(manageMainWidthFrac),
