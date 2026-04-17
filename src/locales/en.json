@@ -111,6 +111,22 @@
     "versions": {
       "showSnapshots": { "label": "Show snapshot versions:" },
       "showAlpha": { "label": "Show Alpha versions:" },
+      "loaderFilter": { "label": "Loader:" },
+      "versionFilter": {
+        "label": "Version filter:",
+        "placeholder": "Type a version...",
+        "all": "All versions",
+        "noneFound": "Nothing found."
+      },
+      "loader": {
+        "vanilla": "Vanilla",
+        "fabric": "Fabric",
+        "quilt": "Quilt",
+        "forge": "Forge",
+        "neoforge": "NeoForge"
+      },
+      "forgeIpv6Download": { "label": "Download versions via IPv6 proxy:" },
+      "forgeProxyFallback": { "label": "Use proxy fallback:" },
       "available": { "label": "Available versions:" },
       "refresh": "Refresh",
       "loading": "Loading versions list...",
@@ -124,7 +140,18 @@
       "loadFailed": "Failed to load Minecraft versions list.",
       "refreshFailed": "Failed to refresh versions list.",
       "installSuccess": "Version {{version}} installed successfully.",
-      "installFailed": "Failed to install version {{version}}."
+      "installFailed": "Failed to install version {{version}}.",
+      "verify": {
+        "button": "Check files",
+        "checking": "Checking...",
+        "ok": "Files for version {{version}} are intact.",
+        "failed": "Failed to verify files for version {{version}}.",
+        "notSupported": "File verification is not supported for this loader.",
+        "promptText": "Issues were found in version {{version}}: missing {{missing}}, corrupted {{corrupted}} (checked {{checked}}). Overwrite files to restore proper operation?",
+        "rewriteButton": "Overwrite",
+        "rewritten": "Files for version {{version}} were overwritten.",
+        "skipPrompt": "Do not show this warning again"
+      }
     },
     "launcher": {
       "openOnProfilesTab": {

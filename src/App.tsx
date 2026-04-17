@@ -28,6 +28,7 @@ import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
 import { SupabaseAccountPanel } from "./tabs/SupabaseAccountPanel";
 import { useT, t } from "./i18n";
+import { getAvatarSrc, getElyAvatarByUsername } from "./lib/avatar";
 
 type Profile = {
   nickname: string;
@@ -61,6 +62,8 @@ type Settings = {
   resolution_height: number | null;
   show_snapshots: boolean;
   show_alpha_versions: boolean;
+  forge_ipv6_download: boolean;
+  forge_proxy_fallback: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;
@@ -117,6 +120,22 @@ function accountKindAvatarClass(kind: string): string {
   if (kind === "microsoft") return "bg-sky-600/35 text-sky-100 ring-1 ring-sky-400/25";
   if (kind === "ely") return "bg-emerald-700/40 text-emerald-100 ring-1 ring-emerald-400/20";
   return "bg-white/10 text-white/80 ring-1 ring-white/10";
+}
+
+function decodeJwtSub(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const decoded = atob(padded);
+    const payload: unknown = JSON.parse(decoded);
+    if (!payload || typeof payload !== "object") return null;
+    const sub = (payload as { sub?: unknown }).sub;
+    return typeof sub === "string" && sub.trim() ? sub.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 type VersionSummary = {
@@ -716,6 +735,7 @@ function App() {
   const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
+  const [launcherAccountsScope, setLauncherAccountsScope] = useState<string | null>(null);
   const didLoadedRemoteNotificationsRef = useRef(false);
   const didLoadedBottomSocialRef = useRef(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -817,8 +837,10 @@ function App() {
       try {
         const t = window.localStorage.getItem("mc16launcher:supabase_access_token_v1");
         setHasSupabaseSession(Boolean(t && t.trim()));
+        setLauncherAccountsScope(t ? decodeJwtSub(t) : null);
       } catch {
         setHasSupabaseSession(false);
+        setLauncherAccountsScope(null);
       }
     };
     readSession();
@@ -834,7 +856,6 @@ function App() {
   const activeAccountFromList = launcherAccounts.find((a) => a.is_active);
   const activeAccountLabel =
     activeAccountFromList?.label ?? (displayedNickname.trim() || "—");
-  const activeAccountKind = activeAccountFromList?.kind ?? "offline";
   const initialPersistedConsole = useMemo(() => loadPersistedGameConsole(), []);
   const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>(
     initialPersistedConsole.lines,
@@ -873,13 +894,6 @@ function App() {
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
 
-  const skinHeadSrc = useMemo(() => {
-    const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
-    const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
-    const uuid = mcUuid || elyUuid || "00000000000000000000000000000000";
-    return `https://crafatar.com/renders/head/${uuid}?scale=6&default=MHF_Steve`;
-  }, [profile.mc_uuid, profile.ely_uuid]);
-
   const stevePlaceholderSrc = useMemo(() => {
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
@@ -894,16 +908,50 @@ function App() {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }, []);
 
-  const [headImgSrc, setHeadImgSrc] = useState<string>(skinHeadSrc);
+  const [headImgSrc, setHeadImgSrc] = useState<string>(stevePlaceholderSrc);
+  const [accountAvatarById, setAccountAvatarById] = useState<Record<string, string>>({});
   useEffect(() => {
-    setHeadImgSrc(skinHeadSrc);
-  }, [skinHeadSrc]);
+    let isCancelled = false;
+    void (async () => {
+      const avatarSrc = await getAvatarSrc(profile, stevePlaceholderSrc, 64);
+      if (!isCancelled) {
+        setHeadImgSrc(avatarSrc);
+      }
+    })();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    profile.nickname,
+    profile.ely_username,
+    profile.ely_uuid,
+    profile.mc_uuid,
+    stevePlaceholderSrc,
+  ]);
 
   const handleHeadImgError = useCallback(() => {
     if (headImgSrc !== stevePlaceholderSrc) {
       setHeadImgSrc(stevePlaceholderSrc);
     }
   }, [headImgSrc, stevePlaceholderSrc]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    void (async () => {
+      const pairs = await Promise.all(
+        launcherAccounts.map(async (acc) => {
+          if (acc.kind !== "ely") return [acc.id, stevePlaceholderSrc] as const;
+          const src = await getElyAvatarByUsername(acc.label, stevePlaceholderSrc, 64);
+          return [acc.id, src] as const;
+        }),
+      );
+      if (isCancelled) return;
+      setAccountAvatarById(Object.fromEntries(pairs));
+    })();
+    return () => {
+      isCancelled = true;
+    };
+  }, [launcherAccounts, stevePlaceholderSrc]);
 
   const archiveCurrentConsoleAndClear = useCallback(() => {
     setConsoleLines((prev) => {
@@ -1291,6 +1339,8 @@ function App() {
     resolution_height: null,
     show_snapshots: false,
     show_alpha_versions: false,
+    forge_ipv6_download: false,
+    forge_proxy_fallback: true,
     notify_new_update: true,
     notify_new_message: true,
     notify_system_message: true,
@@ -1986,6 +2036,24 @@ function App() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    void invoke("set_launcher_accounts_scope", { scope: launcherAccountsScope })
+      .then(async () => {
+        if (isCancelled) return;
+        await loadProfile();
+        if (!isCancelled) {
+          await refreshLauncherAccounts();
+        }
+      })
+      .catch((error) => {
+        console.debug("[accounts] failed to set accounts scope", error);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [launcherAccountsScope, loadProfile, refreshLauncherAccounts]);
 
   useEffect(() => {
     if (activeItem === "accounts") {
@@ -2882,10 +2950,14 @@ function App() {
               className="interactive-press flex max-w-[200px] items-center gap-2 rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
               title={tt("app.accounts.switcherTitle")}
             >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(activeAccountKind)}`}
-              >
-                {accountInitials(activeAccountLabel)}
+              <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/20">
+                <img
+                  src={headImgSrc}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                  onError={handleHeadImgError}
+                />
               </span>
               <span className="min-w-0 flex-1 truncate">{activeAccountLabel}</span>
               <ChevronDownIcon
@@ -2905,11 +2977,26 @@ function App() {
                         acc.is_active ? "bg-emerald-500/10" : "hover:bg-white/5"
                       }`}
                     >
-                      <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(acc.kind)}`}
-                      >
-                        {accountInitials(acc.label)}
-                      </span>
+                      {acc.kind === "ely" ? (
+                        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/20">
+                          <img
+                            src={accountAvatarById[acc.id] ?? stevePlaceholderSrc}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            draggable={false}
+                            onError={(event) => {
+                              const target = event.currentTarget;
+                              if (target.src !== stevePlaceholderSrc) target.src = stevePlaceholderSrc;
+                            }}
+                          />
+                        </span>
+                      ) : (
+                        <span
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(acc.kind)}`}
+                        >
+                          {accountInitials(acc.label)}
+                        </span>
+                      )}
                       <button
                         type="button"
                         disabled={acc.is_active}
