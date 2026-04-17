@@ -1,6 +1,7 @@
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { AnimatePresence, motion } from "framer-motion";
 import type { CSSProperties } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
@@ -25,6 +26,8 @@ type Settings = {
   resolution_height: number | null;
   show_snapshots: boolean;
   show_alpha_versions: boolean;
+  forge_ipv6_download: boolean;
+  forge_proxy_fallback: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;
@@ -77,11 +80,43 @@ type VersionSummary = {
   release_time: string;
 };
 
+type ForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  forge_build: string;
+  installer_url: string;
+};
+
+type NeoForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  neoforge_build: string;
+  installer_url: string;
+};
+
+type LoaderId = "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+
+type VersionListItem = {
+  id: string;
+  version_type: string;
+  release_time: string;
+  loader: LoaderId;
+  url?: string;
+  installer_url?: string;
+};
+
 type DownloadProgressPayload = {
   version_id: string;
   downloaded: number;
   total: number;
   percent: number;
+};
+
+type VersionIntegrityCheckResult = {
+  is_ok: boolean;
+  checked_files: number;
+  missing_files: number;
+  corrupted_files: number;
 };
 
 type LauncherSettingsBackupV1 = {
@@ -217,10 +252,30 @@ export function SettingsTab({
   const [ramInputMb, setRamInputMb] = useState("");
   const ramInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [availableVersions, setAvailableVersions] = useState<VersionSummary[] | null>(null);
+  const [availableVersions, setAvailableVersions] = useState<VersionListItem[] | null>(null);
   const [installedVersions, setInstalledVersions] = useState<string[]>([]);
+  const [installedFabricGameVersions, setInstalledFabricGameVersions] = useState<string[]>([]);
+  const [installedQuiltGameVersions, setInstalledQuiltGameVersions] = useState<string[]>([]);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null);
+  const [checkingVersionId, setCheckingVersionId] = useState<string | null>(null);
+  const [versionsLoader, setVersionsLoader] = useState<LoaderId>("vanilla");
+  const [isVersionsLoaderDropdownOpen, setIsVersionsLoaderDropdownOpen] = useState(false);
+  const [isVersionFilterDropdownOpen, setIsVersionFilterDropdownOpen] = useState(false);
+  const [versionFilterQuery, setVersionFilterQuery] = useState("");
+  const [selectedVersionFilterId, setSelectedVersionFilterId] = useState<string | null>(null);
+  const [repairPrompt, setRepairPrompt] = useState<{
+    version: VersionListItem;
+    result: VersionIntegrityCheckResult;
+  } | null>(null);
+  const [skipRepairPrompt, setSkipRepairPrompt] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("skip_version_repair_prompt") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgressPayload>>(
     {},
   );
@@ -256,6 +311,29 @@ export function SettingsTab({
   const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
   const [isCacheLoading, setIsCacheLoading] = useState(false);
   const [isResettingSettings, setIsResettingSettings] = useState(false);
+  const versionsLoaderDropdownRef = useRef<HTMLDivElement | null>(null);
+  const versionsFilterDropdownRef = useRef<HTMLDivElement | null>(null);
+  const versionFilterInputRef = useRef<HTMLInputElement | null>(null);
+  const versionFilterListRef = useRef<HTMLDivElement | null>(null);
+  const selectedVersionFilterButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const versionFilterOptions = useMemo(() => {
+    if (!availableVersions) return [];
+    const q = versionFilterQuery.trim().toLowerCase();
+    if (!q) return availableVersions;
+    return availableVersions.filter((v) => v.id.toLowerCase().includes(q));
+  }, [availableVersions, versionFilterQuery]);
+
+  const selectedVersionFilterLabel = useMemo(() => {
+    if (!selectedVersionFilterId) return tt("settings.versions.versionFilter.all");
+    return selectedVersionFilterId;
+  }, [selectedVersionFilterId, tt]);
+
+  const filteredAvailableVersions = useMemo(() => {
+    if (!availableVersions) return [];
+    if (!selectedVersionFilterId) return availableVersions;
+    return availableVersions.filter((v) => v.id === selectedVersionFilterId);
+  }, [availableVersions, selectedVersionFilterId]);
 
   useLayoutEffect(() => {
     let raf = 0;
@@ -498,44 +576,75 @@ export function SettingsTab({
     }
   }, [isRamEditing]);
 
+  const loadInstalledVersions = async () => {
+    const ids = await invoke<string[]>("list_installed_versions");
+    setInstalledVersions(ids);
+    try {
+      const fabric = await invoke<string[]>("list_installed_fabric_game_versions");
+      setInstalledFabricGameVersions(fabric ?? []);
+    } catch {
+      setInstalledFabricGameVersions([]);
+    }
+    try {
+      const quilt = await invoke<string[]>("list_installed_quilt_game_versions");
+      setInstalledQuiltGameVersions(quilt ?? []);
+    } catch {
+      setInstalledQuiltGameVersions([]);
+    }
+  };
+
+  const loadAvailableByLoader = async (loader: LoaderId): Promise<VersionListItem[]> => {
+    if (loader === "forge") {
+      const result = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+      return result.map((v) => ({
+        id: v.id,
+        version_type: "forge",
+        release_time: "",
+        installer_url: v.installer_url,
+        loader: "forge",
+      }));
+    }
+    if (loader === "neoforge") {
+      const result = await invoke<NeoForgeVersionSummary[]>("fetch_neoforge_versions");
+      return result.map((v) => ({
+        id: v.id,
+        version_type: "neoforge",
+        release_time: "",
+        installer_url: v.installer_url,
+        loader: "neoforge",
+      }));
+    }
+
+    const all = await invoke<VersionSummary[]>("fetch_all_versions");
+    const showSnapshots = settings?.show_snapshots ?? false;
+    const showAlpha = settings?.show_alpha_versions ?? false;
+    const filtered = all.filter((v) => {
+      if (v.version_type === "release") return true;
+      if (v.version_type === "snapshot") return showSnapshots;
+      if (v.version_type === "old_beta" || v.version_type === "old_alpha" || v.version_type === "alpha") {
+        return showAlpha;
+      }
+      return false;
+    });
+    return filtered.map((v) => ({ ...v, loader }));
+  };
+
   useEffect(() => {
     let isMounted = true;
-
-    const refreshInstalled = async () => {
-      try {
-        const ids = await invoke<string[]>("list_installed_versions");
-        if (!isMounted) return;
-        setInstalledVersions(ids);
-      } catch (e) {
-        console.error("Failed to fetch installed versions list:", e);
-      }
-    };
-
     const refreshAvailable = async () => {
       if (settingsTab !== "versions") return;
       setIsLoadingVersions(true);
       try {
-        const all = await invoke<VersionSummary[]>("fetch_all_versions");
+        const [available] = await Promise.all([
+          loadAvailableByLoader(versionsLoader),
+          loadInstalledVersions(),
+        ]);
         if (!isMounted) return;
-        const showSnapshots = settings?.show_snapshots ?? false;
-        const showAlpha = settings?.show_alpha_versions ?? false;
-        const filtered = all.filter((v) => {
-          if (v.version_type === "release") return true;
-          if (v.version_type === "snapshot") return showSnapshots;
-          if (v.version_type === "old_beta" || v.version_type === "old_alpha") {
-            return showAlpha;
-          }
-          return false;
-        });
-        setAvailableVersions(filtered);
-        await refreshInstalled();
+        setAvailableVersions(available);
       } catch (e) {
         console.error("Failed to load versions list:", e);
         if (isMounted) {
-          showNotification(
-            "error",
-            tt("settings.versions.loadFailed"),
-          );
+          showNotification("error", tt("settings.versions.loadFailed"));
         }
       } finally {
         if (isMounted) {
@@ -543,13 +652,56 @@ export function SettingsTab({
         }
       }
     };
-
     void refreshAvailable();
-
     return () => {
       isMounted = false;
     };
-  }, [settingsTab, settings?.show_snapshots, settings?.show_alpha_versions, language]);
+  }, [settingsTab, settings?.show_snapshots, settings?.show_alpha_versions, versionsLoader, language]);
+
+  useEffect(() => {
+    setSelectedVersionFilterId(null);
+    setVersionFilterQuery("");
+    setIsVersionsLoaderDropdownOpen(false);
+    setIsVersionFilterDropdownOpen(false);
+  }, [versionsLoader]);
+
+  useEffect(() => {
+    if (!isVersionFilterDropdownOpen) return;
+    requestAnimationFrame(() => {
+      try {
+        versionFilterInputRef.current?.focus({ preventScroll: true });
+      } catch {
+        versionFilterInputRef.current?.focus();
+      }
+      const container = versionFilterListRef.current;
+      const selectedButton = selectedVersionFilterButtonRef.current;
+      if (!container || !selectedButton) return;
+      const cRect = container.getBoundingClientRect();
+      const iRect = selectedButton.getBoundingClientRect();
+      const centerOffset = (iRect.top - cRect.top) - (cRect.height / 2 - iRect.height / 2);
+      container.scrollTop = Math.max(0, Math.min(container.scrollHeight, container.scrollTop + centerOffset));
+    });
+  }, [isVersionFilterDropdownOpen, versionFilterOptions.length]);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (
+        versionsLoaderDropdownRef.current &&
+        !versionsLoaderDropdownRef.current.contains(target)
+      ) {
+        setIsVersionsLoaderDropdownOpen(false);
+      }
+      if (
+        versionsFilterDropdownRef.current &&
+        !versionsFilterDropdownRef.current.contains(target)
+      ) {
+        setIsVersionFilterDropdownOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
 
   useEffect(() => {
     let unlistenPromise: Promise<() => void> | null = null;
@@ -575,20 +727,47 @@ export function SettingsTab({
     };
   }, []);
 
-  const handleInstallVersion = async (version: VersionSummary) => {
+  const handleInstallVersion = async (version: VersionListItem, options?: { silentSuccess?: boolean }) => {
     try {
       setInstallingVersionId(version.id);
-      await invoke("install_version", {
-        version_id: version.id,
-        version_url: version.url,
-      });
-      showNotification(
-        "success",
-        tt("settings.versions.installSuccess", { version: version.id }),
-        { sound: true },
-      );
-      const ids = await invoke<string[]>("list_installed_versions");
-      setInstalledVersions(ids);
+      if (version.loader === "forge") {
+        if (!version.installer_url) throw new Error("Missing Forge installer URL");
+        await invoke("install_forge", {
+          versionId: version.id,
+          installerUrl: version.installer_url,
+        });
+      } else if (version.loader === "neoforge") {
+        await invoke("install_neoforge", {
+          version_id: version.id,
+        });
+      } else if (version.loader === "fabric") {
+        const loaders = await invoke<string[]>("fetch_fabric_loaders", {
+          gameVersion: version.id,
+        });
+        const loaderVersion = loaders[0];
+        if (!loaderVersion) throw new Error("No suitable Fabric loader");
+        await invoke("install_fabric", {
+          gameVersion: version.id,
+          loaderVersion,
+        });
+      } else if (version.loader === "quilt") {
+        await invoke("install_quilt", {
+          gameVersion: version.id,
+        });
+      } else {
+        await invoke("install_version", {
+          versionId: version.id,
+          versionUrl: version.url,
+        });
+      }
+      if (!options?.silentSuccess) {
+        showNotification(
+          "success",
+          tt("settings.versions.installSuccess", { version: version.id }),
+          { sound: true },
+        );
+      }
+      await loadInstalledVersions();
     } catch (e) {
       console.error("Failed to install version:", e);
       showNotification(
@@ -597,6 +776,63 @@ export function SettingsTab({
       );
     } finally {
       setInstallingVersionId(null);
+    }
+  };
+
+  const handleCheckVersionFiles = async (version: VersionListItem) => {
+    try {
+      setCheckingVersionId(version.id);
+      const result = await invoke<VersionIntegrityCheckResult>("check_version_files_integrity", {
+        versionId: version.id,
+        versionUrl: version.url ?? null,
+      });
+      if (result.is_ok) {
+        showNotification(
+          "success",
+          tt("settings.versions.verify.ok", { version: version.id }),
+          { sound: true },
+        );
+        return;
+      }
+
+      if (skipRepairPrompt) {
+        await handleInstallVersion(version, { silentSuccess: true });
+        showNotification(
+          "warning",
+          tt("settings.versions.verify.rewritten", { version: version.id }),
+          { sound: true },
+        );
+        return;
+      }
+
+      setRepairPrompt({ version, result });
+    } catch (e) {
+      console.error("Failed to verify version files:", e);
+      showNotification(
+        "error",
+        tt("settings.versions.verify.failed", { version: version.id }),
+      );
+    } finally {
+      setCheckingVersionId(null);
+    }
+  };
+
+  const isVersionInstalled = (version: VersionListItem): boolean => {
+    if (version.loader === "fabric") {
+      return installedFabricGameVersions.includes(version.id);
+    }
+    if (version.loader === "quilt") {
+      return installedQuiltGameVersions.includes(version.id);
+    }
+    return installedVersions.includes(version.id);
+  };
+
+  const handleSkipRepairPromptToggle = (value: boolean) => {
+    setSkipRepairPrompt(value);
+    try {
+      window.localStorage.setItem("skip_version_repair_prompt", value ? "1" : "0");
+    } catch {
+      // ignore
     }
   };
 
@@ -817,6 +1053,62 @@ export function SettingsTab({
 
   return (
     <div className="flex w-full flex-1 min-h-0 flex-col items-center">
+      {repairPrompt && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setRepairPrompt(null)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 text-sm text-white/90">
+              {tt("settings.versions.verify.promptText", {
+                version: repairPrompt.version.id,
+                checked: repairPrompt.result.checked_files,
+                missing: repairPrompt.result.missing_files,
+                corrupted: repairPrompt.result.corrupted_files,
+              })}
+            </p>
+            <label className="mb-4 flex items-center gap-2 text-[11px] text-white/70">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-white"
+                checked={skipRepairPrompt}
+                onChange={(e) => handleSkipRepairPromptToggle(e.target.checked)}
+              />
+              <span>{tt("settings.versions.verify.skipPrompt")}</span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRepairPrompt(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = repairPrompt.version;
+                  setRepairPrompt(null);
+                  void (async () => {
+                    await handleInstallVersion(target, { silentSuccess: true });
+                    showNotification(
+                      "warning",
+                      tt("settings.versions.verify.rewritten", { version: target.id }),
+                      { sound: true },
+                    );
+                  })();
+                }}
+                className="interactive-press rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+              >
+                {tt("settings.versions.verify.rewriteButton")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden px-4">
         <div
           className={[
@@ -1051,7 +1343,7 @@ export function SettingsTab({
 
           {settingsTab === "versions" && (
             <SettingsCard title={tt("settings.card.versions")}>
-              <div className={`${SETTINGS_DARK_BOX} space-y-4`}>
+              <div className={`${SETTINGS_DARK_BOX} max-h-[clamp(260px,62vh,700px)] overflow-y-auto pr-1 space-y-4`}>
               <SettingsToggle
                 label={tt("settings.versions.showSnapshots.label")}
                 yesLabel={tt("settings.common.yes")}
@@ -1066,6 +1358,170 @@ export function SettingsTab({
                 value={settings?.show_alpha_versions ?? false}
                 onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
               />
+              <SettingsToggle
+                label={tt("settings.versions.forgeIpv6Download.label")}
+                yesLabel={tt("settings.common.yes")}
+                noLabel={tt("settings.common.no")}
+                value={settings?.forge_ipv6_download ?? false}
+                onChange={(value: boolean) => updateSettings({ forge_ipv6_download: value })}
+              />
+              <SettingsToggle
+                label={tt("settings.versions.forgeProxyFallback.label")}
+                yesLabel={tt("settings.common.yes")}
+                noLabel={tt("settings.common.no")}
+                value={settings?.forge_proxy_fallback ?? false}
+                onChange={(value: boolean) => updateSettings({ forge_proxy_fallback: value })}
+              />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div ref={versionsLoaderDropdownRef} className="relative text-xs text-white/70">
+                  <span className="mb-1 block">{tt("settings.versions.loaderFilter.label")}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVersionsLoaderDropdownOpen((prev) => !prev);
+                      setIsVersionFilterDropdownOpen(false);
+                    }}
+                    className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/20 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/35 hover:bg-black/40"
+                  >
+                    <span>{tt(`settings.versions.loader.${versionsLoader}`)}</span>
+                    <span className="text-[10px] text-white/50">▾</span>
+                  </button>
+                  <AnimatePresence>
+                    {isVersionsLoaderDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                        transition={{ duration: 0.14, ease: "easeOut" }}
+                        className="absolute left-0 z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                      >
+                        {(["vanilla", "fabric", "quilt", "forge", "neoforge"] as LoaderId[]).map((id) => {
+                          const active = versionsLoader === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() => {
+                                setVersionsLoader(id);
+                                setIsVersionsLoaderDropdownOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                active ? "bg-white/90 text-black" : "text-white/80 hover:bg-white/10"
+                              }`}
+                            >
+                              <span>{tt(`settings.versions.loader.${id}`)}</span>
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div ref={versionsFilterDropdownRef} className="relative text-xs text-white/70">
+                  <span className="mb-1 block">{tt("settings.versions.versionFilter.label")}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVersionFilterDropdownOpen((prev) => !prev);
+                      setIsVersionsLoaderDropdownOpen(false);
+                    }}
+                    className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/20 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/35 hover:bg-black/40"
+                  >
+                    <span className="truncate">{selectedVersionFilterLabel}</span>
+                    <span className="text-[10px] text-white/50">▾</span>
+                  </button>
+                  <AnimatePresence>
+                    {isVersionFilterDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                        transition={{ duration: 0.14, ease: "easeOut" }}
+                        className="absolute left-0 z-30 mt-1 w-full rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                      >
+                        <div className="px-1 pb-1">
+                          <input
+                            ref={versionFilterInputRef}
+                            type="text"
+                            value={versionFilterQuery}
+                            onChange={(e) => setVersionFilterQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setIsVersionFilterDropdownOpen(false);
+                                return;
+                              }
+                              if (e.key === "Enter") {
+                                const q = versionFilterQuery.trim().toLowerCase();
+                                const exact = q
+                                  ? versionFilterOptions.find((v) => v.id.toLowerCase() === q)
+                                  : null;
+                                const chosen = exact ?? versionFilterOptions[0] ?? null;
+                                if (chosen) {
+                                  setSelectedVersionFilterId(chosen.id);
+                                  setIsVersionFilterDropdownOpen(false);
+                                }
+                              }
+                            }}
+                            placeholder={tt("play.version.searchPlaceholder")}
+                            className="h-8 w-full rounded-lg border border-white/15 bg-black/40 px-3 text-xs text-white/90 placeholder:text-white/35 outline-none focus:border-white/35"
+                          />
+                        </div>
+                        <div ref={versionFilterListRef} className="max-h-[240px] overflow-y-auto px-1 pb-1">
+                          <button
+                            type="button"
+                            ref={(el) => {
+                              if (selectedVersionFilterId === null) {
+                                selectedVersionFilterButtonRef.current = el;
+                              }
+                            }}
+                            onClick={() => {
+                              setSelectedVersionFilterId(null);
+                              setIsVersionFilterDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors ${
+                              selectedVersionFilterId === null
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span>{tt("settings.versions.versionFilter.all")}</span>
+                          </button>
+                          {versionFilterOptions.length === 0 ? (
+                            <div className="px-3 py-2 text-[11px] text-white/50">
+                              {tt("settings.versions.versionFilter.noneFound")}
+                            </div>
+                          ) : (
+                            versionFilterOptions.map((v) => {
+                              const selected = selectedVersionFilterId === v.id;
+                              return (
+                                <button
+                                  key={v.id}
+                                  ref={(el) => {
+                                    if (selected) selectedVersionFilterButtonRef.current = el;
+                                  }}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVersionFilterId(v.id);
+                                    setIsVersionFilterDropdownOpen(false);
+                                  }}
+                                  className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors ${
+                                    selected
+                                      ? "bg-white/90 text-black"
+                                      : "text-white/80 hover:bg-white/10"
+                                  }`}
+                                >
+                                  <span className="truncate">{v.id}</span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-white/90">
                   {tt("settings.versions.available.label")}
@@ -1075,20 +1531,12 @@ export function SettingsTab({
                   onClick={() => {
                     void (async () => {
                       try {
-                        const all = await invoke<VersionSummary[]>("fetch_all_versions");
-                        const showSnapshots = settings?.show_snapshots ?? false;
-                        const showAlpha = settings?.show_alpha_versions ?? false;
-                        const filtered = all.filter((v) => {
-                          if (v.version_type === "release") return true;
-                          if (v.version_type === "snapshot") return showSnapshots;
-                          if (v.version_type === "old_beta" || v.version_type === "old_alpha") {
-                            return showAlpha;
-                          }
-                          return false;
-                        });
-                        setAvailableVersions(filtered);
-                        const ids = await invoke<string[]>("list_installed_versions");
-                        setInstalledVersions(ids);
+                        setIsLoadingVersions(true);
+                        const [available] = await Promise.all([
+                          loadAvailableByLoader(versionsLoader),
+                          loadInstalledVersions(),
+                        ]);
+                        setAvailableVersions(available);
                       } catch (e) {
                         console.error("Failed to refresh versions list:", e);
                         showNotification(
@@ -1116,8 +1564,8 @@ export function SettingsTab({
                 )}
                 {!isLoadingVersions && availableVersions && availableVersions.length > 0 && (
                   <div className="space-y-1.5">
-                    {availableVersions.map((v) => {
-                      const installed = installedVersions.includes(v.id);
+                    {filteredAvailableVersions.map((v) => {
+                      const installed = isVersionInstalled(v);
                       const progress = downloadProgress[v.id];
                       const percent =
                         progress && progress.total > 0 ? Math.round(progress.percent) : null;
@@ -1130,6 +1578,9 @@ export function SettingsTab({
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="truncate font-semibold">{v.id}</span>
+                                <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-sky-200">
+                                  {tt(`settings.versions.loader.${v.loader}`)}
+                                </span>
                                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-white/70">
                                   {v.version_type}
                                 </span>
@@ -1140,9 +1591,11 @@ export function SettingsTab({
                                 )}
                               </div>
                               <div className="mt-0.5 text-[11px] text-white/60">
-                                {new Date(v.release_time).toLocaleString(
-                                  language === "ru" ? "ru-RU" : "en-US",
-                                )}
+                                {v.release_time
+                                  ? new Date(v.release_time).toLocaleString(
+                                      language === "ru" ? "ru-RU" : "en-US",
+                                    )
+                                  : "—"}
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-1">
@@ -1175,6 +1628,22 @@ export function SettingsTab({
                                     ? tt("settings.versions.action.reinstall")
                                     : tt("settings.versions.action.install")}
                               </button>
+                              {installed && (
+                                <button
+                                  type="button"
+                                  disabled={checkingVersionId === v.id || installingVersionId === v.id}
+                                  onClick={() => void handleCheckVersionFiles(v)}
+                                  className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+                                    checkingVersionId === v.id
+                                      ? "cursor-default bg-white/10 text-white/60"
+                                      : "border border-white/25 text-white/80 hover:border-white/40 hover:text-white"
+                                  }`}
+                                >
+                                  {checkingVersionId === v.id
+                                    ? tt("settings.versions.verify.checking")
+                                    : tt("settings.versions.verify.button")}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>

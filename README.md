@@ -7,7 +7,6 @@
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-blue.svg" alt="Python"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20MacOS-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/Downloads-30K+-brightgreen.svg" alt="Downloads">
@@ -15,17 +14,11 @@
 
 ---
 
-**RU Readme**: [RU] (README.ru.md)
+**RU Readme**: [RU](README.ru.md)
 
 **Source Code**: [https://github.com/launcherdev11/rust-launcher](https://github.com/launcherdev11/rust-launcher)
 
 **Website**: [https://16luncher.ru](https://16luncher.ru)
-
-**Contributing**: [Developer's Guide](CONTRIBUTING.md)
-
----
-
-![readme_screen.png](assets/about.png)
 
 ---
     
@@ -50,13 +43,6 @@
 2. **Install** following the instructions for your operating system
 3. **Select** your preferred Minecraft version
 4. **Click Play** and enjoy!
-
-# Screenshots
-
-![readme_screen.png](assets/readme_screen.png)
-![readme_screen2.png](assets/readme_screen2.png)
-![readme_screen3.png](assets/readme_screen3.png)
-![readme_screen4.png](assets/readme_screen4.png)
 
 ## Support
 

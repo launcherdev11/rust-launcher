@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "../i18n";
+import { getElyAvatarByUsername } from "../lib/avatar";
 
 type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -13,17 +14,36 @@ type FriendsTabProps = {
 type FriendRow = {
   user_id: string;
   nickname: string;
+  ely_username?: string | null;
 };
 
 type IncomingRequestRow = {
   request_id: string;
   from_user_id: string;
   from_nickname: string;
+  from_ely_username?: string | null;
   created_at?: string;
 };
 
 const STORAGE_TOKEN_KEY = "mc16launcher:supabase_access_token_v1";
 const STORAGE_NICKNAME_KEY = "mc16launcher:supabase_nickname_v1";
+
+function buildInitialAvatarDataUrl(label: string): string {
+  const ch = (label.trim().charAt(0) || "?").toUpperCase();
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b2648"/>
+      <stop offset="100%" stop-color="#102f55"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="32" fill="url(#g)"/>
+  <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#d7e7ff" font-family="Inter,Segoe UI,Arial" font-size="28" font-weight="700">${ch}</text>
+</svg>
+`.trim();
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 function jsonErrorFromBody(body: unknown): string {
   if (!body) return "Unknown error";
@@ -61,6 +81,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequestRow[]>([]);
   const [friendNickToAdd, setFriendNickToAdd] = useState("");
+  const [friendAvatarByKey, setFriendAvatarByKey] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -241,6 +262,76 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     }
   };
 
+  useEffect(() => {
+    if (!accessToken) {
+      setFriends([]);
+      setIncomingRequests([]);
+      return;
+    }
+
+    let isCancelled = false;
+    setLoading(true);
+    setRequestsLoading(true);
+
+    void Promise.all([
+      loadFriends(accessToken),
+      loadIncomingRequests(accessToken),
+    ])
+      .then(([friendsRes, requestsRes]) => {
+        if (isCancelled) return;
+        setFriends(friendsRes.friends ?? []);
+        setIncomingRequests(requestsRes.incoming_requests ?? []);
+      })
+      .catch((e) => {
+        if (isCancelled) return;
+        showNotification("error", e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (isCancelled) return;
+        setLoading(false);
+        setRequestsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [accessToken, edgeAuthHeaders, supabaseProjectUrl, showNotification]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const elyNicknames = Array.from(
+      new Set(
+        [
+          ...friends.map((f) => f.ely_username ?? ""),
+          ...incomingRequests.map((r) => r.from_ely_username ?? ""),
+        ]
+          .map((nick) => nick.trim())
+          .filter((nick) => nick.length > 0),
+      ),
+    );
+    if (elyNicknames.length === 0) {
+      setFriendAvatarByKey({});
+      return;
+    }
+
+    void (async () => {
+      const entries = await Promise.all(
+        elyNicknames.map(async (elyUsername) => {
+          const fallback = buildInitialAvatarDataUrl(elyUsername);
+          const src = await getElyAvatarByUsername(elyUsername, fallback, 64);
+          return [elyUsername.toLowerCase(), src] as const;
+        }),
+      );
+      if (!isCancelled) {
+        setFriendAvatarByKey(Object.fromEntries(entries));
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [friends, incomingRequests]);
+
   return (
     <div className="flex w-full max-w-2xl flex-col items-center gap-6 py-6">
       <div className="w-full text-center">
@@ -302,9 +393,25 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                     key={r.request_id}
                     className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <img
+                        src={
+                          (r.from_ely_username
+                            ? friendAvatarByKey[r.from_ely_username.trim().toLowerCase()]
+                            : undefined) ??
+                          buildInitialAvatarDataUrl(r.from_nickname)
+                        }
+                        alt=""
+                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                        draggable={false}
+                        onError={(event) => {
+                          event.currentTarget.src = buildInitialAvatarDataUrl(r.from_nickname);
+                        }}
+                      />
+                      <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
                       <p className="text-[11px] text-white/45 truncate">{r.from_user_id}</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -345,7 +452,23 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                     key={f.user_id}
                     className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
                   >
-                    <span className="text-sm font-semibold text-white/90">{f.nickname}</span>
+                    <div className="min-w-0 flex items-center gap-2">
+                      <img
+                        src={
+                          (f.ely_username
+                            ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
+                            : undefined) ??
+                          buildInitialAvatarDataUrl(f.nickname)
+                        }
+                        alt=""
+                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                        draggable={false}
+                        onError={(event) => {
+                          event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+                        }}
+                      />
+                      <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
+                    </div>
                     <span className="text-[11px] text-white/40 truncate max-w-[160px]">{f.user_id}</span>
                   </li>
                 ))}

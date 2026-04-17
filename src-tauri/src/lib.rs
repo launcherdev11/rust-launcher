@@ -7,9 +7,9 @@ mod discord_rpc;
 
 use game_provider::{
     cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
-    fetch_neoforge_versions,
+    fetch_neoforge_versions, check_version_files_integrity,
     fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
-    get_installed_quilt_profile_id, get_profile, get_profiles, get_selected_profile,
+    get_installed_quilt_profile_id, get_profile, get_profiles,
     install_fabric, install_forge, install_neoforge, install_quilt, install_version, launch_game,
     list_installed_fabric_game_versions, list_installed_quilt_game_versions, list_installed_versions,
     open_game_folder, open_profile_folder, reset_download_cancel,
@@ -24,8 +24,9 @@ use game_provider::{
     export_launcher_settings_backup, import_launcher_settings_backup,
     get_profile_play_time_seconds,
     list_launcher_accounts, switch_launcher_account, remove_launcher_account, add_launcher_account,
+    set_launcher_accounts_scope,
 };
-use commands::{list_build_files, preview_export, export_build};
+use commands::{list_build_files, preview_export, export_build, get_ely_avatar};
 use ely_auth::{
     ely_login_with_password, ely_logout, handle_oauth_callback, refresh_ely_session,
     start_ely_oauth,
@@ -59,8 +60,6 @@ fn configure_linux_display_backend() {
         }
     }
 
-    // Work around white-screen rendering regressions on some Linux stacks
-    // (notably Wayland/NVIDIA combinations in WebKitGTK).
     if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
@@ -73,8 +72,6 @@ fn configure_linux_display_backend() {
 fn configure_windows_webview_memory() {
     use std::env;
 
-    // Limit default WebView2 memory growth for launcher-like workloads.
-    // Users can still override this variable manually if needed.
     if env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
         env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
@@ -114,6 +111,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
             fetch_all_versions,
+            check_version_files_integrity,
             fetch_vanilla_releases,
             fetch_fabric_loaders,
             fetch_forge_versions,
@@ -183,7 +181,9 @@ pub fn run() {
             list_launcher_accounts,
             switch_launcher_account,
             remove_launcher_account,
-            add_launcher_account
+            add_launcher_account,
+            set_launcher_accounts_scope,
+            get_ely_avatar
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
