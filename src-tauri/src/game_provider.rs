@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::atomic::{AtomicU64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -24,6 +25,7 @@ use base64::Engine;
 use tokio::sync::Semaphore;
 use sha1::{Digest, Sha1};
 use urlencoding::encode;
+use once_cell::sync::Lazy;
 
 use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 
@@ -38,22 +40,23 @@ fn http_client(use_proxy: bool) -> Client {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
 
     if use_proxy {
-        let host = env_var_trim("PROXY_HOST");
+        let host = preferred_proxy_host(false);
         let port_str = env_var_trim("PROXY_PORT");
         let user = env_var_trim("PROXY_USER");
         let pass = env_var_trim("PROXY_PASS");
 
         if let (Some(host), Some(port_str)) = (host, port_str) {
             if let Ok(port) = port_str.parse::<u16>() {
+                let proxy_host = normalize_proxy_host_for_url(&host);
                 let proxy_url = match (user, pass) {
                     (Some(u), Some(p)) => format!(
                         "http://{}:{}@{}:{}",
                         encode(&u),
                         encode(&p),
-                        host,
+                        proxy_host,
                         port
                     ),
-                    _ => format!("http://{host}:{port}"),
+                    _ => format!("http://{proxy_host}:{port}"),
                 };
 
                 if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
@@ -66,7 +69,10 @@ fn http_client(use_proxy: bool) -> Client {
     builder.build().unwrap_or_else(|_| Client::new())
 }
 
-fn http_client_for_binary_download(use_proxy: bool) -> Client {
+fn http_client_for_binary_download_with_preferred_proxy_host(
+    use_proxy: bool,
+    prefer_ipv6: bool,
+) -> Client {
     let _ = dotenvy::dotenv();
 
     let mut builder = Client::builder()
@@ -79,22 +85,23 @@ fn http_client_for_binary_download(use_proxy: bool) -> Client {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
 
     if use_proxy {
-        let host = env_var_trim("PROXY_HOST");
+        let host = preferred_proxy_host(prefer_ipv6);
         let port_str = env_var_trim("PROXY_PORT");
         let user = env_var_trim("PROXY_USER");
         let pass = env_var_trim("PROXY_PASS");
 
         if let (Some(host), Some(port_str)) = (host, port_str) {
             if let Ok(port) = port_str.parse::<u16>() {
+                let proxy_host = normalize_proxy_host_for_url(&host);
                 let proxy_url = match (user, pass) {
                     (Some(u), Some(p)) => format!(
                         "http://{}:{}@{}:{}",
                         encode(&u),
                         encode(&p),
-                        host,
+                        proxy_host,
                         port
                     ),
-                    _ => format!("http://{host}:{port}"),
+                    _ => format!("http://{proxy_host}:{port}"),
                 };
 
                 if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
@@ -118,6 +125,10 @@ fn http_client_for_binary_download(use_proxy: bool) -> Client {
     })
 }
 
+fn http_client_for_binary_download(use_proxy: bool) -> Client {
+    http_client_for_binary_download_with_preferred_proxy_host(use_proxy, false)
+}
+
 fn env_var_trim(key: &str) -> Option<String> {
     let runtime = env::var(key)
         .ok()
@@ -130,6 +141,8 @@ fn env_var_trim(key: &str) -> Option<String> {
     let compile_time = match key {
         "PROXY_HOST" => option_env!("PROXY_HOST"),
         "PROXY_PORT" => option_env!("PROXY_PORT"),
+        "PROXY_HOSTS" => option_env!("PROXY_HOSTS"),
+        "PROXY_HOST_FORGE_IPV6" => option_env!("PROXY_HOST_FORGE_IPV6"),
         "PROXY_USER" => option_env!("PROXY_USER"),
         "PROXY_PASS" => option_env!("PROXY_PASS"),
         _ => return None,
@@ -138,6 +151,49 @@ fn env_var_trim(key: &str) -> Option<String> {
     compile_time
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+fn parse_proxy_hosts_csv(raw: &str) -> Vec<String> {
+    raw.split([',', ';'])
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn is_ipv6_host_literal(raw: &str) -> bool {
+    let candidate = raw.trim().trim_start_matches('[').trim_end_matches(']');
+    candidate.contains(':')
+}
+
+fn normalize_proxy_host_for_url(raw: &str) -> String {
+    let host = raw.trim();
+    if is_ipv6_host_literal(host) && !host.starts_with('[') && !host.ends_with(']') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+fn preferred_proxy_host(prefer_ipv6: bool) -> Option<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    if prefer_ipv6 {
+        if let Some(v) = env_var_trim("PROXY_HOST_FORGE_IPV6") {
+            candidates.push(v);
+        }
+    }
+    if let Some(v) = env_var_trim("PROXY_HOST") {
+        candidates.push(v);
+    }
+    if let Some(v) = env_var_trim("PROXY_HOSTS") {
+        candidates.extend(parse_proxy_hosts_csv(&v));
+    }
+
+    if prefer_ipv6 {
+        if let Some(found) = candidates.iter().find(|h| is_ipv6_host_literal(h)) {
+            return Some(found.clone());
+        }
+    }
+    candidates.into_iter().find(|h| !h.trim().is_empty())
 }
 
 fn load_project_env_for_runtime() {
@@ -189,10 +245,10 @@ fn normalize_api_key(raw: String) -> String {
         .to_string()
 }
 
-fn build_java_http_proxy_args() -> Vec<String> {
+fn build_java_http_proxy_args_with_preferred_host(prefer_ipv6: bool) -> Vec<String> {
     let _ = dotenvy::dotenv();
 
-    let host = env_var_trim("PROXY_HOST");
+    let host = preferred_proxy_host(prefer_ipv6);
     let port_str = env_var_trim("PROXY_PORT");
     let (host, port) = match (host, port_str) {
         (Some(h), Some(p)) => match p.parse::<u16>() {
@@ -230,6 +286,10 @@ fn build_java_http_proxy_args() -> Vec<String> {
     args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());   //10 мин
 
     args
+}
+
+fn build_java_http_proxy_args() -> Vec<String> {
+    build_java_http_proxy_args_with_preferred_host(false)
 }
 
 const PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE: &str = include_str!("../ProxyAuthBootstrap.java");
@@ -631,15 +691,15 @@ pub struct PlaytimeUpdatedPayload {
 #[serde(default)]
 pub struct JavaSettings {
     pub use_custom_jvm_args: bool,
-    ///явный путь к java/javaw.по дефолту офиц runtime Mojang.
+    ///явный путь к java/javaw.по дефолту офиц runtime Mojang
     pub java_path: Option<String>,
-    ///мин. объем памяти xms (1G\1024M).
+    ///мин. объем памяти xms (1G\1024M)
     pub xms: Option<String>,
-    ///макс объем памяти xmx (4G\4096M).
+    ///макс объем памяти xmx (4G\4096M)
     pub xmx: Option<String>,
     ///доп JVM аргументы
     pub jvm_args: Option<String>,
-    ///имя пресета ("balanced", "performance", "low_memory").
+    ///имя пресета ("balanced", "performance", "low_memory")
     pub preset: Option<String>,
 }
 
@@ -658,11 +718,11 @@ impl Default for JavaSettings {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JavaRuntimeInfo {
-    ///полный путь к java/javaw.
+    ///полный путь к java/javaw
     pub path: String,
-    ///строка с версией из `java -version`.
+    ///строка с версией из `java -version`
     pub version: String,
-    ///краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.).
+    ///краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.)
     pub source: String,
 }
 
@@ -1021,6 +1081,10 @@ pub struct Settings {
 
     pub show_snapshots: bool,
     pub show_alpha_versions: bool,
+    #[serde(default)]
+    pub forge_ipv6_download: bool,
+    #[serde(default = "default_forge_proxy_fallback_enabled")]
+    pub forge_proxy_fallback: bool,
 
     pub notify_new_update: bool,
     pub notify_new_message: bool,
@@ -1052,6 +1116,10 @@ fn default_background_blur_enabled() -> bool {
     true
 }
 
+fn default_forge_proxy_fallback_enabled() -> bool {
+    true
+}
+
 fn default_ui_sounds_enabled() -> bool {
     true
 }
@@ -1068,6 +1136,8 @@ impl Default for Settings {
             resolution_height: None,
             show_snapshots: false,
             show_alpha_versions: false,
+            forge_ipv6_download: false,
+            forge_proxy_fallback: true,
             notify_new_update: true,
             notify_new_message: true,
             notify_system_message: true,
@@ -1929,6 +1999,14 @@ pub struct VersionSummary {
     pub release_time: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct VersionIntegrityCheckResult {
+    pub is_ok: bool,
+    pub checked_files: u32,
+    pub missing_files: u32,
+    pub corrupted_files: u32,
+}
+
 impl From<ManifestVersion> for VersionSummary {
     fn from(v: ManifestVersion) -> Self {
         Self {
@@ -2278,7 +2356,47 @@ pub struct LauncherAccountSummary {
 }
 
 fn launcher_accounts_path() -> Result<PathBuf, String> {
-    Ok(launcher_data_dir()?.join("accounts.json"))
+    let base = launcher_data_dir()?;
+    let scope = LAUNCHER_ACCOUNTS_SCOPE
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_else(|| "default".to_string());
+    Ok(base.join(format!("accounts_{scope}.json")))
+}
+
+static LAUNCHER_ACCOUNTS_SCOPE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
+fn normalize_accounts_scope(raw: &str) -> Option<String> {
+    let normalized: String = raw
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+#[tauri::command]
+pub fn set_launcher_accounts_scope(scope: Option<String>) -> Result<(), String> {
+    let normalized = scope
+        .as_deref()
+        .and_then(normalize_accounts_scope);
+    let mut guard = LAUNCHER_ACCOUNTS_SCOPE
+        .lock()
+        .map_err(|_| "Не удалось установить scope аккаунтов.".to_string())?;
+    *guard = normalized;
+    Ok(())
 }
 
 fn new_launcher_account_id() -> String {
@@ -2318,6 +2436,23 @@ fn load_accounts_store() -> Result<LauncherAccountsStore, String> {
         let s =
             std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения accounts.json: {e}"))?;
         return serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора accounts.json: {e}"));
+    }
+
+    let current_scope = LAUNCHER_ACCOUNTS_SCOPE
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_else(|| "default".to_string());
+    if current_scope == "default" {
+        let legacy_path = launcher_data_dir()?.join("accounts.json");
+        if legacy_path.exists() {
+            let s = std::fs::read_to_string(&legacy_path)
+                .map_err(|e| format!("Ошибка чтения legacy accounts.json: {e}"))?;
+            let legacy_store: LauncherAccountsStore = serde_json::from_str(&s)
+                .map_err(|e| format!("Ошибка разбора legacy accounts.json: {e}"))?;
+            save_accounts_store(&legacy_store)?;
+            return Ok(legacy_store);
+        }
     }
 
     let profile = read_profile_from_disk()?;
@@ -2789,10 +2924,10 @@ fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, 
         if !path.is_dir() {
             continue;
         }
-        let id = match path.file_name().and_then(|n| n.to_str()) {
+        let _id = match path.file_name().and_then(|n| n.to_str()) {
             Some(id) if !id.is_empty() => id.to_string(),
             _ => continue,
-        };
+        }; // unused
         let config_path = path.join("config.json");
         if !config_path.exists() {
             continue;
@@ -3429,7 +3564,6 @@ pub async fn import_mrpack(
             }
             let mut out =
                 std::fs::File::create(&dest).map_err(|e| format!("Не удалось создать файл override: {e}"))?;
-            use std::io::Write;
             std::io::copy(&mut entry, &mut out)
                 .map_err(|e| format!("Ошибка распаковки override: {e}"))?;
         }
@@ -3603,7 +3737,6 @@ pub async fn import_mrpack_as_new_profile(
             }
             let mut out =
                 std::fs::File::create(&dest).map_err(|e| format!("Не удалось создать файл override: {e}"))?;
-            use std::io::Read;
             std::io::copy(&mut entry, &mut out)
                 .map_err(|e| format!("Ошибка распаковки override: {e}"))?;
         }
@@ -3848,16 +3981,20 @@ fn library_applies(lib: &Library, os_name: &str) -> bool {
     if lib.rules.is_empty() {
         return true;
     }
+    let current_arch = std::env::consts::ARCH;
     let mut allowed = false;
     for r in &lib.rules {
-        let matches_os = r
-            .os
-            .as_ref()
-            .and_then(|o| o.name.as_deref())
-            .map(|n| n == os_name)
-            .unwrap_or(true);
-        if !matches_os {
-            continue;
+        if let Some(rule_os) = r.os.as_ref() {
+            if let Some(name) = rule_os.name.as_deref() {
+                if name != os_name {
+                    continue;
+                }
+            }
+            if let Some(arch) = rule_os.arch.as_deref() {
+                if !current_arch.contains(arch) {
+                    continue;
+                }
+            }
         }
         match r.action.as_str() {
             "allow" => allowed = true,
@@ -3866,6 +4003,188 @@ fn library_applies(lib: &Library, os_name: &str) -> bool {
         }
     }
     allowed
+}
+
+fn parse_library_coords(name: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = name.splitn(3, ':');
+    let group = parts.next()?;
+    let artifact = parts.next()?;
+    let version = parts.next()?;
+    if group.is_empty() || artifact.is_empty() || version.is_empty() {
+        return None;
+    }
+    Some((group, artifact, version))
+}
+
+fn compare_version_like(a: &str, b: &str) -> std::cmp::Ordering {
+    let av = a
+        .split(|c: char| !(c.is_ascii_alphanumeric()))
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>();
+    let bv = b
+        .split(|c: char| !(c.is_ascii_alphanumeric()))
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>();
+    let n = av.len().max(bv.len());
+    for i in 0..n {
+        let aa = av.get(i).copied().unwrap_or("0");
+        let bb = bv.get(i).copied().unwrap_or("0");
+        let ord = match (aa.parse::<u64>(), bb.parse::<u64>()) {
+            (Ok(na), Ok(nb)) => na.cmp(&nb),
+            _ => aa.cmp(bb),
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+fn native_classifier_candidates(lib: &Library, os_name: &str) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    let is_64 = std::env::consts::ARCH == "x86_64";
+    let base = match os_name {
+        "windows" => "natives-windows",
+        "osx" => "natives-macos",
+        _ => "natives-linux",
+    };
+    out.push(base.to_string());
+    if os_name == "windows" {
+        if is_64 {
+            out.push("natives-windows-64".to_string());
+            out.push("natives-windows-x86_64".to_string());
+        } else {
+            out.push("natives-windows-32".to_string());
+            out.push("natives-windows-x86".to_string());
+        }
+    }
+    if let Some(map) = &lib.natives {
+        if let Some(value) = map.get(os_name).and_then(|v| v.as_str()) {
+            let replaced = value.replace("${arch}", if is_64 { "64" } else { "32" });
+            out.push(replaced);
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn is_probably_native_jar_path(rel_path: &str) -> bool {
+    let p = rel_path.replace('\\', "/").to_ascii_lowercase();
+    p.ends_with(".jar") && p.contains("-natives-")
+}
+
+fn resolve_native_artifact<'a>(lib: &'a Library, os_name: &str) -> Option<&'a LibraryArtifact> {
+    let classifiers = lib.downloads.classifiers.as_ref()?;
+    for key in native_classifier_candidates(lib, os_name) {
+        if let Some(artifact) = classifiers.get(&key) {
+            return Some(artifact);
+        }
+    }
+    None
+}
+
+fn is_release_1_17_or_newer(version_id: &str) -> bool {
+    let normalized = version_id
+        .split_once('-')
+        .map(|(base, _)| base)
+        .unwrap_or(version_id);
+    let mut parts = normalized.split('.');
+    let major = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let minor = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    major > 1 || (major == 1 && minor >= 17)
+}
+
+fn lwjgl_fallback_modules() -> &'static [&'static str] {
+    &[
+        "lwjgl",
+        "lwjgl-glfw",
+        "lwjgl-openal",
+        "lwjgl-opengl",
+        "lwjgl-stb",
+        "lwjgl-freetype",
+        "lwjgl-tinyfd",
+    ]
+}
+
+async fn ensure_lwjgl_fallback_for_modern_versions(
+    app: &AppHandle,
+    version_id: &str,
+    libs_root: &Path,
+    classpath: &mut Vec<PathBuf>,
+    seen_paths: &mut HashSet<String>,
+    os_name: &str,
+) -> Result<(), String> {
+    if !is_release_1_17_or_newer(version_id) {
+        return Ok(());
+    }
+    let has_lwjgl_glfw = classpath.iter().any(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.starts_with("lwjgl-glfw-"))
+            .unwrap_or(false)
+    });
+    if has_lwjgl_glfw {
+        return Ok(());
+    }
+    let lwjgl_version = "3.3.3";
+    let native_classifier = match os_name {
+        "windows" => "natives-windows",
+        "osx" => "natives-macos",
+        _ => "natives-linux",
+    };
+    let client = http_client_for_binary_download(true);
+    let total_done = Arc::new(AtomicU64::new(0));
+    log_to_console(
+        app,
+        &format!(
+            "[Launch] LWJGL fallback активирован для {version_id}: докачка {lwjgl_version}"
+        ),
+    );
+    for module in lwjgl_fallback_modules() {
+        let rel = format!("org/lwjgl/{module}/{lwjgl_version}/{module}-{lwjgl_version}.jar");
+        let path = libs_root.join(&rel);
+        if !path.exists() {
+            let url = format!("{BMCL_MAVEN_BASE}/{rel}");
+            download_file_checked(
+                &client,
+                &url,
+                &path,
+                None,
+                app,
+                version_id,
+                0,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+        }
+        let key = path.to_str().unwrap_or("").replace('\\', "/");
+        if seen_paths.insert(key) {
+            classpath.push(path);
+        }
+
+        let native_rel = format!(
+            "org/lwjgl/{module}/{lwjgl_version}/{module}-{lwjgl_version}-{native_classifier}.jar"
+        );
+        let native_path = libs_root.join(&native_rel);
+        if !native_path.exists() {
+            let url = format!("{BMCL_MAVEN_BASE}/{native_rel}");
+            let _ = download_file_checked(
+                &client,
+                &url,
+                &native_path,
+                None,
+                app,
+                version_id,
+                0,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await;
+        }
+    }
+    Ok(())
 }
 
 pub fn resolve_arguments(
@@ -4437,7 +4756,7 @@ async fn download_assets(
     app: &AppHandle,
     version_id: &str,
     total_size: u64,
-    mut total_downloaded: u64,
+    total_downloaded: u64,
 ) -> Result<(), String> {
     let assets_root = root.join("assets");
     let indexes_dir = assets_root.join("indexes");
@@ -4834,6 +5153,129 @@ pub async fn fetch_all_versions() -> Result<Vec<VersionSummary>, String> {
 }
 
 #[tauri::command]
+pub async fn check_version_files_integrity(
+    version_id: String,
+    version_url: Option<String>,
+) -> Result<VersionIntegrityCheckResult, String> {
+    let root = game_root_dir()?;
+    let libs_root = libraries_dir()?;
+    let vers_root = versions_dir()?;
+    let os_name = current_os_name();
+    let version_json_path = vers_root.join(&version_id).join(format!("{version_id}.json"));
+
+    let mut detail: VersionDetail = if let Some(ref url) = version_url {
+        let client = http_client(false);
+        let version_json_text =
+            download_text_with_retries(&client, url, DEFAULT_DOWNLOAD_RETRIES).await?;
+        serde_json::from_str(&version_json_text)
+            .map_err(|e| format!("Ошибка разбора описания версии: {e}"))?
+    } else if version_json_path.exists() {
+        let s = tokio::fs::read_to_string(&version_json_path)
+            .await
+            .map_err(|e| format!("Ошибка чтения установленного version.json: {e}"))?;
+        serde_json::from_str(&s)
+            .map_err(|e| format!("Ошибка разбора установленного version.json: {e}"))?
+    } else {
+        return Err(
+            "Для проверки файлов не найден локальный version.json и не передан versionUrl."
+                .to_string(),
+        );
+    };
+
+    let mut effective_jar_version = version_id.clone();
+    if let Some(parent_id) = detail.inherits_from.clone() {
+        effective_jar_version = parent_id.clone();
+        let parent_json_path = vers_root.join(&parent_id).join(format!("{parent_id}.json"));
+        let parent_detail: VersionDetail = if parent_json_path.exists() {
+            let s = tokio::fs::read_to_string(&parent_json_path)
+                .await
+                .map_err(|e| format!("Ошибка чтения parent version.json: {e}"))?;
+            serde_json::from_str(&s)
+                .map_err(|e| format!("Ошибка разбора parent version.json: {e}"))?
+        } else if version_url.is_some() {
+            let url = get_mojang_version_url(&parent_id).await?;
+            let client = http_client(false);
+            let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES).await?;
+            serde_json::from_str(&text)
+                .map_err(|e| format!("Ошибка разбора parent версии: {e}"))?
+        } else {
+            return Err(format!(
+                "Не найден parent version.json для '{}'. Переустановите версию.",
+                parent_id
+            ));
+        };
+
+        let mut merged_libs = parent_detail.libraries;
+        merged_libs.extend(detail.libraries);
+        let mut merged_args = parent_detail.arguments;
+        merged_args.jvm.extend(detail.arguments.jvm);
+        merged_args.game.extend(detail.arguments.game);
+
+        detail.downloads = detail.downloads.or(parent_detail.downloads);
+        detail.asset_index = detail.asset_index.or(parent_detail.asset_index);
+        detail.assets = detail.assets.or(parent_detail.assets);
+        detail.java_version = detail.java_version.or(parent_detail.java_version);
+        detail.libraries = merged_libs;
+        detail.arguments = merged_args;
+    }
+
+    let mut checked_files: u32 = 0;
+    let mut missing_files: u32 = 0;
+    let mut corrupted_files: u32 = 0;
+
+    let mut check_one = |path: &Path, expected_sha1: Option<&str>| {
+        checked_files = checked_files.saturating_add(1);
+        if !path.exists() {
+            missing_files = missing_files.saturating_add(1);
+            return;
+        }
+        if let Some(expected) = expected_sha1 {
+            let expected_lc = expected.trim().to_ascii_lowercase();
+            if expected_lc.len() == 40 {
+                if let Ok(actual) = std::fs::read(path).map(|bytes| sha1_hex_of_bytes(&bytes)) {
+                    if actual != expected_lc {
+                        corrupted_files = corrupted_files.saturating_add(1);
+                    }
+                } else {
+                    corrupted_files = corrupted_files.saturating_add(1);
+                }
+            }
+        }
+    };
+
+    check_one(&version_json_path, None);
+
+    if let Some(downloads) = detail.downloads.as_ref() {
+        let client_jar = root.join(format!("{effective_jar_version}.jar"));
+        check_one(&client_jar, downloads.client.sha1.as_deref());
+    }
+
+    for lib in &detail.libraries {
+        if !library_applies(lib, os_name) {
+            continue;
+        }
+
+        if let Some(ref artifact) = lib.downloads.artifact {
+            let path = libs_root.join(&artifact.path);
+            check_one(&path, artifact.sha1.as_deref());
+        }
+
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let path = libs_root.join(&nat.path);
+            check_one(&path, nat.sha1.as_deref());
+        }
+    }
+
+    let is_ok = missing_files == 0 && corrupted_files == 0;
+    Ok(VersionIntegrityCheckResult {
+        is_ok,
+        checked_files,
+        missing_files,
+        corrupted_files,
+    })
+}
+
+#[tauri::command]
 pub async fn fetch_vanilla_releases() -> Result<Vec<VersionSummary>, String> {
     let mut versions = load_all_versions().await?;
     versions.retain(|v| v.version_type == "release");
@@ -4850,10 +5292,23 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
 
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
-    let client = http_client(true);
-    let text = download_text_with_retries(&client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
-        .await
-        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
+    let settings = load_settings_from_disk();
+    let direct_client = http_client(false);
+    let text = match download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES).await {
+        Ok(text) => text,
+        Err(direct_err) => {
+            if settings.forge_proxy_fallback {
+                let proxy_client = http_client(true);
+                download_text_with_retries(&proxy_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
+                    .await
+                    .map_err(|proxy_err| format!(
+                        "Ошибка загрузки Forge promotions без прокси: {direct_err}; через прокси: {proxy_err}"
+                    ))?
+            } else {
+                return Err(format!("Ошибка загрузки Forge promotions: {direct_err}"));
+            }
+        }
+    };
 
     let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
@@ -5231,15 +5686,8 @@ pub async fn install_fabric(
         if let Some(ref a) = lib.downloads.artifact {
             total_size = total_size.saturating_add(a.size);
         }
-        let native_classifier = match os_name {
-            "windows" => "natives-windows",
-            "osx" => "natives-macos",
-            _ => "natives-linux",
-        };
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(ref nat) = classifiers.get(native_classifier) {
-                total_size = total_size.saturating_add(nat.size);
-            }
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            total_size = total_size.saturating_add(nat.size);
         }
     }
     if let Some(ref ai) = mojang_detail.asset_index {
@@ -5761,7 +6209,12 @@ pub async fn install_forge(
 
     ensure_launcher_profiles_json(&root, &mc_version)?;
 
-    let installer_client = http_client_for_binary_download(true);
+    let launcher_settings = load_settings_from_disk();
+    let installer_client_primary = if launcher_settings.forge_ipv6_download {
+        http_client_for_binary_download_with_preferred_proxy_host(true, true)
+    } else {
+        http_client_for_binary_download_with_preferred_proxy_host(true, false)
+    };
     let installer_dir = launcher_data_dir()?.join("forge_installers").join(&version_id);
     tokio::fs::create_dir_all(&installer_dir)
         .await
@@ -5777,15 +6230,81 @@ pub async fn install_forge(
 
     let total_done = Arc::new(AtomicU64::new(0));
     if need_download {
-        let _ = download_forge_installer_once(
-            &installer_client,
+        let mut download_error = match download_forge_installer_once(
+            &installer_client_primary,
             &installer_url,
             &installer_path,
             &app,
             &version_id,
-            total_done,
+            total_done.clone(),
         )
-        .await?;
+        .await
+        {
+            Ok(downloaded) => {
+                let _ = downloaded;
+                None
+            }
+            Err(e) => Some(e),
+        };
+
+        if let Some(primary_error) = download_error.take() {
+            if launcher_settings.forge_proxy_fallback {
+                let _ = log_to_console(
+                    &app,
+                    &format!("[Forge] Основная загрузка installer не удалась: {primary_error}. Пробуем fallback."),
+                );
+
+                let mut fallback_errors: Vec<String> = vec![primary_error];
+
+                if launcher_settings.forge_ipv6_download {
+                    let fallback_proxy_client =
+                        http_client_for_binary_download_with_preferred_proxy_host(true, false);
+                    match download_forge_installer_once(
+                        &fallback_proxy_client,
+                        &installer_url,
+                        &installer_path,
+                        &app,
+                        &version_id,
+                        total_done.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            fallback_errors.clear();
+                        }
+                        Err(e) => fallback_errors.push(format!("fallback proxy: {e}")),
+                    }
+                }
+
+                if !fallback_errors.is_empty() {
+                    let fallback_direct_client = http_client_for_binary_download(false);
+                    match download_forge_installer_once(
+                        &fallback_direct_client,
+                        &installer_url,
+                        &installer_path,
+                        &app,
+                        &version_id,
+                        total_done.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            fallback_errors.clear();
+                        }
+                        Err(e) => fallback_errors.push(format!("fallback direct: {e}")),
+                    }
+                }
+
+                if !fallback_errors.is_empty() {
+                    return Err(format!(
+                        "Ошибка скачивания Forge installer. Попытки: {}",
+                        fallback_errors.join(" | ")
+                    ));
+                }
+            } else {
+                return Err(primary_error);
+            }
+        }
     }
 
 
@@ -5806,7 +6325,7 @@ pub async fn install_forge(
             );
             let total_done_pre = Arc::new(AtomicU64::new(0));
             if let Err(e) = download_file_checked(
-                &installer_client,
+                &installer_client_primary,
                 &downloads.client.url,
                 &vanilla_client_jar,
                 downloads.client.sha1.clone(),
@@ -5832,7 +6351,8 @@ pub async fn install_forge(
     let game_dir = root.clone();
     let java_installer = installer_path.clone();
 
-    let java_http_proxy_args = build_java_http_proxy_args();
+    let java_http_proxy_args =
+        build_java_http_proxy_args_with_preferred_host(launcher_settings.forge_ipv6_download);
 
     let mut forge_java_bin =
         crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
@@ -6244,17 +6764,10 @@ pub async fn install_version(
     )
     .await?;
 
-    //библиотеки
     let natives_dir = vers_root.join(&version_id).join("natives");
     tokio::fs::create_dir_all(&natives_dir)
         .await
         .map_err(|e| format!("Не удалось создать папку natives: {e}"))?;
-
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
 
     log_to_console(&app, "[Vanilla] Загрузка библиотек и natives (параллельно)");
     let sem = Arc::new(Semaphore::new(DEFAULT_DOWNLOAD_CONCURRENCY));
@@ -6299,44 +6812,42 @@ pub async fn install_version(
             }));
         }
 
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let dest = libs_root.join(&nat.path);
-                if dest.exists() {
-                    let natives_dir2 = natives_dir.clone();
-                    let dest2 = dest.clone();
-                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest2, &natives_dir2)).await;
-                } else {
-                    let url = nat.url.clone();
-                    let expected = nat.sha1.clone();
-                    let client2 = client.clone();
-                    let app2 = app.clone();
-                    let sem2 = sem.clone();
-                    let total_done2 = total_done.clone();
-                    let vid = version_id.clone();
-                    let natives_dir2 = natives_dir.clone();
-                    tasks.push(tokio::spawn(async move {
-                        let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
-                        let expected2 = match expected {
-                            Some(s) => Some(s),
-                            None => try_fetch_remote_sha1(&client2, &url).await,
-                        };
-                        download_file_checked(
-                            &client2,
-                            &url,
-                            &dest,
-                            expected2,
-                            &app2,
-                            &vid,
-                            total_size,
-                            total_done2,
-                            DEFAULT_DOWNLOAD_RETRIES,
-                        )
-                        .await?;
-                        let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &natives_dir2)).await;
-                        Ok::<(), String>(())
-                    }));
-                }
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let dest = libs_root.join(&nat.path);
+            if dest.exists() {
+                let natives_dir2 = natives_dir.clone();
+                let dest2 = dest.clone();
+                let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest2, &natives_dir2)).await;
+            } else {
+                let url = nat.url.clone();
+                let expected = nat.sha1.clone();
+                let client2 = client.clone();
+                let app2 = app.clone();
+                let sem2 = sem.clone();
+                let total_done2 = total_done.clone();
+                let vid = version_id.clone();
+                let natives_dir2 = natives_dir.clone();
+                tasks.push(tokio::spawn(async move {
+                    let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
+                    let expected2 = match expected {
+                        Some(s) => Some(s),
+                        None => try_fetch_remote_sha1(&client2, &url).await,
+                    };
+                    download_file_checked(
+                        &client2,
+                        &url,
+                        &dest,
+                        expected2,
+                        &app2,
+                        &vid,
+                        total_size,
+                        total_done2,
+                        DEFAULT_DOWNLOAD_RETRIES,
+                    )
+                    .await?;
+                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &natives_dir2)).await;
+                    Ok::<(), String>(())
+                }));
             }
         }
     }
@@ -6511,33 +7022,66 @@ pub async fn launch_game(
     let features = GameFeatures::full();
 
     let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
-    if is_forge {
-        ensure_library_artifacts_present_for_launch(
-            &app,
-            &version_id,
-            &libs_root,
-            &detail.libraries,
-            os_name,
-        )
-        .await?;
-    }
-
-    let _native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
+    ensure_library_artifacts_present_for_launch(
+        &app,
+        &version_id,
+        &libs_root,
+        &detail.libraries,
+        os_name,
+    )
+    .await?;
 
     let mut classpath = Vec::new();
     let mut seen_paths = std::collections::HashSet::<String>::new();
+    let mut ga_to_index = std::collections::HashMap::<String, usize>::new();
+    let mut ga_to_version = std::collections::HashMap::<String, String>::new();
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
         if let Some(ref a) = lib.downloads.artifact {
+            if is_probably_native_jar_path(&a.path) {
+                continue;
+            }
             let path = libs_root.join(&a.path);
             let key = path.to_str().unwrap_or("").replace('\\', "/");
-            if seen_paths.insert(key) {
+            let ga_key = {
+                let mut parts = lib.name.split(':');
+                match (parts.next(), parts.next()) {
+                    (Some(group), Some(artifact)) if !group.is_empty() && !artifact.is_empty() => {
+                        Some(format!("{group}:{artifact}"))
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(ga_key) = ga_key {
+                if let Some(idx) = ga_to_index.get(&ga_key).copied() {
+                    if seen_paths.insert(key) {
+                        let current_version = ga_to_version.get(&ga_key).cloned().unwrap_or_default();
+                        let new_version = parse_library_coords(&lib.name)
+                            .map(|(_, _, v)| v.to_string())
+                            .unwrap_or_default();
+                        let should_replace = if ga_key.starts_with("org.lwjgl:") {
+                            compare_version_like(&new_version, &current_version)
+                                != std::cmp::Ordering::Less
+                        } else {
+                            true
+                        };
+                        if should_replace {
+                            classpath[idx] = path;
+                            if !new_version.is_empty() {
+                                ga_to_version.insert(ga_key.clone(), new_version);
+                            }
+                        }
+                    }
+                } else if seen_paths.insert(key.clone()) {
+                    if let Some((_, _, version)) = parse_library_coords(&lib.name) {
+                        ga_to_version.insert(ga_key.clone(), version.to_string());
+                    }
+                    ga_to_index.insert(ga_key, classpath.len());
+                    classpath.push(path);
+                }
+            } else if seen_paths.insert(key) {
                 classpath.push(path);
             }
         }
@@ -6548,6 +7092,15 @@ pub async fn launch_game(
             classpath.push(jar_path.clone());
         }
     }
+    ensure_lwjgl_fallback_for_modern_versions(
+        &app,
+        &effective_jar_version,
+        &libs_root,
+        &mut classpath,
+        &mut seen_paths,
+        os_name,
+    )
+    .await?;
 
     let classpath_str = classpath
         .iter()
@@ -6561,21 +7114,22 @@ pub async fn launch_game(
     let natives_dir = vers_root.join(&version_id).join("natives");
     std::fs::create_dir_all(&natives_dir)
         .map_err(|e| format!("Не удалось создать папку natives при запуске: {e}"))?;
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let path = libs_root.join(&nat.path);
+        if let Some(a) = &lib.downloads.artifact {
+            if is_probably_native_jar_path(&a.path) {
+                let path = libs_root.join(&a.path);
                 if path.exists() {
                     let _ = extract_natives_jar(&path, &natives_dir);
                 }
+            }
+        }
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let path = libs_root.join(&nat.path);
+            if path.exists() {
+                let _ = extract_natives_jar(&path, &natives_dir);
             }
         }
     }
@@ -6603,45 +7157,67 @@ pub async fn launch_game(
             if !library_applies(lib, os_name) {
                 continue;
             }
-            if let Some(ref classifiers) = lib.downloads.classifiers {
-                if let Some(nat) = classifiers.get(native_classifier) {
-                    let path = libs_root.join(&nat.path);
-                    if !path.exists() {
-                        if let Some(parent) = path.parent() {
-                            std::fs::create_dir_all(parent).map_err(|e| {
-                                format!("Не удалось создать папку для natives '{}': {e}", parent.display())
-                            })?;
-                        }
-                        let nat_url = format!("{}/{}", BMCL_MAVEN_BASE, nat.path);
-                        let mut resp = client
-                            .get(&nat_url)
-                            .send()
-                            .await
-                            .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
-                        if !resp.status().is_success() {
-                            return Err(format!(
-                                "Сервер вернул ошибку {} при загрузке natives '{}'",
-                                resp.status(),
-                                nat_url
-                            ));
-                        }
-                        let mut file = std::fs::File::create(&path)
-                            .map_err(|e| format!("Ошибка создания файла natives '{}': {e}", path.display()))?;
-                        while let Some(chunk) = resp
-                            .chunk()
-                            .await
-                            .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat_url))?
-                        {
-                            use std::io::Write;
-                            file.write_all(&chunk)
-                                .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
-                        }
+            if let Some(a) = &lib.downloads.artifact {
+                if is_probably_native_jar_path(&a.path) {
+                    let path = libs_root.join(&a.path);
+                    if path.exists() {
+                        let _ = extract_natives_jar(&path, &natives_dir);
                     }
-                    let _ = extract_natives_jar(&path, &natives_dir);
                 }
+            }
+            if let Some(nat) = resolve_native_artifact(lib, os_name) {
+                let path = libs_root.join(&nat.path);
+                if !path.exists() {
+                    if let Some(parent) = path.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| {
+                            format!("Не удалось создать папку для natives '{}': {e}", parent.display())
+                        })?;
+                    }
+                    let nat_url = format!("{}/{}", BMCL_MAVEN_BASE, nat.path);
+                    let mut resp = client
+                        .get(&nat_url)
+                        .send()
+                        .await
+                        .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
+                    if !resp.status().is_success() {
+                        return Err(format!(
+                            "Сервер вернул ошибку {} при загрузке natives '{}'",
+                            resp.status(),
+                            nat_url
+                        ));
+                    }
+                    let mut file = std::fs::File::create(&path)
+                        .map_err(|e| format!("Ошибка создания файла natives '{}': {e}", path.display()))?;
+                    while let Some(chunk) = resp
+                        .chunk()
+                        .await
+                        .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat_url))?
+                    {
+                        use std::io::Write;
+                        file.write_all(&chunk)
+                            .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
+                    }
+                }
+                let _ = extract_natives_jar(&path, &natives_dir);
             }
         }
     }
+    let lwjgl_in_cp: Vec<String> = classpath
+        .iter()
+        .filter_map(|p| {
+            let s = p.to_string_lossy().replace('\\', "/");
+            if s.contains("/org/lwjgl/") {
+                Some(s)
+            } else {
+                None
+            }
+        })
+        .collect();
+    log_to_console(&app, &format!("[Launch] LWJGL в classpath: {}", lwjgl_in_cp.join(" | ")));
+    log_to_console(
+        &app,
+        &format!("[Launch] LWJGL natives dir: {}", natives_dir.display()),
+    );
     let natives_str = natives_dir.to_str().unwrap_or("");
     let assets_root = root.join("assets");
     let assets_str = assets_root.to_str().unwrap_or("");
@@ -6653,7 +7229,7 @@ pub async fn launch_game(
 
     let profile = get_profile().unwrap_or_default();
 
-    let mut is_offline = profile
+    let is_offline = profile
         .ely_access_token
         .as_deref()
         .map(|s| s.is_empty() || s == "0")
@@ -6736,7 +7312,6 @@ pub async fn launch_game(
                 };
                 auth_token = mc_access_token.clone();
                 user_type = "msa".to_string();
-                is_offline = false;
                 auth_is_mojang = true;
             }
         }
@@ -6768,7 +7343,7 @@ pub async fn launch_game(
             }
             auth_token = mc_access_token;
             user_type = "msa".to_string();
-            is_offline = false;
+            // is_offline = false;
             auth_is_mojang = true;
         }
     }
@@ -6988,7 +7563,16 @@ pub async fn launch_game(
             None
         },
     )?;
-
+    // Fix for SE: Ensure Java binary has ex permissions (os error 13)
+    #[cfg(unix)]
+    {
+        if let Err(e) = crate::java_runtime::ensure_executable(&java_path) {
+            eprintln!("[Launch] Warning: Failed to set execute permission for {}: {}", java_path.display(), e);
+        } else {
+            // Opt()
+            // eprintln!("[Launch] Verified/Fixed execute permission for {}", java_path.display());
+        }
+    }
     if auth_token != "offline" && !auth_token.is_empty() && !auth_is_mojang {
         match ensure_authlib_injector().await {
             Ok(path) => {

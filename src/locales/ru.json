@@ -111,6 +111,22 @@
     "versions": {
       "showSnapshots": { "label": "Показывать снапшоты:" },
       "showAlpha": { "label": "Показывать Alpha версии:" },
+      "loaderFilter": { "label": "Загрузчик:" },
+      "versionFilter": {
+        "label": "Фильтр версии:",
+        "placeholder": "Введите версию...",
+        "all": "Все версии",
+        "noneFound": "Ничего не найдено."
+      },
+      "loader": {
+        "vanilla": "Vanilla",
+        "fabric": "Fabric",
+        "quilt": "Quilt",
+        "forge": "Forge",
+        "neoforge": "NeoForge"
+      },
+      "forgeIpv6Download": { "label": "Скачивать версии через IPv6-прокси:" },
+      "forgeProxyFallback": { "label": "Использовать Fallback для прокси:" },
       "available": { "label": "Доступные версии:" },
       "refresh": "Обновить",
       "loading": "Загрузка списка версий...",
@@ -124,7 +140,18 @@
       "loadFailed": "Не удалось загрузить список версий Minecraft.",
       "refreshFailed": "Не удалось обновить список версий.",
       "installSuccess": "Версия {{version}} успешно установлена.",
-      "installFailed": "Не удалось установить версию {{version}}."
+      "installFailed": "Не удалось установить версию {{version}}.",
+      "verify": {
+        "button": "Проверить файлы",
+        "checking": "Проверка...",
+        "ok": "Файлы версии {{version}} в порядке.",
+        "failed": "Не удалось проверить файлы версии {{version}}.",
+        "notSupported": "Проверка файлов для этого загрузчика недоступна.",
+        "promptText": "Для версии {{version}} найдены проблемы: отсутствует {{missing}}, повреждено {{corrupted}} (проверено {{checked}}). Перезаписать файлы для корректной работы?",
+        "rewriteButton": "Перезаписать",
+        "rewritten": "Файлы версии {{version}} перезаписаны.",
+        "skipPrompt": "Больше не показывать это предупреждение"
+      }
     },
     "launcher": {
       "openOnProfilesTab": {

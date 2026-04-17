@@ -1,12 +1,12 @@
 <p align="center">
+    <a href="README.md">English version of README</a>
   <a href="https://16luncher.ru"><img src="assets/readme.png" alt="16Launcher"></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
-  <em>Is an optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings.</em>
+  <em>Оптимизированный лаунчер Minecraft для создания сборок, прямой загрузки модов и запуска игры с пользовательскими настройками.</em>
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-blue.svg" alt="Python"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20MacOS-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/Downloads-30K+-brightgreen.svg" alt="Downloads">
@@ -14,55 +14,42 @@
 
 ---
 
-**RU Readme**: [RU] (README.ru.md)
+**EN Readme**: [EN](README.md)
 
-**Source Code**: [https://github.com/launcherdev11/rust-launcher](https://github.com/launcherdev11/rust-launcher)
+**Исходный код**: [https://github.com/launcherdev11/rust-launcher](https://github.com/launcherdev11/rust-launcher)
 
-**Website**: [https://16luncher.ru](https://16luncher.ru)
-
-**Contributing**: [Developer's Guide](CONTRIBUTING.md)
-
----
-
-![readme_screen.png](assets/about.png)
+**Веб-сайт**: [https://16luncher.ru](https://16luncher.ru)
 
 ---
     
-**16Launcher** - is an optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings.
+**16Launcher** — это оптимизированный лаунчер Minecraft для создания сборок модов, прямой загрузки модов и запуска игры с пользовательскими настройками.
 
-## Installation
+## Установка
 
-1. Download the latest installer from [Official website](https://16luncher.ru)
-2. Run the installer and follow the setup instructions
-3. Launch 16Launcher and start playing!
+1. Скачайте последний установщик с [официального веб-сайта](https://16luncher.ru)
+2. Запустите установщик и следуйте инструкциям по установке
+3. Запустите 16Launcher и начните играть!
 
-## Features
+## Возможности
 
-- **Fast & Optimized**: Quick startup and smooth performance
-- **Multi-Version Support**: Play any Minecraft version from classic to latest
-- **Secure**: Regular updates and security patches
-- **Mod Management**: Easy mod installation and organization
+- **Быстрый и оптимизированный**: Быстрый запуск и плавная работа
+- **Поддержка нескольких версий**: Играйте в любую версию Minecraft от классической до самой последней
+- **Безопасность**: Регулярные обновления и патчи безопасности
+- **Управление модами**: Простая установка и организация модов
 
-## Quick Start
+## Быстрый старт
 
-1. **Download** the launcher from our [official website](https://16luncher.ru)
-2. **Install** following the instructions for your operating system
-3. **Select** your preferred Minecraft version
-4. **Click Play** and enjoy!
+1. **Скачайте** лаунчер с нашего [официального веб-сайта](https://16luncher.ru)
+2. **Установите**, следуя инструкциям для вашей операционной системы
+3. **Выберите** предпочтительную версию Minecraft
+4. **Нажмите «Играть»** и наслаждайтесь!
 
-# Screenshots
-
-![readme_screen.png](assets/readme_screen.png)
-![readme_screen2.png](assets/readme_screen2.png)
-![readme_screen3.png](assets/readme_screen3.png)
-![readme_screen4.png](assets/readme_screen4.png)
-
-## Support
+## Поддержка
 
 - Email: 16launcher@gmail.com
-- Website: [https://16luncher.ru](https://16luncher.ru)
-- Issues: [GitHub Issues](https://github.com/launcherdev11/rust-launcher/issues)
+- Веб-сайт: [https://16luncher.ru](https://16luncher.ru)
+- Проблемы (Issues): [GitHub Issues](https://github.com/launcherdev11/rust-launcher/issues)
 
-## License
+## Лицензия
 
-This project is licensed under the terms of the GPL-3.0 license.
+Этот проект лицензирован на условиях лицензии GPL-3.0.

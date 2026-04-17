@@ -28,6 +28,10 @@ type SupabaseAuthResponse = {
   session?: { access_token?: string };
 };
 
+type ResolveLoginResponse = {
+  email?: string;
+};
+
 type EnsureProfileResponse =
   | { success: true; user: { id: string; nickname: string } }
   | { error: string; detail?: string };
@@ -54,6 +58,53 @@ function normalizeProviderUuid(raw: string): string {
   return raw.trim().toLowerCase().replace(/-/g, "");
 }
 
+function mapAuthErrorMessage(raw: string, mode: "login" | "signup"): string {
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror when attempting to fetch resource")
+  ) {
+    return "Не удается подключиться к Supabase. Проверьте VITE_SUPABASE_PROJECT_URL (должен быть https://<project>.supabase.co), интернет и доступность сервиса.";
+  }
+  if (mode === "login") {
+    if (lower.includes("invalid login credentials")) return "Неверный логин или пароль.";
+    if (lower.includes("invalid_credentials")) return "Неверный логин или пароль.";
+    if (lower.includes("password")) return "Неверный пароль.";
+  } else {
+    if (lower.includes("password should be at least")) return "Пароль слишком короткий. Минимум 6 символов.";
+    if (lower.includes("weak password")) return "Слишком слабый пароль.";
+  }
+  return raw;
+}
+
+function mapIdentityLinkErrorMessage(raw: string, provider: "ely" | "minecraft"): string {
+  const lower = raw.toLowerCase();
+  const providerName = provider === "ely" ? "Ely.by" : "Minecraft";
+
+  if (
+    lower.includes("identity already linked to another user") ||
+    lower.includes("already linked")
+  ) {
+    return `${providerName} уже привязан к другому аккаунту 16launcher. Отвяжите его в том аккаунте или используйте другой аккаунт ${providerName}.`;
+  }
+
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror when attempting to fetch resource")
+  ) {
+    return `Не удалось привязать ${providerName}: нет соединения с Supabase. Проверьте интернет и настройки проекта.`;
+  }
+
+  return raw;
+}
+
+function normalizeSupabaseProjectUrl(raw: string | undefined): string {
+  const value = (raw ?? "").trim().replace(/\/+$/, "");
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+}
+
 export function SupabaseAccountPanel({
   showNotification,
   language,
@@ -65,7 +116,9 @@ export function SupabaseAccountPanel({
 }: SupabaseAccountPanelProps) {
   const tt = useT(language);
 
-  const supabaseProjectUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL as string | undefined) ?? "";
+  const supabaseProjectUrl = normalizeSupabaseProjectUrl(
+    import.meta.env.VITE_SUPABASE_PROJECT_URL as string | undefined,
+  );
   const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
 
   const edgeAuthHeaders = useMemo(() => {
@@ -79,8 +132,10 @@ export function SupabaseAccountPanel({
   const [loading, setLoading] = useState(false);
   const [accessToken, setAccessToken] = useState<string>("");
   const [nickname, setNickname] = useState<string>("");
-  const [authEmail, setAuthEmail] = useState("");
+  const [authIdentifier, setAuthIdentifier] = useState("");
+  const [signupNickname, setSignupNickname] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const launcherNickname = launcherProfile.launcher_nickname?.trim() || nickname.trim();
   const gameNickname =
@@ -121,6 +176,34 @@ export function SupabaseAccountPanel({
     return data as EnsureProfileResponse;
   };
 
+  const callResolveLogin = async (login: string) => {
+    if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
+    if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
+
+    const url = `${supabaseProjectUrl}/functions/v1/users_resolve_login`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...edgeAuthHeaders },
+      body: JSON.stringify({ login }),
+    });
+    const data = (await res.json().catch(() => ({}))) as ResolveLoginResponse & Record<string, unknown>;
+    if (res.status === 404) {
+      throw new Error("Сервер Supabase пока не поддерживает вход по nickname (нет users_resolve_login).");
+    }
+    if (!res.ok) throw new Error(jsonErrorFromBody(data));
+
+    const email = typeof data.email === "string" ? data.email.trim() : "";
+    if (!email) throw new Error("По этому nickname не найден email для входа.");
+    return email;
+  };
+
+  const deriveNickname = (identifier: string) => {
+    const base = identifier.includes("@") ? identifier.split("@")[0] : identifier;
+    const cleaned = base.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+    if (!cleaned) return `player_${Math.random().toString(36).slice(2, 8)}`;
+    return cleaned.slice(0, 24);
+  };
+
   const handleAuth = async () => {
     if (!supabaseProjectUrl || !supabaseAnonKey) {
       showNotification(
@@ -129,9 +212,22 @@ export function SupabaseAccountPanel({
       );
       return;
     }
-    if (!authEmail.trim()) return showNotification("warning", "Введите email");
+    if (!authIdentifier.trim()) {
+      return showNotification(
+        "warning",
+        mode === "signup" ? "Введите email" : "Введите email или nickname",
+      );
+    }
+    if (mode === "signup" && !authIdentifier.includes("@")) {
+      return showNotification("warning", "Для регистрации укажите email.");
+    }
+    if (mode === "signup" && !signupNickname.trim()) {
+      return showNotification("warning", "Введите никнейм для регистрации.");
+    }
     if (!authPassword) return showNotification("warning", "Введите пароль");
-    if (!nickname.trim()) return showNotification("warning", "Введите nickname (уникальный)");
+    if (mode === "signup" && authPassword.length < 6) {
+      return showNotification("warning", "Пароль должен содержать минимум 6 символов.");
+    }
 
     setLoading(true);
     try {
@@ -146,10 +242,30 @@ export function SupabaseAccountPanel({
           ? `${supabaseProjectUrl}/auth/v1/signup`
           : `${supabaseProjectUrl}/auth/v1/token?grant_type=password`;
 
+      const identifier = authIdentifier.trim();
+      let loginEmail = identifier;
+      if (mode === "login" && !identifier.includes("@")) {
+        try {
+          loginEmail = await callResolveLogin(identifier);
+        } catch (resolveErr) {
+          const resolveMessage = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
+          const lowerResolve = resolveMessage.toLowerCase();
+          if (
+            lowerResolve.includes("failed to fetch") ||
+            lowerResolve.includes("networkerror when attempting to fetch resource")
+          ) {
+            throw new Error(
+              "Не удалось обратиться к функции users_resolve_login (вход по никнейму). Обычно это CORS/OPTIONS в Edge Function. Временно войдите по email, затем проверьте CORS в users_resolve_login.",
+            );
+          }
+          throw resolveErr;
+        }
+      }
+
       const res = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify({ email: authEmail.trim(), password: authPassword }),
+        body: JSON.stringify({ email: loginEmail, password: authPassword }),
       });
 
       const data = (await res.json().catch(() => ({}))) as SupabaseAuthResponse & Record<string, unknown>;
@@ -158,19 +274,24 @@ export function SupabaseAccountPanel({
       const token = data.access_token ?? data.session?.access_token;
       if (!token) throw new Error("Не удалось получить access_token из ответа Supabase.");
 
+      const fallbackNickname = deriveNickname(identifier);
+      const nicknameForEnsure =
+        mode === "signup" ? signupNickname.trim() : nickname.trim() || fallbackNickname;
+
       window.localStorage.setItem(STORAGE_TOKEN_KEY, token);
-      window.localStorage.setItem(STORAGE_NICKNAME_KEY, nickname.trim());
+      window.localStorage.setItem(STORAGE_NICKNAME_KEY, nicknameForEnsure);
       setAccessToken(token);
       window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 
-      const ensure = await callEnsureProfile(token, nickname.trim());
+      const ensure = await callEnsureProfile(token, nicknameForEnsure);
       if ("error" in ensure) {
         throw new Error(ensure.detail ? `${ensure.error}: ${ensure.detail}` : ensure.error);
       }
       setNickname(ensure.user.nickname);
       showNotification("success", mode === "signup" ? "Аккаунт создан" : "Вход выполнен");
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      const rawMessage = e instanceof Error ? e.message : String(e);
+      showNotification("error", mapAuthErrorMessage(rawMessage, mode));
     } finally {
       setLoading(false);
     }
@@ -234,7 +355,8 @@ export function SupabaseAccountPanel({
             setLinkedProviders((prev) => ({ ...prev, minecraft: true }));
             showNotification("success", "Minecraft привязан к аккаунту");
           } catch (e) {
-            showNotification("error", e instanceof Error ? e.message : String(e));
+            const rawMessage = e instanceof Error ? e.message : String(e);
+            showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "minecraft"));
           } finally {
             setLinking(null);
           }
@@ -268,7 +390,8 @@ export function SupabaseAccountPanel({
             setLinkedProviders((prev) => ({ ...prev, ely: true }));
             showNotification("success", "Ely.by привязан к аккаунту");
           } catch (e) {
-            showNotification("error", e instanceof Error ? e.message : String(e));
+            const rawMessage = e instanceof Error ? e.message : String(e);
+            showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "ely"));
           } finally {
             setLinking(null);
           }
@@ -353,36 +476,61 @@ export function SupabaseAccountPanel({
           </div>
 
           <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-            Email
+            {mode === "signup" ? "Email" : "Email / Nickname"}
             <input
-              type="email"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
+              type="text"
+              value={authIdentifier}
+              onChange={(e) => setAuthIdentifier(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-              placeholder="you@example.com"
+              placeholder={
+                mode === "signup"
+                  ? language === "ru"
+                    ? "Введите email"
+                    : "Enter email"
+                  : language === "ru"
+                    ? "Введите никнейм или почту"
+                    : "Enter nickname or email"
+              }
             />
           </label>
+
+          {mode === "signup" ? (
+            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
+              Никнейм
+              <input
+                type="text"
+                value={signupNickname}
+                onChange={(e) => setSignupNickname(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                placeholder={language === "ru" ? "Введите никнейм" : "Enter nickname"}
+              />
+            </label>
+          ) : null}
 
           <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
             Пароль
-            <input
-              type="password"
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-              placeholder="••••••••"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-            Nickname (уникальный)
-            <input
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-              placeholder={language === "ru" ? "Напр. steyy" : "e.g. steyy"}
-            />
+            <div className="relative flex items-center">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 pr-11 text-sm text-white outline-none focus:border-emerald-400/30"
+                placeholder="Пароль"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="interactive-press absolute inset-y-0 right-2 my-auto flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/10"
+                aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                title={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              >
+                <img
+                  src={showPassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
+                  alt=""
+                  className="h-4 w-4 object-contain opacity-80"
+                />
+              </button>
+            </div>
           </label>
 
           <button

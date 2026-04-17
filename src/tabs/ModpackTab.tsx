@@ -281,11 +281,11 @@ function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
 }
 
 const MANAGE_ACTION_BTN_CLASS =
-  "interactive-press inline-flex h-9 w-[8.75rem] shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-2xl px-2 py-2 text-xs font-semibold text-white";
+  "interactive-press inline-flex h-9 min-w-0 max-w-full items-center justify-center gap-1.5 overflow-hidden rounded-2xl px-2.5 py-2 text-xs font-semibold text-white sm:min-w-[8.75rem] sm:px-3";
 
 const MODPACK_MANAGE_SPLIT_STORAGE_KEY = "modpack_manage_main_width_frac";
-const MODPACK_MANAGE_SPLIT_MIN = 0.34;
-const MODPACK_MANAGE_SPLIT_MAX = 0.88;
+const MODPACK_MANAGE_SPLIT_MIN = 0.22;
+const MODPACK_MANAGE_SPLIT_MAX = 0.9;
 const MODPACK_MANAGE_SPLIT_DEFAULT = 0.68;
 
 export function ModpackTab({
@@ -1639,8 +1639,8 @@ export function ModpackTab({
   function renderListView() {
     return (
       <div className="flex w-full flex-1 flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-1 items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
             <SearchIcon className="h-4 w-4" />
             <input
               type="text"
@@ -1650,7 +1650,7 @@ export function ModpackTab({
               className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
             <button
               type="button"
               onClick={() => {
@@ -2171,9 +2171,9 @@ export function ModpackTab({
         : items.filter((name) => name.toLowerCase().includes(searchValue));
 
     return (
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
-        <div className="flex shrink-0 items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
+          <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3">
             <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
               <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
                 <ModsIcon className="h-6 w-6" />
@@ -2293,7 +2293,7 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
             <button
               type="button"
               onClick={() => setActiveView("list")}
@@ -2360,7 +2360,7 @@ export function ModpackTab({
 
         <div
           ref={manageSplitRowRef}
-          className="flex min-h-0 w-full flex-1 flex-col gap-3 lg:min-h-[min(36rem,calc(100vh-7.5rem))] lg:flex-row lg:items-stretch lg:gap-0"
+          className="flex min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-0"
           style={
             {
               ["--modpack-main-frac" as string]: String(manageMainWidthFrac),
@@ -2368,8 +2368,8 @@ export function ModpackTab({
           }
         >
           <div className="glass-panel flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:flex-none lg:shrink-0 lg:pr-2 lg:[flex-basis:calc(var(--modpack-main-frac,0.68)*100%)]">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex flex-1 items-center gap-3 rounded-2xl border border-white/15 bg-black/35 px-4 py-2 shadow-soft backdrop-blur-xl">
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/35 px-4 py-2 shadow-soft backdrop-blur-xl">
               <SearchIcon className="h-4 w-4" />
               <input
                 type="text"
@@ -2379,28 +2379,29 @@ export function ModpackTab({
                 className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
               />
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                selectedProfile && void refreshItems(selectedProfile.id, contentTab)
-              }
-              className="interactive-press rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-              title={language === "ru" ? "Пересканировать" : "Rescan"}
-            >
-              <RefreshIcon className="h-3.5 w-3.5" />
-            </button>
-            <div className="relative">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto lg:flex-nowrap">
               <button
                 type="button"
-                onClick={() => setIsAddMenuOpen((v) => !v)}
-                className="interactive-press inline-flex items-center gap-2 rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
+                onClick={() =>
+                  selectedProfile && void refreshItems(selectedProfile.id, contentTab)
+                }
+                className="interactive-press rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                title={language === "ru" ? "Пересканировать" : "Rescan"}
               >
-                <PlusIcon className="h-3.5 w-3.5" />
-                <span>{language === "ru" ? "Добавить" : "Add"}</span>
-                <ChevronDown className="h-3 w-3" />
+                <RefreshIcon className="h-3.5 w-3.5" />
               </button>
-              {isAddMenuOpen && (
-                <div className="absolute right-0 z-30 mt-1 w-44 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMenuOpen((v) => !v)}
+                  className="interactive-press inline-flex items-center gap-2 rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  <span>{language === "ru" ? "Добавить" : "Add"}</span>
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                {isAddMenuOpen && (
+                  <div className="absolute right-0 z-30 mt-1 w-44 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg">
                   <button
                     type="button"
                     onClick={() => {
@@ -2431,15 +2432,16 @@ export function ModpackTab({
                         : "Choose file from PC"}
                     </span>
                   </button>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="mb-3 flex items-center justify-between">
             <div
               ref={manageContentTabsContainerRef}
-              className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden"
+              className="relative inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-white/10 p-1"
             >
               <div
                 className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
