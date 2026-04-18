@@ -25,7 +25,8 @@ type SupabaseAccountPanelProps = {
 
 type SupabaseAuthResponse = {
   access_token?: string;
-  session?: { access_token?: string };
+  refresh_token?: string;
+  session?: { access_token?: string; refresh_token?: string };
 };
 
 type ResolveLoginResponse = {
@@ -37,8 +38,29 @@ type EnsureProfileResponse =
   | { error: string; detail?: string };
 
 const STORAGE_TOKEN_KEY = "mc16launcher:supabase_access_token_v1";
+const STORAGE_REFRESH_TOKEN_KEY = "mc16launcher:supabase_refresh_token_v1";
 const STORAGE_NICKNAME_KEY = "mc16launcher:supabase_nickname_v1";
 const AUTH_CHANGED_EVENT = "mc16launcher:supabase-auth-changed";
+const REFRESH_AHEAD_MS = 60_000;
+
+function decodeJwtExpMs(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(atob(parts[1]));
+    const exp = Number(payload?.exp);
+    if (!Number.isFinite(exp)) return null;
+    return exp * 1000;
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpiringSoon(token: string, aheadMs = REFRESH_AHEAD_MS): boolean {
+  const expMs = decodeJwtExpMs(token);
+  if (!expMs) return true;
+  return Date.now() + aheadMs >= expMs;
+}
 
 function jsonErrorFromBody(body: unknown): string {
   if (!body) return "Unknown error";
@@ -98,6 +120,15 @@ function mapIdentityLinkErrorMessage(raw: string, provider: "ely" | "minecraft")
   return raw;
 }
 
+function isExpiredSupabaseTokenError(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes("token is expired") ||
+    lower.includes("invalid supabase token") ||
+    lower.includes("invalid jwt")
+  );
+}
+
 function normalizeSupabaseProjectUrl(raw: string | undefined): string {
   const value = (raw ?? "").trim().replace(/\/+$/, "");
   if (!value) return "";
@@ -131,7 +162,9 @@ export function SupabaseAccountPanel({
 
   const [loading, setLoading] = useState(false);
   const [accessToken, setAccessToken] = useState<string>("");
+  const [refreshToken, setRefreshToken] = useState<string>("");
   const [nickname, setNickname] = useState<string>("");
+  const [nicknameDraft, setNicknameDraft] = useState<string>("");
   const [authIdentifier, setAuthIdentifier] = useState("");
   const [signupNickname, setSignupNickname] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -153,15 +186,117 @@ export function SupabaseAccountPanel({
     if (typeof window === "undefined") return;
     try {
       const t = window.localStorage.getItem(STORAGE_TOKEN_KEY);
+      const r = window.localStorage.getItem(STORAGE_REFRESH_TOKEN_KEY);
       const n = window.localStorage.getItem(STORAGE_NICKNAME_KEY);
       if (t) setAccessToken(t);
+      if (r) setRefreshToken(r);
       if (n) setNickname(n);
     } catch {
       // ignore
     }
   }, []);
 
-  const callEnsureProfile = async (token: string, nick: string) => {
+  const persistSupabaseSession = (nextAccessToken: string, nextRefreshToken: string) => {
+    window.localStorage.setItem(STORAGE_TOKEN_KEY, nextAccessToken);
+    window.localStorage.setItem(STORAGE_REFRESH_TOKEN_KEY, nextRefreshToken);
+    setAccessToken(nextAccessToken);
+    setRefreshToken(nextRefreshToken);
+    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+  };
+
+  const clearSupabaseSession = () => {
+    setAccessToken("");
+    setRefreshToken("");
+    setLinkedProviders({ ely: false, minecraft: false });
+    try {
+      window.localStorage.removeItem(STORAGE_TOKEN_KEY);
+      window.localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
+      window.localStorage.removeItem(STORAGE_NICKNAME_KEY);
+    } catch {
+      // ignore
+    }
+    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+  };
+
+  const refreshSupabaseSession = async (currentRefreshToken: string) => {
+    if (!supabaseProjectUrl || !supabaseAnonKey) {
+      throw new Error("Не настроены VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY в .env");
+    }
+    const res = await fetch(`${supabaseProjectUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: currentRefreshToken }),
+    });
+    const data = (await res.json().catch(() => ({}))) as SupabaseAuthResponse & Record<string, unknown>;
+    if (!res.ok) throw new Error(jsonErrorFromBody(data));
+    const nextAccessToken = data.access_token ?? data.session?.access_token;
+    const nextRefreshToken = data.refresh_token ?? currentRefreshToken;
+    if (!nextAccessToken) throw new Error("Supabase refresh не вернул access_token.");
+    persistSupabaseSession(nextAccessToken, nextRefreshToken);
+    return nextAccessToken;
+  };
+
+  useEffect(() => {
+    if (!accessToken || !refreshToken) return;
+    if (!isTokenExpiringSoon(accessToken)) return;
+
+    let cancelled = false;
+    void refreshSupabaseSession(refreshToken).catch((e) => {
+      if (cancelled) return;
+      const rawMessage = e instanceof Error ? e.message : String(e);
+      showNotification("warning", `Сессия 16launcher истекла: ${rawMessage}`);
+      clearSupabaseSession();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, refreshToken, supabaseProjectUrl, supabaseAnonKey]);
+
+  useEffect(() => {
+    if (!accessToken || !refreshToken) return;
+    const expMs = decodeJwtExpMs(accessToken);
+    if (!expMs) return;
+    const timeoutMs = Math.max(0, expMs - Date.now() - REFRESH_AHEAD_MS);
+    const timer = window.setTimeout(() => {
+      void refreshSupabaseSession(refreshToken).catch((e) => {
+        const rawMessage = e instanceof Error ? e.message : String(e);
+        showNotification("warning", `Сессия 16launcher истекла: ${rawMessage}`);
+        clearSupabaseSession();
+      });
+    }, timeoutMs);
+    return () => window.clearTimeout(timer);
+  }, [accessToken, refreshToken, supabaseProjectUrl, supabaseAnonKey]);
+
+  useEffect(() => {
+    const onChanged = () => {
+      try {
+        const t = window.localStorage.getItem(STORAGE_TOKEN_KEY) ?? "";
+        const r = window.localStorage.getItem(STORAGE_REFRESH_TOKEN_KEY) ?? "";
+        setAccessToken(t);
+        setRefreshToken(r);
+      } catch {
+        setAccessToken("");
+        setRefreshToken("");
+      }
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, onChanged);
+    window.addEventListener("storage", onChanged);
+    return () => {
+      window.removeEventListener(AUTH_CHANGED_EVENT, onChanged);
+      window.removeEventListener("storage", onChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    setNicknameDraft(nickname);
+  }, [nickname]);
+
+  const callEnsureProfile = async (token: string, nick?: string) => {
     if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
     if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
 
@@ -169,7 +304,10 @@ export function SupabaseAccountPanel({
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...edgeAuthHeaders },
-      body: JSON.stringify({ supabase_access_token: token, nickname: nick }),
+      body: JSON.stringify({
+        supabase_access_token: token,
+        ...(nick && nick.trim() ? { nickname: nick.trim() } : {}),
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(jsonErrorFromBody(data));
@@ -195,13 +333,6 @@ export function SupabaseAccountPanel({
     const email = typeof data.email === "string" ? data.email.trim() : "";
     if (!email) throw new Error("По этому nickname не найден email для входа.");
     return email;
-  };
-
-  const deriveNickname = (identifier: string) => {
-    const base = identifier.includes("@") ? identifier.split("@")[0] : identifier;
-    const cleaned = base.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
-    if (!cleaned) return `player_${Math.random().toString(36).slice(2, 8)}`;
-    return cleaned.slice(0, 24);
   };
 
   const handleAuth = async () => {
@@ -272,22 +403,23 @@ export function SupabaseAccountPanel({
       if (!res.ok) throw new Error(jsonErrorFromBody(data));
 
       const token = data.access_token ?? data.session?.access_token;
+      const receivedRefreshToken = data.refresh_token ?? data.session?.refresh_token;
       if (!token) throw new Error("Не удалось получить access_token из ответа Supabase.");
+      if (!receivedRefreshToken) throw new Error("Не удалось получить refresh_token из ответа Supabase.");
 
-      const fallbackNickname = deriveNickname(identifier);
-      const nicknameForEnsure =
-        mode === "signup" ? signupNickname.trim() : nickname.trim() || fallbackNickname;
+      const nicknameForEnsure = mode === "signup" ? signupNickname.trim() : undefined;
 
-      window.localStorage.setItem(STORAGE_TOKEN_KEY, token);
-      window.localStorage.setItem(STORAGE_NICKNAME_KEY, nicknameForEnsure);
-      setAccessToken(token);
-      window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+      persistSupabaseSession(token, receivedRefreshToken);
+      if (nicknameForEnsure) {
+        window.localStorage.setItem(STORAGE_NICKNAME_KEY, nicknameForEnsure);
+      }
 
       const ensure = await callEnsureProfile(token, nicknameForEnsure);
       if ("error" in ensure) {
         throw new Error(ensure.detail ? `${ensure.error}: ${ensure.detail}` : ensure.error);
       }
       setNickname(ensure.user.nickname);
+      window.localStorage.setItem(STORAGE_NICKNAME_KEY, ensure.user.nickname);
       showNotification("success", mode === "signup" ? "Аккаунт создан" : "Вход выполнен");
     } catch (e) {
       const rawMessage = e instanceof Error ? e.message : String(e);
@@ -298,16 +430,51 @@ export function SupabaseAccountPanel({
   };
 
   const handleLogout = () => {
-    setAccessToken("");
-    setLinkedProviders({ ely: false, minecraft: false });
-    try {
-      window.localStorage.removeItem(STORAGE_TOKEN_KEY);
-      window.localStorage.removeItem(STORAGE_NICKNAME_KEY);
-    } catch {
-      // ignore
-    }
-    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+    clearSupabaseSession();
     showNotification("info", "Вы вышли из аккаунта");
+  };
+
+  const handleChangeNickname = async () => {
+    if (!accessToken) {
+      showNotification("warning", "Сначала войдите в аккаунт.");
+      return;
+    }
+
+    const nextNickname = nicknameDraft.trim();
+    if (!nextNickname) {
+      showNotification("warning", "Введите новый никнейм.");
+      return;
+    }
+    if (nextNickname.length < 3) {
+      showNotification("warning", "Никнейм должен быть не короче 3 символов.");
+      return;
+    }
+    if (nextNickname === nickname.trim()) {
+      showNotification("info", "Этот никнейм уже установлен.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const ensure = await callEnsureProfile(accessToken, nextNickname);
+      if ("error" in ensure) {
+        throw new Error(ensure.detail ? `${ensure.error}: ${ensure.detail}` : ensure.error);
+      }
+      setNickname(ensure.user.nickname);
+      setNicknameDraft(ensure.user.nickname);
+      window.localStorage.setItem(STORAGE_NICKNAME_KEY, ensure.user.nickname);
+      showNotification("success", "Никнейм обновлен.");
+    } catch (e) {
+      const rawMessage = e instanceof Error ? e.message : String(e);
+      if (isExpiredSupabaseTokenError(rawMessage)) {
+        handleLogout();
+        showNotification("warning", "Сессия 16launcher истекла. Войдите в аккаунт снова.");
+        return;
+      }
+      showNotification("error", rawMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const callLinkIdentity = async (provider: "ely" | "minecraft", providerUuidRaw: string, providerUsername?: string | null) => {
@@ -356,6 +523,11 @@ export function SupabaseAccountPanel({
             showNotification("success", "Minecraft привязан к аккаунту");
           } catch (e) {
             const rawMessage = e instanceof Error ? e.message : String(e);
+            if (isExpiredSupabaseTokenError(rawMessage)) {
+              handleLogout();
+              showNotification("warning", "Сессия 16launcher истекла. Войдите в аккаунт снова.");
+              return;
+            }
             showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "minecraft"));
           } finally {
             setLinking(null);
@@ -391,6 +563,11 @@ export function SupabaseAccountPanel({
             showNotification("success", "Ely.by привязан к аккаунту");
           } catch (e) {
             const rawMessage = e instanceof Error ? e.message : String(e);
+            if (isExpiredSupabaseTokenError(rawMessage)) {
+              handleLogout();
+              showNotification("warning", "Сессия 16launcher истекла. Войдите в аккаунт снова.");
+              return;
+            }
             showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "ely"));
           } finally {
             setLinking(null);
@@ -411,39 +588,47 @@ export function SupabaseAccountPanel({
   if (compact && accessToken) {
     return (
       <div className="flex w-full flex-col items-center gap-3">
+        <div className="w-full rounded-xl border border-white/10 bg-black/30 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
+            Управление аккаунтом
+          </p>
+          <input
+            type="text"
+            value={nicknameDraft}
+            onChange={(e) => setNicknameDraft(e.target.value)}
+            className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
+            placeholder={language === "ru" ? "Новый никнейм" : "New nickname"}
+          />
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={loading || linking !== null || providerLoginBusy}
+              onClick={() => void handleChangeNickname()}
+              className="interactive-press flex-1 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+            >
+              Сменить ник
+            </button>
+            <button
+              type="button"
+              disabled={loading || linking !== null || providerLoginBusy}
+              onClick={handleLogout}
+              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+            >
+              Выйти
+            </button>
+          </div>
+        </div>
         {renderProviderButtons(true)}
-        <button
-          type="button"
-          disabled={loading || linking !== null || providerLoginBusy}
-          onClick={handleLogout}
-          className="interactive-press rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
-        >
-          Выйти из аккаунта
-        </button>
       </div>
     );
   }
 
   return (
     <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-6 shadow-xl backdrop-blur-md bg-black/40">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
-            16launcher аккаунт
-          </h2>
-          <p className="mt-1 text-[11px] leading-snug text-white/45">
-          </p>
-        </div>
-        {accessToken ? (
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleLogout}
-            className="interactive-press shrink-0 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-          >
-            Выйти
-          </button>
-        ) : null}
+      <div className="mb-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
+          16launcher аккаунт
+        </h2>
       </div>
 
       {!accessToken ? (
@@ -559,6 +744,37 @@ export function SupabaseAccountPanel({
             <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-100">
               Online
             </span>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
+              Управление аккаунтом
+            </p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={nicknameDraft}
+                onChange={(e) => setNicknameDraft(e.target.value)}
+                className="h-10 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
+                placeholder={language === "ru" ? "Новый никнейм" : "New nickname"}
+              />
+              <button
+                type="button"
+                disabled={loading || linking !== null || providerLoginBusy}
+                onClick={() => void handleChangeNickname()}
+                className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+              >
+                Сменить ник
+              </button>
+              <button
+                type="button"
+                disabled={loading || linking !== null || providerLoginBusy}
+                onClick={handleLogout}
+                className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+              >
+                Выйти
+              </button>
+            </div>
           </div>
 
           <div className="h-px w-full bg-white/10" />
