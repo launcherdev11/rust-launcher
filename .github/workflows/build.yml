@@ -178,6 +178,26 @@ jobs:
           releaseName: "16Launcher ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version) || 'v0.0.0' }}"
           releaseBody: "Автоматический релиз 16Launcher."
 
+      - name: Prepare beta updater manifest
+        if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-beta.')
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_path="$(find src-tauri/target/release/bundle -name latest.json | head -n 1 || true)"
+          if [ -z "${latest_path}" ]; then
+            echo "latest.json not found in bundle output"
+            exit 1
+          fi
+          cp "${latest_path}" src-tauri/target/release/bundle/beta.json
+
+      - name: Upload beta updater manifest
+        if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-beta.')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: src-tauri/target/release/bundle/beta.json
+          fail_on_unmatched_files: true
+
       - name: Upload bundles as workflow artifact
         uses: actions/upload-artifact@v4
         with:
