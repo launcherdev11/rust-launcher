@@ -94,6 +94,8 @@ type ModpackTabProps = {
   consoleLines?: GameConsoleLine[];
   consoleHistorySessions?: GameConsoleSession[];
   onClearConsole?: () => void;
+  openedMrpackPath?: string | null;
+  onOpenedMrpackPathConsumed?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -302,6 +304,8 @@ export function ModpackTab({
   consoleLines = [],
   consoleHistorySessions = [],
   onClearConsole,
+  openedMrpackPath = null,
+  onOpenedMrpackPathConsumed,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -1459,6 +1463,14 @@ export function ModpackTab({
       setMrpackBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!openedMrpackPath) return;
+    const path = openedMrpackPath;
+    onOpenedMrpackPathConsumed?.();
+    void handleImportMrpack(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- реакция только на путь из ОС
+  }, [openedMrpackPath, onOpenedMrpackPathConsumed]);
 
   useEffect(() => {
     if (activeView !== "import") return;

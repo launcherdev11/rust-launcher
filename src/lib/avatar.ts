@@ -150,7 +150,6 @@ export async function buildAvatarFromSkin(
     }
     sourceCtx.imageSmoothingEnabled = false;
 
-    // Build the face from base + hat layer to match Minecraft head rendering.
     sourceCtx.clearRect(0, 0, 8, 8);
     sourceCtx.drawImage(bitmap, 8, 8, 8, 8, 0, 0, 8, 8);
     sourceCtx.drawImage(bitmap, 40, 8, 8, 8, 0, 0, 8, 8);

@@ -160,6 +160,7 @@
         "no": "Main"
       },
       "uiSounds": { "label": "Interface sounds:" },
+      "splitView": { "label": "Dual-pane tab mode:" },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
       "notifyNewMessage": { "label": "Notify about new messages:" },
       "notifySystemMessage": { "label": "Notify about system messages:" },
