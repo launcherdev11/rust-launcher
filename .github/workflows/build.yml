@@ -181,14 +181,30 @@ jobs:
       - name: Prepare beta updater manifest
         if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-beta.')
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          latest_path="$(find src-tauri/target/release/bundle -name latest.json | head -n 1 || true)"
-          if [ -z "${latest_path}" ]; then
-            echo "latest.json not found in bundle output"
+          release_json="$(mktemp)"
+          curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" \
+            -o "${release_json}"
+
+          asset_url="$(python -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); assets=data.get("assets", []); pref=next((a.get("url","") for a in assets if a.get("name","")=="latest.json"), ""); fb=next((a.get("url","") for a in assets if a.get("name","").startswith("latest") and a.get("name","").endswith(".json")), ""); print(pref or fb)' "${release_json}")"
+
+          if [ -z "${asset_url}" ]; then
+            echo "No updater latest*.json asset found in release ${GITHUB_REF_NAME}"
             exit 1
           fi
-          cp "${latest_path}" src-tauri/target/release/bundle/beta.json
+
+          mkdir -p src-tauri/target/release/bundle
+          curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            "${asset_url}" \
+            -o src-tauri/target/release/bundle/beta.json
 
       - name: Upload beta updater manifest
         if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-beta.')
