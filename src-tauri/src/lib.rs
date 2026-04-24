@@ -44,31 +44,25 @@ fn configure_linux_display_backend() {
     let has_x11 = env::var_os("DISPLAY").is_some() || xdg_session_type == "x11";
 
     if env::var_os("WINIT_UNIX_BACKEND").is_none() {
-        if has_x11 {
-            env::set_var("WINIT_UNIX_BACKEND", "x11");
-        } else if has_wayland {
+        if has_wayland {
             env::set_var("WINIT_UNIX_BACKEND", "wayland");
+        } else if has_x11 {
+            env::set_var("WINIT_UNIX_BACKEND", "x11");
         }
     }
 
     if env::var_os("GDK_BACKEND").is_none() {
-        if has_x11 {
-            env::set_var("GDK_BACKEND", "x11,wayland");
-        } else if has_wayland {
+        if has_wayland {
             env::set_var("GDK_BACKEND", "wayland,x11");
+        } else if has_x11 {
+            env::set_var("GDK_BACKEND", "x11,wayland");
         }
     }
 
     if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
-    if env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-        env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-    }
 
-    // AppImage on some Arch/Hyprland setups crashes WebKitWebProcess when
-    // its sandbox cannot initialize correctly (user namespaces/bwrap policy).
-    // Restrict this workaround to AppImage launches only.
     let is_appimage = env::var_os("APPIMAGE").is_some() || env::var_os("APPDIR").is_some();
     if is_appimage && env::var_os("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").is_none() {
         env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
