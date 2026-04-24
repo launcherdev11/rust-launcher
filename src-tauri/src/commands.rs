@@ -318,7 +318,6 @@ fn render_skin_head_png(skin_png: &[u8]) -> Result<Vec<u8>, String> {
     let hat = skin.crop_imm(40, 8, 8, 8).to_rgba8();
 
     let mut face = base_face;
-    // Alpha blend the hat/overlay layer over the base face.
     image::imageops::overlay(&mut face, &hat, 0, 0);
     let enlarged: RgbaImage = image::imageops::resize(&face, 64, 64, FilterType::Nearest);
 

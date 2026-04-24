@@ -160,6 +160,7 @@
         "no": "Главная"
       },
       "uiSounds": { "label": "Звук интерфейса:" },
+      "splitView": { "label": "Двухпанельный режим вкладок:" },
       "notifyNewUpdate": { "label": "Новое обновление:" },
       "notifyNewMessage": { "label": "Новое сообщение:" },
       "notifySystemMessage": { "label": "Системное сообщение:" },

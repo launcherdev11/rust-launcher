@@ -39,6 +39,7 @@ type Settings = {
   background_accent_color: string;
   background_image_url: string | null;
   background_blur_enabled: boolean;
+  split_view_enabled: boolean;
 };
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -479,7 +480,6 @@ export function SettingsTab({
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
     } catch {
-      /* ignore */
     }
   };
 
@@ -521,7 +521,6 @@ export function SettingsTab({
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
     } catch {
-      /* ignore */
     }
   };
 
@@ -1750,6 +1749,13 @@ export function SettingsTab({
                   noLabel={tt("settings.common.toggle.off")}
                   value={settings?.ui_sounds_enabled ?? true}
                   onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
+                />
+                <SettingsToggle
+                  label={tt("settings.launcher.splitView.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={settings?.split_view_enabled ?? false}
+                  onChange={(v) => updateSettings({ split_view_enabled: v })}
                 />
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-white/90">

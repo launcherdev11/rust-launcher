@@ -1,4 +1,7 @@
+use tauri::Manager;
+
 mod game_provider;
+mod mrpack_open;
 mod java_runtime;
 mod ely_auth;
 mod ms_auth;
@@ -33,6 +36,7 @@ use ely_auth::{
 };
 use ms_auth::{ms_logout, start_ms_oauth};
 use discord_rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
+use mrpack_open::take_pending_mrpack_open;
 
 #[cfg(target_os = "linux")]
 fn configure_linux_display_backend() {
@@ -101,13 +105,37 @@ pub fn run() {
     #[cfg(target_os = "windows")]
     configure_windows_webview_memory();
 
-    tauri::Builder::default()
+    let pending_mrpack = mrpack_open::pending_mrpack_new();
+
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .setup(|_app| Ok(()))
+        .manage(pending_mrpack.clone());
+
+    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
+                mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
+            }
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }));
+    }
+
+    builder
+        .setup({
+            let pending = pending_mrpack.clone();
+            move |_app| {
+                mrpack_open::stash_argv_mrpack_if_any(&pending);
+                Ok(())
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
             fetch_all_versions,
@@ -183,20 +211,41 @@ pub fn run() {
             remove_launcher_account,
             add_launcher_account,
             set_launcher_accounts_scope,
-            get_ely_avatar
+            get_ely_avatar,
+            take_pending_mrpack_open
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| match event {
-            tauri::RunEvent::WindowEvent { label, event, .. } => {
-                if label == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                    discord_presence_shutdown();
-                    app_handle.exit(0);
+        .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        if mrpack_open::is_mrpack_path(&path) {
+                            if let Some(pending) = app_handle.try_state::<mrpack_open::PendingMrpackArc>()
+                            {
+                                mrpack_open::stash_mrpack_path(&pending, &path);
+                            }
+                            mrpack_open::emit_mrpack_open_request(
+                                &app_handle,
+                                path.to_string_lossy().to_string(),
+                            );
+                        }
+                    }
                 }
             }
-            tauri::RunEvent::Exit => {
-                discord_presence_shutdown();
+
+            match event {
+                tauri::RunEvent::WindowEvent { label, event, .. } => {
+                    if label == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        discord_presence_shutdown();
+                        app_handle.exit(0);
+                    }
+                }
+                tauri::RunEvent::Exit => {
+                    discord_presence_shutdown();
+                }
+                _ => {}
             }
-            _ => {}
         });
 }

@@ -39,7 +39,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "fileAssociations": [
+      {
+        "ext": ["mrpack"],
+        "name": "Modrinth pack",
+        "description": "Modrinth modpack (.mrpack)",
+        "mimeType": "application/octet-stream"
+      }
+    ]
   },
 
   "plugins": {
