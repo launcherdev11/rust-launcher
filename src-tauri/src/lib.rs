@@ -65,6 +65,14 @@ fn configure_linux_display_backend() {
     if env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
         env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
+
+    // AppImage on some Arch/Hyprland setups crashes WebKitWebProcess when
+    // its sandbox cannot initialize correctly (user namespaces/bwrap policy).
+    // Restrict this workaround to AppImage launches only.
+    let is_appimage = env::var_os("APPIMAGE").is_some() || env::var_os("APPDIR").is_some();
+    if is_appimage && env::var_os("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").is_none() {
+        env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+    }
 }
 
 #[cfg(target_os = "windows")]
