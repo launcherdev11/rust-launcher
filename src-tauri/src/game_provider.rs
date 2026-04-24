@@ -1106,6 +1106,9 @@ pub struct Settings {
 
     #[serde(default = "default_background_blur_enabled")]
     pub background_blur_enabled: bool,
+
+    #[serde(default)]
+    pub split_view_enabled: bool,
 }
 
 fn default_interface_language() -> String {
@@ -1149,6 +1152,7 @@ impl Default for Settings {
             background_accent_color: "#0b1530".to_string(),
             background_image_url: None,
             background_blur_enabled: true,
+            split_view_enabled: false,
         }
     }
 }

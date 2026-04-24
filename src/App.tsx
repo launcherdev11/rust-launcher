@@ -75,6 +75,7 @@ type Settings = {
   background_accent_color: string;
   background_image_url: string | null;
   background_blur_enabled: boolean;
+  split_view_enabled: boolean;
 };
 
 type InstanceProfileSummary = {
@@ -620,6 +621,21 @@ const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge"
 function App() {
   const [hasSupabaseSession, setHasSupabaseSession] = useState(false);
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
+  const [osOpenedMrpackPath, setOsOpenedMrpackPath] = useState<string | null>(null);
+  const lastOsMrpackRequestRef = useRef<{ path: string; at: number } | null>(null);
+  const [splitViewTabs, setSplitViewTabs] = useState<{
+    left: SidebarItemId;
+    right: SidebarItemId | null;
+  }>({
+    left: "play",
+    right: null,
+  });
+  const [draggedSidebarItem, setDraggedSidebarItem] = useState<SidebarItemId | null>(null);
+  const [splitDropTarget, setSplitDropTarget] = useState<"left" | "right" | null>(null);
+  const [dragPointerPos, setDragPointerPos] = useState<{ x: number; y: number } | null>(null);
+  const pointerDragItemRef = useRef<SidebarItemId | null>(null);
+  const pointerDragStartedRef = useRef(false);
+  const pointerDragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const [sidebarOrder, setSidebarOrder] = useState<SidebarItemId[]>(() => {
     if (typeof window === "undefined") return DEFAULT_SIDEBAR_ORDER;
     try {
@@ -755,7 +771,6 @@ function App() {
       const v = sessionStorage.getItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY);
       if (v === "latest" || v === "outdated") return v;
     } catch {
-      /* ignore */
     }
     return null;
   });
@@ -764,7 +779,6 @@ function App() {
     try {
       sessionStorage.setItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY, v);
     } catch {
-      /* ignore */
     }
   }, []);
   const tt = useT(language);
@@ -819,6 +833,69 @@ function App() {
     },
     [activeItem, settings?.ui_sounds_enabled],
   );
+
+  const clearOsOpenedMrpackPath = useCallback(() => {
+    setOsOpenedMrpackPath(null);
+  }, []);
+
+  const requestImportMrpackFromOs = useCallback(
+    (rawPath: string) => {
+      const now = Date.now();
+      const last = lastOsMrpackRequestRef.current;
+      if (last && last.path === rawPath && now - last.at < 2000) return;
+      lastOsMrpackRequestRef.current = { path: rawPath, at: now };
+      setOsOpenedMrpackPath(rawPath);
+      setActiveItemWithSound("modpacks");
+    },
+    [setActiveItemWithSound],
+  );
+
+  const requestImportMrpackFromOsRef = useRef(requestImportMrpackFromOs);
+  requestImportMrpackFromOsRef.current = requestImportMrpackFromOs;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const pending = await invoke<string | null>("take_pending_mrpack_open");
+        if (!cancelled && pending) {
+          requestImportMrpackFromOsRef.current(pending);
+        }
+      } catch {
+        /* старый бинарь / dev без команды */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ path: string }>("mrpack-open-request", (e) => {
+      if (e.payload?.path) requestImportMrpackFromOsRef.current(e.payload.path);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    setSplitViewTabs((prev) => {
+      if (prev.left === activeItem) return prev;
+      return { ...prev, left: activeItem };
+    });
+  }, [activeItem]);
+
+  useEffect(() => {
+    if (settings?.split_view_enabled ?? false) return;
+    setSplitDropTarget(null);
+    setDraggedSidebarItem(null);
+  }, [settings?.split_view_enabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -887,6 +964,11 @@ function App() {
   });
   const [pinnedContextMenu, setPinnedContextMenu] = useState<{
     profileId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [sidebarTabContextMenu, setSidebarTabContextMenu] = useState<{
+    itemId: SidebarItemId;
     x: number;
     y: number;
   } | null>(null);
@@ -1351,6 +1433,7 @@ function App() {
     background_accent_color: "#0b1530",
     background_image_url: null,
     background_blur_enabled: true,
+    split_view_enabled: false,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -2503,6 +2586,344 @@ function App() {
       ? rawBackgroundImage
       : convertFileSrc(rawBackgroundImage));
 
+  const isSplitViewEnabled = settings?.split_view_enabled ?? false;
+
+  const applyDroppedSidebarItem = (side: "left" | "right", dropped: SidebarItemId) => {
+    setSplitViewTabs((prev) => {
+      if (side === "left") {
+        return {
+          left: dropped,
+          right: prev.right === dropped ? null : prev.right,
+        };
+      }
+      return {
+        left: prev.left,
+        right: prev.left === dropped ? null : dropped,
+      };
+    });
+    if (side === "left") {
+      setActiveItemWithSound(dropped);
+    }
+  };
+
+  const handleSidebarPointerDown = (
+    itemId: SidebarItemId,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    if (!isSplitViewEnabled || event.button !== 0) return;
+    pointerDragItemRef.current = itemId;
+    pointerDragStartedRef.current = false;
+    pointerDragOriginRef.current = { x: event.clientX, y: event.clientY };
+  };
+
+  useEffect(() => {
+    if (!isSplitViewEnabled) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const origin = pointerDragOriginRef.current;
+      const item = pointerDragItemRef.current;
+      if (!origin || !item) return;
+      const dx = event.clientX - origin.x;
+      const dy = event.clientY - origin.y;
+      const distance = Math.hypot(dx, dy);
+      if (!pointerDragStartedRef.current && distance < 8) return;
+      if (!pointerDragStartedRef.current) {
+        pointerDragStartedRef.current = true;
+        setDraggedSidebarItem(item);
+      }
+      setDragPointerPos({ x: event.clientX, y: event.clientY });
+      setSplitDropTarget(event.clientX < window.innerWidth / 2 ? "left" : "right");
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      const item = pointerDragItemRef.current;
+      const started = pointerDragStartedRef.current;
+      pointerDragItemRef.current = null;
+      pointerDragOriginRef.current = null;
+      pointerDragStartedRef.current = false;
+
+      if (!started || !item) {
+        setDraggedSidebarItem(null);
+        setSplitDropTarget(null);
+        setDragPointerPos(null);
+        return;
+      }
+
+      const side: "left" | "right" = event.clientX < window.innerWidth / 2 ? "left" : "right";
+      applyDroppedSidebarItem(side, item);
+      setDraggedSidebarItem(null);
+      setSplitDropTarget(null);
+      setDragPointerPos(null);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [isSplitViewEnabled, setActiveItemWithSound]);
+
+  const renderTabContent = (tabId: SidebarItemId) => {
+    if (tabId === "accounts") {
+      return (
+        <div className="flex w-full max-w-6xl flex-col items-center gap-6">
+          <div className="w-full text-center">
+            <h1 className="text-lg font-bold tracking-tight text-white/95">
+              {tt("app.accounts.managerTitle")}
+            </h1>
+            <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
+          </div>
+
+          {!hasSupabaseSession ? (
+            <SupabaseAccountPanel
+              showNotification={showNotification}
+              language={language}
+              onMicrosoftLogin={handleMicrosoftLogin}
+              onElyLogin={handleElyLogin}
+              providerLoginBusy={elyLoading}
+              launcherProfile={{
+                launcher_nickname: profile.nickname,
+                ely_username: profile.ely_username,
+                microsoft_username: activeAccountFromList?.kind === "microsoft" ? activeAccountFromList.label : null,
+                ely_uuid: profile.ely_uuid,
+                mc_uuid: profile.mc_uuid,
+              }}
+            />
+          ) : (
+            <div className="w-full max-w-4xl">
+              <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-5 shadow-xl backdrop-blur-md bg-black/50">
+                <div className="flex items-center gap-6">
+                  <button
+                    type="button"
+                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
+                  >
+                    <img
+                      src={headImgSrc}
+                      alt=""
+                      draggable={false}
+                      className="aspect-square h-full w-full object-cover object-center"
+                      onError={handleHeadImgError}
+                    />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={displayedNickname}
+                        onChange={(e) => setProfile((p) => ({ ...p, nickname: e.target.value }))}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (!isAuthorized && v !== profile.nickname) handleSaveNickname(v);
+                        }}
+                        placeholder={tt("app.accounts.nicknamePlaceholder")}
+                        className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
+                        disabled={profileSaving || isAuthorized}
+                      />
+                      {!isAuthorized && (
+                        <span className="text-white/60" title={tt("app.accounts.editNickname")}>
+                          <PencilIcon />
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-center">
+                <SupabaseAccountPanel
+                  compact
+                  showNotification={showNotification}
+                  language={language}
+                  onMicrosoftLogin={handleMicrosoftLogin}
+                  onElyLogin={handleElyLogin}
+                  providerLoginBusy={elyLoading}
+                  launcherProfile={{
+                    launcher_nickname: profile.nickname,
+                    ely_username: profile.ely_username,
+                    microsoft_username: activeAccountFromList?.kind === "microsoft" ? activeAccountFromList.label : null,
+                    ely_uuid: profile.ely_uuid,
+                    mc_uuid: profile.mc_uuid,
+                  }}
+                />
+              </div>
+
+              {elyAuthUrl && (
+                <div className="mt-4 w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
+                  <p className="mb-1.5 text-xs font-medium text-amber-200">
+                    {tt("app.accounts.elyDialogTitle")}
+                  </p>
+                  <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
+                  <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (tabId === "mods") {
+      return (
+        <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center">
+          <ModsTab
+            showNotification={showNotification}
+            language={language}
+            activeProfileId={activeInstanceProfile?.id ?? null}
+            activeProfileGameVersion={activeInstanceProfile?.game_version}
+            activeProfileLoader={activeInstanceProfile?.loader}
+            onOpenModpacksTab={() => setActiveItem("modpacks")}
+            onSelectedModTitleChange={setDiscordModsTitle}
+          />
+        </div>
+      );
+    }
+
+    if (tabId === "modpacks") {
+      return (
+        <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4">
+          <ModpackTab
+            language={language}
+            showNotification={showNotification}
+            openedMrpackPath={osOpenedMrpackPath}
+            onOpenedMrpackPathConsumed={clearOsOpenedMrpackPath}
+            onProfileSelectionChange={handleModpackProfileSelectionChange}
+            initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+            onProfilesChange={(profiles) => {
+              setKnownProfiles(
+                profiles.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  game_version: p.game_version,
+                  loader: p.loader,
+                  icon_path: p.icon_path,
+                  directory: p.directory,
+                })),
+              );
+              setProfilesHydrated(true);
+            }}
+            onTogglePinInSidebar={(profile) =>
+              handleToggleSidebarPin({
+                id: profile.id,
+                name: profile.name,
+                game_version: profile.game_version,
+                loader: profile.loader,
+                icon_path: profile.icon_path,
+                directory: profile.directory,
+              })
+            }
+            isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
+            onOpenModsTab={() => setActiveItem("mods")}
+            onPlaySelectedProfile={() => {
+              if (!activeInstanceProfile) {
+                showNotification(
+                  "warning",
+                  tt("app.warnings.selectProfileFirst"),
+                );
+                return;
+              }
+              void handlePrimaryClick();
+            }}
+            gameStatus={gameStatus}
+            consoleLines={consoleLines}
+            consoleHistorySessions={consoleHistorySessions}
+            onClearConsole={handleClearConsole}
+          />
+        </div>
+      );
+    }
+
+    if (tabId === "friends") {
+      return (
+        <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-auto py-4">
+          <FriendsTab showNotification={showNotification} language={language} />
+        </div>
+      );
+    }
+
+    if (tabId === "settings") {
+      return (
+        <SettingsTab
+          settings={settings}
+          settingsTab={settingsTab}
+          setSettingsTab={setSettingsTab}
+          systemMemoryGb={systemMemoryGb}
+          updateSettings={(patch) => updateSettings(patch, activeInstanceProfile?.id ?? undefined)}
+          showNotification={showNotification}
+          SettingsCard={SettingsCard}
+          SettingsSlider={SettingsSlider}
+          SettingsToggle={SettingsToggle}
+          language={language}
+          setLanguage={setLanguage}
+          sidebarOrder={sidebarOrder.filter((id) =>
+            id === "play" ||
+            id === "settings" ||
+            id === "friends" ||
+            id === "mods" ||
+            id === "modpacks"
+          ) as ("play" | "settings" | "friends" | "mods" | "modpacks")[]}
+          setSidebarOrder={(order) => setSidebarOrder(order)}
+          updateStatus={updateStatus}
+          updateVersion={updateVersion}
+          updateDownloadPercent={updateDownloadPercent}
+          onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
+          onInstallUpdate={() => void installUpdate()}
+        />
+      );
+    }
+
+    return (
+      <PlayTab
+        gameStatus={gameStatus}
+        consoleLines={consoleLines}
+        isConsoleVisible={isConsoleVisible}
+        onToggleConsole={handleToggleConsole}
+        onClearConsole={handleClearConsole}
+        showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
+        versions={versions}
+        selectedVersion={selectedVersion}
+        setSelectedVersion={setSelectedVersion}
+        versionsLoading={versionsLoading}
+        isVersionDropdownOpen={isVersionDropdownOpen}
+        setIsVersionDropdownOpen={setIsVersionDropdownOpen}
+        installPaused={installPaused}
+        isInstalling={isInstalling}
+        handleResumeInstall={handleResumeInstall}
+        handlePauseInstall={handlePauseInstall}
+        handleCancelInstall={handleCancelInstall}
+        handlePrimaryClick={handlePrimaryClick}
+        primaryColorClasses={primaryColorClasses}
+        primaryLabel={primaryLabel}
+        progress={progress}
+        loader={loader}
+        setLoader={setLoader}
+        isLoaderDropdownOpen={isLoaderDropdownOpen}
+        setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
+        handleOpenGameFolder={handleOpenGameFolder}
+        language={language}
+        installedVersionIds={installedVersionIdsForDropdown}
+        showSnapshots={settings?.show_snapshots ?? false}
+        activeProfileName={activeInstanceProfile?.name ?? null}
+      />
+    );
+  };
+
+  const sidebarItemLabel = (itemId: SidebarItemId): string =>
+    tt(
+      itemId === "play"
+        ? "app.sidebar.play"
+        : itemId === "settings"
+          ? "app.sidebar.settings"
+          : itemId === "friends"
+            ? "app.sidebar.friends"
+            : itemId === "mods"
+              ? "app.sidebar.mods"
+              : itemId === "modpacks"
+                ? "app.sidebar.modpacks"
+                : "app.accounts.sidebarTooltip",
+    );
+
   return (
     <div
       className="relative min-h-screen w-full overflow-hidden text-white"
@@ -2879,6 +3300,63 @@ function App() {
         </div>
       )}
 
+      {sidebarTabContextMenu && (
+        <div
+          className="fixed inset-0 z-[350]"
+          onClick={() => setSidebarTabContextMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setSidebarTabContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute z-[360] w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            style={{ top: sidebarTabContextMenu.y, left: sidebarTabContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const tabId = sidebarTabContextMenu.itemId;
+                setSidebarTabContextMenu(null);
+                setActiveItemWithSound(tabId);
+                setSplitViewTabs((prev) => ({ ...prev, left: tabId }));
+              }}
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/10"
+            >
+              <span>{language === "ru" ? "Открыть вкладку" : "Open tab"}</span>
+              <span className="text-white/50">{sidebarItemLabel(sidebarTabContextMenu.itemId)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const tabId = sidebarTabContextMenu.itemId;
+                setSidebarTabContextMenu(null);
+                applyDroppedSidebarItem("left", tabId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
+            >
+              <span>{language === "ru" ? "Открыть слева" : "Open on left"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const tabId = sidebarTabContextMenu.itemId;
+                setSidebarTabContextMenu(null);
+                applyDroppedSidebarItem("right", tabId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
+            >
+              <span>{language === "ru" ? "Открыть справа" : "Open on right"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className="relative z-20 flex h-9 items-center justify-between px-4 select-none"
         onMouseDown={handleTitleBarMouseDown}
@@ -3101,6 +3579,16 @@ function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItemWithSound(item.id)}
+                onPointerDown={(event) => handleSidebarPointerDown(item.id, event)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSidebarTabContextMenu({
+                    itemId: item.id,
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
                 title={tt(item.labelKey)}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
@@ -3207,6 +3695,16 @@ function App() {
             <button
               type="button"
               onClick={() => setActiveItemWithSound("accounts")}
+              onPointerDown={(event) => handleSidebarPointerDown("accounts", event)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setSidebarTabContextMenu({
+                  itemId: "accounts",
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
               title={tt("app.accounts.sidebarTooltip")}
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
@@ -3224,229 +3722,90 @@ function App() {
           </div>
         </aside>
 
-        <main key={activeItem} className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
-          {activeItem === "accounts" ? (
-            <div className="flex w-full max-w-6xl flex-col items-center gap-6">
-              <div className="w-full text-center">
-                <h1 className="text-lg font-bold tracking-tight text-white/95">
-                  {tt("app.accounts.managerTitle")}
-                </h1>
-                <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
+        {isSplitViewEnabled ? (
+          <main className="flex min-h-0 flex-1 gap-3 px-3 py-3">
+            <div
+              className={`relative min-h-0 flex-1 overflow-hidden rounded-2xl border bg-black/25 ${
+                splitDropTarget === "left"
+                  ? "border-sky-300/80 ring-2 ring-sky-300/30"
+                  : "border-white/10"
+              }`}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setSplitDropTarget((prev) => (prev === "left" ? null : prev));
+                }
+              }}
+            >
+              <div className="tab-animate flex h-full w-full flex-col items-center justify-center px-4">
+                {renderTabContent(splitViewTabs.left)}
               </div>
-
-              {!hasSupabaseSession ? (
-                <SupabaseAccountPanel
-                  showNotification={showNotification}
-                  language={language}
-                  onMicrosoftLogin={handleMicrosoftLogin}
-                  onElyLogin={handleElyLogin}
-                  providerLoginBusy={elyLoading}
-                  launcherProfile={{
-                    launcher_nickname: profile.nickname,
-                    ely_username: profile.ely_username,
-                    microsoft_username: activeAccountFromList?.kind === "microsoft" ? activeAccountFromList.label : null,
-                    ely_uuid: profile.ely_uuid,
-                    mc_uuid: profile.mc_uuid,
-                  }}
-                />
-              ) : (
-                <div className="w-full max-w-4xl">
-                  <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-5 shadow-xl backdrop-blur-md bg-black/50">
-                    <div className="flex items-center gap-6">
-                      <button
-                        type="button"
-                        className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
-                      >
-                        <img
-                          src={headImgSrc}
-                          alt=""
-                          draggable={false}
-                          className="aspect-square h-full w-full object-cover object-center"
-                          onError={handleHeadImgError}
-                        />
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={displayedNickname}
-                            onChange={(e) => setProfile((p) => ({ ...p, nickname: e.target.value }))}
-                            onBlur={(e) => {
-                              const v = e.target.value.trim();
-                              if (!isAuthorized && v !== profile.nickname) handleSaveNickname(v);
-                            }}
-                            placeholder={tt("app.accounts.nicknamePlaceholder")}
-                            className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
-                            disabled={profileSaving || isAuthorized}
-                          />
-                          {!isAuthorized && (
-                            <span className="text-white/60" title={tt("app.accounts.editNickname")}>
-                              <PencilIcon />
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 flex justify-center">
-                    <SupabaseAccountPanel
-                      compact
-                      showNotification={showNotification}
-                      language={language}
-                      onMicrosoftLogin={handleMicrosoftLogin}
-                      onElyLogin={handleElyLogin}
-                      providerLoginBusy={elyLoading}
-                      launcherProfile={{
-                        launcher_nickname: profile.nickname,
-                        ely_username: profile.ely_username,
-                        microsoft_username: activeAccountFromList?.kind === "microsoft" ? activeAccountFromList.label : null,
-                        ely_uuid: profile.ely_uuid,
-                        mc_uuid: profile.mc_uuid,
-                      }}
-                    />
-                  </div>
-
-                  {elyAuthUrl && (
-                    <div className="mt-4 w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
-                      <p className="mb-1.5 text-xs font-medium text-amber-200">
-                        {tt("app.accounts.elyDialogTitle")}
-                      </p>
-                      <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
-                      <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
-                    </div>
-                  )}
+              {draggedSidebarItem && splitDropTarget === "left" && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-sky-400/10 text-sm font-semibold text-sky-100">
+                  {language === "ru" ? "Отпустите, чтобы открыть слева" : "Drop to open on the left"}
                 </div>
               )}
             </div>
-          ) : activeItem === "mods" ? (
-            <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center">
-              <ModsTab
-                showNotification={showNotification}
-                language={language}
-                activeProfileId={activeInstanceProfile?.id ?? null}
-                activeProfileGameVersion={activeInstanceProfile?.game_version}
-                activeProfileLoader={activeInstanceProfile?.loader}
-                onOpenModpacksTab={() => setActiveItem("modpacks")}
-                onSelectedModTitleChange={setDiscordModsTitle}
-              />
-            </div>
-          ) : activeItem === "modpacks" ? (
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4">
-            <ModpackTab
-              language={language}
-              showNotification={showNotification}
-              onProfileSelectionChange={handleModpackProfileSelectionChange}
-              initialSelectedProfileId={activeInstanceProfile?.id ?? null}
-              onProfilesChange={(profiles) => {
-                setKnownProfiles(
-                  profiles.map((p) => ({
-                    id: p.id,
-                    name: p.name,
-                    game_version: p.game_version,
-                    loader: p.loader,
-                    icon_path: p.icon_path,
-                    directory: p.directory,
-                  })),
-                );
-                setProfilesHydrated(true);
-              }}
-              onTogglePinInSidebar={(profile) =>
-                handleToggleSidebarPin({
-                  id: profile.id,
-                  name: profile.name,
-                  game_version: profile.game_version,
-                  loader: profile.loader,
-                  icon_path: profile.icon_path,
-                  directory: profile.directory,
-                })
-              }
-              isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
-              onOpenModsTab={() => setActiveItem("mods")}
-              onPlaySelectedProfile={() => {
-                if (!activeInstanceProfile) {
-                  showNotification(
-                    "warning",
-                    tt("app.warnings.selectProfileFirst"),
-                  );
-                  return;
+
+            <div
+              className={`relative min-h-0 flex-1 overflow-hidden rounded-2xl border bg-black/25 ${
+                splitDropTarget === "right"
+                  ? "border-sky-300/80 ring-2 ring-sky-300/30"
+                  : "border-white/10"
+              }`}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setSplitDropTarget((prev) => (prev === "right" ? null : prev));
                 }
-                void handlePrimaryClick();
               }}
-              gameStatus={gameStatus}
-              consoleLines={consoleLines}
-              consoleHistorySessions={consoleHistorySessions}
-              onClearConsole={handleClearConsole}
-            />
-          </div>
-          ) : activeItem === "friends" ? (
-            <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-auto py-4">
-              <FriendsTab showNotification={showNotification} language={language} />
+            >
+              {splitViewTabs.right ? (
+                <div className="tab-animate flex h-full w-full flex-col items-center justify-center px-4">
+                  {renderTabContent(splitViewTabs.right)}
+                </div>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-center text-sm text-white/55">
+                  {language === "ru"
+                    ? "Перетащите сюда вкладку из боковой панели"
+                    : "Drag a tab from the sidebar here"}
+                </div>
+              )}
+              {draggedSidebarItem && splitDropTarget === "right" && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-sky-400/10 text-sm font-semibold text-sky-100">
+                  {language === "ru" ? "Отпустите, чтобы открыть справа" : "Drop to open on the right"}
+                </div>
+              )}
             </div>
-          ) : activeItem === "settings" ? (
-            <SettingsTab
-              settings={settings}
-              settingsTab={settingsTab}
-              setSettingsTab={setSettingsTab}
-              systemMemoryGb={systemMemoryGb}
-              updateSettings={(patch) => updateSettings(patch, activeInstanceProfile?.id ?? undefined)}
-              showNotification={showNotification}
-              SettingsCard={SettingsCard}
-              SettingsSlider={SettingsSlider}
-              SettingsToggle={SettingsToggle}
-              language={language}
-              setLanguage={setLanguage}
-              sidebarOrder={sidebarOrder.filter((id) =>
-                id === "play" ||
-                id === "settings" ||
-                id === "friends" ||
-                id === "mods" ||
-                id === "modpacks"
-              ) as ("play" | "settings" | "friends" | "mods" | "modpacks")[]}
-              setSidebarOrder={(order) => setSidebarOrder(order)}
-              updateStatus={updateStatus}
-              updateVersion={updateVersion}
-              updateDownloadPercent={updateDownloadPercent}
-              onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
-              onInstallUpdate={() => void installUpdate()}
-            />
-          ) : (
-            <PlayTab
-              gameStatus={gameStatus}
-              consoleLines={consoleLines}
-              isConsoleVisible={isConsoleVisible}
-              onToggleConsole={handleToggleConsole}
-              onClearConsole={handleClearConsole}
-              showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
-              versions={versions}
-              selectedVersion={selectedVersion}
-              setSelectedVersion={setSelectedVersion}
-              versionsLoading={versionsLoading}
-              isVersionDropdownOpen={isVersionDropdownOpen}
-              setIsVersionDropdownOpen={setIsVersionDropdownOpen}
-              installPaused={installPaused}
-              isInstalling={isInstalling}
-              handleResumeInstall={handleResumeInstall}
-              handlePauseInstall={handlePauseInstall}
-              handleCancelInstall={handleCancelInstall}
-              handlePrimaryClick={handlePrimaryClick}
-              primaryColorClasses={primaryColorClasses}
-              primaryLabel={primaryLabel}
-              progress={progress}
-              loader={loader}
-              setLoader={setLoader}
-              isLoaderDropdownOpen={isLoaderDropdownOpen}
-              setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
-              handleOpenGameFolder={handleOpenGameFolder}
-              language={language}
-              installedVersionIds={installedVersionIdsForDropdown}
-              showSnapshots={settings?.show_snapshots ?? false}
-          activeProfileName={activeInstanceProfile?.name ?? null}
-            />
-          )}
-        </main>
+          </main>
+        ) : (
+          <main key={activeItem} className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
+            {renderTabContent(activeItem)}
+          </main>
+        )}
 
       </div>
+      {draggedSidebarItem && dragPointerPos && (
+        <div
+          className="pointer-events-none fixed z-[400] rounded-lg border border-sky-300/70 bg-sky-400/20 px-2.5 py-1 text-xs font-semibold text-sky-100 shadow-lg backdrop-blur"
+          style={{
+            left: dragPointerPos.x + 14,
+            top: dragPointerPos.y + 14,
+          }}
+        >
+          {tt(
+            draggedSidebarItem === "play"
+              ? "app.sidebar.play"
+              : draggedSidebarItem === "settings"
+                ? "app.sidebar.settings"
+                : draggedSidebarItem === "friends"
+                  ? "app.sidebar.friends"
+                  : draggedSidebarItem === "mods"
+                    ? "app.sidebar.mods"
+                    : draggedSidebarItem === "modpacks"
+                      ? "app.sidebar.modpacks"
+                      : "app.accounts.sidebarTooltip",
+          )}
+        </div>
+      )}
     </div>
   );
 }
