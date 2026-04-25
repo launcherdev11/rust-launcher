@@ -36,6 +36,11 @@ use discord_rpc::{discord_presence_update, shutdown as discord_presence_shutdown
 #[cfg(target_os = "linux")]
 fn configure_linux_display_backend() {
     use std::env;
+    fn set_env_if_missing(key: &str, value: &str) {
+        if env::var_os(key).is_none() {
+            env::set_var(key, value);
+        }
+    }
 
     let xdg_session_type = env::var("XDG_SESSION_TYPE")
         .unwrap_or_default()
@@ -59,13 +64,15 @@ fn configure_linux_display_backend() {
         }
     }
 
-    if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-    }
+    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
 
     let is_appimage = env::var_os("APPIMAGE").is_some() || env::var_os("APPDIR").is_some();
-    if is_appimage && env::var_os("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").is_none() {
-        env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+    if is_appimage {
+        // Different WebKitGTK builds use different env knobs for sandbox control.
+        // Setting both makes AppImage startup more robust on distros with strict
+        // user namespace policies (common source of WebKitWebProcess SIGABRT).
+        set_env_if_missing("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+        set_env_if_missing("WEBKIT_FORCE_SANDBOX", "0");
     }
 }
 
