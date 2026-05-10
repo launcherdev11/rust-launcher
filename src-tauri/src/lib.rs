@@ -108,6 +108,15 @@ pub fn run() {
     load_dotenv();
 
     #[cfg(target_os = "linux")]
+    {
+        // используется ли вайленд
+        let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
+        if is_wayland {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+    }
+
+    #[cfg(target_os = "linux")]
     configure_linux_display_backend();
     #[cfg(target_os = "windows")]
     configure_windows_webview_memory();
