@@ -1,5 +1,6 @@
 use std::env
 use std::fs
+use std::path::PathBuf;
 
 mod game_provider;
 mod java_runtime;
@@ -103,6 +104,20 @@ fn get_launcher_logs_file() -> String {
         .unwrap_or_else(|_| "Логи пусты или файл не найден".to_string())
 }
 
+#[tauri::command]
+fn get_screenshots_list() -> Vec<String> {
+    // В будущем путь можно брать динамически через get_game_root_dir
+    let screenshot_path = PathBuf::from(".minecraft/screenshots"); 
+    
+    match std::fs::read_dir(screenshot_path) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path().to_string_lossy().into_owned())
+            .filter(|path| path.ends_with(".png")) // Берем только картинки
+            .collect(),
+        Err(_) => Vec::new(), // Если папки нет, возвращаем пустой список
+    }
+}
 
 pub fn run() {
     load_dotenv();
@@ -212,6 +227,7 @@ pub fn run() {
             remove_launcher_account,
             add_launcher_account
             get_launcher_logs_file
+            get_screenshots_list
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
