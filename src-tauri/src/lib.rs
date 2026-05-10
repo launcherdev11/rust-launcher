@@ -113,9 +113,9 @@ fn get_screenshots_list() -> Vec<String> {
         Ok(entries) => entries
             .filter_map(|entry| entry.ok())
             .map(|entry| entry.path().to_string_lossy().into_owned())
-            .filter(|path| path.ends_with(".png")) // Берем только картинки
+            .filter(|path| path.ends_with(".png")) 
             .collect(),
-        Err(_) => Vec::new(), // Если папки нет, возвращаем пустой список
+        Err(_) => Vec::new(), // если папки нету, то обратно будет пустота
     }
 }
 
