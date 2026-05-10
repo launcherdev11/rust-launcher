@@ -98,10 +98,11 @@ fn load_dotenv() {
 
 #[tauri::command]
 fn get_launcher_logs_file() -> String {
-    // файл лога
-    // в минте/арче он создается в дирректории запуска или кешэ(ну обычно)
-    std::fs::read_to_string("launcher.log").unwrap_or_else(|_| "Логи пусты или файл не создан".to_string())
+    // Мы читаем файл "launcher.log" и возвращаем его содержимое как строку
+    std::fs::read_to_string("launcher.log")
+        .unwrap_or_else(|_| "Логи пусты или файл не найден".to_string())
 }
+
 
 pub fn run() {
     load_dotenv();
