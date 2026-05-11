@@ -1,5 +1,5 @@
-use std::env
-use std::fs
+use std::env;
+use std::fs;
 use std::path::PathBuf;
 
 mod game_provider;
@@ -225,9 +225,9 @@ pub fn run() {
             list_launcher_accounts,
             switch_launcher_account,
             remove_launcher_account,
-            add_launcher_account
-            get_launcher_logs_file
-            get_screenshots_list
+            add_launcher_account,
+            get_launcher_logs_file,
+            get_screenshots_list,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
