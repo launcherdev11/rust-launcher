@@ -1,3 +1,12 @@
+use std::env
+use std::fs
+
+#[tauri::command]
+fn get_launcher_logs() -> String {
+        fs::read_to_string("launcher.log").unwrap_or_else(|_| "Logs was not found".to_string())
+}
+
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::{Path, PathBuf};
