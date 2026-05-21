@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "16Launcher",
-  "version": "2.1.0",
+  "version": "2.0.24-beta.7",
   "identifier": "com.16steyy.16Launcher",
 
   "build": {
@@ -28,7 +28,7 @@
 
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["appimage", "deb", "rpm"],
     "resources": [
       "resources/bootstrap.jar"
     ],
@@ -40,21 +40,29 @@
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": true,
-    "fileAssociations": [
-      {
-        "ext": ["mrpack"],
-        "name": "Modrinth pack",
-        "description": "Modrinth modpack (.mrpack)",
-        "mimeType": "application/octet-stream"
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libayatana-appindicator"
+        ]
       }
-    ]
+    }
   },
 
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwNzkxNTE1RDY5MzNFRDMKUldUVFBwUFdGUlY1b04yR0RvNG5FUDNpTW9nOWgzVEJsMGZiUnlPT1Y3TTNVa0NGSGp0bWUzclMK",
       "endpoints": [
-        "https://github.com/launcherdev11/rust-launcher/releases/latest/download/latest.json"
+        "https://github.com/launcherdev11/rust-launcher/releases/latest/download/beta.json"
       ]
     }
   }
