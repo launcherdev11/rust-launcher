@@ -25,10 +25,7 @@ import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
-import { FriendsTab } from "./tabs/FriendsTab";
-import { SupabaseAccountPanel } from "./tabs/SupabaseAccountPanel";
 import { useT, t } from "./i18n";
-import { getAvatarSrc, getElyAvatarByUsername } from "./lib/avatar";
 
 type Profile = {
   nickname: string;
@@ -45,7 +42,7 @@ type LauncherAccountSummary = {
   is_active: boolean;
 };
 
-type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "friends" | "accounts";
+type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "game" | "versions" | "launcher";
@@ -75,7 +72,6 @@ type Settings = {
   background_accent_color: string;
   background_image_url: string | null;
   background_blur_enabled: boolean;
-  split_view_enabled: boolean;
 };
 
 type InstanceProfileSummary = {
@@ -121,22 +117,6 @@ function accountKindAvatarClass(kind: string): string {
   if (kind === "microsoft") return "bg-sky-600/35 text-sky-100 ring-1 ring-sky-400/25";
   if (kind === "ely") return "bg-emerald-700/40 text-emerald-100 ring-1 ring-emerald-400/20";
   return "bg-white/10 text-white/80 ring-1 ring-white/10";
-}
-
-function decodeJwtSub(token: string): string | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const decoded = atob(padded);
-    const payload: unknown = JSON.parse(decoded);
-    if (!payload || typeof payload !== "object") return null;
-    const sub = (payload as { sub?: unknown }).sub;
-    return typeof sub === "string" && sub.trim() ? sub.trim() : null;
-  } catch {
-    return null;
-  }
 }
 
 type VersionSummary = {
@@ -458,12 +438,11 @@ const REMOTE_NOTIFICATIONS_URLS = [
 const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
 const TELEGRAM_LINK = "https://t.me/of16launcher";
 
-const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "friends", "mods", "modpacks"];
+const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
 
 const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
   { id: "play", labelKey: "app.sidebar.play" },
   { id: "settings", labelKey: "app.sidebar.settings" },
-  { id: "friends", labelKey: "app.sidebar.friends" },
   { id: "mods", labelKey: "app.sidebar.mods" },
   { id: "modpacks", labelKey: "app.sidebar.modpacks" },
 ];
@@ -488,18 +467,6 @@ function SettingsIcon() {
       aria-hidden="true"
     >
       <path d="M12 8.5a3.5 3.5 0 1 0 .001 7.001A3.5 3.5 0 0 0 12 8.5Zm9 3.25-1.8-1.04.16-2.08-2.12-.84-.84-2.12-2.08.16L12 2.75l-1.32 1.88-2.08-.16-.84 2.12-2.12.84.16 2.08L3 11.75v2.5l1.8 1.04-.16 2.08 2.12.84.84 2.12 2.08-.16L12 21.25l1.32-1.88 2.08.16.84-2.12 2.12-.84-.16-2.08L21 14.25v-2.5Z" />
-    </svg>
-  );
-}
-
-function FriendsIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-7 w-7 fill-current"
-      aria-hidden="true"
-    >
-      <path d="M16 11c1.66 0 3-1.34 3-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V20h14v-3.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V20h6v-3.5c0-2.33-4.67-3.5-7-3.5Z" />
     </svg>
   );
 }
@@ -571,6 +538,25 @@ function ChevronDownIcon({ className }: { className?: string }) {
   );
 }
 
+function MicrosoftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
+      <path fill="#f25022" d="M2 2h9.5v9.5H2V2z" />
+      <path fill="#00a4ef" d="M12.5 2H22v9.5h-9.5V2z" />
+      <path fill="#7fba00" d="M2 12.5H11.5V22H2v-9.5z" />
+      <path fill="#ffb900" d="M12.5 12.5H22V22h-9.5v-9.5z" />
+    </svg>
+  );
+}
+
+function ElyByIcon() {
+  return (
+    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#2d7d46] text-[10px] font-bold text-white">
+      E
+    </span>
+  );
+}
+
 function MinimizeIcon() {
   return (
     <svg
@@ -619,30 +605,14 @@ function MaximizeIcon() {
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
-  const [hasSupabaseSession, setHasSupabaseSession] = useState(false);
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
-  const [osOpenedMrpackPath, setOsOpenedMrpackPath] = useState<string | null>(null);
-  const lastOsMrpackRequestRef = useRef<{ path: string; at: number } | null>(null);
-  const [splitViewTabs, setSplitViewTabs] = useState<{
-    left: SidebarItemId;
-    right: SidebarItemId | null;
-  }>({
-    left: "play",
-    right: null,
-  });
-  const [draggedSidebarItem, setDraggedSidebarItem] = useState<SidebarItemId | null>(null);
-  const [splitDropTarget, setSplitDropTarget] = useState<"left" | "right" | null>(null);
-  const [dragPointerPos, setDragPointerPos] = useState<{ x: number; y: number } | null>(null);
-  const pointerDragItemRef = useRef<SidebarItemId | null>(null);
-  const pointerDragStartedRef = useRef(false);
-  const pointerDragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const [sidebarOrder, setSidebarOrder] = useState<SidebarItemId[]>(() => {
     if (typeof window === "undefined") return DEFAULT_SIDEBAR_ORDER;
     try {
       const raw = window.localStorage.getItem("sidebar_order");
       if (!raw) return DEFAULT_SIDEBAR_ORDER;
       const parsed = JSON.parse(raw);
-      const allowed: SidebarItemId[] = ["play", "settings", "friends", "mods", "modpacks"];
+      const allowed: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
       if (
         Array.isArray(parsed) &&
         parsed.every((id) => allowed.includes(id))
@@ -740,6 +710,8 @@ function App() {
   });
   const [elyLoading, setElyLoading] = useState(false);
   const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
+  const [msLoading, setMsLoading] = useState(false);
+  const [msAuthUrl, setMsAuthUrl] = useState<string | null>(null);
   const [launcherAccounts, setLauncherAccounts] = useState<LauncherAccountSummary[]>([]);
   const [addingAccount, setAddingAccount] = useState(false);
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
@@ -751,7 +723,6 @@ function App() {
   const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
-  const [launcherAccountsScope, setLauncherAccountsScope] = useState<string | null>(null);
   const didLoadedRemoteNotificationsRef = useRef(false);
   const didLoadedBottomSocialRef = useRef(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -771,6 +742,7 @@ function App() {
       const v = sessionStorage.getItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY);
       if (v === "latest" || v === "outdated") return v;
     } catch {
+      /* ignore */
     }
     return null;
   });
@@ -779,6 +751,7 @@ function App() {
     try {
       sessionStorage.setItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY, v);
     } catch {
+      /* ignore */
     }
   }, []);
   const tt = useT(language);
@@ -834,69 +807,6 @@ function App() {
     [activeItem, settings?.ui_sounds_enabled],
   );
 
-  const clearOsOpenedMrpackPath = useCallback(() => {
-    setOsOpenedMrpackPath(null);
-  }, []);
-
-  const requestImportMrpackFromOs = useCallback(
-    (rawPath: string) => {
-      const now = Date.now();
-      const last = lastOsMrpackRequestRef.current;
-      if (last && last.path === rawPath && now - last.at < 2000) return;
-      lastOsMrpackRequestRef.current = { path: rawPath, at: now };
-      setOsOpenedMrpackPath(rawPath);
-      setActiveItemWithSound("modpacks");
-    },
-    [setActiveItemWithSound],
-  );
-
-  const requestImportMrpackFromOsRef = useRef(requestImportMrpackFromOs);
-  requestImportMrpackFromOsRef.current = requestImportMrpackFromOs;
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const pending = await invoke<string | null>("take_pending_mrpack_open");
-        if (!cancelled && pending) {
-          requestImportMrpackFromOsRef.current(pending);
-        }
-      } catch {
-        /* старый бинарь / dev без команды */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen<{ path: string }>("mrpack-open-request", (e) => {
-      if (e.payload?.path) requestImportMrpackFromOsRef.current(e.payload.path);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    setSplitViewTabs((prev) => {
-      if (prev.left === activeItem) return prev;
-      return { ...prev, left: activeItem };
-    });
-  }, [activeItem]);
-
-  useEffect(() => {
-    if (settings?.split_view_enabled ?? false) return;
-    setSplitDropTarget(null);
-    setDraggedSidebarItem(null);
-  }, [settings?.split_view_enabled]);
-
   useEffect(() => {
     let cancelled = false;
     getVersion()
@@ -908,23 +818,6 @@ function App() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    const readSession = () => {
-      try {
-        const t = window.localStorage.getItem("mc16launcher:supabase_access_token_v1");
-        setHasSupabaseSession(Boolean(t && t.trim()));
-        setLauncherAccountsScope(t ? decodeJwtSub(t) : null);
-      } catch {
-        setHasSupabaseSession(false);
-        setLauncherAccountsScope(null);
-      }
-    };
-    readSession();
-    const onChanged = () => readSession();
-    window.addEventListener("mc16launcher:supabase-auth-changed", onChanged);
-    return () => window.removeEventListener("mc16launcher:supabase-auth-changed", onChanged);
-  }, []);
   const isAuthorized = !!profile.ms_id_token || !!profile.ely_username;
   const displayedNickname =
     profile.nickname.trim() !== ""
@@ -933,6 +826,7 @@ function App() {
   const activeAccountFromList = launcherAccounts.find((a) => a.is_active);
   const activeAccountLabel =
     activeAccountFromList?.label ?? (displayedNickname.trim() || "—");
+  const activeAccountKind = activeAccountFromList?.kind ?? "offline";
   const initialPersistedConsole = useMemo(() => loadPersistedGameConsole(), []);
   const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>(
     initialPersistedConsole.lines,
@@ -967,14 +861,16 @@ function App() {
     x: number;
     y: number;
   } | null>(null);
-  const [sidebarTabContextMenu, setSidebarTabContextMenu] = useState<{
-    itemId: SidebarItemId;
-    x: number;
-    y: number;
-  } | null>(null);
   const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
+
+  const skinHeadSrc = useMemo(() => {
+    const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
+    const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
+    const uuid = mcUuid || elyUuid || "00000000000000000000000000000000";
+    return `https://crafatar.com/renders/head/${uuid}?scale=6&default=MHF_Steve`;
+  }, [profile.mc_uuid, profile.ely_uuid]);
 
   const stevePlaceholderSrc = useMemo(() => {
     const svg = `
@@ -990,50 +886,16 @@ function App() {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }, []);
 
-  const [headImgSrc, setHeadImgSrc] = useState<string>(stevePlaceholderSrc);
-  const [accountAvatarById, setAccountAvatarById] = useState<Record<string, string>>({});
+  const [headImgSrc, setHeadImgSrc] = useState<string>(skinHeadSrc);
   useEffect(() => {
-    let isCancelled = false;
-    void (async () => {
-      const avatarSrc = await getAvatarSrc(profile, stevePlaceholderSrc, 64);
-      if (!isCancelled) {
-        setHeadImgSrc(avatarSrc);
-      }
-    })();
-    return () => {
-      isCancelled = true;
-    };
-  }, [
-    profile.nickname,
-    profile.ely_username,
-    profile.ely_uuid,
-    profile.mc_uuid,
-    stevePlaceholderSrc,
-  ]);
+    setHeadImgSrc(skinHeadSrc);
+  }, [skinHeadSrc]);
 
   const handleHeadImgError = useCallback(() => {
     if (headImgSrc !== stevePlaceholderSrc) {
       setHeadImgSrc(stevePlaceholderSrc);
     }
   }, [headImgSrc, stevePlaceholderSrc]);
-
-  useEffect(() => {
-    let isCancelled = false;
-    void (async () => {
-      const pairs = await Promise.all(
-        launcherAccounts.map(async (acc) => {
-          if (acc.kind !== "ely") return [acc.id, stevePlaceholderSrc] as const;
-          const src = await getElyAvatarByUsername(acc.label, stevePlaceholderSrc, 64);
-          return [acc.id, src] as const;
-        }),
-      );
-      if (isCancelled) return;
-      setAccountAvatarById(Object.fromEntries(pairs));
-    })();
-    return () => {
-      isCancelled = true;
-    };
-  }, [launcherAccounts, stevePlaceholderSrc]);
 
   const archiveCurrentConsoleAndClear = useCallback(() => {
     setConsoleLines((prev) => {
@@ -1433,7 +1295,6 @@ function App() {
     background_accent_color: "#0b1530",
     background_image_url: null,
     background_blur_enabled: true,
-    split_view_enabled: false,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -2121,24 +1982,6 @@ function App() {
   }, [loadProfile]);
 
   useEffect(() => {
-    let isCancelled = false;
-    void invoke("set_launcher_accounts_scope", { scope: launcherAccountsScope })
-      .then(async () => {
-        if (isCancelled) return;
-        await loadProfile();
-        if (!isCancelled) {
-          await refreshLauncherAccounts();
-        }
-      })
-      .catch((error) => {
-        console.debug("[accounts] failed to set accounts scope", error);
-      });
-    return () => {
-      isCancelled = true;
-    };
-  }, [launcherAccountsScope, loadProfile, refreshLauncherAccounts]);
-
-  useEffect(() => {
     if (activeItem === "accounts") {
       loadProfile();
       void refreshLauncherAccounts();
@@ -2249,8 +2092,79 @@ function App() {
     }
   };
 
+  const handleElyLogout = async () => {
+    try {
+      await invoke("ely_logout");
+      await loadProfile();
+      void refreshLauncherAccounts();
+      showNotification(
+        "info",
+        tt("app.accounts.toast.elyLoggedOut"),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        tt("app.accounts.toast.elyLogoutFailed"),
+      );
+    }
+  };
+
   const handleMicrosoftLogin = async () => {
-    showNotification("warning", tt("app.accounts.toast.msAuthUnavailable"));
+    if (msLoading) return;
+    setMsLoading(true);
+    setMsAuthUrl(null);
+
+    let unlistenComplete: (() => void) | null = null;
+    try {
+      unlistenComplete = await listen("ms-login-complete", async () => {
+        unlistenComplete?.();
+        unlistenComplete = null;
+        setMsLoading(false);
+        setMsAuthUrl(null);
+        await loadProfile();
+        void refreshLauncherAccounts();
+        showNotification("success", tt("app.accounts.toast.msLoggedIn"));
+      });
+
+      const url = await invoke<string>("start_ms_oauth");
+      setMsAuthUrl(url);
+      try {
+        await openUrl(url);
+      } catch (e) {
+        console.error("Не удалось открыть браузер для Microsoft OAuth:", e);
+        unlistenComplete?.();
+        unlistenComplete = null;
+        setMsLoading(false);
+        setMsAuthUrl(null);
+        showNotification("error", tt("app.accounts.toast.msOpenBrowserFailed"));
+      }
+    } catch (e) {
+      console.error(e);
+      unlistenComplete?.();
+      unlistenComplete = null;
+      setMsLoading(false);
+      setMsAuthUrl(null);
+      showNotification("error", tt("app.accounts.toast.msLoginFailed"));
+    }
+  };
+
+  const handleMicrosoftLogout = async () => {
+    try {
+      await invoke("ms_logout");
+      await loadProfile();
+      void refreshLauncherAccounts();
+      showNotification(
+        "info",
+        tt("app.accounts.toast.msLoggedOut"),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        tt("app.accounts.toast.msLogoutFailed"),
+      );
+    }
   };
 
   const handleSwitchLauncherAccount = async (accountId: string) => {
@@ -2585,344 +2499,6 @@ function App() {
     rawBackgroundImage.startsWith("/launcher-assets/")
       ? rawBackgroundImage
       : convertFileSrc(rawBackgroundImage));
-
-  const isSplitViewEnabled = settings?.split_view_enabled ?? false;
-
-  const applyDroppedSidebarItem = (side: "left" | "right", dropped: SidebarItemId) => {
-    setSplitViewTabs((prev) => {
-      if (side === "left") {
-        return {
-          left: dropped,
-          right: prev.right === dropped ? null : prev.right,
-        };
-      }
-      return {
-        left: prev.left,
-        right: prev.left === dropped ? null : dropped,
-      };
-    });
-    if (side === "left") {
-      setActiveItemWithSound(dropped);
-    }
-  };
-
-  const handleSidebarPointerDown = (
-    itemId: SidebarItemId,
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    if (!isSplitViewEnabled || event.button !== 0) return;
-    pointerDragItemRef.current = itemId;
-    pointerDragStartedRef.current = false;
-    pointerDragOriginRef.current = { x: event.clientX, y: event.clientY };
-  };
-
-  useEffect(() => {
-    if (!isSplitViewEnabled) return;
-    const onPointerMove = (event: PointerEvent) => {
-      const origin = pointerDragOriginRef.current;
-      const item = pointerDragItemRef.current;
-      if (!origin || !item) return;
-      const dx = event.clientX - origin.x;
-      const dy = event.clientY - origin.y;
-      const distance = Math.hypot(dx, dy);
-      if (!pointerDragStartedRef.current && distance < 8) return;
-      if (!pointerDragStartedRef.current) {
-        pointerDragStartedRef.current = true;
-        setDraggedSidebarItem(item);
-      }
-      setDragPointerPos({ x: event.clientX, y: event.clientY });
-      setSplitDropTarget(event.clientX < window.innerWidth / 2 ? "left" : "right");
-    };
-
-    const onPointerUp = (event: PointerEvent) => {
-      const item = pointerDragItemRef.current;
-      const started = pointerDragStartedRef.current;
-      pointerDragItemRef.current = null;
-      pointerDragOriginRef.current = null;
-      pointerDragStartedRef.current = false;
-
-      if (!started || !item) {
-        setDraggedSidebarItem(null);
-        setSplitDropTarget(null);
-        setDragPointerPos(null);
-        return;
-      }
-
-      const side: "left" | "right" = event.clientX < window.innerWidth / 2 ? "left" : "right";
-      applyDroppedSidebarItem(side, item);
-      setDraggedSidebarItem(null);
-      setSplitDropTarget(null);
-      setDragPointerPos(null);
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-    };
-  }, [isSplitViewEnabled, setActiveItemWithSound]);
-
-  const renderTabContent = (tabId: SidebarItemId) => {
-    if (tabId === "accounts") {
-      return (
-        <div className="flex w-full max-w-6xl flex-col items-center gap-6">
-          <div className="w-full text-center">
-            <h1 className="text-lg font-bold tracking-tight text-white/95">
-              {tt("app.accounts.managerTitle")}
-            </h1>
-            <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
-          </div>
-
-          {!hasSupabaseSession ? (
-            <SupabaseAccountPanel
-              showNotification={showNotification}
-              language={language}
-              onMicrosoftLogin={handleMicrosoftLogin}
-              onElyLogin={handleElyLogin}
-              providerLoginBusy={elyLoading}
-              launcherProfile={{
-                launcher_nickname: profile.nickname,
-                ely_username: profile.ely_username,
-                microsoft_username: activeAccountFromList?.kind === "microsoft" ? activeAccountFromList.label : null,
-                ely_uuid: profile.ely_uuid,
-                mc_uuid: profile.mc_uuid,
-              }}
-            />
-          ) : (
-            <div className="w-full max-w-4xl">
-              <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-5 shadow-xl backdrop-blur-md bg-black/50">
-                <div className="flex items-center gap-6">
-                  <button
-                    type="button"
-                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
-                  >
-                    <img
-                      src={headImgSrc}
-                      alt=""
-                      draggable={false}
-                      className="aspect-square h-full w-full object-cover object-center"
-                      onError={handleHeadImgError}
-                    />
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={displayedNickname}
-                        onChange={(e) => setProfile((p) => ({ ...p, nickname: e.target.value }))}
-                        onBlur={(e) => {
-                          const v = e.target.value.trim();
-                          if (!isAuthorized && v !== profile.nickname) handleSaveNickname(v);
-                        }}
-                        placeholder={tt("app.accounts.nicknamePlaceholder")}
-                        className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
-                        disabled={profileSaving || isAuthorized}
-                      />
-                      {!isAuthorized && (
-                        <span className="text-white/60" title={tt("app.accounts.editNickname")}>
-                          <PencilIcon />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 flex justify-center">
-                <SupabaseAccountPanel
-                  compact
-                  showNotification={showNotification}
-                  language={language}
-                  onMicrosoftLogin={handleMicrosoftLogin}
-                  onElyLogin={handleElyLogin}
-                  providerLoginBusy={elyLoading}
-                  launcherProfile={{
-                    launcher_nickname: profile.nickname,
-                    ely_username: profile.ely_username,
-                    microsoft_username: activeAccountFromList?.kind === "microsoft" ? activeAccountFromList.label : null,
-                    ely_uuid: profile.ely_uuid,
-                    mc_uuid: profile.mc_uuid,
-                  }}
-                />
-              </div>
-
-              {elyAuthUrl && (
-                <div className="mt-4 w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
-                  <p className="mb-1.5 text-xs font-medium text-amber-200">
-                    {tt("app.accounts.elyDialogTitle")}
-                  </p>
-                  <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
-                  <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (tabId === "mods") {
-      return (
-        <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center">
-          <ModsTab
-            showNotification={showNotification}
-            language={language}
-            activeProfileId={activeInstanceProfile?.id ?? null}
-            activeProfileGameVersion={activeInstanceProfile?.game_version}
-            activeProfileLoader={activeInstanceProfile?.loader}
-            onOpenModpacksTab={() => setActiveItem("modpacks")}
-            onSelectedModTitleChange={setDiscordModsTitle}
-          />
-        </div>
-      );
-    }
-
-    if (tabId === "modpacks") {
-      return (
-        <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4">
-          <ModpackTab
-            language={language}
-            showNotification={showNotification}
-            openedMrpackPath={osOpenedMrpackPath}
-            onOpenedMrpackPathConsumed={clearOsOpenedMrpackPath}
-            onProfileSelectionChange={handleModpackProfileSelectionChange}
-            initialSelectedProfileId={activeInstanceProfile?.id ?? null}
-            onProfilesChange={(profiles) => {
-              setKnownProfiles(
-                profiles.map((p) => ({
-                  id: p.id,
-                  name: p.name,
-                  game_version: p.game_version,
-                  loader: p.loader,
-                  icon_path: p.icon_path,
-                  directory: p.directory,
-                })),
-              );
-              setProfilesHydrated(true);
-            }}
-            onTogglePinInSidebar={(profile) =>
-              handleToggleSidebarPin({
-                id: profile.id,
-                name: profile.name,
-                game_version: profile.game_version,
-                loader: profile.loader,
-                icon_path: profile.icon_path,
-                directory: profile.directory,
-              })
-            }
-            isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
-            onOpenModsTab={() => setActiveItem("mods")}
-            onPlaySelectedProfile={() => {
-              if (!activeInstanceProfile) {
-                showNotification(
-                  "warning",
-                  tt("app.warnings.selectProfileFirst"),
-                );
-                return;
-              }
-              void handlePrimaryClick();
-            }}
-            gameStatus={gameStatus}
-            consoleLines={consoleLines}
-            consoleHistorySessions={consoleHistorySessions}
-            onClearConsole={handleClearConsole}
-          />
-        </div>
-      );
-    }
-
-    if (tabId === "friends") {
-      return (
-        <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-auto py-4">
-          <FriendsTab showNotification={showNotification} language={language} />
-        </div>
-      );
-    }
-
-    if (tabId === "settings") {
-      return (
-        <SettingsTab
-          settings={settings}
-          settingsTab={settingsTab}
-          setSettingsTab={setSettingsTab}
-          systemMemoryGb={systemMemoryGb}
-          updateSettings={(patch) => updateSettings(patch, activeInstanceProfile?.id ?? undefined)}
-          showNotification={showNotification}
-          SettingsCard={SettingsCard}
-          SettingsSlider={SettingsSlider}
-          SettingsToggle={SettingsToggle}
-          language={language}
-          setLanguage={setLanguage}
-          sidebarOrder={sidebarOrder.filter((id) =>
-            id === "play" ||
-            id === "settings" ||
-            id === "friends" ||
-            id === "mods" ||
-            id === "modpacks"
-          ) as ("play" | "settings" | "friends" | "mods" | "modpacks")[]}
-          setSidebarOrder={(order) => setSidebarOrder(order)}
-          updateStatus={updateStatus}
-          updateVersion={updateVersion}
-          updateDownloadPercent={updateDownloadPercent}
-          onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
-          onInstallUpdate={() => void installUpdate()}
-        />
-      );
-    }
-
-    return (
-      <PlayTab
-        gameStatus={gameStatus}
-        consoleLines={consoleLines}
-        isConsoleVisible={isConsoleVisible}
-        onToggleConsole={handleToggleConsole}
-        onClearConsole={handleClearConsole}
-        showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
-        versions={versions}
-        selectedVersion={selectedVersion}
-        setSelectedVersion={setSelectedVersion}
-        versionsLoading={versionsLoading}
-        isVersionDropdownOpen={isVersionDropdownOpen}
-        setIsVersionDropdownOpen={setIsVersionDropdownOpen}
-        installPaused={installPaused}
-        isInstalling={isInstalling}
-        handleResumeInstall={handleResumeInstall}
-        handlePauseInstall={handlePauseInstall}
-        handleCancelInstall={handleCancelInstall}
-        handlePrimaryClick={handlePrimaryClick}
-        primaryColorClasses={primaryColorClasses}
-        primaryLabel={primaryLabel}
-        progress={progress}
-        loader={loader}
-        setLoader={setLoader}
-        isLoaderDropdownOpen={isLoaderDropdownOpen}
-        setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
-        handleOpenGameFolder={handleOpenGameFolder}
-        language={language}
-        installedVersionIds={installedVersionIdsForDropdown}
-        showSnapshots={settings?.show_snapshots ?? false}
-        activeProfileName={activeInstanceProfile?.name ?? null}
-      />
-    );
-  };
-
-  const sidebarItemLabel = (itemId: SidebarItemId): string =>
-    tt(
-      itemId === "play"
-        ? "app.sidebar.play"
-        : itemId === "settings"
-          ? "app.sidebar.settings"
-          : itemId === "friends"
-            ? "app.sidebar.friends"
-            : itemId === "mods"
-              ? "app.sidebar.mods"
-              : itemId === "modpacks"
-                ? "app.sidebar.modpacks"
-                : "app.accounts.sidebarTooltip",
-    );
 
   return (
     <div
@@ -3300,63 +2876,6 @@ function App() {
         </div>
       )}
 
-      {sidebarTabContextMenu && (
-        <div
-          className="fixed inset-0 z-[350]"
-          onClick={() => setSidebarTabContextMenu(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setSidebarTabContextMenu(null);
-          }}
-        >
-          <div
-            className="absolute z-[360] w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
-            style={{ top: sidebarTabContextMenu.y, left: sidebarTabContextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                const tabId = sidebarTabContextMenu.itemId;
-                setSidebarTabContextMenu(null);
-                setActiveItemWithSound(tabId);
-                setSplitViewTabs((prev) => ({ ...prev, left: tabId }));
-              }}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/10"
-            >
-              <span>{language === "ru" ? "Открыть вкладку" : "Open tab"}</span>
-              <span className="text-white/50">{sidebarItemLabel(sidebarTabContextMenu.itemId)}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const tabId = sidebarTabContextMenu.itemId;
-                setSidebarTabContextMenu(null);
-                applyDroppedSidebarItem("left", tabId);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
-            >
-              <span>{language === "ru" ? "Открыть слева" : "Open on left"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const tabId = sidebarTabContextMenu.itemId;
-                setSidebarTabContextMenu(null);
-                applyDroppedSidebarItem("right", tabId);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
-            >
-              <span>{language === "ru" ? "Открыть справа" : "Open on right"}</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       <div
         className="relative z-20 flex h-9 items-center justify-between px-4 select-none"
         onMouseDown={handleTitleBarMouseDown}
@@ -3428,14 +2947,10 @@ function App() {
               className="interactive-press flex max-w-[200px] items-center gap-2 rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
               title={tt("app.accounts.switcherTitle")}
             >
-              <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/20">
-                <img
-                  src={headImgSrc}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  draggable={false}
-                  onError={handleHeadImgError}
-                />
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(activeAccountKind)}`}
+              >
+                {accountInitials(activeAccountLabel)}
               </span>
               <span className="min-w-0 flex-1 truncate">{activeAccountLabel}</span>
               <ChevronDownIcon
@@ -3455,26 +2970,11 @@ function App() {
                         acc.is_active ? "bg-emerald-500/10" : "hover:bg-white/5"
                       }`}
                     >
-                      {acc.kind === "ely" ? (
-                        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-white/20">
-                          <img
-                            src={accountAvatarById[acc.id] ?? stevePlaceholderSrc}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            draggable={false}
-                            onError={(event) => {
-                              const target = event.currentTarget;
-                              if (target.src !== stevePlaceholderSrc) target.src = stevePlaceholderSrc;
-                            }}
-                          />
-                        </span>
-                      ) : (
-                        <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(acc.kind)}`}
-                        >
-                          {accountInitials(acc.label)}
-                        </span>
-                      )}
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(acc.kind)}`}
+                      >
+                        {accountInitials(acc.label)}
+                      </span>
                       <button
                         type="button"
                         disabled={acc.is_active}
@@ -3579,16 +3079,6 @@ function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItemWithSound(item.id)}
-                onPointerDown={(event) => handleSidebarPointerDown(item.id, event)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setSidebarTabContextMenu({
-                    itemId: item.id,
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
-                }}
                 title={tt(item.labelKey)}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
@@ -3610,7 +3100,6 @@ function App() {
                     <>
                       {item.id === "play" && <PlayIcon />}
                       {item.id === "settings" && <SettingsIcon />}
-                      {item.id === "friends" && <FriendsIcon />}
                       {item.id === "mods" && <ModsIcon />}
                       {item.id === "modpacks" && <ModpackIcon />}
                     </>
@@ -3695,16 +3184,6 @@ function App() {
             <button
               type="button"
               onClick={() => setActiveItemWithSound("accounts")}
-              onPointerDown={(event) => handleSidebarPointerDown("accounts", event)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setSidebarTabContextMenu({
-                  itemId: "accounts",
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }}
               title={tt("app.accounts.sidebarTooltip")}
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
@@ -3722,90 +3201,336 @@ function App() {
           </div>
         </aside>
 
-        {isSplitViewEnabled ? (
-          <main className="flex min-h-0 flex-1 gap-3 px-3 py-3">
-            <div
-              className={`relative min-h-0 flex-1 overflow-hidden rounded-2xl border bg-black/25 ${
-                splitDropTarget === "left"
-                  ? "border-sky-300/80 ring-2 ring-sky-300/30"
-                  : "border-white/10"
-              }`}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setSplitDropTarget((prev) => (prev === "left" ? null : prev));
-                }
-              }}
-            >
-              <div className="tab-animate flex h-full w-full flex-col items-center justify-center px-4">
-                {renderTabContent(splitViewTabs.left)}
+        <main key={activeItem} className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
+          {activeItem === "accounts" ? (
+            <div className="flex w-full max-w-xl flex-col items-center gap-6">
+              <div className="w-full text-center">
+                <h1 className="text-lg font-bold tracking-tight text-white/95">
+                  {tt("app.accounts.managerTitle")}
+                </h1>
+                <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
               </div>
-              {draggedSidebarItem && splitDropTarget === "left" && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-sky-400/10 text-sm font-semibold text-sky-100">
-                  {language === "ru" ? "Отпустите, чтобы открыть слева" : "Drop to open on the left"}
-                </div>
-              )}
-            </div>
 
-            <div
-              className={`relative min-h-0 flex-1 overflow-hidden rounded-2xl border bg-black/25 ${
-                splitDropTarget === "right"
-                  ? "border-sky-300/80 ring-2 ring-sky-300/30"
-                  : "border-white/10"
-              }`}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setSplitDropTarget((prev) => (prev === "right" ? null : prev));
-                }
-              }}
-            >
-              {splitViewTabs.right ? (
-                <div className="tab-animate flex h-full w-full flex-col items-center justify-center px-4">
-                  {renderTabContent(splitViewTabs.right)}
+              <div className="w-full rounded-2xl border border-white/10 glass-panel px-4 py-4 shadow-xl backdrop-blur-md bg-black/40">
+                <div className="mb-3 flex items-start justify-between gap-3 px-1">
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
+                      {tt("app.accounts.savedListTitle")}
+                    </h2>
+                    <p className="mt-1 text-[11px] leading-snug text-white/45">
+                      {tt("app.accounts.savedListHint")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={addingAccount}
+                    onClick={() => void handleAddLauncherAccount()}
+                    className="interactive-press flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50"
+                  >
+                    <PlusIcon className="h-3.5 w-3.5" />
+                    {tt("app.accounts.addAccount")}
+                  </button>
                 </div>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-center text-sm text-white/55">
-                  {language === "ru"
-                    ? "Перетащите сюда вкладку из боковой панели"
-                    : "Drag a tab from the sidebar here"}
+                {launcherAccounts.length === 0 ? (
+                  <p className="px-1 py-6 text-center text-sm text-white/45">—</p>
+                ) : (
+                  <ul className="flex max-h-[min(360px,42vh)] flex-col gap-2 overflow-y-auto pr-0.5">
+                    {launcherAccounts.map((acc) => (
+                      <li
+                        key={acc.id}
+                        className={`flex items-stretch gap-2 rounded-xl border px-2 py-2 transition ${
+                          acc.is_active
+                            ? "border-emerald-400/35 bg-emerald-500/10"
+                            : "border-white/10 bg-black/30 hover:bg-black/50"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-xs font-bold ${accountKindAvatarClass(acc.kind)}`}
+                        >
+                          {accountInitials(acc.label)}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={acc.is_active}
+                          onClick={() => {
+                            if (!acc.is_active) void handleSwitchLauncherAccount(acc.id);
+                          }}
+                          className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition enabled:cursor-pointer enabled:hover:bg-white/5 enabled:active:scale-[0.99] disabled:cursor-default"
+                        >
+                          <span className="block truncate text-sm font-semibold text-white/95">
+                            {acc.label}
+                          </span>
+                          <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                                acc.kind === "microsoft"
+                                  ? "bg-sky-500/25 text-sky-100"
+                                  : acc.kind === "ely"
+                                    ? "bg-[#2d7d46]/35 text-emerald-100"
+                                    : "bg-white/10 text-white/55"
+                              }`}
+                            >
+                              {accountKindShortLabel(acc.kind)}
+                            </span>
+                            {acc.is_active ? (
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-300/90">
+                                {tt("app.accounts.activeBadge")}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => requestRemoveLauncherAccount(acc.id)}
+                          className="interactive-press shrink-0 self-center rounded-lg p-2.5 text-white/35 hover:bg-red-500/15 hover:text-red-300"
+                          title={tt("app.accounts.removeTitle")}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                            <path
+                              fill="currentColor"
+                              d="M9 3h6a1 1 0 0 1 1 1v1h4v2H4V5h4V4a1 1 0 0 1 1-1Zm1 5h2v9h-2V8Zm4 0h2v9h-2V8ZM6 8h2v9H6V8Z"
+                            />
+                          </svg>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="w-full">
+                <h2 className="mb-3 px-1 text-center text-xs font-bold uppercase tracking-wider text-white/40">
+                  {tt("app.accounts.currentProfileSection")}
+                </h2>
+                <div
+                  className="flex w-full items-center gap-6 rounded-2xl border border-white/10 glass-panel px-6 py-5 shadow-xl backdrop-blur-md bg-black/50"
+                >
+                  <button
+                    type="button"
+                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
+                  >
+                    <img
+                      src={headImgSrc}
+                      alt=""
+                      draggable={false}
+                      className="aspect-square h-full w-full object-cover object-center"
+                      onError={handleHeadImgError}
+                    />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={displayedNickname}
+                        onChange={(e) => setProfile((p) => ({ ...p, nickname: e.target.value }))}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (!isAuthorized && v !== profile.nickname) handleSaveNickname(v);
+                        }}
+                        placeholder={tt("app.accounts.nicknamePlaceholder")}
+                        className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
+                        disabled={profileSaving || isAuthorized}
+                      />
+                      {!isAuthorized && (
+                        <span className="text-white/50" title={tt("app.accounts.editNickname")}>
+                          <PencilIcon />
+                        </span>
+                      )}
+                    </div>
+                    {profile.ely_username && (
+                      <p className="mt-0.5 text-xs text-white/60">{profile.ely_username}</p>
+                    )}
+                  </div>
                 </div>
-              )}
-              {draggedSidebarItem && splitDropTarget === "right" && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-sky-400/10 text-sm font-semibold text-sky-100">
-                  {language === "ru" ? "Отпустите, чтобы открыть справа" : "Drop to open on the right"}
+                {!isAuthorized && (
+                  <p className="mt-4 text-center text-sm text-white/80">{tt("app.accounts.hint")}</p>
+                )}
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                  {profile.ms_id_token ? (
+                    <button
+                      type="button"
+                      onClick={handleMicrosoftLogout}
+                      className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
+                    >
+                      <MicrosoftIcon />
+                      <span>{tt("app.accounts.microsoftLogout")}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleMicrosoftLogin}
+                      disabled={elyLoading || msLoading}
+                      className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
+                    >
+                      <MicrosoftIcon />
+                      <span>{tt("app.accounts.microsoftSignIn")}</span>
+                    </button>
+                  )}
+                  {profile.ely_username ? (
+                    <button
+                      type="button"
+                      onClick={handleElyLogout}
+                      className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
+                    >
+                      <ElyByIcon />
+                      <span>{tt("app.accounts.elyLogout")}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleElyLogin}
+                      disabled={elyLoading}
+                      className="interactive-press flex items-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+                    >
+                      <ElyByIcon />
+                      <span>
+                        {elyLoading ? tt("app.accounts.elyWaiting") : "Ely.by"}
+                      </span>
+                    </button>
+                  )}
                 </div>
-              )}
+                {elyAuthUrl && (
+                  <div className="mt-4 w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
+                    <p className="mb-1.5 text-xs font-medium text-amber-200">
+                      {tt("app.accounts.elyDialogTitle")}
+                    </p>
+                    <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
+                    <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
+                  </div>
+                )}
+                {msAuthUrl && (
+                  <div className="mt-4 w-full rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-left">
+                    <p className="mb-1.5 text-xs font-medium text-blue-200">
+                      {tt("app.accounts.microsoftSignIn")}
+                    </p>
+                    <p className="break-all text-xs text-white/90">{msAuthUrl}</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </main>
-        ) : (
-          <main key={activeItem} className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
-            {renderTabContent(activeItem)}
-          </main>
-        )}
+          ) : activeItem === "mods" ? (
+            <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center">
+              <ModsTab
+                showNotification={showNotification}
+                language={language}
+                activeProfileId={activeInstanceProfile?.id ?? null}
+                activeProfileGameVersion={activeInstanceProfile?.game_version}
+                activeProfileLoader={activeInstanceProfile?.loader}
+                onOpenModpacksTab={() => setActiveItem("modpacks")}
+                onSelectedModTitleChange={setDiscordModsTitle}
+              />
+            </div>
+          ) : activeItem === "modpacks" ? (
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4">
+            <ModpackTab
+              language={language}
+              showNotification={showNotification}
+              onProfileSelectionChange={handleModpackProfileSelectionChange}
+              initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+              onProfilesChange={(profiles) => {
+                setKnownProfiles(
+                  profiles.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    game_version: p.game_version,
+                    loader: p.loader,
+                    icon_path: p.icon_path,
+                    directory: p.directory,
+                  })),
+                );
+                setProfilesHydrated(true);
+              }}
+              onTogglePinInSidebar={(profile) =>
+                handleToggleSidebarPin({
+                  id: profile.id,
+                  name: profile.name,
+                  game_version: profile.game_version,
+                  loader: profile.loader,
+                  icon_path: profile.icon_path,
+                  directory: profile.directory,
+                })
+              }
+              isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
+              onOpenModsTab={() => setActiveItem("mods")}
+              onPlaySelectedProfile={() => {
+                if (!activeInstanceProfile) {
+                  showNotification(
+                    "warning",
+                    tt("app.warnings.selectProfileFirst"),
+                  );
+                  return;
+                }
+                void handlePrimaryClick();
+              }}
+              gameStatus={gameStatus}
+              consoleLines={consoleLines}
+              consoleHistorySessions={consoleHistorySessions}
+              onClearConsole={handleClearConsole}
+            />
+          </div>
+          ) : activeItem === "settings" ? (
+            <SettingsTab
+              settings={settings}
+              settingsTab={settingsTab}
+              setSettingsTab={setSettingsTab}
+              systemMemoryGb={systemMemoryGb}
+              updateSettings={(patch) => updateSettings(patch, activeInstanceProfile?.id ?? undefined)}
+              showNotification={showNotification}
+              SettingsCard={SettingsCard}
+              SettingsSlider={SettingsSlider}
+              SettingsToggle={SettingsToggle}
+              language={language}
+              setLanguage={setLanguage}
+              sidebarOrder={sidebarOrder.filter((id) =>
+                id === "play" ||
+                id === "settings" ||
+                id === "mods" ||
+                id === "modpacks"
+              ) as ("play" | "settings" | "mods" | "modpacks")[]}
+              setSidebarOrder={(order) => setSidebarOrder(order)}
+              updateStatus={updateStatus}
+              updateVersion={updateVersion}
+              updateDownloadPercent={updateDownloadPercent}
+              onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
+              onInstallUpdate={() => void installUpdate()}
+            />
+          ) : (
+            <PlayTab
+              gameStatus={gameStatus}
+              consoleLines={consoleLines}
+              isConsoleVisible={isConsoleVisible}
+              onToggleConsole={handleToggleConsole}
+              onClearConsole={handleClearConsole}
+              showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
+              versions={versions}
+              selectedVersion={selectedVersion}
+              setSelectedVersion={setSelectedVersion}
+              versionsLoading={versionsLoading}
+              isVersionDropdownOpen={isVersionDropdownOpen}
+              setIsVersionDropdownOpen={setIsVersionDropdownOpen}
+              installPaused={installPaused}
+              isInstalling={isInstalling}
+              handleResumeInstall={handleResumeInstall}
+              handlePauseInstall={handlePauseInstall}
+              handleCancelInstall={handleCancelInstall}
+              handlePrimaryClick={handlePrimaryClick}
+              primaryColorClasses={primaryColorClasses}
+              primaryLabel={primaryLabel}
+              progress={progress}
+              loader={loader}
+              setLoader={setLoader}
+              isLoaderDropdownOpen={isLoaderDropdownOpen}
+              setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
+              handleOpenGameFolder={handleOpenGameFolder}
+              language={language}
+              installedVersionIds={installedVersionIdsForDropdown}
+              showSnapshots={settings?.show_snapshots ?? false}
+          activeProfileName={activeInstanceProfile?.name ?? null}
+            />
+          )}
+        </main>
 
       </div>
-      {draggedSidebarItem && dragPointerPos && (
-        <div
-          className="pointer-events-none fixed z-[400] rounded-lg border border-sky-300/70 bg-sky-400/20 px-2.5 py-1 text-xs font-semibold text-sky-100 shadow-lg backdrop-blur"
-          style={{
-            left: dragPointerPos.x + 14,
-            top: dragPointerPos.y + 14,
-          }}
-        >
-          {tt(
-            draggedSidebarItem === "play"
-              ? "app.sidebar.play"
-              : draggedSidebarItem === "settings"
-                ? "app.sidebar.settings"
-                : draggedSidebarItem === "friends"
-                  ? "app.sidebar.friends"
-                  : draggedSidebarItem === "mods"
-                    ? "app.sidebar.mods"
-                    : draggedSidebarItem === "modpacks"
-                      ? "app.sidebar.modpacks"
-                      : "app.accounts.sidebarTooltip",
-          )}
-        </div>
-      )}
     </div>
   );
 }

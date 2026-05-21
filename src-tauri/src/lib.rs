@@ -8,6 +8,11 @@ mod ms_auth;
 mod commands;
 mod discord_rpc;
 
+mod app;
+mod infra;
+mod models;
+mod services;
+
 use game_provider::{
     cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
     fetch_neoforge_versions, check_version_files_integrity,
@@ -85,15 +90,8 @@ fn configure_windows_webview_memory() {
 }
 
 fn load_dotenv() {
-    use std::path::Path;
-    let repo_env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env");
-    let _ = dotenvy::from_path(repo_env);
-    let _ = dotenvy::dotenv();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let _ = dotenvy::from_path(dir.join(".env"));
-        }
-    }
+    // Единый bootstrap env для app.
+    app::env::load_dotenv_files();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -101,9 +99,9 @@ pub fn run() {
     load_dotenv();
 
     #[cfg(target_os = "linux")]
-    configure_linux_display_backend();
+    infra::platform::configure_linux_display_backend();
     #[cfg(target_os = "windows")]
-    configure_windows_webview_memory();
+    infra::platform::configure_windows_webview_memory();
 
     let pending_mrpack = mrpack_open::pending_mrpack_new();
 

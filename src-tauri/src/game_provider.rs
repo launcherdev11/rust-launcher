@@ -3,7 +3,6 @@ use std::sync::OnceLock;
 use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::atomic::{AtomicU64};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -25,176 +24,24 @@ use base64::Engine;
 use tokio::sync::Semaphore;
 use sha1::{Digest, Sha1};
 use urlencoding::encode;
-use once_cell::sync::Lazy;
 
 use crate::ely_auth::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
+use crate::models::{JavaArgsValidationResult, JavaRuntimeInfo, JavaSettings, Settings};
+pub use crate::models::profile::{InstanceConfig, InstanceProfileSummary, InstanceSettings};
+use crate::services::game::cache as cache_service;
+use crate::services::game::settings as settings_service;
+use crate::services::game::profiles as profiles_service;
+use crate::services::storage::backup as backup_service;
+use crate::services::java as java_service;
 
 const ELY_AUTHLIB_INJECTOR_TARGET: &str = "ely.by";
 
-fn http_client(use_proxy: bool) -> Client {
-    let _ = dotenvy::dotenv();
-
-    let mut builder = Client::builder()
-        .timeout(Duration::from_secs(300))
-        .connect_timeout(Duration::from_secs(30))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
-
-    if use_proxy {
-        let host = preferred_proxy_host(false);
-        let port_str = env_var_trim("PROXY_PORT");
-        let user = env_var_trim("PROXY_USER");
-        let pass = env_var_trim("PROXY_PASS");
-
-        if let (Some(host), Some(port_str)) = (host, port_str) {
-            if let Ok(port) = port_str.parse::<u16>() {
-                let proxy_host = normalize_proxy_host_for_url(&host);
-                let proxy_url = match (user, pass) {
-                    (Some(u), Some(p)) => format!(
-                        "http://{}:{}@{}:{}",
-                        encode(&u),
-                        encode(&p),
-                        proxy_host,
-                        port
-                    ),
-                    _ => format!("http://{proxy_host}:{port}"),
-                };
-
-                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                    builder = builder.proxy(proxy);
-                }
-            }
-        }
-    }
-
-    builder.build().unwrap_or_else(|_| Client::new())
-}
-
-fn http_client_for_binary_download_with_preferred_proxy_host(
-    use_proxy: bool,
-    prefer_ipv6: bool,
-) -> Client {
-    let _ = dotenvy::dotenv();
-
-    let mut builder = Client::builder()
-        .timeout(Duration::from_secs(300))
-        .connect_timeout(Duration::from_secs(30))
-        .http1_only()
-        .no_gzip()
-        .no_brotli()
-        .no_deflate()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36");
-
-    if use_proxy {
-        let host = preferred_proxy_host(prefer_ipv6);
-        let port_str = env_var_trim("PROXY_PORT");
-        let user = env_var_trim("PROXY_USER");
-        let pass = env_var_trim("PROXY_PASS");
-
-        if let (Some(host), Some(port_str)) = (host, port_str) {
-            if let Ok(port) = port_str.parse::<u16>() {
-                let proxy_host = normalize_proxy_host_for_url(&host);
-                let proxy_url = match (user, pass) {
-                    (Some(u), Some(p)) => format!(
-                        "http://{}:{}@{}:{}",
-                        encode(&u),
-                        encode(&p),
-                        proxy_host,
-                        port
-                    ),
-                    _ => format!("http://{proxy_host}:{port}"),
-                };
-
-                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                    builder = builder.proxy(proxy);
-                }
-            }
-        }
-    }
-
-    builder.build().unwrap_or_else(|_| {
-        Client::builder()
-            .timeout(Duration::from_secs(300))
-            .connect_timeout(Duration::from_secs(30))
-            .http1_only()
-            .no_gzip()
-            .no_brotli()
-            .no_deflate()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 16Launcher/1.0 Chrome/122.0.0.0 Safari/537.36")
-            .build()
-            .unwrap_or_else(|_| Client::new())
-    })
-}
-
-fn http_client_for_binary_download(use_proxy: bool) -> Client {
-    http_client_for_binary_download_with_preferred_proxy_host(use_proxy, false)
-}
-
-fn env_var_trim(key: &str) -> Option<String> {
-    let runtime = env::var(key)
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    if runtime.is_some() {
-        return runtime;
-    }
-
-    let compile_time = match key {
-        "PROXY_HOST" => option_env!("PROXY_HOST"),
-        "PROXY_PORT" => option_env!("PROXY_PORT"),
-        "PROXY_HOSTS" => option_env!("PROXY_HOSTS"),
-        "PROXY_HOST_FORGE_IPV6" => option_env!("PROXY_HOST_FORGE_IPV6"),
-        "PROXY_USER" => option_env!("PROXY_USER"),
-        "PROXY_PASS" => option_env!("PROXY_PASS"),
-        _ => return None,
-    };
-
-    compile_time
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-}
-
-fn parse_proxy_hosts_csv(raw: &str) -> Vec<String> {
-    raw.split([',', ';'])
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-fn is_ipv6_host_literal(raw: &str) -> bool {
-    let candidate = raw.trim().trim_start_matches('[').trim_end_matches(']');
-    candidate.contains(':')
-}
-
-fn normalize_proxy_host_for_url(raw: &str) -> String {
-    let host = raw.trim();
-    if is_ipv6_host_literal(host) && !host.starts_with('[') && !host.ends_with(']') {
-        format!("[{host}]")
-    } else {
-        host.to_string()
-    }
-}
-
-fn preferred_proxy_host(prefer_ipv6: bool) -> Option<String> {
-    let mut candidates: Vec<String> = Vec::new();
-    if prefer_ipv6 {
-        if let Some(v) = env_var_trim("PROXY_HOST_FORGE_IPV6") {
-            candidates.push(v);
-        }
-    }
-    if let Some(v) = env_var_trim("PROXY_HOST") {
-        candidates.push(v);
-    }
-    if let Some(v) = env_var_trim("PROXY_HOSTS") {
-        candidates.extend(parse_proxy_hosts_csv(&v));
-    }
-
-    if prefer_ipv6 {
-        if let Some(found) = candidates.iter().find(|h| is_ipv6_host_literal(h)) {
-            return Some(found.clone());
-        }
-    }
-    candidates.into_iter().find(|h| !h.trim().is_empty())
-}
+use crate::infra::http::{
+    http_client, http_client_for_binary_download, http_client_for_binary_download_with_preferred_proxy_host,
+};
+use crate::infra::proxy::{
+    env_var_trim, normalize_proxy_host_for_url, parse_proxy_hosts_csv, preferred_proxy_host,
+};
 
 fn load_project_env_for_runtime() {
     static ENV_LOADED: OnceLock<()> = OnceLock::new();
@@ -687,52 +534,7 @@ pub struct PlaytimeUpdatedPayload {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct JavaSettings {
-    pub use_custom_jvm_args: bool,
-    ///явный путь к java/javaw.по дефолту офиц runtime Mojang
-    pub java_path: Option<String>,
-    ///мин. объем памяти xms (1G\1024M)
-    pub xms: Option<String>,
-    ///макс объем памяти xmx (4G\4096M)
-    pub xmx: Option<String>,
-    ///доп JVM аргументы
-    pub jvm_args: Option<String>,
-    ///имя пресета ("balanced", "performance", "low_memory")
-    pub preset: Option<String>,
-}
-
-impl Default for JavaSettings {
-    fn default() -> Self {
-        Self {
-            use_custom_jvm_args: false,
-            java_path: None,
-            xms: None,
-            xmx: None,
-            jvm_args: None,
-            preset: Some("balanced".to_string()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct JavaRuntimeInfo {
-    ///полный путь к java/javaw
-    pub path: String,
-    ///строка с версией из `java -version`
-    pub version: String,
-    ///краткое описание источника (PATH, JAVA_HOME, system, runtime и т.д.)
-    pub source: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct JavaArgsValidationResult {
-    pub ok: bool,
-    pub warnings: Vec<String>,
-    pub errors: Vec<String>,
-    pub output: String,
-}
+// moved to crate::models::java
 
 fn replace_basic_placeholders(
     s: &str,
@@ -749,7 +551,7 @@ fn replace_basic_placeholders(
         .replace("${version}", version_id)
 }
 
-fn parse_memory_spec_to_mb(raw: &str) -> Option<u32> {
+pub(crate) fn parse_memory_spec_to_mb(raw: &str) -> Option<u32> {
     let s = raw.trim();
     if s.is_empty() {
         return None;
@@ -917,7 +719,7 @@ fn build_java_command(
         }
     }
 
-    if let Some(java_major) = detect_java_major_version(&java_path) {
+    if let Some(java_major) = java_service::detect::detect_java_major_version(&java_path) {
         if java_major < 9 {
             let mut filtered: Vec<String> = Vec::with_capacity(jvm_args.len());
             let mut i = 0usize;
@@ -1066,96 +868,7 @@ fn build_java_command(
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Settings {
-    #[serde(default)]
-    pub game_directory: Option<String>,
-    pub ram_mb: u32,
-    pub show_console_on_launch: bool,
-    pub close_launcher_on_game_start: bool,
-    pub check_game_processes: bool,
-
-    pub resolution_width: Option<u32>,
-    pub resolution_height: Option<u32>,
-
-    pub show_snapshots: bool,
-    pub show_alpha_versions: bool,
-    #[serde(default)]
-    pub forge_ipv6_download: bool,
-    #[serde(default = "default_forge_proxy_fallback_enabled")]
-    pub forge_proxy_fallback: bool,
-
-    pub notify_new_update: bool,
-    pub notify_new_message: bool,
-    pub notify_system_message: bool,
-
-    pub check_updates_on_start: bool,
-    pub auto_install_updates: bool,
-
-    pub open_launcher_on_profiles_tab: bool,
-
-    #[serde(default = "default_ui_sounds_enabled")]
-    pub ui_sounds_enabled: bool,
-
-    #[serde(default = "default_interface_language")]
-    pub interface_language: String,
-
-    pub background_accent_color: String,
-    pub background_image_url: Option<String>,
-
-    #[serde(default = "default_background_blur_enabled")]
-    pub background_blur_enabled: bool,
-
-    #[serde(default)]
-    pub split_view_enabled: bool,
-}
-
-fn default_interface_language() -> String {
-    "ru".to_string()
-}
-
-fn default_background_blur_enabled() -> bool {
-    true
-}
-
-fn default_forge_proxy_fallback_enabled() -> bool {
-    true
-}
-
-fn default_ui_sounds_enabled() -> bool {
-    true
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            game_directory: None,
-            ram_mb: 4096,
-            show_console_on_launch: false,
-            close_launcher_on_game_start: false,
-            check_game_processes: true,
-            resolution_width: None,
-            resolution_height: None,
-            show_snapshots: false,
-            show_alpha_versions: false,
-            forge_ipv6_download: false,
-            forge_proxy_fallback: true,
-            notify_new_update: true,
-            notify_new_message: true,
-            notify_system_message: true,
-            check_updates_on_start: true,
-            auto_install_updates: false,
-            open_launcher_on_profiles_tab: false,
-            ui_sounds_enabled: true,
-            interface_language: "ru".to_string(),
-            background_accent_color: "#0b1530".to_string(),
-            background_image_url: None,
-            background_blur_enabled: true,
-            split_view_enabled: false,
-        }
-    }
-}
+// moved to crate::models::settings
 
 fn settings_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("settings.json"))
@@ -1237,39 +950,21 @@ fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LauncherSettingsBackupV1 {
-    pub format_version: u32,
-    pub exported_at_ms: u64,
-    pub settings: Settings,
-    pub java_settings: JavaSettings,
-    #[serde(default)]
-    pub sidebar_order: Option<Vec<String>>,
-}
-
-fn now_unix_ms() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
+use crate::models::LauncherSettingsBackupV1;
 
 #[tauri::command]
 pub fn get_settings() -> Result<Settings, String> {
-    Ok(load_settings_from_disk())
+    Ok(settings_service::load_settings_from_disk())
 }
 
 #[tauri::command]
 pub fn set_settings(settings: Settings) -> Result<(), String> {
-    save_settings_to_disk(&settings)
+    settings_service::save_settings_to_disk(&settings)
 }
 
 #[tauri::command]
 pub fn reset_settings_to_default() -> Result<Settings, String> {
-    let defaults = Settings::default();
-    save_settings_to_disk(&defaults)?;
-    Ok(defaults)
+    settings_service::reset_settings_to_default()
 }
 
 #[tauri::command]
@@ -1278,124 +973,37 @@ pub fn export_launcher_settings_backup(
     path: String,
     sidebar_order: Option<Vec<String>>,
 ) -> Result<String, String> {
-    let p = PathBuf::from(path.clone());
-    if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку для экспорта: {e}"))?;
-    }
-
-    let settings = load_settings_from_disk();
-    let java_settings = load_java_settings_internal(&app);
-    let backup = LauncherSettingsBackupV1 {
-        format_version: 1,
-        exported_at_ms: now_unix_ms(),
-        settings,
-        java_settings,
-        sidebar_order,
-    };
-
-    let text = serde_json::to_string_pretty(&backup)
-        .map_err(|e| format!("Ошибка сериализации файла экспорта: {e}"))?;
-    std::fs::write(&p, text).map_err(|e| format!("Не удалось записать файл экспорта: {e}"))?;
-    Ok(path)
+    backup_service::export_launcher_settings_backup(&app, path, sidebar_order)
 }
 
 #[tauri::command]
 pub fn import_launcher_settings_backup(app: AppHandle, path: String) -> Result<LauncherSettingsBackupV1, String> {
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Не удалось прочитать файл импорта: {e}"))?;
-
-    let parsed_backup = serde_json::from_str::<LauncherSettingsBackupV1>(&text).ok();
-    let (mut settings, mut java_settings, sidebar_order) = if let Some(b) = parsed_backup {
-        (b.settings, b.java_settings, b.sidebar_order)
-    } else {
-        let s = serde_json::from_str::<Settings>(&text)
-            .map_err(|e| format!("Файл импорта не распознан (ожидался JSON настроек): {e}"))?;
-        let js = load_java_settings_internal(&app);
-        (s, js, None)
-    };
-
-    if settings.interface_language.trim().is_empty() {
-        settings.interface_language = default_interface_language();
-    }
-    if settings.background_accent_color.trim().is_empty() {
-        settings.background_accent_color = "#0b1530".to_string();
-    }
-    if java_settings.java_path.as_deref().unwrap_or("").trim().is_empty() {
-        java_settings.java_path = None;
-    }
-
-    save_settings_to_disk(&settings)?;
-    save_java_settings_internal(&app, &java_settings)?;
-
-    Ok(LauncherSettingsBackupV1 {
-        format_version: 1,
-        exported_at_ms: now_unix_ms(),
-        settings,
-        java_settings,
-        sidebar_order,
-    })
+    backup_service::import_launcher_settings_backup(&app, path)
 }
 
 #[tauri::command]
 pub fn get_launcher_cache_size() -> Result<u64, String> {
-    let dir = launcher_cache_dir()?;
-    let (bytes, _) = dir_size_and_count(&dir);
-    Ok(bytes)
+    cache_service::get_launcher_cache_size()
 }
 
 #[tauri::command]
 pub fn clear_launcher_cache() -> Result<(), String> {
-    let dir = launcher_cache_dir()?;
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir)
-            .map_err(|e| format!("Не удалось удалить кэш лаунчера: {e}"))?;
-    }
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Не удалось создать папку кэша лаунчера: {e}"))?;
-    Ok(())
+    cache_service::clear_launcher_cache()
 }
 
 #[tauri::command]
 pub fn get_java_settings(app: AppHandle) -> Result<JavaSettings, String> {
-    Ok(load_java_settings_internal(&app))
+    Ok(settings_service::load_java_settings(&app))
 }
 
 #[tauri::command]
 pub fn set_java_settings(app: AppHandle, settings: JavaSettings) -> Result<(), String> {
-    save_java_settings_internal(&app, &settings)
-}
-
-fn effective_java_settings_for_profile_internal(
-    app: &AppHandle,
-    profile_id: Option<String>,
-) -> JavaSettings {
-    let id = match profile_id {
-        Some(id) if !id.trim().is_empty() => id,
-        _ => return load_java_settings_internal(app),
-    };
-    let path = match instance_settings_path(&id) {
-        Ok(p) => p,
-        Err(_) => return load_java_settings_internal(app),
-    };
-    if !path.exists() {
-        return load_java_settings_internal(app);
-    }
-    let text = match std::fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(_) => return load_java_settings_internal(app),
-    };
-    let inst: InstanceSettings = match serde_json::from_str(&text) {
-        Ok(s) => s,
-        Err(_) => return load_java_settings_internal(app),
-    };
-    inst.java_settings
-        .unwrap_or_else(|| load_java_settings_internal(app))
+    settings_service::save_java_settings(&app, &settings)
 }
 
 #[tauri::command]
 pub fn get_profile_java_settings(app: AppHandle, id: String) -> Result<JavaSettings, String> {
-    Ok(effective_java_settings_for_profile_internal(&app, Some(id)))
+    Ok(settings_service::effective_java_settings_for_profile(&app, Some(id)))
 }
 
 #[tauri::command]
@@ -1403,25 +1011,7 @@ pub fn set_profile_java_settings(
     id: String,
     settings: JavaSettings,
 ) -> Result<(), String> {
-    let path = instance_settings_path(&id)?;
-    let mut current = if path.exists() {
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
-        serde_json::from_str::<InstanceSettings>(&text)
-            .map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
-    } else {
-        InstanceSettings::default()
-    };
-    current.java_settings = Some(settings);
-    let text = serde_json::to_string_pretty(&current)
-        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
-    }
-    std::fs::write(&path, text)
-        .map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
-    Ok(())
+    settings_service::set_profile_java_settings(&id, settings)
 }
 
 #[tauri::command]
@@ -1524,194 +1114,14 @@ pub async fn validate_java_args(
     java_path: Option<String>,
     args: String,
 ) -> Result<JavaArgsValidationResult, String> {
-    let mut warnings = Vec::new();
-    let mut errors = Vec::new();
-
-    let java_exe = java_path
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "java".to_string());
-
-    let mut cmd = std::process::Command::new(&java_exe);
-    cmd.arg("-XshowSettings:vm");
-    cmd.arg("-version");
-
-    let user_args: Vec<String> = args
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
-
-    const FORBIDDEN_PREFIXES: &[&str] = &[
-        "-agentlib:",
-        "-agentpath:",
-        "-Xrun",
-        "-Xdebug",
-    ];
-    const FORBIDDEN_EQUALS: &[&str] = &[
-        "-XX:+DisableAttachMechanism",
-    ];
-
-    const EXPERIMENTAL_FLAGS: &[&str] = &[
-        "-XX:+AggressiveOpts",
-        "-XX:+UnlockExperimentalVMOptions",
-    ];
-
-    let mut filtered_args = Vec::new();
-    for a in &user_args {
-        let mut blocked = false;
-        for p in FORBIDDEN_PREFIXES {
-            if a.starts_with(p) {
-                blocked = true;
-                errors.push(format!("Флаг \"{a}\" не может быть использован по соображениям безопасности."));
-                break;
-            }
-        }
-        if blocked {
-            continue;
-        }
-        for eq in FORBIDDEN_EQUALS {
-            if a == eq {
-                blocked = true;
-                errors.push(format!("Флаг \"{a}\" не может быть использован по соображениям безопасности."));
-                break;
-            }
-        }
-        if blocked {
-            continue;
-        }
-
-        for exp in EXPERIMENTAL_FLAGS {
-            if a == exp {
-                warnings.push(format!(
-                    "Флаг \"{a}\" является экспериментальным и может вызывать нестабильность JVM."
-                ));
-            }
-        }
-
-        if let Some(rest) = a.strip_prefix("-Xmx") {
-            if let Some(mb) = parse_memory_spec_to_mb(rest) {
-                if mb > 64 * 1024 {
-                    warnings.push("Указан очень большой Xmx (более 64ГБ). Убедитесь, что это соответствует объёму вашей ОЗУ.".to_string());
-                }
-            }
-        }
-
-        filtered_args.push(a.clone());
-    }
-
-    cmd.args(&filtered_args);
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Не удалось запустить Java для проверки: {e}"))?;
-
-    let mut combined = String::new();
-    combined.push_str(&String::from_utf8_lossy(&output.stdout));
-    if !output.stderr.is_empty() {
-        if !combined.is_empty() {
-            combined.push('\n');
-        }
-        combined.push_str(&String::from_utf8_lossy(&output.stderr));
-    }
-
-    let ok = output.status.success() && errors.is_empty();
-    if !output.status.success() {
-        errors.push(format!("Команда Java завершилась с кодом: {}", output.status));
-    }
-
-    Ok(JavaArgsValidationResult {
-        ok,
-        warnings,
-        errors,
-        output: combined,
-    })
+    java_service::validate::validate_java_args(java_path, args).await
 }
 
-fn detect_java_version(path: &str, source: &str) -> Option<JavaRuntimeInfo> {
-    let mut cmd = std::process::Command::new(path);
-    cmd.arg("-version");
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-
-    let output = cmd.output().ok()?;
-    let text = if !output.stderr.is_empty() {
-        String::from_utf8_lossy(&output.stderr).into_owned()
-    } else {
-        String::from_utf8_lossy(&output.stdout).into_owned()
-    };
-    let version_line = text.lines().next().unwrap_or("").trim();
-    if version_line.is_empty() {
-        return None;
-    }
-    Some(JavaRuntimeInfo {
-        path: path.to_string(),
-        version: version_line.to_string(),
-        source: source.to_string(),
-    })
-}
-
-fn parse_java_major_version(version_line: &str) -> Option<u8> {
-    let start_quote = version_line.find('"')?;
-    let after = &version_line[start_quote + 1..];
-    let end_quote_rel = after.find('"')?;
-    let version = &after[..end_quote_rel];
-
-    let mut parts = version.split('.');
-    let first = parts.next()?;
-    if first == "1" {
-        let second = parts.next()?;
-        second.parse::<u8>().ok()
-    } else {
-        first.parse::<u8>().ok()
-    }
-}
-
-fn detect_java_major_version(java_path: &Path) -> Option<u8> {
-    let java_path_str = java_path.to_string_lossy();
-    let info = detect_java_version(java_path_str.as_ref(), "LAUNCH_JAVA_RUNTIME")?;
-    parse_java_major_version(&info.version)
-}
+// moved to services/java/detect.rs
 
 #[tauri::command]
 pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut result = Vec::new();
-
-    if let Ok(home) = env::var("JAVA_HOME") {
-        let base = PathBuf::from(&home);
-        let cand_javaw = base.join("bin").join(if cfg!(target_os = "windows") {
-            "javaw.exe"
-        } else {
-            "java"
-        });
-        if cand_javaw.exists() {
-            if let Some(info) =
-                detect_java_version(cand_javaw.to_string_lossy().as_ref(), "JAVA_HOME")
-            {
-                if seen.insert(info.path.clone()) {
-                    result.push(info);
-                }
-            }
-        }
-    }
-
-    if let Some(info) = detect_java_version("java", "PATH") {
-        if seen.insert(info.path.clone()) {
-            result.push(info);
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(info) = detect_java_version("javaw", "PATH") {
-            if seen.insert(info.path.clone()) {
-                result.push(info);
-            }
-        }
-    }
-
-    Ok(result)
+    java_service::detect::detect_java_runtimes().await
 }
 
 #[cfg(test)]
@@ -2360,47 +1770,7 @@ pub struct LauncherAccountSummary {
 }
 
 fn launcher_accounts_path() -> Result<PathBuf, String> {
-    let base = launcher_data_dir()?;
-    let scope = LAUNCHER_ACCOUNTS_SCOPE
-        .lock()
-        .ok()
-        .and_then(|g| g.clone())
-        .unwrap_or_else(|| "default".to_string());
-    Ok(base.join(format!("accounts_{scope}.json")))
-}
-
-static LAUNCHER_ACCOUNTS_SCOPE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
-
-fn normalize_accounts_scope(raw: &str) -> Option<String> {
-    let normalized: String = raw
-        .trim()
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
-#[tauri::command]
-pub fn set_launcher_accounts_scope(scope: Option<String>) -> Result<(), String> {
-    let normalized = scope
-        .as_deref()
-        .and_then(normalize_accounts_scope);
-    let mut guard = LAUNCHER_ACCOUNTS_SCOPE
-        .lock()
-        .map_err(|_| "Не удалось установить scope аккаунтов.".to_string())?;
-    *guard = normalized;
-    Ok(())
+    Ok(launcher_data_dir()?.join("accounts.json"))
 }
 
 fn new_launcher_account_id() -> String {
@@ -2440,23 +1810,6 @@ fn load_accounts_store() -> Result<LauncherAccountsStore, String> {
         let s =
             std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения accounts.json: {e}"))?;
         return serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора accounts.json: {e}"));
-    }
-
-    let current_scope = LAUNCHER_ACCOUNTS_SCOPE
-        .lock()
-        .ok()
-        .and_then(|g| g.clone())
-        .unwrap_or_else(|| "default".to_string());
-    if current_scope == "default" {
-        let legacy_path = launcher_data_dir()?.join("accounts.json");
-        if legacy_path.exists() {
-            let s = std::fs::read_to_string(&legacy_path)
-                .map_err(|e| format!("Ошибка чтения legacy accounts.json: {e}"))?;
-            let legacy_store: LauncherAccountsStore = serde_json::from_str(&s)
-                .map_err(|e| format!("Ошибка разбора legacy accounts.json: {e}"))?;
-            save_accounts_store(&legacy_store)?;
-            return Ok(legacy_store);
-        }
     }
 
     let profile = read_profile_from_disk()?;
@@ -2795,7 +2148,7 @@ fn instance_config_path(id: &str) -> Result<PathBuf, String> {
     Ok(instance_dir(id)?.join("config.json"))
 }
 
-fn instance_settings_path(id: &str) -> Result<PathBuf, String> {
+pub(crate) fn instance_settings_path(id: &str) -> Result<PathBuf, String> {
     Ok(instance_dir(id)?.join("settings.json"))
 }
 
@@ -2811,77 +2164,9 @@ fn generate_instance_id() -> String {
         .collect()
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct InstanceConfig {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub icon_path: Option<String>,
-    pub game_version: String,
-    pub loader: String,
-    pub created_at: u64,
-    #[serde(default)]
-    pub play_time_seconds: u64,
-}
+use crate::models::profile::SelectedProfileFile;
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-#[serde(default)]
-pub struct InstanceSettings {
-    pub ram_mb: Option<u32>,
-    pub jvm_args: Option<String>,
-    pub java_settings: Option<JavaSettings>,
-    pub resolution_width: Option<u32>,
-    pub resolution_height: Option<u32>,
-    pub show_console_on_launch: Option<bool>,
-    pub close_launcher_on_game_start: Option<bool>,
-    pub check_game_processes: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct InstanceProfileSummary {
-    pub id: String,
-    pub name: String,
-    pub icon_path: Option<String>,
-    pub game_version: String,
-    pub loader: String,
-    pub created_at: u64,
-    pub play_time_seconds: u64,
-    pub mods_count: u32,
-    pub resourcepacks_count: u32,
-    pub shaderpacks_count: u32,
-    pub total_size_bytes: u64,
-    pub directory: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SelectedProfileFile {
-    pub id: String,
-}
-
-fn dir_size_and_count(root: &Path) -> (u64, u32) {
-    if !root.exists() {
-        return (0, 0);
-    }
-    let mut total_bytes = 0u64;
-    let mut files_count = 0u32;
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(path) = stack.pop() {
-        if let Ok(entries) = std::fs::read_dir(&path) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if let Ok(meta) = entry.metadata() {
-                    if meta.is_file() {
-                        total_bytes = total_bytes.saturating_add(meta.len());
-                        files_count = files_count.saturating_add(1);
-                    } else if meta.is_dir() {
-                        stack.push(p);
-                    }
-                }
-            }
-        }
-    }
-    (total_bytes, files_count)
-}
+// moved to services/game/cache.rs
 
 fn find_icon_png_in_profile(root: &Path) -> Option<String> {
     let mut stack = vec![root.to_path_buf()];
@@ -2949,9 +2234,9 @@ fn load_all_instance_profiles_internal() -> Result<Vec<InstanceProfileSummary>, 
         let res_dir = path.join("resourcepacks");
         let shader_dir = path.join("shaderpacks");
 
-        let (mods_size, mods_count) = dir_size_and_count(&mods_dir);
-        let (res_size, res_count) = dir_size_and_count(&res_dir);
-        let (shader_size, shader_count) = dir_size_and_count(&shader_dir);
+        let (mods_size, mods_count) = cache_service::dir_size_and_count(&mods_dir);
+        let (res_size, res_count) = cache_service::dir_size_and_count(&res_dir);
+        let (shader_size, shader_count) = cache_service::dir_size_and_count(&shader_dir);
 
         let total_size_bytes = mods_size
             .saturating_add(res_size)
@@ -3066,7 +2351,7 @@ fn selected_instance_dir_internal() -> Option<PathBuf> {
 
 #[tauri::command]
 pub fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
-    load_all_instance_profiles_internal()
+    profiles_service::load_all_instance_profiles()
 }
 
 #[tauri::command]
@@ -3153,9 +2438,9 @@ fn create_profile_internal(
     std::fs::write(&settings_path, settings_text)
         .map_err(|e| format!("Не удалось записать settings.json сборки: {e}"))?;
 
-    let (mods_size, mods_count) = dir_size_and_count(&dir.join("mods"));
-    let (res_size, res_count) = dir_size_and_count(&dir.join("resourcepacks"));
-    let (shader_size, shader_count) = dir_size_and_count(&dir.join("shaderpacks"));
+    let (mods_size, mods_count) = cache_service::dir_size_and_count(&dir.join("mods"));
+    let (res_size, res_count) = cache_service::dir_size_and_count(&dir.join("resourcepacks"));
+    let (shader_size, shader_count) = cache_service::dir_size_and_count(&dir.join("shaderpacks"));
     let total_size_bytes = mods_size
         .saturating_add(res_size)
         .saturating_add(shader_size);
@@ -3218,184 +2503,37 @@ pub fn create_profile(
 
 #[tauri::command]
 pub fn set_selected_profile(id: Option<String>) -> Result<(), String> {
-    let path = selected_profile_path()?;
-    if let Some(id) = id {
-        if id.trim().is_empty() {
-            if path.exists() {
-                std::fs::remove_file(&path)
-                    .map_err(|e| format!("Не удалось удалить selected_profile.json: {e}"))?;
-            }
-            return Ok(());
-        }
-        let obj = SelectedProfileFile { id };
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Не удалось создать папку для selected_profile.json: {e}"))?;
-        }
-        let text = serde_json::to_string_pretty(&obj)
-            .map_err(|e| format!("Ошибка сериализации selected_profile.json: {e}"))?;
-        std::fs::write(&path, text)
-            .map_err(|e| format!("Не удалось записать selected_profile.json: {e}"))?;
-    } else if path.exists() {
-        std::fs::remove_file(&path)
-            .map_err(|e| format!("Не удалось удалить selected_profile.json: {e}"))?;
-    }
-    Ok(())
+    profiles_service::set_selected_profile(id)
 }
 
 #[tauri::command]
 pub fn delete_profile(id: String) -> Result<(), String> {
-    let dir = instance_dir(&id)?;
-    if !dir.exists() {
-        return Err("Папка сборки не найдена".to_string());
-    }
-
-    if let Some(selected_id) = read_selected_profile_id_internal() {
-        if selected_id == id {
-            set_selected_profile(None)?;
-        }
-    }
-
-    std::fs::remove_dir_all(&dir)
-        .map_err(|e| format!("Не удалось удалить папку сборки {:?}: {e}", dir))?;
-
-    Ok(())
+    profiles_service::delete_profile(id)
 }
 
 #[tauri::command]
 pub fn get_selected_profile() -> Result<Option<InstanceProfileSummary>, String> {
-    let selected_id = match read_selected_profile_id_internal() {
-        Some(id) => id,
-        None => return Ok(None),
-    };
-    let all = load_all_instance_profiles_internal()?;
-    Ok(all.into_iter().find(|p| p.id == selected_id))
+    profiles_service::get_selected_profile()
 }
 
 #[tauri::command]
 pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<(), String> {
-    let path = instance_settings_path(&id)?;
-    let mut current = if path.exists() {
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
-        serde_json::from_str::<InstanceSettings>(&text)
-            .map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
-    } else {
-        InstanceSettings::default()
-    };
-
-    if let Some(v) = patch.ram_mb {
-        current.ram_mb = Some(v);
-    }
-    if let Some(v) = patch.jvm_args {
-        current.jvm_args = Some(v);
-    }
-    if let Some(v) = patch.java_settings {
-        current.java_settings = Some(v);
-    }
-    if let Some(v) = patch.resolution_width {
-        current.resolution_width = Some(v);
-    }
-    if let Some(v) = patch.resolution_height {
-        current.resolution_height = Some(v);
-    }
-    if let Some(v) = patch.show_console_on_launch {
-        current.show_console_on_launch = Some(v);
-    }
-    if let Some(v) = patch.close_launcher_on_game_start {
-        current.close_launcher_on_game_start = Some(v);
-    }
-    if let Some(v) = patch.check_game_processes {
-        current.check_game_processes = Some(v);
-    }
-
-    let text = serde_json::to_string_pretty(&current)
-        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
-    }
-    std::fs::write(&path, text)
-        .map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
-    Ok(())
+    profiles_service::update_profile_settings(id, patch)
 }
 
 #[tauri::command]
 pub fn rename_profile(id: String, name: String) -> Result<(), String> {
-    let cfg_path = instance_config_path(&id)?;
-    if !cfg_path.exists() {
-        return Err("config.json сборки не найден".to_string());
-    }
-    let text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json сборки: {e}"))?;
-    let mut cfg: InstanceConfig =
-        serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
-    cfg.name = name;
-    let new_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
-    std::fs::write(&cfg_path, new_text)
-        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
-    Ok(())
+    profiles_service::rename_profile(id, name)
 }
 
 #[tauri::command]
 pub fn delete_item(id: String, category: String, filename: String) -> Result<(), String> {
-    let dir = instance_dir(&id)?;
-    if !dir.exists() {
-        return Err("Папка сборки не найдена".to_string());
-    }
-    let subdir = match category.as_str() {
-        "mod" | "mods" => "mods",
-        "resourcepack" | "resourcepacks" => "resourcepacks",
-        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
-        other => {
-            return Err(format!(
-                "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
-            ))
-        }
-    };
-    let target = dir.join(subdir).join(&filename);
-    if target.exists() {
-        std::fs::remove_file(&target)
-            .map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))?;
-    }
-    Ok(())
+    profiles_service::delete_item(id, category, filename)
 }
 
 #[tauri::command]
 pub fn list_profile_items(id: String, category: String) -> Result<Vec<String>, String> {
-    let dir = instance_dir(&id)?;
-    if !dir.exists() {
-        return Err("Папка сборки не найдена".to_string());
-    }
-    let subdir = match category.as_str() {
-        "mod" | "mods" => "mods",
-        "resourcepack" | "resourcepacks" => "resourcepacks",
-        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
-        other => {
-            return Err(format!(
-                "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
-            ))
-        }
-    };
-    let target_dir = dir.join(subdir);
-    if !target_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut files = Vec::new();
-    for entry in std::fs::read_dir(&target_dir)
-        .map_err(|e| format!("Ошибка чтения папки сборки: {e}"))?
-    {
-        let entry = entry.map_err(|e| format!("Ошибка чтения файла сборки: {e}"))?;
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                files.push(name.to_string());
-            }
-        }
-    }
-    files.sort();
-    Ok(files)
+    profiles_service::list_profile_items(id, category)
 }
 
 #[tauri::command]
@@ -3808,9 +2946,9 @@ pub async fn import_mrpack_as_new_profile(
             .map_err(|e| format!("Не удалось сохранить файл сборки: {e}"))?;
     }
 
-    let (mods_size, mods_count) = dir_size_and_count(&dir.join("mods"));
-    let (res_size, res_count) = dir_size_and_count(&dir.join("resourcepacks"));
-    let (shader_size, shader_count) = dir_size_and_count(&dir.join("shaderpacks"));
+    let (mods_size, mods_count) = cache_service::dir_size_and_count(&dir.join("mods"));
+    let (res_size, res_count) = cache_service::dir_size_and_count(&dir.join("resourcepacks"));
+    let (shader_size, shader_count) = cache_service::dir_size_and_count(&dir.join("shaderpacks"));
     let total_size_bytes = mods_size
         .saturating_add(res_size)
         .saturating_add(shader_size);
@@ -7279,6 +6417,12 @@ pub async fn launch_game(
         "mojang".to_string()
     };
     let mut auth_is_mojang = false;
+    let mut auth_uuid_nodash: String = auth_uuid.replace('-', "");
+    let mut legacy_session: String = if is_offline {
+        "offline".to_string()
+    } else {
+        format!("token:{}:{}", auth_token, auth_uuid_nodash)
+    };
 
     let has_valid_ely_session = !is_offline
         && profile
@@ -7317,6 +6461,8 @@ pub async fn launch_game(
                 auth_token = mc_access_token.clone();
                 user_type = "msa".to_string();
                 auth_is_mojang = true;
+                auth_uuid_nodash = auth_uuid.replace('-', "");
+                legacy_session = format!("token:{}:{}", auth_token, auth_uuid_nodash);
             }
         }
     }
@@ -7349,6 +6495,8 @@ pub async fn launch_game(
             user_type = "msa".to_string();
             // is_offline = false;
             auth_is_mojang = true;
+            auth_uuid_nodash = auth_uuid.replace('-', "");
+            legacy_session = format!("token:{}:{}", auth_token, auth_uuid_nodash);
         }
     }
 
@@ -7414,6 +6562,15 @@ pub async fn launch_game(
             .replace("${auth_player_name}", &auth_name)
             .replace("${auth_uuid}", &auth_uuid)
             .replace("${auth_access_token}", &auth_token)
+            // Legacy / alternative placeholder aliases used by some manifests and older versions
+            .replace("${username}", &auth_name)
+            .replace("${userName}", &auth_name)
+            .replace("${uuid}", &auth_uuid_nodash)
+            .replace("${accessToken}", &auth_token)
+            .replace("${userType}", &user_type)
+            .replace("${auth_session}", &legacy_session)
+            .replace("${session}", &legacy_session)
+            .replace("${sessionId}", &legacy_session)
             .replace("${clientid}", ELY_CLIENT_ID)
             .replace("${auth_xuid}", "")
             .replace("${user_type}", &user_type)
