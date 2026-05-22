@@ -27,6 +27,8 @@ import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
+import { AccountAvatar } from "./components/account_avatar";
+import type { ProfileAvatarInput } from "./lib/avatar";
 import { useT, t } from "./i18n";
 import {
   applyTabDrop,
@@ -116,18 +118,6 @@ const NECO_ARC_SECRET_SOUND_VOLUME = 0.05;
 
 function normalizeNicknameForSecretCheck(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function accountInitials(label: string): string {
-  const t = label.trim();
-  if (!t || t === "—") return "?";
-  const parts = t.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    const a = parts[0].charAt(0);
-    const b = parts[1].charAt(0);
-    return (a + b).toUpperCase().slice(0, 2);
-  }
-  return t.slice(0, 2).toUpperCase();
 }
 
 function accountKindAvatarClass(kind: string): string {
@@ -265,6 +255,7 @@ type Notification = {
   kind?: NotificationKind;
   message: string;
   leaving?: boolean;
+  count?: number;
   colorMsg?: string;
   iconMsg?: string;
 };
@@ -272,6 +263,17 @@ type Notification = {
 type ShowNotificationOptions = {
   sound?: boolean;
 };
+
+type NotificationIdentity = Pick<Notification, "kind" | "message" | "colorMsg" | "iconMsg">;
+
+function notificationsMatch(a: NotificationIdentity, b: NotificationIdentity): boolean {
+  return (
+    a.kind === b.kind &&
+    a.message === b.message &&
+    (a.colorMsg ?? "") === (b.colorMsg ?? "") &&
+    (a.iconMsg ?? "") === (b.iconMsg ?? "")
+  );
+}
 
 function appendAlphaToHex(hex: string, alpha01: number): string {
   const a = Math.round(Math.max(0, Math.min(1, alpha01)) * 255)
@@ -762,6 +764,9 @@ function App() {
   const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
   const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const notificationTimersRef = useRef(
+    new Map<number, { fade: ReturnType<typeof setTimeout>; remove?: ReturnType<typeof setTimeout> }>(),
+  );
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
   const didLoadedRemoteNotificationsRef = useRef(false);
   const didLoadedBottomSocialRef = useRef(false);
@@ -1113,37 +1118,15 @@ function App() {
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
 
-  const skinHeadSrc = useMemo(() => {
-    const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
-    const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
-    const uuid = mcUuid || elyUuid || "00000000000000000000000000000000";
-    return `https://crafatar.com/renders/head/${uuid}?scale=6&default=MHF_Steve`;
-  }, [profile.mc_uuid, profile.ely_uuid]);
-
-  const stevePlaceholderSrc = useMemo(() => {
-    const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="32" fill="#0f2744"/>
-  <circle cx="32" cy="28" r="16" fill="#8b6b4f"/>
-  <rect x="14" y="38" width="36" height="24" rx="14" fill="#7a5a41"/>
-  <rect x="24" y="27" width="5" height="5" rx="1.2" fill="#2b2b2b"/>
-  <rect x="35" y="27" width="5" height="5" rx="1.2" fill="#2b2b2b"/>
-  <path d="M25 36 C28 39 36 39 39 36" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round"/>
-</svg>
-`.trim();
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  }, []);
-
-  const [headImgSrc, setHeadImgSrc] = useState<string>(skinHeadSrc);
-  useEffect(() => {
-    setHeadImgSrc(skinHeadSrc);
-  }, [skinHeadSrc]);
-
-  const handleHeadImgError = useCallback(() => {
-    if (headImgSrc !== stevePlaceholderSrc) {
-      setHeadImgSrc(stevePlaceholderSrc);
-    }
-  }, [headImgSrc, stevePlaceholderSrc]);
+  const profileAvatarInput = useMemo<ProfileAvatarInput>(
+    () => ({
+      nickname: profile.nickname,
+      ely_username: profile.ely_username,
+      ely_uuid: profile.ely_uuid,
+      mc_uuid: profile.mc_uuid,
+    }),
+    [profile.nickname, profile.ely_username, profile.ely_uuid, profile.mc_uuid],
+  );
 
   const archiveCurrentConsoleAndClear = useCallback(() => {
     setConsoleLines((prev) => {
@@ -1477,48 +1460,89 @@ function App() {
     return () => window.clearTimeout(t);
   }, [consoleLines, consoleHistorySessions]);
 
-  const showNotification = useCallback(
-    (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => {
-      const id = Date.now() + Math.random();
+  const clearNotificationDismissTimers = useCallback((id: number) => {
+    const t = notificationTimersRef.current.get(id);
+    if (!t) return;
+    clearTimeout(t.fade);
+    if (t.remove !== undefined) clearTimeout(t.remove);
+    notificationTimersRef.current.delete(id);
+  }, []);
 
-      const shouldShow =
-        !(settings && !settings.notify_new_message && kind === "info");
+  const scheduleNotificationDismiss = useCallback(
+    (id: number) => {
+      clearNotificationDismissTimers(id);
+      const fade = window.setTimeout(() => {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),
+        );
+        const remove = window.setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== id));
+          notificationTimersRef.current.delete(id);
+        }, 200);
+        notificationTimersRef.current.set(id, { fade, remove });
+      }, 4300);
+      notificationTimersRef.current.set(id, { fade });
+    },
+    [clearNotificationDismissTimers],
+  );
+
+  useEffect(() => {
+    return () => {
+      for (const t of notificationTimersRef.current.values()) {
+        clearTimeout(t.fade);
+        if (t.remove !== undefined) clearTimeout(t.remove);
+      }
+      notificationTimersRef.current.clear();
+    };
+  }, []);
+
+  const pushNotification = useCallback(
+    (entry: NotificationIdentity): { merged: boolean } => {
+      let targetId = 0;
+      let merged = false;
 
       setNotifications((prev) => {
-        if (!shouldShow) return prev;
-        return [...prev, { id, kind, message }];
+        const existing = prev.find((n) => !n.leaving && notificationsMatch(n, entry));
+        if (existing) {
+          targetId = existing.id;
+          merged = true;
+          return prev.map((n) =>
+            n.id === existing.id
+              ? { ...n, ...entry, count: (n.count ?? 1) + 1, leaving: false }
+              : n,
+          );
+        }
+        targetId = Date.now() + Math.random();
+        return [...prev, { id: targetId, ...entry, count: 1 }];
       });
+
+      scheduleNotificationDismiss(targetId);
+      return { merged };
+    },
+    [scheduleNotificationDismiss],
+  );
+
+  const showNotification = useCallback(
+    (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => {
+      const shouldShow =
+        !(settings && !settings.notify_new_message && kind === "info");
+      if (!shouldShow) return;
+
+      const { merged } = pushNotification({ kind, message });
 
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
       const shouldSound =
-        shouldShow &&
+        !merged &&
         uiSoundsEnabled &&
         (kind === "info" || kind === "error" || options?.sound === true);
 
       if (shouldSound) playNotificationSound();
-
-      setTimeout(() => {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),
-        );
-        setTimeout(() => {
-          setNotifications((prev) => prev.filter((n) => n.id !== id));
-        }, 200);
-      }, 4300);
     },
-    [settings],
+    [settings, pushNotification],
   );
 
   const showSettingsSavedNotification = useCallback(() => {
-    setNotifications((prev) =>
-      prev.filter(
-        (n) => !(n.kind === "success"),
-      ),
-    );
-    showNotification(
-      "success",
-      tt("app.toast.settingsSaved"),
-    );
+    showNotification("success", tt("app.toast.settingsSaved"));
   }, [tt, showNotification]);
 
   const defaultSettings: Settings = {
@@ -1729,16 +1753,7 @@ function App() {
         }
 
         for (const s of system) {
-          const id = Date.now() + Math.random();
-
-          setNotifications((prev) => [...prev, { id, ...s }]);
-
-          setTimeout(() => {
-            setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)));
-            setTimeout(() => {
-              setNotifications((prev) => prev.filter((n) => n.id !== id));
-            }, 200);
-          }, 4300);
+          pushNotification(s);
         }
 
       } catch (e) {
@@ -1748,7 +1763,7 @@ function App() {
     })();
 
     return () => controller.abort();
-  }, [settings]);
+  }, [settings, pushNotification]);
 
   useEffect(() => {
     if (didLoadedBottomSocialRef.current) return;
@@ -3078,6 +3093,11 @@ function App() {
               <span className="whitespace-pre-line flex-1 break-words">
                 {n.message}
               </span>
+              {(n.count ?? 1) > 1 ? (
+                <span className="shrink-0 tabular-nums text-xs font-semibold opacity-85">
+                  ×{n.count}
+                </span>
+              ) : null}
             </div>
           );
         })}
@@ -3421,11 +3441,13 @@ function App() {
               className="interactive-press flex max-w-[200px] items-center gap-2 rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
               title={tt("app.accounts.switcherTitle")}
             >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(activeAccountKind)}`}
-              >
-                {accountInitials(activeAccountLabel)}
-              </span>
+              <AccountAvatar
+                username={activeAccountLabel}
+                profile={profileAvatarInput}
+                kind={activeAccountKind}
+                size={56}
+                className={`h-7 w-7 shrink-0 rounded-full ${accountKindAvatarClass(activeAccountKind)}`}
+              />
               <span className="min-w-0 flex-1 truncate">{activeAccountLabel}</span>
               <ChevronDownIcon
                 className={accountSwitcherOpen ? "rotate-180 opacity-100" : "opacity-70"}
@@ -3444,11 +3466,13 @@ function App() {
                         acc.is_active ? "bg-emerald-500/10" : "hover:bg-white/5"
                       }`}
                     >
-                      <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${accountKindAvatarClass(acc.kind)}`}
-                      >
-                        {accountInitials(acc.label)}
-                      </span>
+                      <AccountAvatar
+                        username={acc.label}
+                        profile={acc.is_active ? profileAvatarInput : undefined}
+                        kind={acc.kind}
+                        size={64}
+                        className={`h-8 w-8 shrink-0 rounded-full ${accountKindAvatarClass(acc.kind)}`}
+                      />
                       <button
                         type="button"
                         disabled={acc.is_active}
@@ -3754,11 +3778,13 @@ function App() {
                             : "border-white/10 bg-black/30 hover:bg-black/50"
                         }`}
                       >
-                        <span
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-xs font-bold ${accountKindAvatarClass(acc.kind)}`}
-                        >
-                          {accountInitials(acc.label)}
-                        </span>
+                        <AccountAvatar
+                          username={acc.label}
+                          profile={acc.is_active ? profileAvatarInput : undefined}
+                          kind={acc.kind}
+                          size={88}
+                          className={`h-11 w-11 shrink-0 self-center rounded-full ${accountKindAvatarClass(acc.kind)}`}
+                        />
                         <button
                           type="button"
                           disabled={acc.is_active}
@@ -3817,14 +3843,14 @@ function App() {
                 >
                   <button
                     type="button"
-                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] text-white/90 transition hover:border-white hover:bg-[#1e3a5f]"
+                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] transition hover:border-white hover:bg-[#1e3a5f]"
                   >
-                    <img
-                      src={headImgSrc}
-                      alt=""
-                      draggable={false}
-                      className="aspect-square h-full w-full object-cover object-center"
-                      onError={handleHeadImgError}
+                    <AccountAvatar
+                      username={displayedNickname}
+                      profile={profileAvatarInput}
+                      kind={activeAccountKind}
+                      size={80}
+                      className="h-full w-full rounded-full"
                     />
                   </button>
                   <div className="min-w-0 flex-1">
