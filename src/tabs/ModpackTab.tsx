@@ -96,6 +96,7 @@ type ModpackTabProps = {
   onClearConsole?: () => void;
   openedMrpackPath?: string | null;
   onOpenedMrpackPathConsumed?: () => void;
+  fillPane?: boolean;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -306,6 +307,7 @@ export function ModpackTab({
   onClearConsole,
   openedMrpackPath = null,
   onOpenedMrpackPathConsumed,
+  fillPane = false,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -1650,7 +1652,11 @@ export function ModpackTab({
 
   function renderListView() {
     return (
-      <div className="flex w-full flex-1 flex-col gap-4">
+      <div
+        className={`flex w-full min-h-0 flex-1 flex-col gap-3 ${
+          fillPane ? "h-full" : ""
+        }`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
             <SearchIcon className="h-4 w-4" />
@@ -2684,8 +2690,10 @@ export function ModpackTab({
 
   return (
     <div
-      className={`flex w-full flex-1 flex-col gap-4 ${
-        activeView === "manage" ? "max-w-none min-h-0 self-stretch px-0 sm:px-1" : "max-w-5xl"
+      className={`flex w-full min-h-0 flex-1 flex-col gap-4 ${
+        fillPane || activeView === "manage"
+          ? "h-full max-w-none self-stretch px-0 sm:px-1"
+          : "max-w-5xl"
       }`}
     >
       <div className="flex items-center justify-between">
