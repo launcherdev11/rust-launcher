@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use tauri::AppHandle;
+use tauri::{command, AppHandle};
 
 use crate::models::LauncherSettingsBackupV1;
 use crate::models::{JavaSettings, Settings};
@@ -14,8 +14,9 @@ fn now_unix_ms() -> u64 {
         .unwrap_or(0)
 }
 
+#[command]
 pub fn export_launcher_settings_backup(
-    app: &AppHandle,
+    app: AppHandle,
     path: String,
     sidebar_order: Option<Vec<String>>,
 ) -> Result<String, String> {
@@ -25,7 +26,7 @@ pub fn export_launcher_settings_backup(
     }
 
     let settings: Settings = settings_service::load_settings_from_disk();
-    let java_settings: JavaSettings = settings_service::load_java_settings(app);
+    let java_settings: JavaSettings = settings_service::load_java_settings(&app);
 
     let backup = LauncherSettingsBackupV1 {
         format_version: 1,
@@ -40,7 +41,8 @@ pub fn export_launcher_settings_backup(
     Ok(path)
 }
 
-pub fn import_launcher_settings_backup(app: &AppHandle, path: String) -> Result<LauncherSettingsBackupV1, String> {
+#[command]
+pub fn import_launcher_settings_backup(app: AppHandle, path: String) -> Result<LauncherSettingsBackupV1, String> {
     let text = std::fs::read_to_string(&path).map_err(|e| format!("Не удалось прочитать файл импорта: {e}"))?;
 
     let parsed_backup = serde_json::from_str::<LauncherSettingsBackupV1>(&text).ok();
@@ -49,14 +51,14 @@ pub fn import_launcher_settings_backup(app: &AppHandle, path: String) -> Result<
     } else {
         let s = serde_json::from_str::<Settings>(&text)
             .map_err(|e| format!("Файл импорта не распознан (ожидался JSON настроек): {e}"))?;
-        let js = settings_service::load_java_settings(app);
+        let js = settings_service::load_java_settings(&app);
         (s, js, None)
     };
 
     settings_service::sanitize_imported_settings(&mut settings, &mut java_settings);
 
     settings_service::save_settings_to_disk(&settings)?;
-    settings_service::save_java_settings(app, &java_settings)?;
+    settings_service::save_java_settings(&app, &java_settings)?;
 
     Ok(LauncherSettingsBackupV1 {
         format_version: 1,

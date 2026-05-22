@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use tauri::command;
+
 use crate::services::game::settings::launcher_cache_dir;
 
 pub(crate) fn dir_size_and_count(root: &Path) -> (u64, u32) {
@@ -27,12 +29,14 @@ pub(crate) fn dir_size_and_count(root: &Path) -> (u64, u32) {
     (total_bytes, files_count)
 }
 
+#[command]
 pub fn get_launcher_cache_size() -> Result<u64, String> {
     let dir = launcher_cache_dir()?;
     let (bytes, _) = dir_size_and_count(&dir);
     Ok(bytes)
 }
 
+#[command]
 pub fn clear_launcher_cache() -> Result<(), String> {
     let dir = launcher_cache_dir()?;
     if dir.exists() {

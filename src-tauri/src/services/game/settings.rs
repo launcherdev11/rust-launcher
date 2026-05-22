@@ -1,16 +1,16 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use tauri::AppHandle;
-use tauri::Manager;
+use sysinfo::System;
+use tauri::{command, AppHandle, Manager};
 
 use crate::models::settings::default_interface_language;
-use crate::models::{JavaSettings, Settings};
+use crate::models::{JavaArgsValidationResult, JavaRuntimeInfo, JavaSettings, Settings};
+use crate::models::profile::InstanceSettings;
+use crate::services::java as java_service;
 
-// ВАЖНО: на первом этапе эти функции напрямую используют существующие helper'ы из
-// `game_provider.rs`, чтобы не ломать пути/поведение. По мере распила вынесем paths
-// в `app/paths.rs` и уберём обратные зависимости.
-use crate::game_provider::{instance_settings_path, launcher_data_dir, InstanceSettings};
+use crate::app::paths::{instance_settings_path, launcher_data_dir};
+use crate::services::game::profiles::read_selected_profile_id;
 
 fn settings_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("settings.json"))
@@ -78,6 +78,7 @@ pub fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
+#[command]
 pub fn reset_settings_to_default() -> Result<Settings, String> {
     let defaults = Settings::default();
     save_settings_to_disk(&defaults)?;
@@ -107,8 +108,9 @@ pub fn effective_java_settings_for_profile(app: &AppHandle, profile_id: Option<S
     inst.java_settings.unwrap_or_else(|| load_java_settings(app))
 }
 
-pub fn set_profile_java_settings(profile_id: &str, settings: JavaSettings) -> Result<(), String> {
-    let path = instance_settings_path(profile_id)?;
+#[command]
+pub fn set_profile_java_settings(profile_id: String, settings: JavaSettings) -> Result<(), String> {
+    let path = instance_settings_path(&profile_id)?;
     let mut current = if path.exists() {
         let text = std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
         serde_json::from_str::<InstanceSettings>(&text).map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
@@ -135,5 +137,102 @@ pub fn sanitize_imported_settings(settings: &mut Settings, java_settings: &mut J
     if java_settings.java_path.as_deref().unwrap_or("").trim().is_empty() {
         java_settings.java_path = None;
     }
+}
+
+pub fn effective_settings_for_profile(profile_id: Option<String>) -> Settings {
+    let base = load_settings_from_disk();
+    let id = match profile_id {
+        Some(id) if !id.trim().is_empty() => id,
+        _ => return base,
+    };
+    let path = match instance_settings_path(&id) {
+        Ok(p) => p,
+        Err(_) => return base,
+    };
+    let inst: InstanceSettings = if path.exists() {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(_) => return base,
+        };
+        match serde_json::from_str(&text) {
+            Ok(s) => s,
+            Err(_) => return base,
+        }
+    } else {
+        return base;
+    };
+    let mut s = base;
+    if let Some(ram) = inst.ram_mb {
+        s.ram_mb = ram.max(512);
+    }
+    if let Some(v) = inst.show_console_on_launch {
+        s.show_console_on_launch = v;
+    }
+    if let Some(v) = inst.close_launcher_on_game_start {
+        s.close_launcher_on_game_start = v;
+    }
+    if let Some(v) = inst.check_game_processes {
+        s.check_game_processes = v;
+    }
+    s
+}
+
+pub fn effective_settings_for_launch() -> Settings {
+    effective_settings_for_profile(read_selected_profile_id())
+}
+
+#[command]
+pub fn get_system_memory_gb() -> Result<u64, String> {
+    let mut sys = System::new_all();
+    sys.refresh_memory();
+    let total_bytes = sys.total_memory();
+    if total_bytes == 0 {
+        return Err("Не удалось определить объём памяти системы".to_string());
+    }
+    let gb = total_bytes / (1024 * 1024 * 1024);
+    Ok(gb.max(1))
+}
+
+#[command]
+pub fn get_settings() -> Result<Settings, String> {
+    Ok(load_settings_from_disk())
+}
+
+#[command]
+pub fn set_settings(settings: Settings) -> Result<(), String> {
+    save_settings_to_disk(&settings)
+}
+
+#[command]
+pub fn get_effective_settings(profile_id: Option<String>) -> Result<Settings, String> {
+    Ok(effective_settings_for_profile(profile_id))
+}
+
+#[command]
+pub fn get_java_settings(app: AppHandle) -> Result<JavaSettings, String> {
+    Ok(load_java_settings(&app))
+}
+
+#[command]
+pub fn set_java_settings(app: AppHandle, settings: JavaSettings) -> Result<(), String> {
+    save_java_settings(&app, &settings)
+}
+
+#[command]
+pub fn get_profile_java_settings(app: AppHandle, id: String) -> Result<JavaSettings, String> {
+    Ok(effective_java_settings_for_profile(&app, Some(id)))
+}
+
+#[command]
+pub async fn validate_java_args(
+    java_path: Option<String>,
+    args: String,
+) -> Result<JavaArgsValidationResult, String> {
+    java_service::validate::validate_java_args(java_path, args).await
+}
+
+#[command]
+pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
+    java_service::detect::detect_java_runtimes().await
 }
 

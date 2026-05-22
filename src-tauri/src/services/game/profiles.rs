@@ -1,39 +1,19 @@
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rand::distributions::Alphanumeric;
 use rand::Rng;
+use tauri::command;
 
-use crate::models::profile::{SelectedProfileFile};
-use crate::models::{InstanceConfig, InstanceProfileSummary, InstanceSettings};
+use crate::models::profile::{InstanceConfig, SelectedProfileFile};
+use crate::models::{InstanceProfileSummary, InstanceSettings};
+use crate::app::paths::{
+    instance_config_path, instance_dir, instance_settings_path, instances_root_dir,
+    selected_profile_path,
+};
 use crate::services::game::cache as cache_service;
 
-// пока используем существующий источник путей данных, чтобы не менять поведение.
-use crate::game_provider::launcher_data_dir;
-
-pub fn instances_root_dir() -> Result<PathBuf, String> {
-    Ok(launcher_data_dir()?.join("instances"))
-}
-
-pub fn instance_dir(id: &str) -> Result<PathBuf, String> {
-    Ok(instances_root_dir()?.join(id))
-}
-
-pub fn instance_dir_for_id(id: &str) -> Result<PathBuf, String> {
-    instance_dir(id)
-}
-
-pub fn instance_config_path(id: &str) -> Result<PathBuf, String> {
-    Ok(instance_dir(id)?.join("config.json"))
-}
-
-pub fn instance_settings_path(id: &str) -> Result<PathBuf, String> {
-    Ok(instance_dir(id)?.join("settings.json"))
-}
-
-fn selected_profile_path() -> Result<PathBuf, String> {
-    Ok(launcher_data_dir()?.join("selected_profile.json"))
-}
 
 fn generate_instance_id() -> String {
     rand::thread_rng()
@@ -73,6 +53,58 @@ fn find_icon_png_in_profile(root: &Path) -> Option<String> {
     None
 }
 
+pub fn load_selected_instance_settings() -> Result<Option<(String, InstanceSettings)>, String> {
+    let id = match read_selected_profile_id() {
+        Some(id) => id,
+        None => return Ok(None),
+    };
+    let path = instance_settings_path(&id)?;
+    let settings = if path.exists() {
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения настроек сборки: {e}"))?;
+        serde_json::from_str::<InstanceSettings>(&text)
+            .map_err(|e| format!("Ошибка разбора настроек сборки: {e}"))?
+    } else {
+        InstanceSettings::default()
+    };
+    Ok(Some((id, settings)))
+}
+
+pub fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Result<(), String> {
+    let cfg_path = instance_config_path(profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(());
+    }
+
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
+
+    let mut cfg: InstanceConfig = match serde_json::from_str(&text) {
+        Ok(c) => c,
+        Err(_) => return Ok(()),
+    };
+
+    cfg.play_time_seconds = cfg.play_time_seconds.saturating_add(delta_secs);
+
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json для playtime: {e}"))?;
+
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Ошибка записи config.json для playtime: {e}"))?;
+
+    Ok(())
+}
+
+pub fn selected_instance_dir() -> Option<PathBuf> {
+    let id = read_selected_profile_id()?;
+    let dir = instance_dir(&id).ok()?;
+    if dir.exists() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
 pub fn read_selected_profile_id() -> Option<String> {
     let path = selected_profile_path().ok()?;
     let text = std::fs::read_to_string(path).ok()?;
@@ -80,6 +112,7 @@ pub fn read_selected_profile_id() -> Option<String> {
     if obj.id.trim().is_empty() { None } else { Some(obj.id) }
 }
 
+#[command]
 pub fn set_selected_profile(id: Option<String>) -> Result<(), String> {
     let path = selected_profile_path()?;
     if let Some(id) = id {
@@ -122,7 +155,7 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
         let _id = match path.file_name().and_then(|n| n.to_str()) {
             Some(id) if !id.is_empty() => id.to_string(),
             _ => continue,
-        }; // unused
+        }; //unused
         let config_path = path.join("config.json");
         if !config_path.exists() {
             continue;
@@ -173,6 +206,7 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
     Ok(out)
 }
 
+#[command]
 pub fn get_selected_profile() -> Result<Option<InstanceProfileSummary>, String> {
     let selected_id = match read_selected_profile_id() {
         Some(id) => id,
@@ -182,6 +216,7 @@ pub fn get_selected_profile() -> Result<Option<InstanceProfileSummary>, String> 
     Ok(all.into_iter().find(|p| p.id == selected_id))
 }
 
+#[command]
 pub fn delete_profile(id: String) -> Result<(), String> {
     let dir = instance_dir(&id)?;
     if !dir.exists() {
@@ -198,6 +233,7 @@ pub fn delete_profile(id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[command]
 pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<(), String> {
     let path = instance_settings_path(&id)?;
     let mut current = if path.exists() {
@@ -240,6 +276,7 @@ pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<()
     Ok(())
 }
 
+#[command]
 pub fn rename_profile(id: String, name: String) -> Result<(), String> {
     let cfg_path = instance_config_path(&id)?;
     if !cfg_path.exists() {
@@ -253,6 +290,7 @@ pub fn rename_profile(id: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
+#[command]
 pub fn delete_item(id: String, category: String, filename: String) -> Result<(), String> {
     let dir = instance_dir(&id)?;
     if !dir.exists() {
@@ -275,6 +313,7 @@ pub fn delete_item(id: String, category: String, filename: String) -> Result<(),
     Ok(())
 }
 
+#[command]
 pub fn list_profile_items(id: String, category: String) -> Result<Vec<String>, String> {
     let dir = instance_dir(&id)?;
     if !dir.exists() {
@@ -306,5 +345,186 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<String>, S
     }
     files.sort();
     Ok(files)
+}
+
+pub fn create_profile_impl(
+    name: String,
+    game_version: String,
+    loader: String,
+    icon_source_path: Option<String>,
+) -> Result<InstanceProfileSummary, String> {
+    let root = instances_root_dir()?;
+    std::fs::create_dir_all(&root)
+        .map_err(|e| format!("Не удалось создать папку instances: {e}"))?;
+
+    let mut id = generate_instance_id();
+    while instance_dir(&id)?.exists() {
+        id = generate_instance_id();
+    }
+    let dir = instance_dir(&id)?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Не удалось создать папку сборки: {e}"))?;
+
+    for sub in ["mods", "resourcepacks", "shaderpacks"] {
+        let subdir = dir.join(sub);
+        std::fs::create_dir_all(&subdir)
+            .map_err(|e| format!("Не удалось создать папку '{sub}': {e}"))?;
+    }
+
+    let mut icon_path: Option<String> = None;
+    if let Some(src) = icon_source_path {
+        let src_path = PathBuf::from(&src);
+        if src_path.exists() {
+            let dest = dir.join("icon.png");
+            std::fs::copy(&src_path, &dest)
+                .map_err(|e| format!("Не удалось скопировать иконку сборки: {e}"))?;
+            icon_path = dest.to_str().map(|s| s.to_string());
+        }
+    }
+
+    let created_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| Duration::from_secs(0))
+        .as_secs();
+
+    let cfg = InstanceConfig {
+        id: id.clone(),
+        name: name.clone(),
+        icon_path: icon_path.clone(),
+        game_version: game_version.clone(),
+        loader: loader.clone(),
+        created_at,
+        play_time_seconds: 0,
+    };
+
+    let cfg_path = instance_config_path(&id)?;
+    let cfg_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json сборки: {e}"))?;
+    if let Some(parent) = cfg_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для config.json: {e}"))?;
+    }
+    std::fs::write(&cfg_path, cfg_text)
+        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+
+    let settings_path = instance_settings_path(&id)?;
+    if let Some(parent) = settings_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
+    }
+    let settings = InstanceSettings::default();
+    let settings_text = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
+    std::fs::write(&settings_path, settings_text)
+        .map_err(|e| format!("Не удалось записать settings.json сборки: {e}"))?;
+
+    let (mods_size, mods_count) = cache_service::dir_size_and_count(&dir.join("mods"));
+    let (res_size, res_count) = cache_service::dir_size_and_count(&dir.join("resourcepacks"));
+    let (shader_size, shader_count) = cache_service::dir_size_and_count(&dir.join("shaderpacks"));
+    let total_size_bytes = mods_size
+        .saturating_add(res_size)
+        .saturating_add(shader_size);
+
+    let directory = dir
+        .to_str()
+        .ok_or("Путь к папке сборки не в UTF-8")?
+        .to_string();
+
+    Ok(InstanceProfileSummary {
+        id,
+        name,
+        icon_path,
+        game_version,
+        loader,
+        created_at,
+        play_time_seconds: 0,
+        mods_count,
+        resourcepacks_count: res_count,
+        shaderpacks_count: shader_count,
+        total_size_bytes,
+        directory,
+    })
+}
+
+#[command]
+pub fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
+    load_all_instance_profiles()
+}
+
+#[command]
+pub fn get_profile_play_time_seconds(profile_id: String) -> Result<u64, String> {
+    let cfg_path = instance_config_path(&profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(0);
+    }
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
+    let cfg: InstanceConfig = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
+    Ok(cfg.play_time_seconds)
+}
+
+#[command]
+pub fn create_profile(
+    name: String,
+    game_version: String,
+    loader: String,
+    icon_source_path: Option<String>,
+) -> Result<InstanceProfileSummary, String> {
+    create_profile_impl(name, game_version, loader, icon_source_path)
+}
+
+#[command]
+pub async fn add_profile_files(
+    id: String,
+    category: String,
+    files: Vec<String>,
+) -> Result<(), String> {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let root = instance_dir(&id)?;
+    if !root.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+
+    let subdir = match category.as_str() {
+        "mod" | "mods" => "mods",
+        "resourcepack" | "resourcepacks" => "resourcepacks",
+        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
+        other => {
+            return Err(format!(
+                "Неизвестная категория контента сборки: {other}. Ожидается mod, resourcepack или shader."
+            ))
+        }
+    };
+
+    let target_dir = root.join(subdir);
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|e| format!("Не удалось создать папку '{subdir}' для сборки: {e}"))?;
+
+    for src in files {
+        let src_path = PathBuf::from(&src);
+        if !src_path.exists() {
+            continue;
+        }
+        let file_name = match src_path.file_name().and_then(|n| n.to_str()) {
+            Some(name) if !name.is_empty() => name.to_string(),
+            _ => continue,
+        };
+        let dest_path = target_dir.join(&file_name);
+        if let Some(parent) = dest_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| format!("Не удалось создать папку для файла сборки: {e}"))?;
+        }
+        tokio::fs::copy(&src_path, &dest_path)
+            .await
+            .map_err(|e| format!("Не удалось скопировать файл сборки {:?}: {e}", src_path))?;
+    }
+
+    Ok(())
 }
 
