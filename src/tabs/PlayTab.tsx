@@ -96,6 +96,7 @@ type PlayTabProps = {
   activeProfileName: string | null;
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
+  fillPane?: boolean;
 };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -137,6 +138,7 @@ export function PlayTab({
   activeProfileName,
   installedVersionIds,
   showSnapshots,
+  fillPane = false,
 }: PlayTabProps) {
   const tt = useT(language);
   const [banners, setBanners] = useState<LauncherBannerData[]>([]);
@@ -431,9 +433,17 @@ export function PlayTab({
           ? "bg-sky-400"
           : "bg-gray-500";
 
-  return (
+  const bannerClass = fillPane
+    ? "glass-panel relative flex min-h-[7rem] max-h-[min(220px,42%)] w-full max-w-none flex-1 overflow-hidden rounded-3xl"
+    : "glass-panel relative flex h-[260px] w-full max-w-1xl overflow-hidden rounded-3xl";
+
+  const controlsClass = fillPane
+    ? "relative mt-2 flex w-full max-w-none shrink-0 justify-center px-2"
+    : "pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2";
+
+  const shell = (
     <>
-      <div className="glass-panel relative flex h-[260px] w-full max-w-1xl overflow-hidden rounded-3xl">
+      <div className={bannerClass}>
         {bannerLoading ? (
           <div className="flex h-full w-full items-center justify-center">
             <span className="text-sm font-medium tracking-wide text-white/70">
@@ -496,7 +506,7 @@ export function PlayTab({
         )}
       </div>
 
-      <div className="pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2">
+      <div className={controlsClass}>
         <div className="pointer-events-auto relative w-full max-w-2xl">
           <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8">
             <div className="relative flex flex-col text-left">
@@ -939,5 +949,12 @@ export function PlayTab({
       )}
     </>
   );
+
+  if (fillPane) {
+    return (
+      <div className="flex h-full min-h-0 w-full max-w-none flex-col">{shell}</div>
+    );
+  }
+  return shell;
 }
 

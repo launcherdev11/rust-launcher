@@ -8,6 +8,10 @@
     "search": "Поиск…"
   },
   "mods": {
+    "provider": {
+      "modrinth": "Modrinth",
+      "curseforge": "CurseForge"
+    },
     "unlockConfirm": "Версия и загрузчик синхронизированы с выбранной сборкой. Сменить их?",
     "searchPlaceholder": "Поиск...",
     "version": "Версия",
@@ -25,7 +29,9 @@
       "grid": "Сетка"
     },
     "loadingPopular": "Загрузка популярных проектов…",
-    "nothingFound": "Ничего не найдено для выбранных фильтров Modrinth.",
+    "nothingFound": "Ничего не найдено для выбранных фильтров.",
+    "nothingFoundModrinth": "Ничего не найдено для выбранных фильтров Modrinth.",
+    "nothingFoundCurseforge": "Ничего не найдено для выбранных фильтров CurseForge.",
     "pageOf": "Страница {{current}} из {{total}}",
     "prev": "Назад",
     "next": "Вперёд",
@@ -44,7 +50,10 @@
     "noIcon": "Нет иконки",
     "saveSuccessProfile": "Файл {{filename}} сохранён в сборку.",
     "saveSuccessFolder": "Файл {{filename}} сохранён в папку {{folder}}.",
-    "downloadFailed": "Не удалось скачать файл Modrinth."
+    "downloadFailed": "Не удалось скачать файл.",
+    "downloadFailedModrinth": "Не удалось скачать файл Modrinth.",
+    "downloadFailedCurseforge": "Не удалось скачать файл CurseForge.",
+    "curseforgeModpackHint": "Сборка CurseForge сохранена как архив. Автоимпорт .mrpack доступен только для Modrinth."
   },
   "settings": {
     "common": {
@@ -428,6 +437,15 @@
       "modpacks": "Сборки",
       "friends": "Друзья"
     },
+    "splitView": {
+      "zones": {
+        "left": "Слева",
+        "right": "Справа",
+        "top": "Сверху",
+        "bottom": "Снизу",
+        "center": "На весь экран"
+      }
+    },
     "launcherVersionTitle": "Версия лаунчера {{version}}",
     "accounts": {
       "managerTitle": "Менеджер аккаунтов",
@@ -495,7 +513,7 @@
       "mainInfo": "16Launcher — бесплатный лаунчер для Minecraft с поддержкой Fabric, Forge, Quilt, NeoForge.",
       "icons": "Иконки взяты с сайта",
       "mojangDisclaimer": "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\n\n16Launcher is in no way affiliated with Mojang Studios, nor should it be considered a project endorsed by Mojang Studios.",
-      "apis": "Используем API Modrinth и Ely.by",
+      "apis": "Используем API Modrinth, CurseForge и Ely.by",
       "reportBug": "Нашли ошибку?",
       "close": "Закрыть"
     },

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useT } from "../i18n";
+import { useT, t } from "../i18n";
 
 type ModrinthContentType = "mod" | "resourcepack" | "shader" | "modpack";
 type Language = "ru" | "en";
@@ -46,6 +46,49 @@ type ModrinthGameVersionTag = {
   version: string;
 };
 
+type ContentProvider = "modrinth" | "curseforge";
+
+type CurseforgeModHit = {
+  id: number;
+  slug: string;
+  name: string;
+  summary: string;
+  downloadCount: number;
+  thumbnailUrl: string | null;
+  author: string;
+  classId: number;
+};
+
+type CurseforgeFileHit = {
+  id: number;
+  displayName: string;
+  fileName: string;
+  downloadUrl: string | null;
+  gameVersions: string[];
+  loaders: string[];
+  fileDate: string;
+};
+
+type CatalogProject = {
+  key: string;
+  title: string;
+  description: string;
+  icon_url: string | null;
+  downloads: number;
+  follows: number;
+  author: string;
+  project_type: string;
+};
+
+type CatalogVersion = {
+  id: string;
+  version_number: string;
+  game_versions: string[];
+  loaders: string[];
+  file_url: string;
+  filename: string;
+};
+
 type NotificationKind = "info" | "success" | "error" | "warning";
 
 type MrpackImportProgressPayload = {
@@ -63,6 +106,7 @@ type ModsTabProps = {
   activeProfileLoader?: string | null;
   onOpenModpacksTab?: () => void;
   onSelectedModTitleChange?: (title: string | null) => void;
+  fillPane?: boolean;
 };
 
 function DownloadStatIcon() {
@@ -74,6 +118,12 @@ function DownloadStatIcon() {
       aria-hidden="true"
     />
   );
+}
+
+function invokeErrorMessage(e: unknown, fallback: string): string {
+  if (typeof e === "string" && e.trim().length > 0) return e;
+  if (e instanceof Error && e.message.trim().length > 0) return e.message;
+  return fallback;
 }
 
 function HeartStatIcon() {
@@ -95,8 +145,18 @@ export function ModsTab({
   activeProfileLoader,
   onOpenModpacksTab,
   onSelectedModTitleChange,
+  fillPane = false,
 }: ModsTabProps) {
   const tt = useT(language);
+  const [contentProvider, setContentProvider] = useState<ContentProvider>(() => {
+    if (typeof window === "undefined") return "modrinth";
+    try {
+      const saved = window.localStorage.getItem("mods_content_provider");
+      return saved === "curseforge" || saved === "modrinth" ? saved : "modrinth";
+    } catch {
+      return "modrinth";
+    }
+  });
   const [modrinthContentType, setModrinthContentType] =
     useState<ModrinthContentType>("mod");
   const [modrinthSearch, setModrinthSearch] = useState("");
@@ -131,9 +191,25 @@ export function ModsTab({
       return "list";
     }
   });
-  const MODRINTH_PAGE_SIZE = 30;
   const [modrinthPage, setModrinthPage] = useState(0);
   const [modrinthTotalHits, setModrinthTotalHits] = useState(0);
+
+  const [curseforgeProjects, setCurseforgeProjects] = useState<CurseforgeModHit[]>(
+    [],
+  );
+  const [curseforgeLoading, setCurseforgeLoading] = useState(false);
+  const [curseforgeError, setCurseforgeError] = useState<string | null>(null);
+  const [curseforgeSelectedProject, setCurseforgeSelectedProject] =
+    useState<CurseforgeModHit | null>(null);
+  const [curseforgeVersions, setCurseforgeVersions] = useState<CurseforgeFileHit[]>(
+    [],
+  );
+  const [curseforgeVersionsLoading, setCurseforgeVersionsLoading] =
+    useState(false);
+  const [curseforgePage, setCurseforgePage] = useState(0);
+  const [curseforgeTotalHits, setCurseforgeTotalHits] = useState(0);
+
+  const CATALOG_PAGE_SIZE = 30;
 
   const [modpackImportBusy, setModpackImportBusy] = useState(false);
   const [modpackImportProgress, setModpackImportProgress] = useState<
@@ -142,9 +218,17 @@ export function ModsTab({
 
   useEffect(() => {
     if (!onSelectedModTitleChange) return;
-    const title = modrinthSelectedProject?.title ?? null;
+    const title =
+      contentProvider === "modrinth"
+        ? modrinthSelectedProject?.title ?? null
+        : curseforgeSelectedProject?.name ?? null;
     onSelectedModTitleChange(title);
-  }, [modrinthSelectedProject, onSelectedModTitleChange]);
+  }, [
+    contentProvider,
+    modrinthSelectedProject,
+    curseforgeSelectedProject,
+    onSelectedModTitleChange,
+  ]);
 
   const modrinthTabRefs = useRef<
     Partial<Record<ModrinthContentType, HTMLButtonElement | null>>
@@ -209,21 +293,26 @@ export function ModsTab({
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch("https://api.modrinth.com/v2/tag/game_version", {
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          throw new Error(`Modrinth HTTP ${res.status}`);
+        let versions: string[] = [];
+        if (contentProvider === "curseforge") {
+          versions = await invoke<string[]>("curseforge_list_minecraft_versions");
+        } else {
+          const res = await fetch("https://api.modrinth.com/v2/tag/game_version", {
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            throw new Error(`Modrinth HTTP ${res.status}`);
+          }
+          const data: ModrinthGameVersionTag[] = await res.json();
+          versions = data
+            .map((t) => t.version)
+            .filter((v) => /^1\.\d+(\.\d+)?$/.test(v));
         }
-        const data: ModrinthGameVersionTag[] = await res.json();
-        const versions = data
-          .map((t) => t.version)
-          .filter((v) => /^1\.\d+(\.\d+)?$/.test(v));
         if (versions.length > 0) {
           setModrinthGameVersions(versions);
-          if (!versions.includes(modrinthGameVersion)) {
-            setModrinthGameVersion(versions[0]);
-          }
+          setModrinthGameVersion((current) =>
+            versions.includes(current) ? current : versions[0],
+          );
         }
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
@@ -231,7 +320,7 @@ export function ModsTab({
       }
     })();
     return () => controller.abort();
-  }, [modrinthGameVersion]);
+  }, [contentProvider]);
 
   const loadModrinthVersions = useCallback(
     async (projectId: string) => {
@@ -269,7 +358,34 @@ export function ModsTab({
     [modrinthContentType, modrinthGameVersion, modrinthLoader, showNotification],
   );
 
+  const loadCurseforgeVersions = useCallback(
+    async (modId: number) => {
+      setCurseforgeVersionsLoading(true);
+      setCurseforgeError(null);
+      try {
+        const data = await invoke<CurseforgeFileHit[]>("curseforge_get_mod_files", {
+          modId,
+          gameVersion: modrinthGameVersion,
+          loader: modrinthLoader,
+        });
+        setCurseforgeVersions(data);
+      } catch (e) {
+        console.error(e);
+        const uiMessage = invokeErrorMessage(
+          e,
+          t(language, "mods.downloadFailedCurseforge"),
+        );
+        setCurseforgeError(uiMessage);
+        showNotification("error", uiMessage);
+      } finally {
+        setCurseforgeVersionsLoading(false);
+      }
+    },
+    [language, modrinthGameVersion, modrinthLoader, showNotification],
+  );
+
   useEffect(() => {
+    if (contentProvider !== "modrinth") return;
     const controller = new AbortController();
 
     (async () => {
@@ -286,9 +402,9 @@ export function ModsTab({
         }
 
         const params = new URLSearchParams({
-          limit: String(MODRINTH_PAGE_SIZE),
+          limit: String(CATALOG_PAGE_SIZE),
           index: "downloads",
-          offset: String(modrinthPage * MODRINTH_PAGE_SIZE),
+          offset: String(modrinthPage * CATALOG_PAGE_SIZE),
         });
         if (modrinthSearch.trim().length > 0) {
           params.set("query", modrinthSearch.trim());
@@ -309,9 +425,7 @@ export function ModsTab({
             (p) => p.project_id === modrinthSelectedProject?.project_id,
           ) ?? data.hits[0] ?? null;
         setModrinthSelectedProject(nextSelected);
-        if (nextSelected) {
-          void loadModrinthVersions(nextSelected.project_id);
-        } else {
+        if (!nextSelected) {
           setModrinthVersions([]);
         }
       } catch (e) {
@@ -333,20 +447,128 @@ export function ModsTab({
       controller.abort();
     };
   }, [
+    contentProvider,
     modrinthContentType,
     modrinthGameVersion,
     modrinthLoader,
     modrinthSearch,
-    modrinthSelectedProject?.project_id,
     modrinthPage,
-    MODRINTH_PAGE_SIZE,
-    loadModrinthVersions,
+    CATALOG_PAGE_SIZE,
     showNotification,
   ]);
 
   useEffect(() => {
+    if (contentProvider !== "modrinth") return;
+    const projectId = modrinthSelectedProject?.project_id;
+    if (!projectId) {
+      setModrinthVersions([]);
+      return;
+    }
+    void loadModrinthVersions(projectId);
+  }, [
+    contentProvider,
+    modrinthSelectedProject?.project_id,
+    modrinthGameVersion,
+    modrinthLoader,
+    modrinthContentType,
+    loadModrinthVersions,
+  ]);
+
+  useEffect(() => {
+    if (contentProvider !== "curseforge") return;
+    let cancelled = false;
+
+    (async () => {
+      setCurseforgeLoading(true);
+      setCurseforgeError(null);
+      try {
+        const data = await invoke<{
+          hits: CurseforgeModHit[];
+          index: number;
+          pageSize: number;
+          totalCount: number;
+        }>("curseforge_search_mods", {
+          contentType: modrinthContentType,
+          searchFilter: modrinthSearch,
+          gameVersion: modrinthGameVersion,
+          loader: modrinthLoader,
+          index: curseforgePage * CATALOG_PAGE_SIZE,
+          pageSize: CATALOG_PAGE_SIZE,
+        });
+        if (cancelled) return;
+        setCurseforgeProjects(data.hits);
+        setCurseforgeTotalHits(data.totalCount ?? data.hits.length);
+
+        const nextSelected =
+          data.hits.find((p) => p.id === curseforgeSelectedProject?.id) ??
+          data.hits[0] ??
+          null;
+        setCurseforgeSelectedProject(nextSelected);
+        if (!nextSelected) {
+          setCurseforgeVersions([]);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        const uiMessage = invokeErrorMessage(
+          e,
+          t(language, "mods.downloadFailedCurseforge"),
+        );
+        setCurseforgeError(uiMessage);
+        showNotification("error", uiMessage);
+      } finally {
+        if (!cancelled) setCurseforgeLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    contentProvider,
+    language,
+    modrinthContentType,
+    modrinthGameVersion,
+    modrinthLoader,
+    modrinthSearch,
+    curseforgePage,
+    CATALOG_PAGE_SIZE,
+    showNotification,
+  ]);
+
+  useEffect(() => {
+    if (contentProvider !== "curseforge") return;
+    const modId = curseforgeSelectedProject?.id;
+    if (!modId) {
+      setCurseforgeVersions([]);
+      return;
+    }
+    void loadCurseforgeVersions(modId);
+  }, [
+    contentProvider,
+    curseforgeSelectedProject?.id,
+    modrinthGameVersion,
+    modrinthLoader,
+    loadCurseforgeVersions,
+  ]);
+
+  useEffect(() => {
     setModrinthPage(0);
-  }, [modrinthContentType, modrinthGameVersion, modrinthLoader]);
+    setCurseforgePage(0);
+  }, [modrinthContentType, modrinthGameVersion, modrinthLoader, contentProvider]);
+
+  const setContentProviderPersisted = (provider: ContentProvider) => {
+    setContentProvider(provider);
+    setModrinthPage(0);
+    setCurseforgePage(0);
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("mods_content_provider", provider);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -425,13 +647,99 @@ export function ModsTab({
     return true;
   });
 
+  const filteredCurseforgeVersions = curseforgeVersions.filter((f) => {
+    if (
+      modrinthGameVersion &&
+      f.gameVersions.length > 0 &&
+      !f.gameVersions.includes(modrinthGameVersion)
+    ) {
+      return false;
+    }
+    if (
+      modrinthContentType === "mod" &&
+      modrinthLoader !== "any" &&
+      f.loaders.length > 0 &&
+      !f.loaders.includes(modrinthLoader)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const catalogProjects: CatalogProject[] =
+    contentProvider === "modrinth"
+      ? modrinthProjects.map((p) => ({
+          key: p.project_id,
+          title: p.title,
+          description: p.description,
+          icon_url: p.icon_url,
+          downloads: p.downloads,
+          follows: p.follows,
+          author: p.author,
+          project_type: p.project_type,
+        }))
+      : curseforgeProjects.map((p) => ({
+          key: String(p.id),
+          title: p.name,
+          description: p.summary,
+          icon_url: p.thumbnailUrl,
+          downloads: p.downloadCount,
+          follows: 0,
+          author: p.author,
+          project_type: modrinthContentType,
+        }));
+
+  const catalogVersions: CatalogVersion[] =
+    contentProvider === "modrinth"
+      ? filteredModrinthVersions.map((v) => {
+          const primaryFile = v.files.find((f) => f.primary) ?? v.files[0];
+          return {
+            id: v.id,
+            version_number: v.version_number,
+            game_versions: v.game_versions,
+            loaders: v.loaders,
+            file_url: primaryFile?.url ?? "",
+            filename: primaryFile?.filename ?? "",
+          };
+        })
+      : filteredCurseforgeVersions.map((f) => ({
+          id: String(f.id),
+          version_number: f.displayName,
+          game_versions: f.gameVersions,
+          loaders: f.loaders,
+          file_url: f.downloadUrl ?? "",
+          filename: f.fileName,
+        }));
+
+  const catalogLoading =
+    contentProvider === "modrinth" ? modrinthLoading : curseforgeLoading;
+  const catalogError =
+    contentProvider === "modrinth" ? modrinthError : curseforgeError;
+  const catalogVersionsLoading =
+    contentProvider === "modrinth"
+      ? modrinthVersionsLoading
+      : curseforgeVersionsLoading;
+  const catalogSelectedKey =
+    contentProvider === "modrinth"
+      ? modrinthSelectedProject?.project_id ?? null
+      : curseforgeSelectedProject
+        ? String(curseforgeSelectedProject.id)
+        : null;
+  const catalogTotalHits =
+    contentProvider === "modrinth" ? modrinthTotalHits : curseforgeTotalHits;
+  const catalogPage =
+    contentProvider === "modrinth" ? modrinthPage : curseforgePage;
+  const setCatalogPage =
+    contentProvider === "modrinth" ? setModrinthPage : setCurseforgePage;
+
   const totalPages =
-    modrinthTotalHits > 0
-      ? Math.max(1, Math.ceil(modrinthTotalHits / MODRINTH_PAGE_SIZE))
+    catalogTotalHits > 0
+      ? Math.max(1, Math.ceil(catalogTotalHits / CATALOG_PAGE_SIZE))
       : 1;
-  const currentPage = modrinthPage + 1;
+  const currentPage = catalogPage + 1;
   const canPrevPage = currentPage > 1;
   const canNextPage = currentPage < totalPages;
+  const hasSelectedProject = catalogSelectedKey != null;
 
   const modpackImportPercent =
     modpackImportProgress?.total && modpackImportProgress.total > 0
@@ -451,7 +759,11 @@ export function ModsTab({
   })();
 
   return (
-    <div className="flex h-full w-full max-w-4xl flex-col">
+    <div
+      className={`flex h-full w-full flex-col min-h-0 ${
+        fillPane ? "max-w-none" : "max-w-4xl"
+      }`}
+    >
       {showUnlockConfirm && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -487,6 +799,24 @@ export function ModsTab({
         </div>
       )}
       <div className="relative z-[80] mb-4 mt-2 flex items-center justify-between gap-3">
+        <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl">
+          {(["modrinth", "curseforge"] as ContentProvider[]).map((provider) => (
+            <button
+              key={provider}
+              type="button"
+              onClick={() => setContentProviderPersisted(provider)}
+              className={`interactive-press rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
+                contentProvider === provider
+                  ? "bg-white/90 text-black"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              {provider === "modrinth"
+                ? tt("mods.provider.modrinth")
+                : tt("mods.provider.curseforge")}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 py-2 shadow-soft backdrop-blur-xl">
           <img
             src="/launcher-assets/search.png"
@@ -500,6 +830,7 @@ export function ModsTab({
             onChange={(e) => {
               setModrinthSearch(e.target.value);
               setModrinthPage(0);
+              setCurseforgePage(0);
             }}
             className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
           />
@@ -663,6 +994,7 @@ export function ModsTab({
                   onClick={() => {
                     setModrinthContentType(kind);
                     setModrinthPage(0);
+                    setCurseforgePage(0);
                   }}
                   className={`interactive-press relative z-10 flex-1 rounded-xl px-3 py-1 text-xs font-semibold text-center transition-colors ${
                     active
@@ -741,13 +1073,13 @@ export function ModsTab({
           <div className="mb-2 flex items-center justify-between text-xs text-white/60">
             <div className="flex items-center gap-2">
               <span className="ml-1.5">
-                {modrinthLoading ? tt("mods.loadingPopular") : ""}
+                {catalogLoading ? tt("mods.loadingPopular") : ""}
               </span>
-              {modrinthError ? <span className="text-rose-300">{modrinthError}</span> : null}
+              {catalogError ? <span className="text-rose-300">{catalogError}</span> : null}
             </div>
           </div>
           <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
-            {modrinthProjects.length > 0 && (
+            {catalogProjects.length > 0 && (
               <div
                 className={
                   modsLayout === "grid"
@@ -755,16 +1087,28 @@ export function ModsTab({
                     : "flex flex-col gap-2"
                 }
               >
-                {modrinthProjects.map((p) => {
-                  const isActive =
-                    modrinthSelectedProject?.project_id === p.project_id;
+                {catalogProjects.map((p) => {
+                  const isActive = catalogSelectedKey === p.key;
                   return (
                     <button
-                      key={p.project_id}
+                      key={p.key}
                       type="button"
                       onClick={() => {
-                        setModrinthSelectedProject(p);
-                        void loadModrinthVersions(p.project_id);
+                        if (contentProvider === "modrinth") {
+                          const hit = modrinthProjects.find(
+                            (m) => m.project_id === p.key,
+                          );
+                          if (hit) {
+                            setModrinthSelectedProject(hit);
+                          }
+                        } else {
+                          const hit = curseforgeProjects.find(
+                            (m) => String(m.id) === p.key,
+                          );
+                          if (hit) {
+                            setCurseforgeSelectedProject(hit);
+                          }
+                        }
                       }}
                       className={`interactive-press w-full rounded-2xl border px-3 py-3 text-left transition ${
                         modsLayout === "grid"
@@ -813,10 +1157,12 @@ export function ModsTab({
                               {p.downloads.toLocaleString("ru-RU")}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <HeartStatIcon />
-                            <span>{p.follows.toLocaleString("ru-RU")}</span>
-                          </div>
+                          {contentProvider === "modrinth" && p.follows > 0 && (
+                            <div className="flex items-center gap-1">
+                              <HeartStatIcon />
+                              <span>{p.follows.toLocaleString("ru-RU")}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -824,13 +1170,15 @@ export function ModsTab({
                 })}
               </div>
             )}
-            {!modrinthLoading && modrinthProjects.length === 0 && (
+            {!catalogLoading && catalogProjects.length === 0 && (
               <div className="rounded-2xl border border-dashed border-white/15 bg-black/30 px-4 py-6 text-center text-xs text-white/60">
-                {tt("mods.nothingFound")}
+                {contentProvider === "curseforge"
+                  ? tt("mods.nothingFoundCurseforge")
+                  : tt("mods.nothingFoundModrinth")}
               </div>
             )}
           </div>
-          {modrinthTotalHits > MODRINTH_PAGE_SIZE && (
+          {catalogTotalHits > CATALOG_PAGE_SIZE && (
             <div className="mt-2 flex items-center justify-between rounded-2xl bg-black/40 px-3 py-2 text-[11px] text-white/70">
               <span>
                 {tt("mods.pageOf", { current: currentPage, total: totalPages })}
@@ -838,9 +1186,9 @@ export function ModsTab({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={!canPrevPage || modrinthLoading}
+                  disabled={!canPrevPage || catalogLoading}
                   onClick={() =>
-                    setModrinthPage((prev) => Math.max(0, prev - 1))
+                    setCatalogPage((prev) => Math.max(0, prev - 1))
                   }
                   className="interactive-press rounded-full bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -848,8 +1196,8 @@ export function ModsTab({
                 </button>
                 <button
                   type="button"
-                  disabled={!canNextPage || modrinthLoading}
-                  onClick={() => setModrinthPage((prev) => prev + 1)}
+                  disabled={!canNextPage || catalogLoading}
+                  onClick={() => setCatalogPage((prev) => prev + 1)}
                   className="interactive-press rounded-full bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {tt("mods.next")}
@@ -862,7 +1210,7 @@ export function ModsTab({
 
         <div className="glass-panel relative z-0 flex w-80 min-h-0 flex-shrink-0 flex-col">
           <div className="mb-2 text-xs text-white/60">
-            {modrinthSelectedProject ? `` : tt("mods.selectProject")}
+            {hasSelectedProject ? `` : tt("mods.selectProject")}
           </div>
           {modrinthContentType === "modpack" && modpackImportBusy && (
               <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
@@ -889,24 +1237,22 @@ export function ModsTab({
               </div>
             )}
           <div className="custom-scrollbar -mr-3 min-h-0 flex-1 overflow-y-auto pr-3">
-            {modrinthVersionsLoading && (
+            {catalogVersionsLoading && (
               <div className="py-8 text-center text-xs text-white/70">
                 {tt("mods.versionsLoading")}
               </div>
             )}
-            {!modrinthVersionsLoading && modrinthSelectedProject && (
+            {!catalogVersionsLoading && hasSelectedProject && (
                 <div>
-                  {filteredModrinthVersions.map((v) => {
-                    const primaryFile = v.files.find((f) => f.primary) ?? v.files[0];
+                  {catalogVersions.map((v) => {
                     const isInstalled =
                       modrinthContentType !== "modpack" &&
-                      primaryFile &&
-                      installedFilenames.has(primaryFile.filename);
-                    const mrpackFile =
-                      modrinthContentType === "modpack"
-                        ? v.files.find((f) => f.filename.toLowerCase().endsWith(".mrpack")) ??
-                          primaryFile
-                        : primaryFile;
+                      v.filename &&
+                      installedFilenames.has(v.filename);
+                    const canDownload =
+                      contentProvider === "curseforge"
+                        ? Boolean(curseforgeSelectedProject && v.filename)
+                        : Boolean(v.file_url && v.filename);
                     return (
                       <div
                         key={v.id}
@@ -943,13 +1289,18 @@ export function ModsTab({
                         <button
                           type="button"
                           disabled={
-                            !mrpackFile ||
-                            (modpackImportBusy && modrinthContentType === "modpack")
+                            !canDownload ||
+                            (modpackImportBusy &&
+                              modrinthContentType === "modpack" &&
+                              contentProvider === "modrinth")
                           }
                           onClick={async () => {
-                            if (!mrpackFile) return;
+                            if (!canDownload) return;
                             try {
-                              if (modrinthContentType === "modpack") {
+                              if (
+                                modrinthContentType === "modpack" &&
+                                contentProvider === "modrinth"
+                              ) {
                                 setModpackImportBusy(true);
                                 setModpackImportProgress({
                                   phase: "start",
@@ -961,8 +1312,8 @@ export function ModsTab({
                                   id: string;
                                   name: string;
                                 }>("download_modrinth_modpack_and_import", {
-                                  url: mrpackFile.url,
-                                  filename: mrpackFile.filename,
+                                  url: v.file_url,
+                                  filename: v.filename,
                                 });
                                 await invoke("set_selected_profile", { id: imported.id });
                                 onOpenModpacksTab?.();
@@ -972,24 +1323,61 @@ export function ModsTab({
                                     name: imported.name ?? imported.id,
                                   }),
                                 );
-                              } else {
-                                await invoke("download_modrinth_file", {
+                              } else if (contentProvider === "curseforge") {
+                                const modId = curseforgeSelectedProject?.id;
+                                if (!modId) return;
+                                await invoke("download_curseforge_file", {
+                                  modId,
+                                  fileId: Number(v.id),
                                   category: modrinthContentType,
-                                  url: mrpackFile.url,
-                                  filename: mrpackFile.filename,
+                                  filename: v.filename,
                                   profileId: activeProfileId ?? null,
                                 });
                                 if (activeProfileId) {
-                                  setInstalledFilenames((prev) => new Set([...prev, mrpackFile.filename]));
+                                  setInstalledFilenames((prev) =>
+                                    new Set([...prev, v.filename]),
+                                  );
+                                }
+                                showNotification(
+                                  "success",
+                                  modrinthContentType === "modpack"
+                                    ? tt("mods.curseforgeModpackHint")
+                                    : activeProfileId
+                                      ? tt("mods.saveSuccessProfile", {
+                                          filename: v.filename,
+                                        })
+                                      : tt("mods.saveSuccessFolder", {
+                                          filename: v.filename,
+                                          folder:
+                                            modrinthContentType === "mod"
+                                              ? "mods"
+                                              : modrinthContentType === "resourcepack"
+                                                ? "resourcepacks"
+                                                : modrinthContentType === "shader"
+                                                  ? "shaderpacks"
+                                                  : "modpacks",
+                                        }),
+                                );
+                              } else {
+                                await invoke("download_modrinth_file", {
+                                  category: modrinthContentType,
+                                  url: v.file_url,
+                                  filename: v.filename,
+                                  profileId: activeProfileId ?? null,
+                                });
+                                if (activeProfileId) {
+                                  setInstalledFilenames((prev) =>
+                                    new Set([...prev, v.filename]),
+                                  );
                                 }
                                 showNotification(
                                   "success",
                                   activeProfileId
                                     ? tt("mods.saveSuccessProfile", {
-                                        filename: mrpackFile.filename,
+                                        filename: v.filename,
                                       })
                                     : tt("mods.saveSuccessFolder", {
-                                        filename: mrpackFile.filename,
+                                        filename: v.filename,
                                         folder:
                                           modrinthContentType === "mod"
                                             ? "mods"
@@ -1000,12 +1388,19 @@ export function ModsTab({
                                 );
                               }
                             } catch (e) {
-                              const msg =
-                                e instanceof Error ? e.message : tt("mods.downloadFailed");
+                              const msg = invokeErrorMessage(
+                                e,
+                                contentProvider === "curseforge"
+                                  ? tt("mods.downloadFailedCurseforge")
+                                  : tt("mods.downloadFailedModrinth"),
+                              );
                               console.error(e);
                               showNotification("error", msg);
                             } finally {
-                              if (modrinthContentType === "modpack") {
+                              if (
+                                modrinthContentType === "modpack" &&
+                                contentProvider === "modrinth"
+                              ) {
                                 setModpackImportBusy(false);
                                 setModpackImportProgress(null);
                               }
@@ -1021,9 +1416,9 @@ export function ModsTab({
                   })}
                 </div>
               )}
-            {!modrinthVersionsLoading &&
-              modrinthSelectedProject &&
-              filteredModrinthVersions.length === 0 && (
+            {!catalogVersionsLoading &&
+              hasSelectedProject &&
+              catalogVersions.length === 0 && (
                 <div className="py-8 text-center text-xs text-white/60">
                   {tt("mods.noAvailableVersions")}
                 </div>

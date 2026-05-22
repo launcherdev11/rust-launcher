@@ -6,7 +6,7 @@ fn load_dotenv_walking_up(start: &Path) {
     for _ in 0..16 {
         let cand = dir.join(".env");
         if cand.is_file() {
-            let _ = dotenvy::from_path(&cand);
+            let _ = dotenvy::from_path_override(&cand);
             return;
         }
         if !dir.pop() {
@@ -31,7 +31,7 @@ pub fn load_dotenv_files() {
     ];
     for p in fixed {
         if p.is_file() {
-            let _ = dotenvy::from_path(&p);
+            let _ = dotenvy::from_path_override(&p);
         }
     }
 }

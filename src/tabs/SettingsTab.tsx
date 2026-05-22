@@ -72,6 +72,7 @@ type SettingsTabProps = {
   updateDownloadPercent?: number | null;
   onCheckUpdate?: () => void;
   onInstallUpdate?: () => void;
+  fillPane?: boolean;
 };
 
 type VersionSummary = {
@@ -246,6 +247,7 @@ export function SettingsTab({
   updateDownloadPercent = null,
   onCheckUpdate,
   onInstallUpdate,
+  fillPane = false,
 }: SettingsTabProps) {
   const tt = useT(language);
   const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
@@ -1051,7 +1053,11 @@ export function SettingsTab({
   };
 
   return (
-    <div className="flex w-full flex-1 min-h-0 flex-col items-center">
+    <div
+      className={`flex w-full min-h-0 flex-col ${
+        fillPane ? "h-full flex-1" : "flex-1 items-center"
+      }`}
+    >
       {repairPrompt && (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -1108,15 +1114,20 @@ export function SettingsTab({
           </div>
         </div>
       )}
-      <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden px-4">
+      <div
+        className={`flex min-h-0 w-full flex-1 overflow-hidden ${
+          fillPane ? "px-1 py-1" : "items-center justify-center px-4"
+        }`}
+      >
         <div
           className={[
-            "w-full min-h-0 overflow-hidden",
-            "max-w-[clamp(360px,82vw,1200px)]",
-            "max-h-[clamp(260px,78vh,860px)]",
+            "flex w-full min-h-0 flex-col overflow-hidden",
+            fillPane
+              ? "h-full max-h-full max-w-none"
+              : "max-w-[clamp(360px,82vw,1200px)] max-h-[clamp(260px,78vh,860px)]",
           ].join(" ")}
         >
-          <div className="glass-panel h-full w-full overflow-y-auto px-6 py-5">
+          <div className="glass-panel min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {settingsTab === "game" && (
             <SettingsCard title={tt("settings.card.game")}>
               <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1 relative overflow-hidden">
@@ -2168,7 +2179,11 @@ export function SettingsTab({
         </div>
       </div>
 
-      <div className="mt-4 mb-6 flex items-center justify-center">
+      <div
+        className={`flex shrink-0 items-center justify-center ${
+          fillPane ? "mt-2 mb-1" : "mt-4 mb-6"
+        }`}
+      >
         <div className="relative flex items-center gap-0 rounded-full border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
           <div
             className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
