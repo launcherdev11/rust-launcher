@@ -32,6 +32,10 @@ use services::auth::{
     ely_login_with_password, ely_logout, handle_oauth_callback, ms_logout, refresh_ely_session,
     start_ely_oauth, start_ms_oauth,
 };
+use services::curseforge::{
+    curseforge_get_mod_files, curseforge_list_minecraft_versions, curseforge_search_mods,
+    download_curseforge_file,
+};
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 use commands::{export_build, get_ely_avatar, list_build_files, preview_export};
 use mrpack_open::take_pending_mrpack_open;
@@ -127,6 +131,10 @@ pub fn run() {
             reset_download_cancel,
             download_modrinth_file,
             download_modrinth_modpack_and_import,
+            curseforge_search_mods,
+            curseforge_get_mod_files,
+            curseforge_list_minecraft_versions,
+            download_curseforge_file,
             import_mrpack,
             import_mrpack_as_new_profile,
             update_profile_settings,

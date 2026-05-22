@@ -12,7 +12,7 @@ pub fn load_project_env_for_runtime() {
         ];
         for path in candidate_paths {
             if path.exists() {
-                let _ = dotenvy::from_path(path);
+                let _ = dotenvy::from_path_override(path);
             }
         }
     });

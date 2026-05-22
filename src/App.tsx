@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -25,7 +26,22 @@ import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
+import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { useT, t } from "./i18n";
+import {
+  applyTabDrop,
+  detectDropZone,
+  isSplittableTab,
+  loadTabSplitLayout,
+  saveTabSplitLayout,
+  tabPaneRole,
+  TAB_DRAG_THRESHOLD_PX,
+  TAB_SPLIT_RATIO_MAX,
+  TAB_SPLIT_RATIO_MIN,
+  type SplittableTabId,
+  type TabDropZone,
+  type TabSplitLayout,
+} from "./splitView";
 
 type Profile = {
   nickname: string;
@@ -72,6 +88,7 @@ type Settings = {
   background_accent_color: string;
   background_image_url: string | null;
   background_blur_enabled: boolean;
+  split_view_enabled: boolean;
 };
 
 type InstanceProfileSummary = {
@@ -606,6 +623,29 @@ const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge"
 
 function App() {
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
+  const [tabSplitLayout, setTabSplitLayout] = useState<TabSplitLayout | null>(() =>
+    loadTabSplitLayout(),
+  );
+  const [tabDrag, setTabDrag] = useState<{
+    tab: SplittableTabId;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [tabDropZone, setTabDropZone] = useState<TabDropZone | null>(null);
+  const [isTabSplitDividerDragging, setIsTabSplitDividerDragging] = useState(false);
+  const mainSplitRef = useRef<HTMLElement | null>(null);
+  const sidebarTabDragRef = useRef<{
+    tab: SplittableTabId;
+    startX: number;
+    startY: number;
+    active: boolean;
+  } | null>(null);
+  const sidebarDragConsumedRef = useRef(false);
+  const tabSplitDividerDragRef = useRef<{
+    startCoord: number;
+    startRatio: number;
+    direction: TabSplitLayout["direction"];
+  } | null>(null);
   const [sidebarOrder, setSidebarOrder] = useState<SidebarItemId[]>(() => {
     if (typeof window === "undefined") return DEFAULT_SIDEBAR_ORDER;
     try {
@@ -798,6 +838,36 @@ function App() {
     };
   }, []);
 
+  const splitViewEnabled = settings?.split_view_enabled ?? false;
+  const effectiveTabSplit =
+    splitViewEnabled && tabSplitLayout ? tabSplitLayout : null;
+
+  const splitDropZoneLabels = useMemo(
+    () => ({
+      left: tt("app.splitView.zones.left"),
+      right: tt("app.splitView.zones.right"),
+      top: tt("app.splitView.zones.top"),
+      bottom: tt("app.splitView.zones.bottom"),
+      center: tt("app.splitView.zones.center"),
+    }),
+    [tt],
+  );
+
+  useEffect(() => {
+    if (splitViewEnabled) {
+      saveTabSplitLayout(tabSplitLayout);
+    } else {
+      saveTabSplitLayout(null);
+    }
+  }, [splitViewEnabled, tabSplitLayout]);
+
+  useEffect(() => {
+    if (!splitViewEnabled) return;
+    if (tabSplitLayout) return;
+    const saved = loadTabSplitLayout();
+    if (saved) setTabSplitLayout(saved);
+  }, [splitViewEnabled, tabSplitLayout]);
+
   const setActiveItemWithSound = useCallback(
     (next: SidebarItemId) => {
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
@@ -806,6 +876,184 @@ function App() {
     },
     [activeItem, settings?.ui_sounds_enabled],
   );
+
+  const activateSidebarTab = useCallback(
+    (next: SplittableTabId) => {
+      if (!effectiveTabSplit) {
+        setActiveItemWithSound(next);
+        return;
+      }
+      const role = tabPaneRole(next, effectiveTabSplit);
+      if (role) {
+        if (effectiveTabSplit.focused !== role) {
+          setTabSplitLayout({ ...effectiveTabSplit, focused: role });
+        }
+        setActiveItemWithSound(next);
+        return;
+      }
+      const updated: TabSplitLayout =
+        effectiveTabSplit.focused === "primary"
+          ? { ...effectiveTabSplit, primary: next }
+          : { ...effectiveTabSplit, secondary: next };
+      setTabSplitLayout(updated);
+      setActiveItemWithSound(next);
+    },
+    [effectiveTabSplit, setActiveItemWithSound],
+  );
+
+  const finishTabDrag = useCallback(
+    (clientX: number, clientY: number) => {
+      const drag = sidebarTabDragRef.current;
+      sidebarTabDragRef.current = null;
+      setTabDrag(null);
+      setTabDropZone(null);
+
+      if (!drag?.active || !splitViewEnabled) return;
+
+      sidebarDragConsumedRef.current = true;
+      const mainEl = mainSplitRef.current;
+      if (!mainEl) return;
+
+      const rect = mainEl.getBoundingClientRect();
+      const zone = detectDropZone(clientX, clientY, rect);
+      const currentTab = isSplittableTab(activeItem) ? activeItem : "play";
+      const { layout, focusedTab } = applyTabDrop(
+        drag.tab,
+        zone,
+        currentTab,
+        effectiveTabSplit,
+      );
+      setTabSplitLayout(layout);
+      setActiveItemWithSound(focusedTab);
+    },
+    [activeItem, effectiveTabSplit, setActiveItemWithSound, splitViewEnabled],
+  );
+
+  const handleSidebarTabPointerDown = useCallback(
+    (tab: SplittableTabId, e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!splitViewEnabled || e.button !== 0) return;
+      sidebarTabDragRef.current = {
+        tab,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: false,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [splitViewEnabled],
+  );
+
+  const handleSidebarTabPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = sidebarTabDragRef.current;
+      if (!drag) return;
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      if (
+        !drag.active &&
+        (Math.abs(dx) > TAB_DRAG_THRESHOLD_PX || Math.abs(dy) > TAB_DRAG_THRESHOLD_PX)
+      ) {
+        drag.active = true;
+        setTabDrag({ tab: drag.tab, x: e.clientX, y: e.clientY });
+      }
+      if (!drag.active) return;
+      setTabDrag({ tab: drag.tab, x: e.clientX, y: e.clientY });
+      const mainEl = mainSplitRef.current;
+      if (mainEl) {
+        setTabDropZone(detectDropZone(e.clientX, e.clientY, mainEl.getBoundingClientRect()));
+      }
+    },
+    [],
+  );
+
+  const handleSidebarTabPointerUp = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = sidebarTabDragRef.current;
+      if (!drag) return;
+      if (drag.active) {
+        finishTabDrag(e.clientX, e.clientY);
+      } else {
+        sidebarTabDragRef.current = null;
+      }
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [finishTabDrag],
+  );
+
+  const handleSidebarTabPointerCancel = useCallback(() => {
+    sidebarTabDragRef.current = null;
+    setTabDrag(null);
+    setTabDropZone(null);
+  }, []);
+
+  const sidebarIconClass = useCallback(
+    (tab: SplittableTabId) => {
+      if (activeItem === tab) return "sidebar-icon-active";
+      if (effectiveTabSplit && tabPaneRole(tab, effectiveTabSplit)) {
+        return "sidebar-icon-split-pane";
+      }
+      return "";
+    },
+    [activeItem, effectiveTabSplit],
+  );
+
+  const onTabSplitDividerPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!effectiveTabSplit || e.button !== 0) return;
+      e.preventDefault();
+      const row = mainSplitRef.current;
+      if (!row) return;
+      const rect = row.getBoundingClientRect();
+      const horizontal = effectiveTabSplit.direction === "horizontal";
+      const size = horizontal ? rect.width : rect.height;
+      const origin = horizontal ? rect.left : rect.top;
+      const coord = horizontal ? e.clientX : e.clientY;
+      const startRel = size > 0 ? (coord - origin) / size : effectiveTabSplit.ratio;
+      tabSplitDividerDragRef.current = {
+        startCoord: startRel,
+        startRatio: effectiveTabSplit.ratio,
+        direction: effectiveTabSplit.direction,
+      };
+      setIsTabSplitDividerDragging(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [effectiveTabSplit],
+  );
+
+  useEffect(() => {
+    if (!isTabSplitDividerDragging) return;
+    const onMove = (e: PointerEvent) => {
+      const d = tabSplitDividerDragRef.current;
+      const row = mainSplitRef.current;
+      if (!d || !row) return;
+      const rect = row.getBoundingClientRect();
+      const size = d.direction === "horizontal" ? rect.width : rect.height;
+      if (size <= 0) return;
+      const coord = d.direction === "horizontal" ? e.clientX : e.clientY;
+      const origin = d.direction === "horizontal" ? rect.left : rect.top;
+      const rel = size > 0 ? (coord - origin) / size : d.startRatio;
+      const delta = rel - d.startCoord;
+      let next = d.startRatio + delta;
+      next = Math.min(TAB_SPLIT_RATIO_MAX, Math.max(TAB_SPLIT_RATIO_MIN, next));
+      setTabSplitLayout((prev) => (prev ? { ...prev, ratio: next } : prev));
+    };
+    const onUp = () => {
+      tabSplitDividerDragRef.current = null;
+      setIsTabSplitDividerDragging(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [isTabSplitDividerDragging]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1295,6 +1543,7 @@ function App() {
     background_accent_color: "#0b1530",
     background_image_url: null,
     background_blur_enabled: true,
+    split_view_enabled: false,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -2500,6 +2749,231 @@ function App() {
       ? rawBackgroundImage
       : convertFileSrc(rawBackgroundImage));
 
+  const renderMainTabContent = useCallback(
+    (tab: SplittableTabId, inSplitPane = false) => {
+      switch (tab) {
+        case "mods":
+          return (
+            <div
+              className={
+                inSplitPane
+                  ? "tab-pane-fill px-2 py-2"
+                  : "flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center"
+              }
+            >
+              <ModsTab
+                fillPane={inSplitPane}
+                showNotification={showNotification}
+                language={language}
+                activeProfileId={activeInstanceProfile?.id ?? null}
+                activeProfileGameVersion={activeInstanceProfile?.game_version}
+                activeProfileLoader={activeInstanceProfile?.loader}
+                onOpenModpacksTab={() => activateSidebarTab("modpacks")}
+                onSelectedModTitleChange={setDiscordModsTitle}
+              />
+            </div>
+          );
+        case "modpacks":
+          return (
+            <div
+              className={
+                inSplitPane
+                  ? "tab-pane-fill py-2"
+                  : "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4"
+              }
+            >
+              <ModpackTab
+                fillPane={inSplitPane}
+                language={language}
+                showNotification={showNotification}
+                onProfileSelectionChange={handleModpackProfileSelectionChange}
+                initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+                onProfilesChange={(profiles) => {
+                  setKnownProfiles(
+                    profiles.map((p) => ({
+                      id: p.id,
+                      name: p.name,
+                      game_version: p.game_version,
+                      loader: p.loader,
+                      icon_path: p.icon_path,
+                      directory: p.directory,
+                    })),
+                  );
+                  setProfilesHydrated(true);
+                }}
+                onTogglePinInSidebar={(profile) =>
+                  handleToggleSidebarPin({
+                    id: profile.id,
+                    name: profile.name,
+                    game_version: profile.game_version,
+                    loader: profile.loader,
+                    icon_path: profile.icon_path,
+                    directory: profile.directory,
+                  })
+                }
+                isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
+                onOpenModsTab={() => activateSidebarTab("mods")}
+                onPlaySelectedProfile={() => {
+                  if (!activeInstanceProfile) {
+                    showNotification("warning", tt("app.warnings.selectProfileFirst"));
+                    return;
+                  }
+                  void handlePrimaryClick();
+                }}
+                gameStatus={gameStatus}
+                consoleLines={consoleLines}
+                consoleHistorySessions={consoleHistorySessions}
+                onClearConsole={handleClearConsole}
+              />
+            </div>
+          );
+        case "settings":
+          return (
+            <div className={inSplitPane ? "tab-pane-fill" : "flex min-h-0 w-full flex-1 flex-col"}>
+            <SettingsTab
+              fillPane={inSplitPane}
+              settings={settings}
+              settingsTab={settingsTab}
+              setSettingsTab={setSettingsTab}
+              systemMemoryGb={systemMemoryGb}
+              updateSettings={(patch) =>
+                updateSettings(patch, activeInstanceProfile?.id ?? undefined)
+              }
+              showNotification={showNotification}
+              SettingsCard={SettingsCard}
+              SettingsSlider={SettingsSlider}
+              SettingsToggle={SettingsToggle}
+              language={language}
+              setLanguage={setLanguage}
+              sidebarOrder={
+                sidebarOrder.filter(
+                  (id) =>
+                    id === "play" ||
+                    id === "settings" ||
+                    id === "mods" ||
+                    id === "modpacks",
+                ) as ("play" | "settings" | "mods" | "modpacks")[]
+              }
+              setSidebarOrder={(order) =>
+                setSidebarOrder(
+                  order.filter(
+                    (id) =>
+                      id === "play" ||
+                      id === "settings" ||
+                      id === "mods" ||
+                      id === "modpacks",
+                  ) as SidebarItemId[],
+                )
+              }
+              updateStatus={updateStatus}
+              updateVersion={updateVersion}
+              updateDownloadPercent={updateDownloadPercent}
+              onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
+              onInstallUpdate={() => void installUpdate()}
+            />
+            </div>
+          );
+        case "play":
+        default:
+          return (
+            <div
+              className={
+                inSplitPane
+                  ? "tab-pane-fill items-center justify-center overflow-auto py-2"
+                  : "flex min-h-0 w-full flex-1 flex-col items-center justify-center"
+              }
+            >
+            <PlayTab
+              fillPane={inSplitPane}
+              gameStatus={gameStatus}
+              consoleLines={consoleLines}
+              isConsoleVisible={isConsoleVisible}
+              onToggleConsole={handleToggleConsole}
+              onClearConsole={handleClearConsole}
+              showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
+              versions={versions}
+              selectedVersion={selectedVersion}
+              setSelectedVersion={setSelectedVersion}
+              versionsLoading={versionsLoading}
+              isVersionDropdownOpen={isVersionDropdownOpen}
+              setIsVersionDropdownOpen={setIsVersionDropdownOpen}
+              installPaused={installPaused}
+              isInstalling={isInstalling}
+              handleResumeInstall={handleResumeInstall}
+              handlePauseInstall={handlePauseInstall}
+              handleCancelInstall={handleCancelInstall}
+              handlePrimaryClick={handlePrimaryClick}
+              primaryColorClasses={primaryColorClasses}
+              primaryLabel={primaryLabel}
+              progress={progress}
+              loader={loader}
+              setLoader={setLoader}
+              isLoaderDropdownOpen={isLoaderDropdownOpen}
+              setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
+              handleOpenGameFolder={handleOpenGameFolder}
+              language={language}
+              installedVersionIds={installedVersionIdsForDropdown}
+              showSnapshots={settings?.show_snapshots ?? false}
+              activeProfileName={activeInstanceProfile?.name ?? null}
+            />
+            </div>
+          );
+      }
+    },
+    [
+      activateSidebarTab,
+      activeInstanceProfile,
+      checkForUpdate,
+      consoleHistorySessions,
+      consoleLines,
+      gameStatus,
+      handleCancelInstall,
+      handleClearConsole,
+      handleModpackProfileSelectionChange,
+      handleOpenGameFolder,
+      handlePauseInstall,
+      handlePrimaryClick,
+      handleResumeInstall,
+      handleToggleConsole,
+      handleToggleSidebarPin,
+      installPaused,
+      installUpdate,
+      installedVersionIdsForDropdown,
+      isConsoleVisible,
+      isInstalling,
+      isLoaderDropdownOpen,
+      isVersionDropdownOpen,
+      language,
+      loader,
+      pinnedProfileIds,
+      primaryColorClasses,
+      primaryLabel,
+      progress,
+      selectedVersion,
+      setDiscordModsTitle,
+      setIsLoaderDropdownOpen,
+      setIsVersionDropdownOpen,
+      setLanguage,
+      setLoader,
+      setSelectedVersion,
+      setSettingsTab,
+      settings,
+      settingsTab,
+      showNotification,
+      sidebarOrder,
+      systemMemoryGb,
+      tt,
+      updateDownloadPercent,
+      updateSettings,
+      updateStatus,
+      updateVersion,
+      versions,
+      versionsLoading,
+    ],
+  );
+
+  const singleMainTab: SplittableTabId = isSplittableTab(activeItem) ? activeItem : "play";
+
   return (
     <div
       className="relative min-h-screen w-full overflow-hidden text-white"
@@ -3074,11 +3548,19 @@ function App() {
             }}
           />
           <div className="flex flex-col gap-3">
-            {orderedSidebarItems.map((item) => (
+            {orderedSidebarItems.map((item) => {
+              const tabId = item.id as SplittableTabId;
+              return (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveItemWithSound(item.id)}
+                onClick={() => {
+                  if (sidebarDragConsumedRef.current) {
+                    sidebarDragConsumedRef.current = false;
+                    return;
+                  }
+                  activateSidebarTab(tabId);
+                }}
                 title={tt(item.labelKey)}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
@@ -3086,9 +3568,11 @@ function App() {
                 className="interactive-press group relative flex items-center"
               >
                 <div
-                  className={`sidebar-icon ml-2 flex items-center justify-center ${
-                    activeItem === item.id ? "sidebar-icon-active" : ""
-                  }`}
+                  className={`sidebar-icon ml-2 flex items-center justify-center ${sidebarIconClass(tabId)}`}
+                  onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
+                  onPointerMove={handleSidebarTabPointerMove}
+                  onPointerUp={handleSidebarTabPointerUp}
+                  onPointerCancel={handleSidebarTabPointerCancel}
                 >
                   {SIDEBAR_ICON_PATHS[item.id] ? (
                     <img
@@ -3106,7 +3590,8 @@ function App() {
                   )}
                 </div>
               </button>
-            ))}
+            );
+            })}
           </div>
 
           <div className="mt-40 flex flex-col items-center gap-2">
@@ -3201,7 +3686,32 @@ function App() {
           </div>
         </aside>
 
-        <main key={activeItem} className="tab-animate flex flex-1 flex-col items-center justify-center px-6">
+        <main
+          ref={mainSplitRef}
+          className={`relative flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
+            tabDrag ? "select-none" : ""
+          }`}
+        >
+          {tabDrag ? (
+            <div
+              className="tab-drag-ghost"
+              style={{ left: tabDrag.x, top: tabDrag.y }}
+              aria-hidden
+            >
+              {SIDEBAR_ICON_PATHS[tabDrag.tab] ? (
+                <img
+                  src={SIDEBAR_ICON_PATHS[tabDrag.tab]}
+                  alt=""
+                  className="h-7 w-7 object-contain"
+                />
+              ) : (
+                <>
+                  {tabDrag.tab === "play" && <PlayIcon />}
+                  {tabDrag.tab === "settings" && <SettingsIcon />}
+                </>
+              )}
+            </div>
+          ) : null}
           {activeItem === "accounts" ? (
             <div className="flex w-full max-w-xl flex-col items-center gap-6">
               <div className="w-full text-center">
@@ -3408,126 +3918,75 @@ function App() {
                 )}
               </div>
             </div>
-          ) : activeItem === "mods" ? (
-            <div className="flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center">
-              <ModsTab
-                showNotification={showNotification}
-                language={language}
-                activeProfileId={activeInstanceProfile?.id ?? null}
-                activeProfileGameVersion={activeInstanceProfile?.game_version}
-                activeProfileLoader={activeInstanceProfile?.loader}
-                onOpenModpacksTab={() => setActiveItem("modpacks")}
-                onSelectedModTitleChange={setDiscordModsTitle}
-              />
-            </div>
-          ) : activeItem === "modpacks" ? (
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4">
-            <ModpackTab
-              language={language}
-              showNotification={showNotification}
-              onProfileSelectionChange={handleModpackProfileSelectionChange}
-              initialSelectedProfileId={activeInstanceProfile?.id ?? null}
-              onProfilesChange={(profiles) => {
-                setKnownProfiles(
-                  profiles.map((p) => ({
-                    id: p.id,
-                    name: p.name,
-                    game_version: p.game_version,
-                    loader: p.loader,
-                    icon_path: p.icon_path,
-                    directory: p.directory,
-                  })),
-                );
-                setProfilesHydrated(true);
-              }}
-              onTogglePinInSidebar={(profile) =>
-                handleToggleSidebarPin({
-                  id: profile.id,
-                  name: profile.name,
-                  game_version: profile.game_version,
-                  loader: profile.loader,
-                  icon_path: profile.icon_path,
-                  directory: profile.directory,
-                })
-              }
-              isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
-              onOpenModsTab={() => setActiveItem("mods")}
-              onPlaySelectedProfile={() => {
-                if (!activeInstanceProfile) {
-                  showNotification(
-                    "warning",
-                    tt("app.warnings.selectProfileFirst"),
-                  );
-                  return;
+          ) : effectiveTabSplit ? (
+            <div
+              className={`tab-split-main tab-animate min-h-0 w-full flex-1 ${
+                effectiveTabSplit.direction === "horizontal"
+                  ? "tab-split-main-horizontal"
+                  : "tab-split-main-vertical"
+              }`}
+            >
+              <div
+                key={effectiveTabSplit.primary}
+                className={`tab-split-pane ${
+                  effectiveTabSplit.focused !== "primary" ? "tab-split-pane-inactive" : ""
+                }`}
+                style={{ flexGrow: effectiveTabSplit.ratio, flexBasis: 0 }}
+                onPointerDown={() => {
+                  if (effectiveTabSplit.focused !== "primary") {
+                    setTabSplitLayout({ ...effectiveTabSplit, focused: "primary" });
+                    setActiveItemWithSound(effectiveTabSplit.primary);
+                  }
+                }}
+              >
+                <div className="tab-split-pane-inner">
+                  {renderMainTabContent(effectiveTabSplit.primary, true)}
+                </div>
+              </div>
+              <div
+                role="separator"
+                aria-orientation={
+                  effectiveTabSplit.direction === "horizontal" ? "vertical" : "horizontal"
                 }
-                void handlePrimaryClick();
-              }}
-              gameStatus={gameStatus}
-              consoleLines={consoleLines}
-              consoleHistorySessions={consoleHistorySessions}
-              onClearConsole={handleClearConsole}
-            />
-          </div>
-          ) : activeItem === "settings" ? (
-            <SettingsTab
-              settings={settings}
-              settingsTab={settingsTab}
-              setSettingsTab={setSettingsTab}
-              systemMemoryGb={systemMemoryGb}
-              updateSettings={(patch) => updateSettings(patch, activeInstanceProfile?.id ?? undefined)}
-              showNotification={showNotification}
-              SettingsCard={SettingsCard}
-              SettingsSlider={SettingsSlider}
-              SettingsToggle={SettingsToggle}
-              language={language}
-              setLanguage={setLanguage}
-              sidebarOrder={sidebarOrder.filter((id) =>
-                id === "play" ||
-                id === "settings" ||
-                id === "mods" ||
-                id === "modpacks"
-              ) as ("play" | "settings" | "mods" | "modpacks")[]}
-              setSidebarOrder={(order) => setSidebarOrder(order)}
-              updateStatus={updateStatus}
-              updateVersion={updateVersion}
-              updateDownloadPercent={updateDownloadPercent}
-              onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
-              onInstallUpdate={() => void installUpdate()}
-            />
+                aria-valuenow={Math.round(effectiveTabSplit.ratio * 100)}
+                className={[
+                  "tab-split-divider",
+                  effectiveTabSplit.direction === "horizontal"
+                    ? "tab-split-divider-horizontal"
+                    : "tab-split-divider-vertical",
+                  isTabSplitDividerDragging ? "tab-split-divider-dragging" : "",
+                ].join(" ")}
+                onPointerDown={onTabSplitDividerPointerDown}
+              />
+              <div
+                key={effectiveTabSplit.secondary}
+                className={`tab-split-pane ${
+                  effectiveTabSplit.focused !== "secondary" ? "tab-split-pane-inactive" : ""
+                }`}
+                style={{ flexGrow: 1 - effectiveTabSplit.ratio, flexBasis: 0 }}
+                onPointerDown={() => {
+                  if (effectiveTabSplit.focused !== "secondary") {
+                    setTabSplitLayout({ ...effectiveTabSplit, focused: "secondary" });
+                    setActiveItemWithSound(effectiveTabSplit.secondary);
+                  }
+                }}
+              >
+                <div className="tab-split-pane-inner">
+                  {renderMainTabContent(effectiveTabSplit.secondary, true)}
+                </div>
+              </div>
+            </div>
           ) : (
-            <PlayTab
-              gameStatus={gameStatus}
-              consoleLines={consoleLines}
-              isConsoleVisible={isConsoleVisible}
-              onToggleConsole={handleToggleConsole}
-              onClearConsole={handleClearConsole}
-              showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
-              versions={versions}
-              selectedVersion={selectedVersion}
-              setSelectedVersion={setSelectedVersion}
-              versionsLoading={versionsLoading}
-              isVersionDropdownOpen={isVersionDropdownOpen}
-              setIsVersionDropdownOpen={setIsVersionDropdownOpen}
-              installPaused={installPaused}
-              isInstalling={isInstalling}
-              handleResumeInstall={handleResumeInstall}
-              handlePauseInstall={handlePauseInstall}
-              handleCancelInstall={handleCancelInstall}
-              handlePrimaryClick={handlePrimaryClick}
-              primaryColorClasses={primaryColorClasses}
-              primaryLabel={primaryLabel}
-              progress={progress}
-              loader={loader}
-              setLoader={setLoader}
-              isLoaderDropdownOpen={isLoaderDropdownOpen}
-              setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
-              handleOpenGameFolder={handleOpenGameFolder}
-              language={language}
-              installedVersionIds={installedVersionIdsForDropdown}
-              showSnapshots={settings?.show_snapshots ?? false}
-          activeProfileName={activeInstanceProfile?.name ?? null}
-            />
+            <div
+              key={singleMainTab}
+              className="tab-animate flex min-h-0 w-full flex-1 flex-col items-center justify-center"
+            >
+              {renderMainTabContent(singleMainTab)}
+            </div>
           )}
+          {tabDrag && splitViewEnabled ? (
+            <TabSplitDropOverlay zone={tabDropZone} labels={splitDropZoneLabels} />
+          ) : null}
         </main>
 
       </div>
