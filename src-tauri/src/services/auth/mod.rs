@@ -1,4 +1,5 @@
 pub mod ely;
 pub mod microsoft;
-pub mod oauth;
 
+pub use ely::*;
+pub use microsoft::*;

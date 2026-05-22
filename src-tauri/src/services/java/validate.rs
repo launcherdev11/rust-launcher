@@ -56,7 +56,7 @@ pub async fn validate_java_args(java_path: Option<String>, args: String) -> Resu
         }
 
         if let Some(rest) = a.strip_prefix("-Xmx") {
-            if let Some(mb) = crate::game_provider::parse_memory_spec_to_mb(rest) {
+            if let Some(mb) = crate::services::game::arguments::parse_memory_spec_to_mb(rest) {
                 if mb > 64 * 1024 {
                     warnings.push("Указан очень большой Xmx (более 64ГБ). Убедитесь, что это соответствует объёму вашей ОЗУ.".to_string());
                 }

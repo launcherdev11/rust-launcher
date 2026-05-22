@@ -1,97 +1,44 @@
 use tauri::Manager;
 
-mod game_provider;
 mod mrpack_open;
 mod java_runtime;
-mod ely_auth;
-mod ms_auth;
 mod commands;
-mod discord_rpc;
 
 mod app;
 mod infra;
 mod models;
 mod services;
 
-use game_provider::{
-    cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
-    fetch_neoforge_versions, check_version_files_integrity,
-    fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
-    get_installed_quilt_profile_id, get_profile, get_profiles,
-    install_fabric, install_forge, install_neoforge, install_quilt, install_version, launch_game,
-    list_installed_fabric_game_versions, list_installed_quilt_game_versions, list_installed_versions,
-    open_game_folder, open_profile_folder, reset_download_cancel,
-    set_profile, set_selected_profile, get_settings, set_settings, get_effective_settings,
-    is_game_running_now, stop_game, get_system_memory_gb, delete_item, delete_profile,
-    download_modrinth_file, download_modrinth_modpack_and_import, import_mrpack, import_mrpack_as_new_profile,
-    import_modpack_files, update_profile_settings, list_profile_items, rename_profile,
-    add_profile_files, create_profile, get_java_settings, set_java_settings,
-    validate_java_args, detect_java_runtimes, get_profile_java_settings, set_profile_java_settings,
-    reset_settings_to_default, get_launcher_cache_size, clear_launcher_cache,
-    set_background_image, get_background_data_uri,
-    export_launcher_settings_backup, import_launcher_settings_backup,
-    get_profile_play_time_seconds,
-    list_launcher_accounts, switch_launcher_account, remove_launcher_account, add_launcher_account,
-    set_launcher_accounts_scope,
+use services::background::{get_background_data_uri, set_background_image};
+use services::game::{
+    add_launcher_account, add_profile_files, cancel_download, check_version_files_integrity,
+    clear_launcher_cache, create_profile, delete_item, delete_profile, detect_java_runtimes,
+    download_modrinth_file, download_modrinth_modpack_and_import, export_launcher_settings_backup,
+    fetch_all_versions, fetch_fabric_loaders, fetch_forge_versions, fetch_neoforge_versions,
+    fetch_vanilla_releases, get_effective_settings, get_game_root_dir, get_installed_fabric_profile_id,
+    get_installed_quilt_profile_id, get_java_settings, get_profile, get_profile_java_settings,
+    get_profile_play_time_seconds, get_profiles, get_selected_profile, get_settings, get_system_memory_gb,
+    get_launcher_cache_size,
+    import_launcher_settings_backup, import_modpack_files, import_mrpack, import_mrpack_as_new_profile,
+    install_fabric, install_forge, install_neoforge, install_quilt, install_version, is_game_running_now,
+    launch_game, list_installed_fabric_game_versions, list_installed_quilt_game_versions,
+    list_installed_versions, list_launcher_accounts, list_profile_items, open_game_folder,
+    open_profile_folder, remove_launcher_account, rename_profile, reset_download_cancel,
+    reset_settings_to_default, set_java_settings, set_profile, set_profile_java_settings,
+    set_selected_profile, set_settings, stop_game, switch_launcher_account, update_profile_settings,
+    validate_java_args,
 };
-use commands::{list_build_files, preview_export, export_build, get_ely_avatar};
-use ely_auth::{
-    ely_login_with_password, ely_logout, handle_oauth_callback, refresh_ely_session,
-    start_ely_oauth,
+use services::auth::{
+    ely_login_with_password, ely_logout, handle_oauth_callback, ms_logout, refresh_ely_session,
+    start_ely_oauth, start_ms_oauth,
 };
-use ms_auth::{ms_logout, start_ms_oauth};
-use discord_rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
+use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
+use commands::{export_build, get_ely_avatar, list_build_files, preview_export};
 use mrpack_open::take_pending_mrpack_open;
 
-#[cfg(target_os = "linux")]
-fn configure_linux_display_backend() {
-    use std::env;
-
-    let xdg_session_type = env::var("XDG_SESSION_TYPE")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let has_wayland = env::var_os("WAYLAND_DISPLAY").is_some() || xdg_session_type == "wayland";
-    let has_x11 = env::var_os("DISPLAY").is_some() || xdg_session_type == "x11";
-
-    if env::var_os("WINIT_UNIX_BACKEND").is_none() {
-        if has_x11 {
-            env::set_var("WINIT_UNIX_BACKEND", "x11");
-        } else if has_wayland {
-            env::set_var("WINIT_UNIX_BACKEND", "wayland");
-        }
-    }
-
-    if env::var_os("GDK_BACKEND").is_none() {
-        if has_x11 {
-            env::set_var("GDK_BACKEND", "x11,wayland");
-        } else if has_wayland {
-            env::set_var("GDK_BACKEND", "wayland,x11");
-        }
-    }
-
-    if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-    }
-    if env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-        env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn configure_windows_webview_memory() {
-    use std::env;
-
-    if env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
-        env::set_var(
-            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-            "--renderer-process-limit=2 --process-per-site --js-flags=--max-old-space-size=192 --disk-cache-size=33554432 --media-cache-size=8388608",
-        );
-    }
-}
-
 fn load_dotenv() {
-    // Единый bootstrap env для app.
     app::env::load_dotenv_files();
+    crate::services::game::runtime::load_project_env_for_runtime();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -161,6 +108,7 @@ pub fn run() {
             get_profile_play_time_seconds,
             create_profile,
             set_profile,
+            get_selected_profile,
             set_selected_profile,
             get_settings,
             set_settings,
@@ -208,7 +156,6 @@ pub fn run() {
             switch_launcher_account,
             remove_launcher_account,
             add_launcher_account,
-            set_launcher_accounts_scope,
             get_ely_avatar,
             take_pending_mrpack_open
         ])
