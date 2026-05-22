@@ -83,6 +83,7 @@ struct FileEntry {
     #[serde(rename = "type", default)]
     entry_type: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     executable: bool,
 }
 #[derive(Debug, Deserialize)]
@@ -172,52 +173,6 @@ fn set_executable(path: &Path, exec: bool) -> Result<(), String> {
     if exec { mode |= 0o111; } else { mode &= !0o111; }
     p.set_mode(mode);
     fs::set_permissions(path, p).map_err(|e| e.to_string())
-}
-
-fn unzip_to(zip_path: &Path, out_dir: &Path) -> Result<(), String> {
-    let file = File::open(zip_path).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = entry.name();
-        if name.ends_with('/') { continue; }
-        
-        let out = out_dir.join(name);
-        if let Some(parent) = out.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let mut dst = File::create(&out).map_err(|e| e.to_string())?;
-        std::io::copy(&mut entry, &mut dst).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-fn flatten_archive(tmp: &Path, final_dir: &Path) -> Result<(), String> {
-    if final_dir.exists() {
-        fs::remove_dir_all(final_dir).map_err(|e| e.to_string())?;
-    }
-
-    let mut entries: Vec<_> = fs::read_dir(tmp)
-        .map_err(|e| e.to_string())?
-        .collect::<Result<_, _>>()
-        .map_err(|e| e.to_string())?;
-
-    if entries.is_empty() { return Err("Пустой архив".into()); }
-
-    if entries.len() == 1 && entries[0].path().is_dir() {
-        let inner = entries.remove(0).path();
-        fs::create_dir_all(final_dir).map_err(|e| e.to_string())?;
-        for child in fs::read_dir(&inner).map_err(|e| e.to_string())? {
-            let child = child.map_err(|e| e.to_string())?;
-            let name = child.file_name().to_string_lossy().to_string();
-            fs::rename(child.path(), final_dir.join(name)).map_err(|e| e.to_string())?;
-        }
-        fs::remove_dir_all(tmp).map_err(|e| e.to_string())?;
-    } else {
-        fs::rename(tmp, final_dir).map_err(|e| e.to_string())?;
-    }
-    Ok(())
 }
 
 pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, String> {
@@ -327,6 +282,7 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
     Ok(bin)
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 pub fn ensure_executable(path: &Path) -> Result<(), String> {
     if !path.exists() { return Err(format!("Файл не найден: {:?}", path)); }
     

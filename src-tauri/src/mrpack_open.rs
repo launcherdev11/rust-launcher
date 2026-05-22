@@ -27,7 +27,7 @@ fn path_from_cli_arg(arg: &str) -> Option<PathBuf> {
     if s.is_empty() {
         return None;
     }
-    // Только настоящие file:// — иначе url даёт ложные совпадения: `C:/path` → схема "c", путь теряется.
+    
     if matches!(s.get(..5), Some(head) if head.eq_ignore_ascii_case("file:")) {
         if let Ok(u) = url::Url::parse(s) {
             if u.scheme() == "file" {
@@ -64,6 +64,7 @@ pub fn stash_argv_mrpack_if_any(pending: &PendingMrpackArc) {
     }
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn stash_mrpack_path(pending: &PendingMrpackArc, path: &Path) {
     if !is_mrpack_path(path) {
         return;

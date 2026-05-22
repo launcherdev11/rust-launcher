@@ -1,14 +1,5 @@
 use std::time::Duration;
 
-pub fn http_client_with_timeout(user_agent: &str, timeout: Duration, connect_timeout: Duration) -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(timeout)
-        .connect_timeout(connect_timeout)
-        .user_agent(user_agent)
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
-}
-
 pub fn http_client(use_proxy: bool) -> reqwest::Client {
     use crate::infra::proxy::{env_var_trim, normalize_proxy_host_for_url, preferred_proxy_host};
     use urlencoding::encode;
