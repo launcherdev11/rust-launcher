@@ -1,9 +1,27 @@
-type ProfileAvatarInput = {
+export type ProfileAvatarInput = {
   nickname: string;
   ely_username: string | null;
   ely_uuid: string | null;
   mc_uuid: string | null;
 };
+
+/** SVG-плейсхолдер с буквой, пока скин грузится или недоступен. */
+export function buildInitialAvatarDataUrl(label: string): string {
+  const ch = (label.trim().charAt(0) || "?").toUpperCase();
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b2648"/>
+      <stop offset="100%" stop-color="#102f55"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="32" fill="url(#g)"/>
+  <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#d7e7ff" font-family="Inter,Segoe UI,Arial" font-size="28" font-weight="700">${ch}</text>
+</svg>
+`.trim();
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 type AvatarCacheEntry = {
   src: string;
