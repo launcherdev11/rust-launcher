@@ -12,7 +12,7 @@ import {
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -20,6 +20,8 @@ import { ChevronDown, Download, UploadCloud } from "lucide-react";
 import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
+import { ProfileInstanceIcon } from "../components/profile_instance_icon";
+import { resolveIconSrc } from "../lib/profile-icon";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
@@ -232,25 +234,6 @@ function countLabel(count: number, language: Language): string {
   return `Mods: ${count}`;
 }
 
-function resolveIconSrc(iconPath: string): string {
-  if (iconPath.startsWith("http://") || iconPath.startsWith("https://") || iconPath.startsWith("data:")) {
-    return iconPath;
-  }
-
-  let localPath = iconPath;
-  if (localPath.startsWith("file://")) {
-    localPath = localPath.replace(/^file:\/\//, "");
-  }
-
-  const normalized = localPath.replace(/\\/g, "/");
-  const driveMatch = normalized.match(/^\/([a-zA-Z]:\/.*)$/);
-  if (driveMatch) {
-    localPath = driveMatch[1];
-  }
-
-  return convertFileSrc(localPath);
-}
-
 function formatPlaytime(seconds: number | null, language: Language): string {
   const s = seconds != null && Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   const h = Math.floor(s / 3600);
@@ -263,12 +246,6 @@ function formatPlaytime(seconds: number | null, language: Language): string {
 
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
-}
-
-function getProfileIconPath(profile: InstanceProfile): string {
-  const baseDir = profile.directory.replace(/\\/g, "/").replace(/\/$/, "");
-  if (profile.icon_path) return profile.icon_path;
-  return `${baseDir}/icon.png`;
 }
 
 const contentTabLabelsRu: Record<ContentTab, string> = {
@@ -1968,33 +1945,7 @@ export function ModpackTab({
                     }}
                   >
                     <div className="flex items-center gap-3">
-                    <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-                      <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
-                        <ModsIcon className="h-6 w-6" />
-                      </div>
-                      <img
-                        src={resolveIconSrc(getProfileIconPath(p))}
-                        alt="icon"
-                        className="absolute inset-0 h-full w-full object-cover"
-                        style={{ display: "none" }}
-                        onLoad={(e) => {
-                          const img = e.currentTarget;
-                          const fallback = img.parentElement?.querySelector(
-                            '[data-icon-fallback="1"]',
-                          ) as HTMLElement | null;
-                          if (fallback) fallback.style.display = "none";
-                          img.style.display = "block";
-                        }}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          const fallback = img.parentElement?.querySelector(
-                            '[data-icon-fallback="1"]',
-                          ) as HTMLElement | null;
-                          if (fallback) fallback.style.display = "flex";
-                          img.style.display = "none";
-                        }}
-                      />
-                    </div>
+                      <ProfileInstanceIcon profile={p} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold text-white">
@@ -2418,33 +2369,7 @@ export function ModpackTab({
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
         <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
           <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3">
-            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-              <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
-                <ModsIcon className="h-6 w-6" />
-              </div>
-              <img
-                src={resolveIconSrc(getProfileIconPath(selectedProfile))}
-                alt="icon"
-                className="absolute inset-0 h-full w-full object-contain"
-                style={{ display: "none" }}
-                onLoad={(e) => {
-                  const img = e.currentTarget;
-                  const fallback = img.parentElement?.querySelector(
-                    '[data-icon-fallback="1"]',
-                  ) as HTMLElement | null;
-                  if (fallback) fallback.style.display = "none";
-                  img.style.display = "block";
-                }}
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  const fallback = img.parentElement?.querySelector(
-                    '[data-icon-fallback="1"]',
-                  ) as HTMLElement | null;
-                  if (fallback) fallback.style.display = "flex";
-                  img.style.display = "none";
-                }}
-              />
-            </div>
+            <ProfileInstanceIcon profile={selectedProfile} imageFit="contain" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 {isRenaming ? (

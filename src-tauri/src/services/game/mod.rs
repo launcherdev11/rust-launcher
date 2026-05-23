@@ -34,7 +34,8 @@ pub use launcher::{
     cancel_download, is_game_running_now, launch_game, reset_download_cancel, stop_game,
 };
 pub use profiles::{
-    add_profile_files, create_profile, delete_item, delete_profile, get_profile_play_time_seconds, get_profiles,
+    add_profile_files, create_profile, delete_item, delete_profile, get_profile_icon_data_uri,
+    get_profile_play_time_seconds, get_profiles,
     get_selected_profile, list_profile_items, rename_profile, set_profile_item_enabled, set_selected_profile,
     update_profile_settings,
 };
