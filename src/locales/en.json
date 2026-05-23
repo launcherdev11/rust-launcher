@@ -196,7 +196,7 @@
       "backgroundImage": {
         "label": "Background image:",
         "choose": "Choose image",
-        "hint": "The file will be copied to the launcher data folder. “Reset” restores the default background."
+        "hint": "PNG, JPG, WebP, and GIF are supported (animations are preserved). The file is copied to the launcher data folder. “Reset” restores the default background."
       },
       "backgroundBlur": {
         "label": "Background blur:"

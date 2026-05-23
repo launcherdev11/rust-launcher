@@ -1,3 +1,7 @@
+import { LauncherBackgroundImage } from "../../components/LauncherBackgroundImage";
+import { DEFAULT_LAUNCHER_BACKGROUND } from "../../lib/launcherBackground";
+import { useOnboardingBackgroundAnimated } from "../backgroundAnimatedContext";
+
 type Props = {
   accentColor?: string;
   backgroundImageUrl?: string;
@@ -5,21 +9,17 @@ type Props = {
 
 export function OnboardingBackground({
   accentColor = "#0b1530",
-  backgroundImageUrl = "/launcher-assets/background.jpg",
+  backgroundImageUrl = DEFAULT_LAUNCHER_BACKGROUND,
 }: Props) {
+  const backgroundAnimated = useOnboardingBackgroundAnimated();
+
   return (
     <>
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div
-          className="absolute inset-0 bg-center will-change-transform"
-          style={{
-            backgroundImage: `url(${backgroundImageUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            filter: "blur(22px)",
-            transform: "scale(1.08)",
-          }}
+        <LauncherBackgroundImage
+          imageUrl={backgroundImageUrl}
+          blurEnabled
+          animated={backgroundAnimated}
         />
       </div>
       <div className="pointer-events-none absolute inset-0 bg-black/55" />

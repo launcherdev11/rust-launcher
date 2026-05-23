@@ -2060,7 +2060,7 @@ export function SettingsTab({
                             filters: [
                               {
                                 name: tt("settings.common.imagesFilterName"),
-                                extensions: ["png", "jpg", "jpeg", "webp"],
+                                extensions: ["png", "jpg", "jpeg", "webp", "gif"],
                               },
                             ],
                           });

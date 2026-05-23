@@ -21,6 +21,7 @@ fn image_path_to_data_uri(path: &Path) -> Result<Option<String>, String> {
     let mime = match ext.as_str() {
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
+        "gif" => "image/gif",
         "png" | _ => "image/png",
     };
     let encoded = BASE64_STANDARD.encode(bytes);
@@ -78,6 +79,13 @@ pub fn get_background_data_uri() -> Result<Option<String>, String> {
         Some(p) => p,
         None => return Ok(None),
     };
-    let path = PathBuf::from(path_str);
+    let path = PathBuf::from(&path_str);
+    if path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("gif"))
+    {
+        return Ok(None);
+    }
     image_path_to_data_uri(&path)
 }
