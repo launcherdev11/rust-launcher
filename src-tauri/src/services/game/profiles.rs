@@ -2,6 +2,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use tauri::command;
@@ -75,6 +77,63 @@ fn generate_instance_id() -> String {
         .take(12)
         .map(char::from)
         .collect()
+}
+
+fn image_path_to_data_uri(path: &Path) -> Result<Option<String>, String> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path)
+        .map_err(|e| format!("Не удалось прочитать иконку сборки: {e}"))?;
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png")
+        .to_lowercase();
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "png" | _ => "image/png",
+    };
+    let encoded = BASE64_STANDARD.encode(bytes);
+    Ok(Some(format!("data:{mime};base64,{encoded}")))
+}
+
+pub fn set_profile_icon_path(profile_id: &str, icon_path: Option<String>) -> Result<(), String> {
+    let cfg_path = instance_config_path(profile_id)?;
+    if !cfg_path.exists() {
+        return Err("config.json сборки не найден".to_string());
+    }
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json: {e}"))?;
+    let mut cfg: InstanceConfig =
+        serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+    cfg.icon_path = icon_path;
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Не удалось записать config.json: {e}"))?;
+    Ok(())
+}
+
+fn resolve_profile_icon_file(profile_dir: &Path, cfg_icon: Option<&str>) -> Option<PathBuf> {
+    if let Some(raw) = cfg_icon {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+
+    let root_icon = profile_dir.join("icon.png");
+    if root_icon.is_file() {
+        return Some(root_icon);
+    }
+
+    find_icon_png_in_profile(profile_dir).map(PathBuf::from)
 }
 
 fn find_icon_png_in_profile(root: &Path) -> Option<String> {
@@ -524,6 +583,26 @@ pub fn create_profile_impl(
         total_size_bytes,
         directory,
     })
+}
+
+#[command]
+pub fn get_profile_icon_data_uri(profile_id: String) -> Result<Option<String>, String> {
+    let profile_dir = instance_dir(&profile_id)?;
+    if !profile_dir.is_dir() {
+        return Ok(None);
+    }
+
+    let cfg_icon = instance_config_path(&profile_id)
+        .ok()
+        .filter(|path| path.is_file())
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<InstanceConfig>(&text).ok())
+        .and_then(|cfg| cfg.icon_path);
+
+    match resolve_profile_icon_file(&profile_dir, cfg_icon.as_deref()) {
+        Some(path) => image_path_to_data_uri(&path),
+        None => Ok(None),
+    }
 }
 
 #[command]

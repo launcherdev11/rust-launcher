@@ -9,7 +9,6 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { getVersion } from "@tauri-apps/api/app";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -30,6 +29,7 @@ import { PlayTab } from "./tabs/PlayTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
+import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
@@ -329,28 +329,6 @@ function resolveRemoteNotificationIconSrc(iconMsg?: string): string | null {
   if (lower === "warning" || lower === "warn") return "/launcher-assets/warn.png";
 
   return null;
-}
-
-function resolveProfileIconSrc(iconPath: string): string {
-  if (iconPath.startsWith("http://") || iconPath.startsWith("https://") || iconPath.startsWith("data:")) {
-    return iconPath;
-  }
-  let localPath = iconPath;
-  if (localPath.startsWith("file://")) {
-    localPath = localPath.replace(/^file:\/\//, "");
-  }
-  const normalized = localPath.replace(/\\/g, "/");
-  const driveMatch = normalized.match(/^\/([a-zA-Z]:\/.*)$/);
-  if (driveMatch) {
-    localPath = driveMatch[1];
-  }
-  return convertFileSrc(localPath);
-}
-
-function getProfileIconPath(profile: InstanceProfileCard): string {
-  const baseDir = profile.directory.replace(/\\/g, "/").replace(/\/$/, "");
-  if (profile.icon_path) return profile.icon_path;
-  return `${baseDir}/icon.png`;
 }
 
 function normalizeOptionalString(value?: unknown): string | undefined {
@@ -3762,29 +3740,10 @@ function App() {
                 title={profile.name}
                 className="interactive-press group relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-white/20 bg-black/40 hover:bg-black/60"
               >
-                <div
-                  data-icon-fallback="1"
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <img src="/launcher-assets/mods.png" alt="" className="h-5 w-5 object-contain opacity-80" />
-                </div>
-                <img
-                  src={resolveProfileIconSrc(getProfileIconPath(profile))}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{ display: "none" }}
-                  onLoad={(e) => {
-                    const img = e.currentTarget;
-                    const fallback = img.parentElement?.querySelector('[data-icon-fallback="1"]') as HTMLElement | null;
-                    if (fallback) fallback.style.display = "none";
-                    img.style.display = "block";
-                  }}
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    const fallback = img.parentElement?.querySelector('[data-icon-fallback="1"]') as HTMLElement | null;
-                    if (fallback) fallback.style.display = "flex";
-                    img.style.display = "none";
-                  }}
+                <ProfileInstanceIcon
+                  profile={{ id: profile.id, name: profile.name }}
+                  className="absolute inset-0 size-full rounded-xl"
+                  initialClassName="text-xs"
                 />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
                   <img

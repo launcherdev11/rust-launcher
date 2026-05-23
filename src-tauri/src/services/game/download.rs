@@ -10,7 +10,7 @@ use crate::infra::http::http_client;
 use crate::models::events::{MrpackImportProgressPayload, EVENT_MRPACK_IMPORT_PROGRESS};
 use crate::models::profile::InstanceProfileSummary;
 use crate::services::game::cache as cache_service;
-use crate::services::game::profiles::create_profile_impl;
+use crate::services::game::profiles::{create_profile_impl, set_profile_icon_path};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct MrpackFileEntry {
@@ -210,10 +210,46 @@ pub async fn import_mrpack(
 }
 
 
+async fn save_profile_icon_from_url(profile_id: &str, icon_url: &str) -> Result<Option<String>, String> {
+    let trimmed = icon_url.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let dir = instance_dir(profile_id)?;
+    let dest = dir.join("icon.png");
+
+    let client = http_client(false);
+    let resp = client
+        .get(trimmed)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка загрузки иконки сборки: {e}"))?;
+    if !resp.status().is_success() {
+        return Ok(None);
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Ошибка чтения иконки сборки: {e}"))?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    tokio::fs::write(&dest, &bytes)
+        .await
+        .map_err(|e| format!("Не удалось сохранить иконку сборки: {e}"))?;
+
+    let icon_path = dest.to_str().map(|s| s.to_string());
+    set_profile_icon_path(profile_id, icon_path.clone())?;
+    Ok(icon_path)
+}
+
 #[tauri::command]
 pub async fn import_mrpack_as_new_profile(
     app: AppHandle,
     mrpack_path: String,
+    icon_url: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
     let _ = app.emit(
         EVENT_MRPACK_IMPORT_PROGRESS,
@@ -369,6 +405,12 @@ pub async fn import_mrpack_as_new_profile(
             .map_err(|e| format!("Не удалось сохранить файл сборки: {e}"))?;
     }
 
+    if !dir.join("icon.png").exists() {
+        if let Some(ref url) = icon_url {
+            let _ = save_profile_icon_from_url(&profile.id, url).await;
+        }
+    }
+
     let (mods_size, mods_count) = cache_service::dir_size_and_count(&dir.join("mods"));
     let (res_size, res_count) = cache_service::dir_size_and_count(&dir.join("resourcepacks"));
     let (shader_size, shader_count) = cache_service::dir_size_and_count(&dir.join("shaderpacks"));
@@ -411,6 +453,7 @@ pub async fn download_modrinth_modpack_and_import(
     app: AppHandle,
     url: String,
     filename: String,
+    icon_url: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
     let root = launcher_data_dir()?
         .join("tmp")
@@ -455,7 +498,7 @@ pub async fn download_modrinth_modpack_and_import(
         .ok_or_else(|| "Путь к временной .mrpack не в UTF-8".to_string())?
         .to_string();
 
-    let imported = import_mrpack_as_new_profile(app.clone(), dest_str).await?;
+    let imported = import_mrpack_as_new_profile(app.clone(), dest_str, icon_url).await?;
 
     let _ = tokio::fs::remove_file(&dest).await;
 
