@@ -26,6 +26,11 @@ pub struct VersionSummary {
     pub release_time: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct LoaderMetaGameVersion {
+    pub(crate) version: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct VersionIntegrityCheckResult {
     pub is_ok: bool,
@@ -265,6 +270,8 @@ pub(crate) struct LibraryExtract {
 #[derive(Debug, Deserialize)]
 pub(crate) struct FabricLoaderInfo {
     pub(crate) version: String,
+    #[serde(default)]
+    pub(crate) build: u32,
     #[serde(default)]
     pub(crate) stable: bool,
 }

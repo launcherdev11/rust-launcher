@@ -267,7 +267,7 @@ pub async fn import_mrpack_as_new_profile(
                 .to_string()
         });
 
-    let profile = create_profile_impl(name, game_version, loader, None)?;
+    let profile = create_profile_impl(name, game_version, loader, None, None)?;
     let dir = instance_dir(&profile.id)?;
 
     let _ = app.emit(
@@ -393,6 +393,7 @@ pub async fn import_mrpack_as_new_profile(
         },
         game_version: profile.game_version,
         loader: profile.loader,
+        loader_version: profile.loader_version,
         created_at: profile.created_at,
         play_time_seconds: profile.play_time_seconds,
         mods_count,

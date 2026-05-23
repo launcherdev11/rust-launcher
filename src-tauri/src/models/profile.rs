@@ -10,6 +10,8 @@ pub struct InstanceConfig {
     pub icon_path: Option<String>,
     pub game_version: String,
     pub loader: String,
+    #[serde(default)]
+    pub loader_version: Option<String>,
     pub created_at: u64,
     #[serde(default)]
     pub play_time_seconds: u64,
@@ -35,6 +37,8 @@ pub struct InstanceProfileSummary {
     pub icon_path: Option<String>,
     pub game_version: String,
     pub loader: String,
+    #[serde(default)]
+    pub loader_version: Option<String>,
     pub created_at: u64,
     pub play_time_seconds: u64,
     pub mods_count: u32,

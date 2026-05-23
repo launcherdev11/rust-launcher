@@ -99,6 +99,7 @@ type InstanceProfileSummary = {
   name: string;
   game_version: string;
   loader: string;
+  loader_version?: string | null;
 };
 
 type InstanceProfileCard = InstanceProfileSummary & {
@@ -1210,11 +1211,14 @@ function App() {
         name: profile.name,
         game_version: profile.game_version,
         loader: profile.loader,
+        loader_version: profile.loader_version ?? null,
       });
       let launchVersionId = profile.game_version;
+      const profileLoaderVersion = profile.loader_version?.trim() || null;
       if (profile.loader === "fabric") {
         const installedFabricId = await invoke<string | null>("get_installed_fabric_profile_id", {
           gameVersion: profile.game_version,
+          loaderVersion: profileLoaderVersion,
         });
         if (!installedFabricId) {
           throw new Error(
@@ -1227,6 +1231,7 @@ function App() {
       } else if (profile.loader === "quilt") {
         const installedQuiltId = await invoke<string | null>("get_installed_quilt_profile_id", {
           gameVersion: profile.game_version,
+          loaderVersion: profileLoaderVersion,
         });
         if (!installedQuiltId) {
           throw new Error(
@@ -1236,6 +1241,10 @@ function App() {
           );
         }
         launchVersionId = installedQuiltId;
+      } else if (profile.loader === "forge" && profileLoaderVersion) {
+        launchVersionId = `${profile.game_version}-forge-${profileLoaderVersion}`;
+      } else if (profile.loader === "neoforge" && profileLoaderVersion) {
+        launchVersionId = `${profile.game_version}-neoforge-${profileLoaderVersion}`;
       }
       archiveCurrentConsoleAndClear();
       if (settings?.show_console_on_launch) {
@@ -1260,6 +1269,7 @@ function App() {
         name: profile.name,
         game_version: profile.game_version,
         loader: profile.loader,
+        loader_version: profile.loader_version ?? null,
       });
     }
     try {
@@ -1298,6 +1308,7 @@ function App() {
               name: p.name,
               game_version: p.game_version,
               loader: p.loader,
+              loader_version: p.loader_version ?? null,
             }
           : null,
       );
@@ -1994,6 +2005,7 @@ function App() {
             name: current.name,
             game_version: current.game_version,
             loader: current.loader,
+            loader_version: current.loader_version ?? null,
           });
         }
       } catch {
@@ -2086,14 +2098,10 @@ function App() {
           setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
           setInstalledGameVersions(new Set());
         } else {
-          const all = await invoke<VersionSummary[]>("fetch_all_versions");
-          const showSnapshots = settings?.show_snapshots ?? false;
-          const showAlpha = settings?.show_alpha_versions ?? false;
-          const filtered = all.filter((v) => {
-            if (v.version_type === "release") return true;
-            if (v.version_type === "snapshot") return showSnapshots;
-            if (v.version_type === "old_alpha" || v.version_type === "alpha") return showAlpha;
-            return false;
+          const filtered = await invoke<VersionSummary[]>("fetch_versions_for_loader", {
+            loader,
+            showSnapshots: settings?.show_snapshots ?? false,
+            showAlpha: settings?.show_alpha_versions ?? false,
           });
           setVersions(filtered);
           const savedKey =
@@ -2211,12 +2219,14 @@ function App() {
         if (loader === "fabric") {
           const id = await invoke<string | null>("get_installed_fabric_profile_id", {
             gameVersion: selectedVersion.id,
+            loaderVersion: null,
           });
           setFabricProfileId(id);
           setQuiltProfileId(null);
         } else if (loader === "quilt") {
           const id = await invoke<string | null>("get_installed_quilt_profile_id", {
             gameVersion: selectedVersion.id,
+            loaderVersion: null,
           });
           setQuiltProfileId(id);
           setFabricProfileId(null);
@@ -2656,9 +2666,13 @@ function App() {
         await invoke("set_profile", {
           nickname: profile.nickname,
         });
+        const vanillaSummary =
+          loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
+            ? (selectedVersion as VersionSummary)
+            : null;
         const versionUrl =
-          loader === "vanilla" && !isForgeVersion(selectedVersion)
-            ? (selectedVersion as VersionSummary).url
+          vanillaSummary && vanillaSummary.version_type !== "custom" && vanillaSummary.url
+            ? vanillaSummary.url
             : undefined;
         const versionId =
           loader === "fabric" && fabricProfileId
@@ -2698,10 +2712,14 @@ function App() {
       }
       if (loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
-        await invoke("install_version", {
-          versionId: v.id,
-          versionUrl: v.url,
-        });
+        if (v.version_type === "custom" || !v.url) {
+          await invoke("install_local_version", { versionId: v.id });
+        } else {
+          await invoke("install_version", {
+            versionId: v.id,
+            versionUrl: v.url,
+          });
+        }
       } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
         const loaders = await invoke<string[]>("fetch_fabric_loaders", {
@@ -2722,6 +2740,7 @@ function App() {
         const v = selectedVersion as VersionSummary;
         const profileId = await invoke<string>("install_quilt", {
           gameVersion: v.id,
+          loaderVersion: null,
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setQuiltProfileId(profileId);
