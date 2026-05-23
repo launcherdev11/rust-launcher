@@ -7,6 +7,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { getVersion } from "@tauri-apps/api/app";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
@@ -1182,19 +1183,23 @@ function App() {
   }, [knownProfiles, profilesHydrated]);
 
   const handleToggleSidebarPin = (profile: InstanceProfileCard) => {
+    let pinLimitReached = false;
     setPinnedProfileIds((prev) => {
       if (prev.includes(profile.id)) return prev.filter((id) => id !== profile.id);
       if (prev.length >= 3) {
-        showNotification(
-          "warning",
-          language === "ru"
-            ? "Можно закрепить не более 3 сборок."
-            : "You can pin up to 3 profiles.",
-        );
+        pinLimitReached = true;
         return prev;
       }
       return [...prev, profile.id];
     });
+    if (pinLimitReached) {
+      showNotification(
+        "warning",
+        language === "ru"
+          ? "Можно закрепить не более 3 сборок."
+          : "You can pin up to 3 profiles.",
+      );
+    }
   };
 
   const handlePlayPinnedProfile = async (profile: InstanceProfileCard) => {
@@ -1468,22 +1473,35 @@ function App() {
     notificationTimersRef.current.delete(id);
   }, []);
 
-  const scheduleNotificationDismiss = useCallback(
+  const beginDismissNotification = useCallback(
     (id: number) => {
       clearNotificationDismissTimers(id);
-      const fade = window.setTimeout(() => {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)),
-        );
-        const remove = window.setTimeout(() => {
-          setNotifications((prev) => prev.filter((n) => n.id !== id));
-          notificationTimersRef.current.delete(id);
-        }, 200);
-        notificationTimersRef.current.set(id, { fade, remove });
-      }, 4300);
-      notificationTimersRef.current.set(id, { fade });
+      let shouldAnimateOut = false;
+      setNotifications((prev) => {
+        const target = prev.find((n) => n.id === id);
+        if (!target || target.leaving) return prev;
+        shouldAnimateOut = true;
+        return prev.map((n) => (n.id === id ? { ...n, leaving: true } : n));
+      });
+      if (!shouldAnimateOut) return;
+
+      const remove = window.setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        notificationTimersRef.current.delete(id);
+      }, 200);
+      notificationTimersRef.current.set(id, { fade: remove });
     },
     [clearNotificationDismissTimers],
+  );
+
+  const scheduleNotificationDismiss = useCallback(
+    (id: number) => {
+      if (!id) return;
+      clearNotificationDismissTimers(id);
+      const fade = window.setTimeout(() => beginDismissNotification(id), 4300);
+      notificationTimersRef.current.set(id, { fade });
+    },
+    [clearNotificationDismissTimers, beginDismissNotification],
   );
 
   useEffect(() => {
@@ -1501,19 +1519,22 @@ function App() {
       let targetId = 0;
       let merged = false;
 
-      setNotifications((prev) => {
-        const existing = prev.find((n) => !n.leaving && notificationsMatch(n, entry));
-        if (existing) {
-          targetId = existing.id;
-          merged = true;
-          return prev.map((n) =>
-            n.id === existing.id
-              ? { ...n, ...entry, count: (n.count ?? 1) + 1, leaving: false }
-              : n,
-          );
-        }
-        targetId = Date.now() + Math.random();
-        return [...prev, { id: targetId, ...entry, count: 1 }];
+      flushSync(() => {
+        setNotifications((prev) => {
+          const existing = prev.find((n) => !n.leaving && notificationsMatch(n, entry));
+          if (existing) {
+            targetId = existing.id;
+            merged = true;
+            return prev.map((n) =>
+              n.id === existing.id
+                ? { ...n, ...entry, count: (n.count ?? 1) + 1, leaving: false }
+                : n,
+            );
+          }
+          targetId = Date.now() + Math.random();
+          merged = false;
+          return [...prev, { id: targetId, ...entry, count: 1 }];
+        });
       });
 
       scheduleNotificationDismiss(targetId);
@@ -1601,12 +1622,20 @@ function App() {
       const hasGameField = gameFields.some((k) => k in patch && patch[k] !== undefined);
       const useProfile = profileId != null && profileId !== "" && hasGameField;
 
+      let snapshotCurrent = defaultSettings;
+      let snapshotNext = defaultSettings;
+
       setSettings((prev) => {
-        const current = prev ?? defaultSettings;
-        const next: Settings = { ...current, ...patch };
-        if (patch.open_launcher_on_profiles_tab !== undefined) {
-          setActiveItemWithSound(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
-        }
+        snapshotCurrent = prev ?? defaultSettings;
+        snapshotNext = { ...snapshotCurrent, ...patch };
+        return snapshotNext;
+      });
+
+      if (patch.open_launcher_on_profiles_tab !== undefined) {
+        setActiveItemWithSound(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
+      }
+
+      try {
         if (useProfile) {
           const profilePatch: Record<string, unknown> = {};
           if (patch.ram_mb !== undefined) profilePatch.ram_mb = patch.ram_mb;
@@ -1616,27 +1645,23 @@ function App() {
             profilePatch.close_launcher_on_game_start = patch.close_launcher_on_game_start;
           if (patch.check_game_processes !== undefined)
             profilePatch.check_game_processes = patch.check_game_processes;
-          invoke("update_profile_settings", { id: profileId, patch: profilePatch })
-            .then(() => {
-              showSettingsSavedNotification();
-            })
-            .catch((e) => {
-              console.error("Не удалось сохранить настройки профиля:", e);
-            });
+
+          await invoke("update_profile_settings", { id: profileId, patch: profilePatch });
+
           const nonGamePatch = { ...patch };
           gameFields.forEach((k) => delete nonGamePatch[k]);
           if (Object.keys(nonGamePatch).length > 0) {
-            invoke("set_settings", { settings: { ...current, ...nonGamePatch } }).catch((e) =>
-              console.error("Не удалось сохранить настройки:", e),
-            );
+            await invoke("set_settings", {
+              settings: { ...snapshotCurrent, ...nonGamePatch },
+            });
           }
         } else {
-          invoke("set_settings", { settings: next })
-            .then(() => showSettingsSavedNotification())
-            .catch((e) => console.error("Не удалось сохранить настройки:", e));
+          await invoke("set_settings", { settings: snapshotNext });
         }
-        return next;
-      });
+        showSettingsSavedNotification();
+      } catch (e) {
+        console.error("Не удалось сохранить настройки:", e);
+      }
     },
     [showSettingsSavedNotification, setActiveItemWithSound],
   );
@@ -3037,10 +3062,10 @@ function App() {
         />
       </div>
 
-      <div className="pointer-events-none absolute top-4 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4">
+      <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4">
         {notifications.map((n) => {
           const baseClasses =
-            "pointer-events-auto group flex max-w-xl items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-soft";
+            "pointer-events-auto group inline-flex w-max max-w-[min(36rem,calc(100vw-2rem))] cursor-pointer items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium leading-snug shadow-soft transition-opacity hover:opacity-90 active:opacity-80 outline-none focus-visible:ring-2 focus-visible:ring-white/35";
           let bgClasses = "";
           let iconSrc = "";
           let style: React.CSSProperties | undefined;
@@ -3080,24 +3105,35 @@ function App() {
           return (
             <div
               key={n.id}
-              className={`${baseClasses} ${bgClasses} ${
+              className={`flex w-full justify-center ${
                 n.leaving
                   ? "animate-notification-slide-out"
                   : "animate-notification-slide-in"
               }`}
-              style={style}
             >
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/15">
-                <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
+              <div
+                role="button"
+                tabIndex={0}
+                className={`${baseClasses} ${bgClasses}`}
+                style={style}
+                onClick={() => beginDismissNotification(n.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    beginDismissNotification(n.id);
+                  }
+                }}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/15">
+                  <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
+                </div>
+                <span className="whitespace-pre-line break-words">{n.message}</span>
+                {(n.count ?? 1) > 1 ? (
+                  <span className="shrink-0 pl-0.5 tabular-nums text-xs font-semibold leading-none opacity-85">
+                    ×{n.count}
+                  </span>
+                ) : null}
               </div>
-              <span className="whitespace-pre-line flex-1 break-words">
-                {n.message}
-              </span>
-              {(n.count ?? 1) > 1 ? (
-                <span className="shrink-0 tabular-nums text-xs font-semibold opacity-85">
-                  ×{n.count}
-                </span>
-              ) : null}
             </div>
           );
         })}

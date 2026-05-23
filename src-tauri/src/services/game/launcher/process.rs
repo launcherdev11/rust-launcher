@@ -1,5 +1,3 @@
-//! Управление процессом игры и отмена загрузок.
-
 use std::sync::atomic::Ordering;
 
 use sysinfo::{ProcessesToUpdate, Pid, System};

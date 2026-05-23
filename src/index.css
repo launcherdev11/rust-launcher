@@ -123,11 +123,11 @@ body {
 }
 
 .animate-notification-slide-in {
-  animation: notification-slide-down 0.18s ease-out forwards;
+  animation: notification-slide-down 0.18s ease-out both;
 }
 
 .animate-notification-slide-out {
-  animation: notification-slide-up 0.18s ease-in forwards;
+  animation: notification-slide-up 0.18s ease-in both;
 }
 
 * {
