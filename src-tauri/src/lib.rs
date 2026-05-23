@@ -1,6 +1,7 @@
 use tauri::Manager;
 
 mod mrpack_open;
+mod profile_launch;
 mod java_runtime;
 mod commands;
 
@@ -43,6 +44,12 @@ use services::curseforge::{
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 use commands::{export_build, get_ely_avatar, list_build_files, preview_export};
 use mrpack_open::take_pending_mrpack_open;
+use profile_launch::{
+    extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
+    emit_profile_launch_request,
+};
+use profile_launch::take_pending_profile_launch;
+use services::shortcuts::create_profile_desktop_shortcut;
 
 fn load_dotenv() {
     app::env::load_dotenv_files();
@@ -59,6 +66,7 @@ pub fn run() {
     infra::platform::configure_windows_webview_memory();
 
     let pending_mrpack = mrpack_open::pending_mrpack_new();
+    let pending_profile_launch = pending_profile_launch_new();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -66,13 +74,17 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .manage(pending_mrpack.clone());
+        .manage(pending_mrpack.clone())
+        .manage(pending_profile_launch.clone());
 
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
                 mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
+            }
+            if let Some(profile_id) = extract_profile_launch_from_os_args(&args) {
+                emit_profile_launch_request(&app, profile_id);
             }
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
@@ -83,9 +95,11 @@ pub fn run() {
 
     builder
         .setup({
-            let pending = pending_mrpack.clone();
+            let pending_mrpack = pending_mrpack.clone();
+            let pending_launch = pending_profile_launch.clone();
             move |_app| {
-                mrpack_open::stash_argv_mrpack_if_any(&pending);
+                mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
+                stash_argv_profile_launch_if_any(&pending_launch);
                 Ok(())
             }
         })
@@ -177,7 +191,9 @@ pub fn run() {
             remove_launcher_account,
             add_launcher_account,
             get_ely_avatar,
-            take_pending_mrpack_open
+            take_pending_mrpack_open,
+            take_pending_profile_launch,
+            create_profile_desktop_shortcut
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

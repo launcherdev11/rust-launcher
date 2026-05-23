@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useT, t } from "../i18n";
+import type { DownloadJobKind } from "../hooks/useDownloadJobs";
 
 type ModrinthContentType = "mod" | "resourcepack" | "shader" | "modpack";
 type Language = "ru" | "en";
@@ -107,6 +108,15 @@ type ModsTabProps = {
   onOpenModpacksTab?: () => void;
   onSelectedModTitleChange?: (title: string | null) => void;
   fillPane?: boolean;
+  registerDownloadJob?: (params: {
+    id: string;
+    label: string;
+    kind: DownloadJobKind;
+    percent?: number | null;
+  }) => void;
+  updateDownloadJob?: (id: string, percent: number | null) => void;
+  finishDownloadJob?: (id: string) => void;
+  makeDownloadJobId?: (prefix: string) => string;
 };
 
 function DownloadStatIcon() {
@@ -124,6 +134,11 @@ function invokeErrorMessage(e: unknown, fallback: string): string {
   if (typeof e === "string" && e.trim().length > 0) return e;
   if (e instanceof Error && e.message.trim().length > 0) return e.message;
   return fallback;
+}
+
+function isDownloadCancelledMessage(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return msg.includes("отменена") || lower.includes("cancelled") || lower.includes("canceled");
 }
 
 function HeartStatIcon() {
@@ -146,6 +161,10 @@ export function ModsTab({
   onOpenModpacksTab,
   onSelectedModTitleChange,
   fillPane = false,
+  registerDownloadJob,
+  updateDownloadJob,
+  finishDownloadJob,
+  makeDownloadJobId,
 }: ModsTabProps) {
   const tt = useT(language);
   const [contentProvider, setContentProvider] = useState<ContentProvider>(() => {
@@ -571,6 +590,24 @@ export function ModsTab({
     }
   };
 
+  const modpackDownloadJobIdRef = useRef<string | null>(null);
+  const modpackImportStopReasonRef = useRef<"cancel" | null>(null);
+
+  const handleCancelModpackImport = useCallback(async () => {
+    if (!modpackImportBusy) return;
+    modpackImportStopReasonRef.current = "cancel";
+    const jobId = modpackDownloadJobIdRef.current;
+    if (jobId) {
+      finishDownloadJob?.(jobId);
+      modpackDownloadJobIdRef.current = null;
+    }
+    try {
+      await invoke("cancel_download");
+    } catch (e) {
+      console.error("Не удалось отменить установку сборки:", e);
+    }
+  }, [modpackImportBusy, finishDownloadJob]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void (async () => {
@@ -578,7 +615,21 @@ export function ModsTab({
         unlisten = await listen<MrpackImportProgressPayload>(
           "mrpack-import-progress",
           (event) => {
-            setModpackImportProgress(event.payload);
+            const payload = event.payload;
+            setModpackImportProgress(payload);
+            const jobId = modpackDownloadJobIdRef.current;
+            if (!jobId || !updateDownloadJob) return;
+            if (
+              payload.phase === "files" &&
+              payload.current != null &&
+              payload.total != null &&
+              payload.total > 0
+            ) {
+              updateDownloadJob(
+                jobId,
+                (payload.current / payload.total) * 100,
+              );
+            }
           },
         );
       } catch (e) {
@@ -589,7 +640,7 @@ export function ModsTab({
     return () => {
       if (unlisten) unlisten();
     };
-  }, []);
+  }, [updateDownloadJob]);
 
   useEffect(() => {
     let raf = 0;
@@ -1215,12 +1266,25 @@ export function ModsTab({
           </div>
           {modrinthContentType === "modpack" && modpackImportBusy && (
               <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
-                <div className="text-xs font-semibold text-white/80">
-                  {tt("mods.modpackImport.title")}
-                </div>
-                <div className="mt-1 text-[11px] text-white/60">
-                  {modpackImportPhaseLabel}
-                  {modpackImportProgress?.message ? `: ${modpackImportProgress.message}` : ""}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-white/80">
+                      {tt("mods.modpackImport.title")}
+                    </div>
+                    <div className="mt-1 text-[11px] text-white/60">
+                      {modpackImportPhaseLabel}
+                      {modpackImportProgress?.message
+                        ? `: ${modpackImportProgress.message}`
+                        : ""}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleCancelModpackImport()}
+                    className="interactive-press shrink-0 rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold text-white/80 hover:bg-white/20"
+                  >
+                    {tt("common.cancel")}
+                  </button>
                 </div>
                 <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
                   <div
@@ -1297,11 +1361,30 @@ export function ModsTab({
                           }
                           onClick={async () => {
                             if (!canDownload) return;
+                            const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
+                            const jobLabel =
+                              modrinthSelectedProject?.title ??
+                              curseforgeSelectedProject?.name ??
+                              v.filename;
+                            const fileKind: DownloadJobKind =
+                              modrinthContentType === "modpack" ? "modpack" : "mod";
+                            registerDownloadJob?.({
+                              id: jobId,
+                              label: jobLabel,
+                              kind: fileKind,
+                            });
                             try {
                               if (
                                 modrinthContentType === "modpack" &&
                                 contentProvider === "modrinth"
                               ) {
+                                modpackImportStopReasonRef.current = null;
+                                try {
+                                  await invoke("reset_download_cancel");
+                                } catch (resetErr) {
+                                  console.error(resetErr);
+                                }
+                                modpackDownloadJobIdRef.current = jobId;
                                 setModpackImportBusy(true);
                                 setModpackImportProgress({
                                   phase: "start",
@@ -1396,9 +1479,19 @@ export function ModsTab({
                                   ? tt("mods.downloadFailedCurseforge")
                                   : tt("mods.downloadFailedModrinth"),
                               );
+                              const cancelled =
+                                modpackImportStopReasonRef.current === "cancel" ||
+                                isDownloadCancelledMessage(msg);
                               console.error(e);
-                              showNotification("error", msg);
+                              if (cancelled) {
+                                showNotification("info", tt("mods.modpackImport.cancelled"));
+                              } else {
+                                showNotification("error", msg);
+                              }
                             } finally {
+                              modpackDownloadJobIdRef.current = null;
+                              modpackImportStopReasonRef.current = null;
+                              finishDownloadJob?.(jobId);
                               if (
                                 modrinthContentType === "modpack" &&
                                 contentProvider === "modrinth"

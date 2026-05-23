@@ -122,6 +122,13 @@ fn resolve_profile_icon_file(profile_dir: &Path, cfg_icon: Option<&str>) -> Opti
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             let path = PathBuf::from(trimmed);
+            if path.is_absolute() && path.is_file() {
+                return Some(path);
+            }
+            let in_profile = profile_dir.join(&path);
+            if in_profile.is_file() {
+                return Some(in_profile);
+            }
             if path.is_file() {
                 return Some(path);
             }
@@ -134,6 +141,20 @@ fn resolve_profile_icon_file(profile_dir: &Path, cfg_icon: Option<&str>) -> Opti
     }
 
     find_icon_png_in_profile(profile_dir).map(PathBuf::from)
+}
+
+pub fn profile_icon_file_path(profile_id: &str) -> Option<PathBuf> {
+    let profile_dir = instance_dir(profile_id).ok()?;
+    if !profile_dir.is_dir() {
+        return None;
+    }
+    let cfg_icon = instance_config_path(profile_id)
+        .ok()
+        .filter(|p| p.is_file())
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|text| serde_json::from_str::<InstanceConfig>(&text).ok())
+        .and_then(|cfg| cfg.icon_path);
+    resolve_profile_icon_file(&profile_dir, cfg_icon.as_deref())
 }
 
 fn find_icon_png_in_profile(root: &Path) -> Option<String> {

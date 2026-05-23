@@ -30,6 +30,8 @@ import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
+import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
+import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
@@ -170,6 +172,20 @@ function isForgeVersion(v: VersionItem): v is ForgeVersionSummary {
 
 function isNeoForgeVersion(v: VersionItem): v is NeoForgeVersionSummary {
   return "neoforge_build" in v && "installer_url" in v;
+}
+
+function versionInstallJobId(versionId: string) {
+  return `version:${versionId}`;
+}
+
+function getVersionLabel(v: VersionItem): string {
+  if (isForgeVersion(v)) {
+    return `Forge ${v.mc_version}-${v.forge_build}`;
+  }
+  if (isNeoForgeVersion(v)) {
+    return `NeoForge ${v.mc_version}-${v.neoforge_build}`;
+  }
+  return v.id;
 }
 
 type DownloadProgressPayload = {
@@ -754,6 +770,16 @@ function App() {
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [installPaused, setInstallPaused] = useState(false);
+  const installStopReasonRef = useRef<"pause" | "cancel" | null>(null);
+  const versionInstallJobIdRef = useRef<string | null>(null);
+  const {
+    jobs: activeDownloadJobs,
+    startJob: startDownloadJob,
+    updateJobProgress: updateDownloadJobProgress,
+    setJobPaused: setDownloadJobPaused,
+    finishJob: finishDownloadJob,
+    makeJobId: makeDownloadJobId,
+  } = useDownloadJobs();
   const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
   const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -1192,6 +1218,11 @@ function App() {
     }
   };
 
+  const pendingProfileLaunchIdRef = useRef<string | null>(null);
+  const handlePlayPinnedProfileRef = useRef<(profile: InstanceProfileCard) => Promise<void>>(
+    async () => {},
+  );
+
   const handlePlayPinnedProfile = async (profile: InstanceProfileCard) => {
     try {
       await invoke("set_selected_profile", { id: profile.id });
@@ -1249,6 +1280,8 @@ function App() {
       showNotification("error", tt("app.errors.launchError", { msg }));
     }
   };
+
+  handlePlayPinnedProfileRef.current = handlePlayPinnedProfile;
 
   const handleOpenProfileInModpacks = async (profileId: string) => {
     const profile = knownProfiles.find((p) => p.id === profileId);
@@ -2053,6 +2086,7 @@ function App() {
             name: p.name,
             game_version: p.game_version,
             loader: p.loader,
+            loader_version: p.loader_version ?? null,
             icon_path: p.icon_path,
             directory: p.directory,
           })),
@@ -2063,6 +2097,57 @@ function App() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const pending = await invoke<string | null>("take_pending_profile_launch");
+        if (pending?.trim()) {
+          pendingProfileLaunchIdRef.current = pending.trim();
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        unlisten = await listen<{ profile_id: string }>("profile-launch-request", (event) => {
+          const id = event.payload.profile_id?.trim();
+          if (id) pendingProfileLaunchIdRef.current = id;
+        });
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const profileId = pendingProfileLaunchIdRef.current;
+    if (!profileId || !profilesHydrated) return;
+    const profile = knownProfiles.find((p) => p.id === profileId);
+    if (!profile) return;
+    pendingProfileLaunchIdRef.current = null;
+    void handlePlayPinnedProfileRef.current(profile);
+  }, [profilesHydrated, knownProfiles]);
+
+  const handleCreateProfileDesktopShortcut = async (profile: InstanceProfileCard) => {
+    try {
+      const path = await invoke<string>("create_profile_desktop_shortcut", {
+        profileId: profile.id,
+      });
+      showNotification(
+        "success",
+        path
+          ? `${tt("modpacks.shortcut.created")} (${path})`
+          : tt("modpacks.shortcut.created"),
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showNotification("error", tt("modpacks.shortcut.failed", { msg }));
+    }
+  };
 
   useEffect(() => {
     if (activeItem === "settings") {
@@ -2193,6 +2278,10 @@ function App() {
           "download-progress",
           (event) => {
             setProgress(event.payload);
+            updateDownloadJobProgress(
+              versionInstallJobId(event.payload.version_id),
+              event.payload.percent,
+            );
           },
         );
       } catch (error) {
@@ -2211,6 +2300,7 @@ function App() {
     settings?.show_alpha_versions,
     showNotification,
     language,
+    updateDownloadJobProgress,
   ]);
 
   useEffect(() => {
@@ -2644,31 +2734,146 @@ function App() {
 
   const handlePauseInstall = async () => {
     if (!isInstalling) return;
-    setInstallPaused(true);
-    setIsInstalling(false);
+    installStopReasonRef.current = "pause";
     try {
       await invoke("cancel_download");
     } catch (error) {
       console.error("Не удалось поставить загрузку на паузу:", error);
+      installStopReasonRef.current = null;
     }
   };
 
   const handleCancelInstall = async () => {
+    installStopReasonRef.current = "cancel";
     setInstallPaused(false);
     setIsInstalling(false);
+    const jobId =
+      versionInstallJobIdRef.current ??
+      (selectedVersion ? versionInstallJobId(selectedVersion.id) : null);
+    if (jobId) {
+      finishDownloadJob(jobId);
+      versionInstallJobIdRef.current = null;
+    }
+    setProgress(null);
     try {
       await invoke("cancel_download");
     } catch (error) {
       console.error("Не удалось отменить загрузку:", error);
-    } finally {
-      setProgress(null);
     }
   };
 
   const handleResumeInstall = () => {
-    if (isInstalled || !selectedVersion) return;
+    if (isInstalled || !selectedVersion || isInstalling) return;
+    void runVersionInstall({ resume: true });
+  };
+
+  const runVersionInstall = async (options?: { resume?: boolean }) => {
+    if (!selectedVersion) return;
+
+    const jobId = versionInstallJobId(selectedVersion.id);
+    versionInstallJobIdRef.current = jobId;
+
     setInstallPaused(false);
-    void handlePrimaryClick();
+    setIsInstalling(true);
+    if (!options?.resume) {
+      setProgress(null);
+      showNotification("info", tt("app.toast.downloadStarted"));
+    }
+    startDownloadJob({
+      id: jobId,
+      label: getVersionLabel(selectedVersion),
+      kind: "version",
+      percent: options?.resume ? (progress?.percent ?? null) : null,
+    });
+    if (options?.resume) {
+      setDownloadJobPaused(jobId, false);
+    }
+
+    try {
+      try {
+        await invoke("reset_download_cancel");
+      } catch (e) {
+        console.error("Не удалось сбросить состояние загрузки:", e);
+      }
+      if (loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
+        const v = selectedVersion as VersionSummary;
+        if (v.version_type === "custom" || !v.url) {
+          await invoke("install_local_version", { versionId: v.id });
+        } else {
+          await invoke("install_version", {
+            versionId: v.id,
+            versionUrl: v.url,
+          });
+        }
+      } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
+        const v = selectedVersion as VersionSummary;
+        const loaders = await invoke<string[]>("fetch_fabric_loaders", {
+          gameVersion: v.id,
+        });
+        const loaderVersion = loaders[0];
+        if (!loaderVersion) throw new Error("Нет подходящего Fabric Loader для этой версии");
+        const profileId = await invoke<string>("install_fabric", {
+          gameVersion: v.id,
+          loaderVersion,
+        });
+        setInstalledIds((prev) => new Set(prev).add(profileId));
+        setFabricProfileId(profileId);
+        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
+        return;
+      } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
+        const v = selectedVersion as VersionSummary;
+        const profileId = await invoke<string>("install_quilt", {
+          gameVersion: v.id,
+          loaderVersion: null,
+        });
+        setInstalledIds((prev) => new Set(prev).add(profileId));
+        setQuiltProfileId(profileId);
+        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
+        return;
+      } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
+        await invoke("install_forge", {
+          versionId: selectedVersion.id,
+          installerUrl: selectedVersion.installer_url,
+        });
+      } else if (loader === "neoforge" && isNeoForgeVersion(selectedVersion)) {
+        await invoke("install_neoforge", {
+          version_id: selectedVersion.id,
+        });
+      } else {
+        throw new Error("Неизвестный тип версии");
+      }
+
+      showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
+      setInstalledIds((prev) => {
+        const next = new Set(prev);
+        next.add(selectedVersion.id);
+        return next;
+      });
+    } catch (error) {
+      if (installStopReasonRef.current === "pause") {
+        return;
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Ошибка установки версии:", error);
+      showNotification("error", tt("app.errors.installError", { msg }));
+    } finally {
+      const stopReason = installStopReasonRef.current;
+      if (stopReason === "pause") {
+        setInstallPaused(true);
+        setIsInstalling(false);
+        setDownloadJobPaused(jobId, true);
+        installStopReasonRef.current = null;
+      } else {
+        setIsInstalling(false);
+        setInstallPaused(false);
+        finishDownloadJob(jobId);
+        versionInstallJobIdRef.current = null;
+        if (stopReason === "cancel") {
+          setProgress(null);
+        }
+        installStopReasonRef.current = null;
+      }
+    }
   };
 
   const handlePrimaryClick = async () => {
@@ -2729,82 +2934,7 @@ function App() {
       return;
     }
 
-    setInstallPaused(false);
-    setIsInstalling(true);
-    setProgress(null);
-    showNotification("info", tt("app.toast.downloadStarted"));
-    try {
-      try {
-        await invoke("reset_download_cancel");
-      } catch (e) {
-        console.error("Не удалось сбросить состояние загрузки:", e);
-      }
-      if (loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
-        const v = selectedVersion as VersionSummary;
-        if (v.version_type === "custom" || !v.url) {
-          await invoke("install_local_version", { versionId: v.id });
-        } else {
-          await invoke("install_version", {
-            versionId: v.id,
-            versionUrl: v.url,
-          });
-        }
-      } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
-        const v = selectedVersion as VersionSummary;
-        const loaders = await invoke<string[]>("fetch_fabric_loaders", {
-          gameVersion: v.id,
-        });
-        const loaderVersion = loaders[0];
-        if (!loaderVersion) throw new Error("Нет подходящего Fabric Loader для этой версии");
-        const profileId = await invoke<string>("install_fabric", {
-          gameVersion: v.id,
-          loaderVersion,
-        });
-        setInstalledIds((prev) => new Set(prev).add(profileId));
-        setFabricProfileId(profileId);
-        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
-        setIsInstalling(false);
-        return;
-      } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
-        const v = selectedVersion as VersionSummary;
-        const profileId = await invoke<string>("install_quilt", {
-          gameVersion: v.id,
-          loaderVersion: null,
-        });
-        setInstalledIds((prev) => new Set(prev).add(profileId));
-        setQuiltProfileId(profileId);
-        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
-        setIsInstalling(false);
-        return;
-      } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
-        await invoke("install_forge", {
-          versionId: selectedVersion.id,
-          installerUrl: selectedVersion.installer_url,
-        });
-      } else if (loader === "neoforge" && isNeoForgeVersion(selectedVersion)) {
-        await invoke("install_neoforge", {
-          version_id: selectedVersion.id,
-        });
-      } else {
-        throw new Error("Неизвестный тип версии");
-      }
-
-      showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
-      setInstalledIds((prev) => {
-        const next = new Set(prev);
-        next.add(selectedVersion.id);
-        return next;
-      });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Ошибка установки версии:", error);
-        showNotification(
-          "error",
-          tt("app.errors.installError", { msg }),
-        );
-    } finally {
-      setIsInstalling(false);
-    }
+    await runVersionInstall();
   };
 
   const accentColor = settings?.background_accent_color ?? "#0b1530";
@@ -2853,6 +2983,10 @@ function App() {
                 activeProfileLoader={activeInstanceProfile?.loader}
                 onOpenModpacksTab={() => activateSidebarTab("modpacks")}
                 onSelectedModTitleChange={setDiscordModsTitle}
+                registerDownloadJob={startDownloadJob}
+                updateDownloadJob={updateDownloadJobProgress}
+                finishDownloadJob={finishDownloadJob}
+                makeDownloadJobId={makeDownloadJobId}
               />
             </div>
           );
@@ -2869,6 +3003,10 @@ function App() {
                 fillPane={inSplitPane}
                 language={language}
                 showNotification={showNotification}
+                registerDownloadJob={startDownloadJob}
+                updateDownloadJob={updateDownloadJobProgress}
+                finishDownloadJob={finishDownloadJob}
+                makeDownloadJobId={makeDownloadJobId}
                 onProfileSelectionChange={handleModpackProfileSelectionChange}
                 initialSelectedProfileId={activeInstanceProfile?.id ?? null}
                 onProfilesChange={(profiles) => {
@@ -3430,6 +3568,19 @@ function App() {
             >
               <img src="/launcher-assets/settings.png" alt="" className="h-3.5 w-3.5 object-contain" />
               <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
+                setPinnedContextMenu(null);
+                if (!profile) return;
+                void handleCreateProfileDesktopShortcut(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <img src="/launcher-assets/export.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{tt("modpacks.actions.createShortcut")}</span>
             </button>
             <button
               type="button"
@@ -4098,6 +4249,7 @@ function App() {
           ) : null}
         </main>
 
+        <ActiveDownloadsPanel jobs={activeDownloadJobs} language={language} />
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
+import type { DownloadJobKind } from "../hooks/useDownloadJobs";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
@@ -107,6 +108,15 @@ type ModpackTabProps = {
   openedMrpackPath?: string | null;
   onOpenedMrpackPathConsumed?: () => void;
   fillPane?: boolean;
+  registerDownloadJob?: (params: {
+    id: string;
+    label: string;
+    kind: DownloadJobKind;
+    percent?: number | null;
+  }) => void;
+  updateDownloadJob?: (id: string, percent: number | null) => void;
+  finishDownloadJob?: (id: string) => void;
+  makeDownloadJobId?: (prefix: string) => string;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -298,6 +308,10 @@ export function ModpackTab({
   openedMrpackPath = null,
   onOpenedMrpackPathConsumed,
   fillPane = false,
+  registerDownloadJob,
+  updateDownloadJob,
+  finishDownloadJob,
+  makeDownloadJobId,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -1021,6 +1035,24 @@ export function ModpackTab({
     onProfileSelectionChange(profile);
   }, [onProfileSelectionChange, profiles, selectedProfileId]);
 
+  const mrpackDownloadJobIdRef = useRef<string | null>(null);
+  const mrpackImportStopReasonRef = useRef<"cancel" | null>(null);
+
+  const handleCancelMrpackImport = useCallback(async () => {
+    if (!mrpackBusy) return;
+    mrpackImportStopReasonRef.current = "cancel";
+    const jobId = mrpackDownloadJobIdRef.current;
+    if (jobId) {
+      finishDownloadJob?.(jobId);
+      mrpackDownloadJobIdRef.current = null;
+    }
+    try {
+      await invoke("cancel_download");
+    } catch (e) {
+      console.error("Не удалось отменить импорт сборки:", e);
+    }
+  }, [mrpackBusy, finishDownloadJob]);
+
   useEffect(() => {
     const unlistenPromise = listen<{
       phase: string;
@@ -1030,6 +1062,17 @@ export function ModpackTab({
     }>("mrpack-import-progress", (event) => {
       const payload = event.payload;
       setMrpackProgress(payload);
+      const jobId = mrpackDownloadJobIdRef.current;
+      if (
+        jobId &&
+        updateDownloadJob &&
+        payload.phase === "files" &&
+        payload.current != null &&
+        payload.total != null &&
+        payload.total > 0
+      ) {
+        updateDownloadJob(jobId, (payload.current / payload.total) * 100);
+      }
       if (payload.phase === "start") {
         showNotification(
           "info",
@@ -1040,7 +1083,7 @@ export function ModpackTab({
     return () => {
       unlistenPromise.then((fn) => fn());
     };
-  }, [language, showNotification]);
+  }, [language, showNotification, updateDownloadJob]);
 
   async function refreshProfiles() {
     setLoadingProfiles(true);
@@ -1342,16 +1385,26 @@ export function ModpackTab({
         const installed = await invoke<string[]>("list_installed_versions");
         const isInstalled = installed.includes(createGameVersion);
         if (!isInstalled) {
+          const versionJobId = `version:${createGameVersion}`;
+          registerDownloadJob?.({
+            id: versionJobId,
+            label: createGameVersion,
+            kind: "version",
+          });
           showNotification(
             "info",
             language === "ru"
               ? `Версия ${createGameVersion} не установлена. Начинаю загрузку…`
               : `Version ${createGameVersion} is not installed. Starting download…`,
           );
-          await invoke("install_version", {
-            versionId: createGameVersion,
-            versionUrl,
-          });
+          try {
+            await invoke("install_version", {
+              versionId: createGameVersion,
+              versionUrl,
+            });
+          } finally {
+            finishDownloadJob?.(versionJobId);
+          }
           showNotification(
             "success",
             language === "ru"
@@ -1458,6 +1511,23 @@ export function ModpackTab({
     }
   }
 
+  async function handleCreateDesktopShortcut(profile: InstanceProfile) {
+    try {
+      const path = await invoke<string>("create_profile_desktop_shortcut", {
+        profileId: profile.id,
+      });
+      showNotification(
+        "success",
+        path
+          ? `${tt("modpacks.shortcut.created")} (${path})`
+          : tt("modpacks.shortcut.created"),
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showNotification("error", tt("modpacks.shortcut.failed", { msg }));
+    }
+  }
+
   async function handleSelectProfile(profile: InstanceProfile) {
     const isAlreadySelected = selectedProfileId === profile.id;
     try {
@@ -1541,6 +1611,17 @@ export function ModpackTab({
     }
     if (!chosen) return;
 
+    const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
+    const jobLabel =
+      chosen.split(/[/\\]/).pop()?.replace(/\.mrpack$/i, "") ?? "Modpack";
+    mrpackImportStopReasonRef.current = null;
+    try {
+      await invoke("reset_download_cancel");
+    } catch (e) {
+      console.error(e);
+    }
+    mrpackDownloadJobIdRef.current = jobId;
+    registerDownloadJob?.({ id: jobId, label: jobLabel, kind: "modpack" });
     setMrpackBusy(true);
     setMrpackProgress(null);
     try {
@@ -1569,13 +1650,30 @@ export function ModpackTab({
           : typeof e === "string"
             ? e
             : JSON.stringify(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? `Не удалось импортировать .mrpack: ${msg}`
-          : `Failed to import .mrpack: ${msg}`,
-      );
+      const cancelled =
+        mrpackImportStopReasonRef.current === "cancel" ||
+        msg.includes("отменена") ||
+        msg.toLowerCase().includes("cancelled") ||
+        msg.toLowerCase().includes("canceled");
+      if (cancelled) {
+        showNotification(
+          "info",
+          language === "ru"
+            ? "Установка сборки отменена."
+            : "Modpack installation cancelled.",
+        );
+      } else {
+        showNotification(
+          "error",
+          language === "ru"
+            ? `Не удалось импортировать .mrpack: ${msg}`
+            : `Failed to import .mrpack: ${msg}`,
+        );
+      }
     } finally {
+      mrpackImportStopReasonRef.current = null;
+      mrpackDownloadJobIdRef.current = null;
+      finishDownloadJob?.(jobId);
       setMrpackBusy(false);
     }
   }
@@ -2292,22 +2390,33 @@ export function ModpackTab({
           </button>
         </div>
 
-        {mrpackBusy && mrpackProgress && (
+        {mrpackBusy && (
           <div className="flex flex-col gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3">
-            <p className="text-sm font-medium text-white">
-              {mrpackProgress.phase === "start"
-                ? tt("modpacks.import.progress.preparing")
-                : mrpackProgress.phase === "overrides"
-                  ? tt("modpacks.import.progress.extractingOverrides")
-                  : mrpackProgress.phase === "files" && mrpackProgress.total != null && mrpackProgress.total > 0
-                    ? tt("modpacks.import.progress.downloading", {
-                        current: mrpackProgress.current ?? 0,
-                        total: mrpackProgress.total,
-                        msg: mrpackProgress.message ? ` — ${mrpackProgress.message}` : "",
-                      })
-                    : tt("modpacks.import.progress.importing")}
-            </p>
-            {mrpackProgress.total != null &&
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-white">
+                {mrpackProgress?.phase === "start"
+                  ? tt("modpacks.import.progress.preparing")
+                  : mrpackProgress?.phase === "overrides"
+                    ? tt("modpacks.import.progress.extractingOverrides")
+                    : mrpackProgress?.phase === "files" &&
+                        mrpackProgress.total != null &&
+                        mrpackProgress.total > 0
+                      ? tt("modpacks.import.progress.downloading", {
+                          current: mrpackProgress.current ?? 0,
+                          total: mrpackProgress.total,
+                          msg: mrpackProgress.message ? ` — ${mrpackProgress.message}` : "",
+                        })
+                      : tt("modpacks.import.progress.importing")}
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleCancelMrpackImport()}
+                className="interactive-press shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+            </div>
+            {mrpackProgress?.total != null &&
               mrpackProgress.total > 0 &&
               mrpackProgress.current != null && (
                 <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
@@ -2913,6 +3022,19 @@ export function ModpackTab({
             >
               <SettingsIcon className="h-3.5 w-3.5" />
               <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void handleCreateDesktopShortcut(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <ExportIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.actions.createShortcut")}</span>
             </button>
             <button
               type="button"

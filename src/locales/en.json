@@ -45,7 +45,8 @@
       "title": "Installing modpack…",
       "start": "Preparing…",
       "overrides": "Extracting…",
-      "files": "Downloading files…"
+      "files": "Downloading files…",
+      "cancelled": "Modpack installation cancelled."
     },
     "noIcon": "No icon",
     "saveSuccessProfile": "File {{filename}} saved to profile.",
@@ -393,7 +394,12 @@
       "refresh": "Refresh",
       "play": "Play",
       "select": "Select",
-      "unselect": "Unselect"
+      "unselect": "Unselect",
+      "createShortcut": "Create desktop shortcut"
+    },
+    "shortcut": {
+      "created": "Desktop shortcut created.",
+      "failed": "Failed to create shortcut: {{msg}}"
     },
     "profile": {
       "renamed": "Profile renamed.",
@@ -509,6 +515,16 @@
       "downloadFinished": "Download finished!",
       "copy": "Copy",
       "copied": "Copied!"
+    },
+    "downloads": {
+      "paused": "paused",
+      "preparing": "preparing…",
+      "kind": {
+        "version": "version",
+        "modpack": "modpack",
+        "mod": "mod",
+        "file": "file"
+      }
     },
     "social": {
       "discord": "Join our Discord!\nChat with the team and share your emotions!",
