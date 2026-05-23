@@ -26,8 +26,9 @@ use services::game::{
     launch_game, list_installed_fabric_game_versions, list_installed_quilt_game_versions,
     list_installed_versions, list_launcher_accounts, list_profile_items, open_game_folder,
     open_profile_folder, remove_launcher_account, rename_profile, reset_download_cancel,
-    reset_settings_to_default, set_java_settings, set_profile, set_profile_java_settings,
-    set_selected_profile, set_settings, stop_game, switch_launcher_account, update_profile_settings,
+    reset_settings_to_default, set_java_settings, set_profile, set_profile_item_enabled,
+    set_profile_java_settings, set_selected_profile, set_settings, stop_game, switch_launcher_account,
+    update_profile_settings,
     validate_java_args,
 };
 use services::auth::{
@@ -148,6 +149,7 @@ pub fn run() {
             update_profile_settings,
             delete_item,
             list_profile_items,
+            set_profile_item_enabled,
             rename_profile,
             add_profile_files,
             import_modpack_files,

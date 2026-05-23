@@ -256,11 +256,13 @@ export function ModsTab({
       return;
     }
     setVersionLoaderLocked(true);
-    invoke<string[]>("list_profile_items", {
+    invoke<{ name: string; enabled: boolean }[]>("list_profile_items", {
       id: activeProfileId,
       category: mapContentTypeToCategory(modrinthContentType),
     })
-      .then((names) => setInstalledFilenames(new Set(names ?? [])))
+      .then((entries) =>
+        setInstalledFilenames(new Set((entries ?? []).map((e) => e.name))),
+      )
       .catch(() => setInstalledFilenames(new Set()));
   }, [activeProfileId, modrinthContentType]);
 
@@ -566,7 +568,6 @@ export function ModsTab({
         window.localStorage.setItem("mods_content_provider", provider);
       }
     } catch {
-      /* ignore */
     }
   };
 

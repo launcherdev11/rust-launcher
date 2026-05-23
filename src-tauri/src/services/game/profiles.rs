@@ -6,7 +6,7 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 use tauri::command;
 
-use crate::models::profile::{InstanceConfig, SelectedProfileFile};
+use crate::models::profile::{InstanceConfig, ProfileItemEntry, SelectedProfileFile};
 use crate::models::{InstanceProfileSummary, InstanceSettings};
 use crate::app::paths::{
     instance_config_path, instance_dir, instance_settings_path, instances_root_dir,
@@ -14,6 +14,60 @@ use crate::app::paths::{
 };
 use crate::services::game::cache as cache_service;
 
+
+const PROFILE_ITEM_DISABLED_SUFFIX: &str = ".disabled";
+
+fn profile_content_subdir(category: &str) -> Result<&'static str, String> {
+    match category {
+        "mod" | "mods" => Ok("mods"),
+        "resourcepack" | "resourcepacks" => Ok("resourcepacks"),
+        "shader" | "shaderpack" | "shaderpacks" => Ok("shaderpacks"),
+        other => Err(format!(
+            "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
+        )),
+    }
+}
+
+fn profile_item_is_disabled(stored_name: &str) -> bool {
+    stored_name.ends_with(PROFILE_ITEM_DISABLED_SUFFIX)
+}
+
+fn profile_item_display_name(stored_name: &str) -> String {
+    if profile_item_is_disabled(stored_name) {
+        stored_name
+            .strip_suffix(PROFILE_ITEM_DISABLED_SUFFIX)
+            .unwrap_or(stored_name)
+            .to_string()
+    } else {
+        stored_name.to_string()
+    }
+}
+
+fn profile_item_stored_name(display_name: &str, enabled: bool) -> String {
+    let base = profile_item_display_name(display_name);
+    if enabled {
+        base
+    } else {
+        format!("{base}{PROFILE_ITEM_DISABLED_SUFFIX}")
+    }
+}
+
+fn resolve_profile_item_path(content_dir: &Path, filename: &str) -> Option<PathBuf> {
+    let direct = content_dir.join(filename);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    let display = profile_item_display_name(filename);
+    let enabled_path = content_dir.join(&display);
+    if enabled_path.is_file() {
+        return Some(enabled_path);
+    }
+    let disabled_path = content_dir.join(profile_item_stored_name(&display, false));
+    if disabled_path.is_file() {
+        return Some(disabled_path);
+    }
+    None
+}
 
 fn generate_instance_id() -> String {
     rand::thread_rng()
@@ -297,39 +351,21 @@ pub fn delete_item(id: String, category: String, filename: String) -> Result<(),
     if !dir.exists() {
         return Err("Папка сборки не найдена".to_string());
     }
-    let subdir = match category.as_str() {
-        "mod" | "mods" => "mods",
-        "resourcepack" | "resourcepacks" => "resourcepacks",
-        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
-        other => {
-            return Err(format!(
-                "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
-            ))
-        }
+    let subdir = profile_content_subdir(&category)?;
+    let content_dir = dir.join(subdir);
+    let Some(target) = resolve_profile_item_path(&content_dir, &filename) else {
+        return Ok(());
     };
-    let target = dir.join(subdir).join(&filename);
-    if target.exists() {
-        std::fs::remove_file(&target).map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))?;
-    }
-    Ok(())
+    std::fs::remove_file(&target).map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))
 }
 
 #[command]
-pub fn list_profile_items(id: String, category: String) -> Result<Vec<String>, String> {
+pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileItemEntry>, String> {
     let dir = instance_dir(&id)?;
     if !dir.exists() {
         return Err("Папка сборки не найдена".to_string());
     }
-    let subdir = match category.as_str() {
-        "mod" | "mods" => "mods",
-        "resourcepack" | "resourcepacks" => "resourcepacks",
-        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
-        other => {
-            return Err(format!(
-                "Неизвестная категория контента: {other}. Ожидается mod, resourcepack или shader."
-            ))
-        }
-    };
+    let subdir = profile_content_subdir(&category)?;
     let target_dir = dir.join(subdir);
     if !target_dir.exists() {
         return Ok(Vec::new());
@@ -339,13 +375,53 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<String>, S
         let entry = entry.map_err(|e| format!("Ошибка чтения файла сборки: {e}"))?;
         let path = entry.path();
         if path.is_file() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                files.push(name.to_string());
+            if let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) {
+                files.push(ProfileItemEntry {
+                    name: profile_item_display_name(stored_name),
+                    enabled: !profile_item_is_disabled(stored_name),
+                });
             }
         }
     }
-    files.sort();
+    files.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(files)
+}
+
+#[command]
+pub fn set_profile_item_enabled(
+    id: String,
+    category: String,
+    filename: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let dir = instance_dir(&id)?;
+    if !dir.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+    let subdir = profile_content_subdir(&category)?;
+    let content_dir = dir.join(subdir);
+    let Some(from) = resolve_profile_item_path(&content_dir, &filename) else {
+        return Err("Файл не найден в сборке".to_string());
+    };
+    let display_name = profile_item_display_name(
+        from.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&filename),
+    );
+    let to = content_dir.join(profile_item_stored_name(&display_name, enabled));
+    if from == to {
+        return Ok(());
+    }
+    if to.exists() {
+        return Err("Файл с таким именем уже существует".to_string());
+    }
+    std::fs::rename(&from, &to).map_err(|e| {
+        format!(
+            "Не удалось {} файл {:?}: {e}",
+            if enabled { "включить" } else { "отключить" },
+            from
+        )
+    })
 }
 
 pub fn create_profile_impl(

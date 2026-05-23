@@ -32,6 +32,12 @@ import { AccountAvatar } from "./components/account_avatar";
 import type { ProfileAvatarInput } from "./lib/avatar";
 import { useT, t } from "./i18n";
 import {
+  OnboardingFlow,
+  ONBOARDING_COMPLETED_STORAGE_KEY,
+  ONBOARDING_FORCE_STORAGE_KEY,
+  ONBOARDING_LEGACY_MIGRATED_KEY,
+} from "./onboarding";
+import {
   applyTabDrop,
   detectDropZone,
   isSplittableTab,
@@ -92,6 +98,7 @@ type Settings = {
   background_image_url: string | null;
   background_blur_enabled: boolean;
   split_view_enabled: boolean;
+  onboarding_completed?: boolean;
 };
 
 type InstanceProfileSummary = {
@@ -781,6 +788,7 @@ function App() {
   const [updateDownloadPercent, setUpdateDownloadPercent] = useState<number | null>(null);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>("ru");
+  const [onboardingVisible, setOnboardingVisible] = useState<boolean | null>(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [launcherVersion, setLauncherVersion] = useState<string | null>(null);
   const [launcherUpdateBadge, setLauncherUpdateBadge] = useState<"latest" | "outdated" | null>(() => {
@@ -789,7 +797,6 @@ function App() {
       const v = sessionStorage.getItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY);
       if (v === "latest" || v === "outdated") return v;
     } catch {
-      /* ignore */
     }
     return null;
   });
@@ -798,7 +805,6 @@ function App() {
     try {
       sessionStorage.setItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY, v);
     } catch {
-      /* ignore */
     }
   }, []);
   const tt = useT(language);
@@ -985,7 +991,6 @@ function App() {
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {
-        /* ignore */
       }
     },
     [finishTabDrag],
@@ -1399,13 +1404,13 @@ function App() {
   }, [consoleLines]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem("launcher_language", language);
-      } catch {
-      }
+    if (typeof window === "undefined") return;
+    if (onboardingVisible !== false) return;
+    try {
+      window.localStorage.setItem("launcher_language", language);
+    } catch {
     }
-  }, [language]);
+  }, [language, onboardingVisible]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1600,6 +1605,7 @@ function App() {
     background_image_url: null,
     background_blur_enabled: true,
     split_view_enabled: false,
+    onboarding_completed: false,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -1620,6 +1626,48 @@ function App() {
     if (didApplyStartPageRef.current) return;
     setActiveItem(settings.open_launcher_on_profiles_tab ? "modpacks" : "play");
     didApplyStartPageRef.current = true;
+  }, [settings]);
+
+  useEffect(() => {
+    if (!settings) return;
+
+    try {
+      if (window.localStorage.getItem(ONBOARDING_FORCE_STORAGE_KEY) === "1") {
+        setOnboardingVisible(true);
+        return;
+      }
+    } catch {
+    }
+
+    if (settings.onboarding_completed) {
+      setOnboardingVisible(false);
+      return;
+    }
+
+    try {
+      if (window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY) === "1") {
+        setOnboardingVisible(false);
+        void invoke("set_settings", {
+          settings: { ...settings, onboarding_completed: true },
+        }).catch(() => {});
+        return;
+      }
+
+      const legacyMigrated =
+        window.localStorage.getItem(ONBOARDING_LEGACY_MIGRATED_KEY) === "1";
+      if (!legacyMigrated && window.localStorage.getItem("launcher_language")) {
+        window.localStorage.setItem(ONBOARDING_LEGACY_MIGRATED_KEY, "1");
+        window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+        void invoke("set_settings", {
+          settings: { ...settings, onboarding_completed: true },
+        }).catch(() => {});
+        setOnboardingVisible(false);
+        return;
+      }
+    } catch {
+    }
+
+    setOnboardingVisible(true);
   }, [settings]);
 
   const updateSettings = useCallback(
@@ -1818,14 +1866,12 @@ function App() {
       launches = Number.parseInt(localStorage.getItem(STORAGE_LAUNCHES_KEY) ?? "0", 10) || 0;
       lastShownAt = Number.parseInt(localStorage.getItem(STORAGE_LAST_SHOWN_AT_KEY) ?? "0", 10) || 0;
     } catch {
-      // ignore
     }
 
     launches += 1;
     try {
       localStorage.setItem(STORAGE_LAUNCHES_KEY, String(launches));
     } catch {
-      // ignore
     }
 
     const now = Date.now();
@@ -1851,7 +1897,6 @@ function App() {
       localStorage.setItem(STORAGE_LAST_SHOWN_AT_KEY, String(now));
       localStorage.setItem(STORAGE_LAUNCHES_KEY, "0");
     } catch {
-      // ignore
     }
   }, []);
 
@@ -3032,6 +3077,38 @@ function App() {
   );
 
   const singleMainTab: SplittableTabId = isSplittableTab(activeItem) ? activeItem : "play";
+
+  if (onboardingVisible === null) {
+    return (
+      <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#050609] text-white">
+        <p className="text-sm text-white/45">{tt("common.loading")}</p>
+      </div>
+    );
+  }
+
+  if (onboardingVisible) {
+    return (
+      <OnboardingFlow
+        language={language}
+        setLanguage={setLanguage}
+        accentColor={settings?.background_accent_color ?? "#0b1530"}
+        backgroundImageUrl={backgroundImageUrl}
+        onLanguagePersist={(lang) => {
+          void updateSettings({ interface_language: lang });
+        }}
+        onProfileUpdated={loadProfile}
+        onComplete={async () => {
+          try {
+            window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+            window.localStorage.removeItem(ONBOARDING_FORCE_STORAGE_KEY);
+          } catch {
+          }
+          await updateSettings({ onboarding_completed: true });
+          setOnboardingVisible(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div
