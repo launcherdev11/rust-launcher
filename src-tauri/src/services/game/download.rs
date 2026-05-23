@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 
 use rand::Rng;
 use serde::Deserialize;
@@ -10,7 +11,18 @@ use crate::infra::http::http_client;
 use crate::models::events::{MrpackImportProgressPayload, EVENT_MRPACK_IMPORT_PROGRESS};
 use crate::models::profile::InstanceProfileSummary;
 use crate::services::game::cache as cache_service;
-use crate::services::game::profiles::{create_profile_impl, set_profile_icon_path};
+use crate::services::game::profiles::{create_profile_impl, delete_profile, set_profile_icon_path};
+use crate::services::game::state::CANCEL_DOWNLOAD;
+
+const DOWNLOAD_CANCELLED_MSG: &str = "Загрузка отменена пользователем";
+
+fn check_download_cancelled() -> Result<(), String> {
+    if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+        Err(DOWNLOAD_CANCELLED_MSG.to_string())
+    } else {
+        Ok(())
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct MrpackFileEntry {
@@ -105,6 +117,7 @@ pub async fn import_mrpack(
     let mut index_json = None;
 
     for i in 0..archive.len() {
+        check_download_cancelled()?;
         let mut entry = archive
             .by_index(i)
             .map_err(|e| format!("Ошибка чтения entry .mrpack: {e}"))?;
@@ -161,6 +174,7 @@ pub async fn import_mrpack(
 
     let mut current_file: u32 = 0;
     for f in index.files.iter() {
+        check_download_cancelled()?;
         if f.downloads.is_empty() {
             continue;
         }
@@ -190,6 +204,7 @@ pub async fn import_mrpack(
             .send()
             .await
             .map_err(|e| format!("Ошибка скачивания файла из Modrinth: {e}"))?;
+        check_download_cancelled()?;
         if !resp.status().is_success() {
             return Err(format!(
                 "Modrinth вернул ошибку {} при скачивании {}",
@@ -201,6 +216,7 @@ pub async fn import_mrpack(
             .bytes()
             .await
             .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+        check_download_cancelled()?;
         tokio::fs::write(&dest, &bytes)
             .await
             .map_err(|e| format!("Не удалось сохранить файл сборки: {e}"))?;
@@ -273,6 +289,7 @@ pub async fn import_mrpack_as_new_profile(
 
     let mut index_json = None;
     for i in 0..archive.len() {
+        check_download_cancelled()?;
         let mut entry = archive
             .by_index(i)
             .map_err(|e| format!("Ошибка чтения entry .mrpack: {e}"))?;
@@ -304,6 +321,7 @@ pub async fn import_mrpack_as_new_profile(
         });
 
     let profile = create_profile_impl(name, game_version, loader, None, None)?;
+    let profile_id = profile.id.clone();
     let dir = instance_dir(&profile.id)?;
 
     let _ = app.emit(
@@ -322,6 +340,10 @@ pub async fn import_mrpack_as_new_profile(
         zip::ZipArchive::new(file2).map_err(|e| format!("Ошибка чтения .mrpack: {e}"))?;
 
     for i in 0..archive2.len() {
+        if let Err(e) = check_download_cancelled() {
+            let _ = delete_profile(profile_id.clone());
+            return Err(e);
+        }
         let mut entry = archive2
             .by_index(i)
             .map_err(|e| format!("Ошибка чтения entry .mrpack: {e}"))?;
@@ -363,6 +385,10 @@ pub async fn import_mrpack_as_new_profile(
     let client = http_client(false);
     let mut current_file: u32 = 0;
     for f in index.files.iter() {
+        if let Err(e) = check_download_cancelled() {
+            let _ = delete_profile(profile_id.clone());
+            return Err(e);
+        }
         if f.downloads.is_empty() || f.downloads[0].is_empty() {
             continue;
         }
@@ -389,6 +415,10 @@ pub async fn import_mrpack_as_new_profile(
             .send()
             .await
             .map_err(|e| format!("Ошибка скачивания файла из Modrinth: {e}"))?;
+        if let Err(e) = check_download_cancelled() {
+            let _ = delete_profile(profile_id.clone());
+            return Err(e);
+        }
         if !resp.status().is_success() {
             return Err(format!(
                 "Modrinth вернул ошибку {} при скачивании {}",
@@ -400,6 +430,10 @@ pub async fn import_mrpack_as_new_profile(
             .bytes()
             .await
             .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+        if let Err(e) = check_download_cancelled() {
+            let _ = delete_profile(profile_id.clone());
+            return Err(e);
+        }
         tokio::fs::write(&dest, &bytes)
             .await
             .map_err(|e| format!("Не удалось сохранить файл сборки: {e}"))?;
@@ -470,12 +504,16 @@ pub async fn download_modrinth_modpack_and_import(
     let suffix: u64 = rand::thread_rng().gen();
     let dest = root.join(format!("{}-{}", suffix, base_name));
 
+    check_download_cancelled()?;
+
     let client = http_client(false);
     let resp = client
         .get(&url)
         .send()
         .await
         .map_err(|e| format!("Ошибка загрузки Modrinth .mrpack: {e}"))?;
+
+    check_download_cancelled()?;
 
     if !resp.status().is_success() {
         return Err(format!(
@@ -488,6 +526,8 @@ pub async fn download_modrinth_modpack_and_import(
         .bytes()
         .await
         .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
+
+    check_download_cancelled()?;
 
     tokio::fs::write(&dest, &bytes)
         .await
