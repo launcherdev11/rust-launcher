@@ -10,6 +10,7 @@ import { FinishScreen } from "./screens/FinishScreen";
 import { LanguageScreen } from "./screens/LanguageScreen";
 import { MicrosoftLoginScreen } from "./screens/MicrosoftLoginScreen";
 import { WelcomeScreen } from "./screens/WelcomeScreen";
+import { OnboardingBackgroundAnimatedProvider } from "./backgroundAnimatedContext";
 import type { AccountProvider, OnboardingLanguageOption, OnboardingStep } from "./types";
 import { stepProgressIndex } from "./types";
 
@@ -26,6 +27,7 @@ export type OnboardingFlowProps = {
   setLanguage: (lang: Language) => void;
   accentColor?: string;
   backgroundImageUrl?: string;
+  backgroundAnimated?: boolean;
   onLanguagePersist: (lang: Language) => void;
   onComplete: () => void | Promise<void>;
   onProfileUpdated?: () => void | Promise<void>;
@@ -36,6 +38,7 @@ export function OnboardingFlow({
   setLanguage,
   accentColor,
   backgroundImageUrl,
+  backgroundAnimated = false,
   onLanguagePersist,
   onComplete,
   onProfileUpdated,
@@ -185,6 +188,7 @@ export function OnboardingFlow({
     }
   };
 
+  const stepView = (() => {
   switch (step) {
     case "welcome":
       return (
@@ -278,4 +282,11 @@ export function OnboardingFlow({
     default:
       return null;
   }
+  })();
+
+  return (
+    <OnboardingBackgroundAnimatedProvider value={backgroundAnimated}>
+      {stepView}
+    </OnboardingBackgroundAnimatedProvider>
+  );
 }
