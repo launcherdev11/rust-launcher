@@ -150,6 +150,12 @@
       "refreshFailed": "Не удалось обновить список версий.",
       "installSuccess": "Версия {{version}} успешно установлена.",
       "installFailed": "Не удалось установить версию {{version}}.",
+      "custom": {
+        "importButton": "Импорт своей версии",
+        "importJarPrompt": "Указать client.jar для этой версии? (можно пропустить — лаунчер скачает при установке)",
+        "importSuccess": "Кастомная версия {{version}} импортирована. Нажмите «Установить», чтобы загрузить библиотеки.",
+        "importFailed": "Не удалось импортировать версию: {{msg}}"
+      },
       "verify": {
         "button": "Проверить файлы",
         "checking": "Проверка...",
@@ -412,6 +418,7 @@
       "namePlaceholder": "Введите название вашей сборки...",
       "loaderLabel": "Загрузчик:",
       "gameVersionLabel": "Версия игры:",
+      "loaderVersionLabel": "Версия загрузчика:",
       "allVersions": "Все версии"
     },
     "import": {

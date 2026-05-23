@@ -5,7 +5,6 @@ export type ProfileAvatarInput = {
   mc_uuid: string | null;
 };
 
-/** SVG-плейсхолдер с буквой, пока скин грузится или недоступен. */
 export function buildInitialAvatarDataUrl(label: string): string {
   const ch = (label.trim().charAt(0) || "?").toUpperCase();
   const svg = `

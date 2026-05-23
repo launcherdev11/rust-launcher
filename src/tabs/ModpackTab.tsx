@@ -49,6 +49,7 @@ type InstanceProfile = {
   icon_path: string | null;
   game_version: string;
   loader: string;
+  loader_version?: string | null;
   created_at: number;
   play_time_seconds: number | null;
   mods_count: number;
@@ -63,6 +64,20 @@ type VersionSummary = {
   version_type: string;
   url: string;
   release_time: string;
+};
+
+type ForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  forge_build: string;
+  installer_url: string;
+};
+
+type NeoForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  neoforge_build: string;
+  installer_url: string;
 };
 
 type GameConsoleLine = {
@@ -331,6 +346,10 @@ export function ModpackTab({
   const [createName, setCreateName] = useState("");
   const [createLoader, setCreateLoader] = useState<LoaderId>("fabric");
   const [createGameVersion, setCreateGameVersion] = useState("1.20.1");
+  const [createLoaderVersion, setCreateLoaderVersion] = useState("");
+  const [loaderVersionOptions, setLoaderVersionOptions] = useState<string[]>([]);
+  const [loaderVersionsLoading, setLoaderVersionsLoading] = useState(false);
+  const [isLoaderVersionDropdownOpen, setIsLoaderVersionDropdownOpen] = useState(false);
   const [createAllVersions, setCreateAllVersions] = useState(false);
   const [createIconPath, setCreateIconPath] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
@@ -1179,6 +1198,61 @@ export function ModpackTab({
     }
   }
 
+  const loadCreateLoaderVersions = useCallback(async () => {
+    if (createLoader === "vanilla") {
+      setLoaderVersionOptions([]);
+      setCreateLoaderVersion("");
+      return;
+    }
+    setLoaderVersionsLoading(true);
+    try {
+      let options: string[] = [];
+      if (createLoader === "fabric") {
+        options = await invoke<string[]>("fetch_fabric_loaders", {
+          gameVersion: createGameVersion,
+        });
+      } else if (createLoader === "quilt") {
+        options = await invoke<string[]>("fetch_quilt_loaders", {
+          gameVersion: createGameVersion,
+        });
+      } else if (createLoader === "forge") {
+        options = await invoke<string[]>("fetch_forge_builds_for_game", {
+          gameVersion: createGameVersion,
+        });
+      } else if (createLoader === "neoforge") {
+        options = await invoke<string[]>("fetch_neoforge_builds_for_game", {
+          gameVersion: createGameVersion,
+        });
+      }
+      options = [...new Set(options)];
+      setLoaderVersionOptions(options);
+      setCreateLoaderVersion((prev) =>
+        prev && options.includes(prev) ? prev : (options[0] ?? ""),
+      );
+    } catch (e) {
+      console.error(e);
+      setLoaderVersionOptions([]);
+      setCreateLoaderVersion("");
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification(
+        "error",
+        language === "ru"
+          ? `Не удалось загрузить версии загрузчика: ${msg}`
+          : `Failed to load loader versions: ${msg}`,
+      );
+    } finally {
+      setLoaderVersionsLoading(false);
+    }
+  }, [createLoader, createGameVersion, language]);
+
+  useEffect(() => {
+    if (activeView !== "create" || createLoader === "vanilla") {
+      return;
+    }
+    void loadCreateLoaderVersions();
+  }, [activeView, createLoader, createGameVersion, loadCreateLoaderVersions]);
+
   const filteredProfiles = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return profiles;
@@ -1241,6 +1315,17 @@ export function ModpackTab({
       );
       return;
     }
+    const loaderVersion =
+      createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
+    if (createLoader !== "vanilla" && !loaderVersion) {
+      showNotification(
+        "warning",
+        language === "ru"
+          ? "Выберите версию загрузчика."
+          : "Select a loader version.",
+      );
+      return;
+    }
     setCreateBusy(true);
     try {
       let versionUrl: string | null = null;
@@ -1268,10 +1353,17 @@ export function ModpackTab({
         name,
         gameVersion: createGameVersion,
         loader: createLoader,
+        loaderVersion,
         iconSourcePath: createIconPath,
       });
 
       try {
+        try {
+          await invoke("reset_download_cancel");
+        } catch (e) {
+          console.error(e);
+        }
+
         const installed = await invoke<string[]>("list_installed_versions");
         const isInstalled = installed.includes(createGameVersion);
         if (!isInstalled) {
@@ -1281,11 +1373,6 @@ export function ModpackTab({
               ? `Версия ${createGameVersion} не установлена. Начинаю загрузку…`
               : `Version ${createGameVersion} is not installed. Starting download…`,
           );
-          try {
-            await invoke("reset_download_cancel");
-          } catch (e) {
-            console.error(e);
-          }
           await invoke("install_version", {
             versionId: createGameVersion,
             versionUrl,
@@ -1297,6 +1384,56 @@ export function ModpackTab({
               : `Version ${createGameVersion} installed.`,
           );
         }
+
+        if (createLoader === "fabric" && loaderVersion) {
+          showNotification(
+            "info",
+            language === "ru"
+              ? `Устанавливаю Fabric ${loaderVersion}…`
+              : `Installing Fabric ${loaderVersion}…`,
+          );
+          await invoke("install_fabric", {
+            gameVersion: createGameVersion,
+            loaderVersion,
+          });
+        } else if (createLoader === "quilt" && loaderVersion) {
+          showNotification(
+            "info",
+            language === "ru"
+              ? `Устанавливаю Quilt ${loaderVersion}…`
+              : `Installing Quilt ${loaderVersion}…`,
+          );
+          await invoke("install_quilt", {
+            gameVersion: createGameVersion,
+            loaderVersion,
+          });
+        } else if (createLoader === "forge" && loaderVersion) {
+          const forgeList = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+          const match = forgeList.find(
+            (v) => v.mc_version === createGameVersion && v.forge_build === loaderVersion,
+          );
+          const versionId =
+            match?.id ?? `${createGameVersion}-forge-${loaderVersion}`;
+          const installerUrl =
+            match?.installer_url ??
+            `https://maven.minecraftforge.net/net/minecraftforge/forge/${createGameVersion}-${loaderVersion}/forge-${createGameVersion}-${loaderVersion}-installer.jar`;
+          showNotification(
+            "info",
+            language === "ru"
+              ? `Устанавливаю Forge ${loaderVersion}…`
+              : `Installing Forge ${loaderVersion}…`,
+          );
+          await invoke("install_forge", { versionId, installerUrl });
+        } else if (createLoader === "neoforge" && loaderVersion) {
+          const versionId = `${createGameVersion}-neoforge-${loaderVersion}`;
+          showNotification(
+            "info",
+            language === "ru"
+              ? `Устанавливаю NeoForge ${loaderVersion}…`
+              : `Installing NeoForge ${loaderVersion}…`,
+          );
+          await invoke("install_neoforge", { versionId });
+        }
       } catch (e) {
         console.error(e);
         const msg =
@@ -1304,14 +1441,16 @@ export function ModpackTab({
         showNotification(
           "warning",
           language === "ru"
-            ? `Сборка создана, но не удалось проверить/установить версию игры: ${msg}`
-            : `Profile created, but failed to check/install game version: ${msg}`,
+            ? `Сборка создана, но не удалось установить версию: ${msg}`
+            : `Profile created, but failed to install version: ${msg}`,
         );
       }
 
       setProfiles((prev) => [...prev, profile]);
       setCreateName("");
       setCreateIconPath(null);
+      setCreateLoaderVersion("");
+      setLoaderVersionOptions([]);
       setActiveView("manage");
       setSelectedProfileId(profile.id);
       try {
@@ -2003,7 +2142,10 @@ export function ModpackTab({
                     <button
                       key={id}
                       type="button"
-                      onClick={() => setCreateLoader(id)}
+                      onClick={() => {
+                        setCreateLoader(id);
+                        setIsLoaderVersionDropdownOpen(false);
+                      }}
                       className={`interactive-press rounded-full px-3 py-1.5 text-xs font-semibold ${
                         createLoader === id
                           ? "bg-white text-black shadow-soft"
@@ -2081,6 +2223,62 @@ export function ModpackTab({
                 </span>
               </label>
             </div>
+
+            {createLoader !== "vanilla" && (
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-white/70">
+                  {tt("modpacks.create.loaderVersionLabel")}
+                </label>
+                <div className="relative inline-flex w-60 items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (loaderVersionOptions.length === 0) {
+                        void loadCreateLoaderVersions();
+                      }
+                      setIsLoaderVersionDropdownOpen((v) => !v);
+                    }}
+                    disabled={loaderVersionsLoading}
+                    className="flex flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                  >
+                    <span className="truncate">
+                      {loaderVersionsLoading
+                        ? tt("modpacks.common.loading")
+                        : createLoaderVersion || tt("modpacks.common.select")}
+                    </span>
+                    <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+                  </button>
+                  {isLoaderVersionDropdownOpen && (
+                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                      {loaderVersionOptions.length === 0 && !loaderVersionsLoading && (
+                        <div className="px-3 py-2 text-white/60">
+                          {language === "ru"
+                            ? "Нет версий для выбранной игры"
+                            : "No versions for this game"}
+                        </div>
+                      )}
+                      {loaderVersionOptions.map((v, idx) => (
+                        <button
+                          key={`${createLoader}-${v}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            setCreateLoaderVersion(v);
+                            setIsLoaderVersionDropdownOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                            createLoaderVersion === v
+                              ? "bg-white/90 text-black"
+                              : "text-white/80 hover:bg-white/10"
+                          }`}
+                        >
+                          <span>{v}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
