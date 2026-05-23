@@ -150,6 +150,12 @@
       "refreshFailed": "Failed to refresh versions list.",
       "installSuccess": "Version {{version}} installed successfully.",
       "installFailed": "Failed to install version {{version}}.",
+      "custom": {
+        "importButton": "Import custom version",
+        "importJarPrompt": "Select client.jar for this version? (you can skip — the launcher will download it on install)",
+        "importSuccess": "Custom version {{version}} imported. Click Install to download libraries.",
+        "importFailed": "Failed to import version: {{msg}}"
+      },
       "verify": {
         "button": "Check files",
         "checking": "Checking...",
@@ -412,6 +418,7 @@
       "namePlaceholder": "Enter profile name...",
       "loaderLabel": "Loader:",
       "gameVersionLabel": "Game version:",
+      "loaderVersionLabel": "Loader version:",
       "allVersions": "All versions"
     },
     "import": {

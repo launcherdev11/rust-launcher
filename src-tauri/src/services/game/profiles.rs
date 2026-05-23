@@ -192,6 +192,7 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
             icon_path,
             game_version: cfg.game_version,
             loader: cfg.loader,
+            loader_version: cfg.loader_version,
             created_at: cfg.created_at,
             play_time_seconds: cfg.play_time_seconds,
             mods_count,
@@ -351,6 +352,7 @@ pub fn create_profile_impl(
     name: String,
     game_version: String,
     loader: String,
+    loader_version: Option<String>,
     icon_source_path: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
     let root = instances_root_dir()?;
@@ -393,6 +395,7 @@ pub fn create_profile_impl(
         icon_path: icon_path.clone(),
         game_version: game_version.clone(),
         loader: loader.clone(),
+        loader_version: loader_version.clone(),
         created_at,
         play_time_seconds: 0,
     };
@@ -436,6 +439,7 @@ pub fn create_profile_impl(
         icon_path,
         game_version,
         loader,
+        loader_version,
         created_at,
         play_time_seconds: 0,
         mods_count,
@@ -469,9 +473,10 @@ pub fn create_profile(
     name: String,
     game_version: String,
     loader: String,
+    loader_version: Option<String>,
     icon_source_path: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
-    create_profile_impl(name, game_version, loader, icon_source_path)
+    create_profile_impl(name, game_version, loader, loader_version, icon_source_path)
 }
 
 #[command]

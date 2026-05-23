@@ -306,6 +306,7 @@ pub async fn install_fabric(
 pub async fn install_quilt(
     app: AppHandle,
     game_version: String,
+    loader_version: Option<String>,
 ) -> Result<String, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client(false);
@@ -315,7 +316,10 @@ pub async fn install_quilt(
         &format!("[Quilt] Начало установки Quilt для Minecraft {game_version}"),
     );
 
-    let loader_version = select_latest_quilt_loader(&game_version).await?;
+    let loader_version = match loader_version {
+        Some(v) if !v.trim().is_empty() => v,
+        _ => select_latest_quilt_loader(&game_version).await?,
+    };
     log_to_console(
         &app,
         &format!("[Quilt] Выбран loader {loader_version}"),
@@ -1091,7 +1095,6 @@ pub async fn install_version(
 ) -> Result<(), String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
     let client = http_client(false);
-    let os_name = current_os_name();
 
     log_to_console(
         &app,
@@ -1102,6 +1105,39 @@ pub async fn install_version(
 
     let version_json_text =
         download_text_with_retries(&client, &version_url, DEFAULT_DOWNLOAD_RETRIES).await?;
+
+    install_version_from_json(app, version_id, version_json_text).await
+}
+
+#[tauri::command]
+pub async fn install_local_version(app: AppHandle, version_id: String) -> Result<(), String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+    let vers_root = versions_dir()?;
+    let version_json_path = vers_root.join(&version_id).join(format!("{version_id}.json"));
+    let version_json_text = tokio::fs::read_to_string(&version_json_path)
+        .await
+        .map_err(|e| {
+            format!(
+                "Не найден {}: {e}. Импортируйте кастомную версию или установите из списка.",
+                version_json_path.display()
+            )
+        })?;
+
+    log_to_console(
+        &app,
+        &format!("[Vanilla] Установка локальной версии {version_id}"),
+    );
+
+    install_version_from_json(app, version_id, version_json_text).await
+}
+
+async fn install_version_from_json(
+    app: AppHandle,
+    version_id: String,
+    version_json_text: String,
+) -> Result<(), String> {
+    let client = http_client(false);
+    let os_name = current_os_name();
 
     let detail: VersionDetail = serde_json::from_str(&version_json_text)
         .map_err(|e| format!("Ошибка разбора описания версии: {e}"))?;

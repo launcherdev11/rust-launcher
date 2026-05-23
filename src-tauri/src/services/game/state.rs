@@ -10,10 +10,14 @@ pub const DEFAULT_DOWNLOAD_RETRIES: usize = 6;
 pub const FORGE_PROMOTIONS_URL: &str =
     "https://files.minecraftforge.net/maven/net/minecraftforge/forge/promotions_slim.json";
 pub const FORGE_MAVEN_BASE: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
+pub const FORGE_MAVEN_METADATA_URL: &str =
+    "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 pub const NEOFORGE_MAVEN_METADATA_URL: &str =
     "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
 pub const NEOFORGE_MAVEN_BASE: &str = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
 pub const FORGE_INSTALLER_MIN_BYTES: u64 = 1_000_000;
 pub const BMCL_MAVEN_BASE: &str = "https://bmclapi2.bangbang93.com/maven";
+pub const FABRIC_META_GAME: &str = "https://meta.fabricmc.net/v2/versions/game";
 pub const FABRIC_META_LOADERS: &str = "https://meta.fabricmc.net/v2/versions/loader";
 pub const FABRIC_META_PROFILE: &str = "https://meta.fabricmc.net/v2/versions/loader";
+pub const QUILT_META_GAME: &str = "https://meta.quiltmc.org/v3/versions/game";

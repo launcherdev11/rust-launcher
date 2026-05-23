@@ -616,16 +616,10 @@ export function SettingsTab({
       }));
     }
 
-    const all = await invoke<VersionSummary[]>("fetch_all_versions");
-    const showSnapshots = settings?.show_snapshots ?? false;
-    const showAlpha = settings?.show_alpha_versions ?? false;
-    const filtered = all.filter((v) => {
-      if (v.version_type === "release") return true;
-      if (v.version_type === "snapshot") return showSnapshots;
-      if (v.version_type === "old_beta" || v.version_type === "old_alpha" || v.version_type === "alpha") {
-        return showAlpha;
-      }
-      return false;
+    const filtered = await invoke<VersionSummary[]>("fetch_versions_for_loader", {
+      loader,
+      showSnapshots: settings?.show_snapshots ?? false,
+      showAlpha: settings?.show_alpha_versions ?? false,
     });
     return filtered.map((v) => ({ ...v, loader }));
   };
@@ -728,6 +722,47 @@ export function SettingsTab({
     };
   }, []);
 
+  const handleImportCustomVersion = async () => {
+    try {
+      const jsonPath = await openFile({
+        multiple: false,
+        filters: [{ name: "Minecraft version JSON", extensions: ["json"] }],
+      });
+      if (!jsonPath || typeof jsonPath !== "string") return;
+
+      const wantJar = window.confirm(tt("settings.versions.custom.importJarPrompt"));
+      let jarPath: string | null = null;
+      if (wantJar) {
+        const picked = await openFile({
+          multiple: false,
+          filters: [{ name: "Minecraft client JAR", extensions: ["jar"] }],
+        });
+        if (picked && typeof picked === "string") {
+          jarPath = picked;
+        }
+      }
+
+      const versionId = await invoke<string>("import_custom_version", {
+        jsonPath,
+        jarPath,
+      });
+      showNotification(
+        "success",
+        tt("settings.versions.custom.importSuccess", { version: versionId }),
+        { sound: true },
+      );
+      const [available] = await Promise.all([
+        loadAvailableByLoader(versionsLoader),
+        loadInstalledVersions(),
+      ]);
+      setAvailableVersions(available);
+    } catch (e) {
+      console.error("Failed to import custom version:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", tt("settings.versions.custom.importFailed", { msg }));
+    }
+  };
+
   const handleInstallVersion = async (version: VersionListItem, options?: { silentSuccess?: boolean }) => {
     try {
       setInstallingVersionId(version.id);
@@ -754,7 +789,10 @@ export function SettingsTab({
       } else if (version.loader === "quilt") {
         await invoke("install_quilt", {
           gameVersion: version.id,
+          loaderVersion: null,
         });
+      } else if (version.version_type === "custom" || !version.url) {
+        await invoke("install_local_version", { versionId: version.id });
       } else {
         await invoke("install_version", {
           versionId: version.id,
@@ -785,7 +823,7 @@ export function SettingsTab({
       setCheckingVersionId(version.id);
       const result = await invoke<VersionIntegrityCheckResult>("check_version_files_integrity", {
         versionId: version.id,
-        versionUrl: version.url ?? null,
+        versionUrl: version.url || null,
       });
       if (result.is_ok) {
         showNotification(
@@ -1532,34 +1570,47 @@ export function SettingsTab({
                   </AnimatePresence>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-white/90">
                   {tt("settings.versions.available.label")}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        setIsLoadingVersions(true);
-                        const [available] = await Promise.all([
-                          loadAvailableByLoader(versionsLoader),
-                          loadInstalledVersions(),
-                        ]);
-                        setAvailableVersions(available);
-                      } catch (e) {
-                        console.error("Failed to refresh versions list:", e);
-                        showNotification(
-                          "error",
-                          tt("settings.versions.refreshFailed"),
-                        );
-                      }
-                    })();
-                  }}
-                  className="interactive-press rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/40 hover:text-white"
-                >
-                  {tt("settings.versions.refresh")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {versionsLoader === "vanilla" && (
+                    <button
+                      type="button"
+                      onClick={() => void handleImportCustomVersion()}
+                      className="interactive-press rounded-full border border-amber-400/40 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:border-amber-300/60 hover:text-amber-50"
+                    >
+                      {tt("settings.versions.custom.importButton")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          setIsLoadingVersions(true);
+                          const [available] = await Promise.all([
+                            loadAvailableByLoader(versionsLoader),
+                            loadInstalledVersions(),
+                          ]);
+                          setAvailableVersions(available);
+                        } catch (e) {
+                          console.error("Failed to refresh versions list:", e);
+                          showNotification(
+                            "error",
+                            tt("settings.versions.refreshFailed"),
+                          );
+                        } finally {
+                          setIsLoadingVersions(false);
+                        }
+                      })();
+                    }}
+                    className="interactive-press rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/40 hover:text-white"
+                  >
+                    {tt("settings.versions.refresh")}
+                  </button>
+                </div>
               </div>
               <div className="h-48 min-h-[12rem] overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-2">
                 {isLoadingVersions && (

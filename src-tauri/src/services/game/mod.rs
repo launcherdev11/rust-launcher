@@ -26,7 +26,8 @@ pub use download::{
 };
 pub use files::{get_game_root_dir, open_game_folder, open_profile_folder};
 pub use install::{
-    install_fabric, install_forge, install_neoforge, install_quilt, install_version,
+    install_fabric, install_forge, install_local_version, install_neoforge, install_quilt,
+    install_version,
 };
 pub use integrity::check_version_files_integrity;
 pub use launcher::{
@@ -42,8 +43,10 @@ pub use settings::{
     set_java_settings, set_profile_java_settings, set_settings, validate_java_args,
 };
 pub use versions::{
-    fetch_all_versions, fetch_fabric_loaders, fetch_forge_versions, fetch_neoforge_versions, fetch_vanilla_releases,
-    get_installed_fabric_profile_id, get_installed_quilt_profile_id, list_installed_fabric_game_versions,
+    fetch_all_versions, fetch_fabric_loaders, fetch_forge_builds_for_game, fetch_forge_versions,
+    fetch_neoforge_builds_for_game, fetch_neoforge_versions, fetch_quilt_loaders,
+    fetch_vanilla_releases, fetch_versions_for_loader, get_installed_fabric_profile_id,
+    get_installed_quilt_profile_id, import_custom_version, list_installed_fabric_game_versions,
     list_installed_quilt_game_versions, list_installed_versions,
 };
 
