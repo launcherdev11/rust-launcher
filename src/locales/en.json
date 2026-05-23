@@ -421,6 +421,11 @@
       "loaderVersionLabel": "Loader version:",
       "allVersions": "All versions"
     },
+    "manage": {
+      "enableItem": "Enable",
+      "disableItem": "Disable",
+      "toggleFailed": "Failed to change item state."
+    },
     "import": {
       "title": "Import Modrinth pack",
       "chooseFile": "Choose file",
@@ -547,6 +552,62 @@
       "mods": "Selecting a mod",
       "modpacks": "Selecting a profile",
       "accounts": "Managing account"
+    }
+  },
+  "onboarding": {
+    "progress": "Step {{current}} of {{total}}",
+    "nav": {
+      "back": "Back",
+      "next": "Next"
+    },
+    "welcome": {
+      "title": "Welcome to 16Launcher!",
+      "subtitle": "Let's set everything up to your taste",
+      "cta": "Let's go!"
+    },
+    "language": {
+      "title": "Choose your language",
+      "subtitle": "You can change the language later in launcher settings",
+      "comingSoon": "Soon",
+      "ruDesc": "Russian launcher interface",
+      "enDesc": "English launcher interface",
+      "deDesc": "German will be available in a future update"
+    },
+    "account": {
+      "title": "Sign in",
+      "subtitle": "Pick a sign-in method or skip — you can sign in later",
+      "elyTitle": "Ely.by",
+      "elyDesc": "For Ely profile and Ely.by skins",
+      "microsoftTitle": "Microsoft",
+      "microsoftDesc": "Official Minecraft / Microsoft account",
+      "skip": "Skip · sign in later"
+    },
+    "ely": {
+      "title": "Sign in with Ely.by",
+      "subtitle": "Enter your Ely credentials or open browser sign-in",
+      "loginLabel": "Login",
+      "loginPlaceholder": "Ely.by username",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Password",
+      "securityHint": "Credentials are stored locally on your device and used only for game sign-in.",
+      "submit": "Sign in",
+      "oauth": "Sign in via browser (OAuth)",
+      "success": "Signed in successfully!",
+      "errorGeneric": "Sign-in failed. Check your login and password."
+    },
+    "microsoft": {
+      "title": "Sign in with Microsoft",
+      "subtitle": "Use your official Minecraft account. After clicking the button, Microsoft authorization will open.",
+      "externalHint": "An external browser window will open for secure Microsoft sign-in.",
+      "cta": "Continue with Microsoft",
+      "waiting": "Waiting for sign-in…",
+      "success": "Microsoft sign-in complete!",
+      "errorGeneric": "Could not start Microsoft sign-in."
+    },
+    "finish": {
+      "title": "All set!",
+      "subtitle": "Setup is complete. Head to the launcher and start playing.",
+      "cta": "Start playing"
     }
   }
 }

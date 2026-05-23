@@ -88,7 +88,6 @@ export function saveTabSplitLayout(layout: TabSplitLayout | null) {
     }
     window.localStorage.setItem(TAB_SPLIT_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
   } catch {
-    /* ignore */
   }
 }
 

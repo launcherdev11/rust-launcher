@@ -73,13 +73,6 @@ type ForgeVersionSummary = {
   installer_url: string;
 };
 
-type NeoForgeVersionSummary = {
-  id: string;
-  mc_version: string;
-  neoforge_build: string;
-  installer_url: string;
-};
-
 type GameConsoleLine = {
   id: number;
   line: string;
@@ -116,6 +109,11 @@ type ModpackTabProps = {
 
 type ViewId = "list" | "create" | "import" | "manage";
 type ContentTab = "mods" | "resourcepacks" | "shaderpacks";
+
+type ProfileItemEntry = {
+  name: string;
+  enabled: boolean;
+};
 
 type FileNode = {
   path: string;
@@ -339,7 +337,7 @@ export function ModpackTab({
   });
   const [activeView, setActiveView] = useState<ViewId>("list");
   const [contentTab, setContentTab] = useState<ContentTab>("mods");
-  const [items, setItems] = useState<string[]>([]);
+  const [items, setItems] = useState<ProfileItemEntry[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [search, setSearch] = useState("");
@@ -1129,7 +1127,7 @@ export function ModpackTab({
           : tab === "resourcepacks"
             ? "resourcepacks"
             : "shaderpacks";
-      const files = await invoke<string[]>("list_profile_items", {
+      const files = await invoke<ProfileItemEntry[]>("list_profile_items", {
         id,
         category,
       });
@@ -1721,7 +1719,7 @@ export function ModpackTab({
     }
   }
 
-  async function handleDeleteItem(filename: string) {
+  async function handleDeleteItem(item: ProfileItemEntry) {
     if (!selectedProfile) return;
     try {
       const category =
@@ -1733,9 +1731,9 @@ export function ModpackTab({
       await invoke("delete_item", {
         id: selectedProfile.id,
         category,
-        filename,
+        filename: item.name,
       });
-      setItems((prev) => prev.filter((f) => f !== filename));
+      setItems((prev) => prev.filter((f) => f.name !== item.name));
     } catch (e) {
       console.error(e);
       showNotification(
@@ -1743,6 +1741,36 @@ export function ModpackTab({
         language === "ru"
           ? "Не удалось удалить файл."
           : "Failed to delete file.",
+      );
+    }
+  }
+
+  async function handleToggleItemEnabled(item: ProfileItemEntry) {
+    if (!selectedProfile) return;
+    const nextEnabled = !item.enabled;
+    try {
+      const category =
+        contentTab === "mods"
+          ? "mods"
+          : contentTab === "resourcepacks"
+            ? "resourcepacks"
+            : "shaderpacks";
+      await invoke("set_profile_item_enabled", {
+        id: selectedProfile.id,
+        category,
+        filename: item.name,
+        enabled: nextEnabled,
+      });
+      setItems((prev) =>
+        prev.map((entry) =>
+          entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
+        ),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        tt("modpacks.manage.toggleFailed"),
       );
     }
   }
@@ -2384,7 +2412,7 @@ export function ModpackTab({
     const visibleItems =
       searchValue.length === 0
         ? items
-        : items.filter((name) => name.toLowerCase().includes(searchValue));
+        : items.filter((item) => item.name.toLowerCase().includes(searchValue));
 
     return (
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
@@ -2719,13 +2747,15 @@ export function ModpackTab({
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-                {visibleItems.map((name) => (
+                {visibleItems.map((item) => (
                   <div
-                    key={name}
-                    className="flex items-center justify-between rounded-2xl bg-black/45 px-3 py-3 text-xs text-white/85"
+                    key={item.name}
+                    className={`flex items-center justify-between gap-2 rounded-2xl bg-black/45 px-3 py-3 text-xs transition-opacity ${
+                      item.enabled ? "text-white/85" : "text-white/45 opacity-75"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[11px]">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px]">
                         {contentTab === "mods" ? (
                           <ModsIcon className="h-5 w-5" />
                         ) : contentTab === "resourcepacks" ? (
@@ -2734,18 +2764,40 @@ export function ModpackTab({
                           "S"
                         )}
                       </span>
-                      <span className="max-w-[260px] truncate md:max-w-[360px]">
-                        {name}
+                      <span className="max-w-[200px] truncate md:max-w-[280px]">
+                        {item.name}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteItem(name)}
-                      className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
-                      title={language === "ru" ? "Удалить" : "Delete"}
-                    >
-                      <DeleteIcon className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={item.enabled}
+                        onClick={() => void handleToggleItemEnabled(item)}
+                        className={`interactive-press relative h-6 w-10 rounded-full transition-colors ${
+                          item.enabled ? "bg-emerald-500/90" : "bg-white/20"
+                        }`}
+                        title={
+                          item.enabled
+                            ? tt("modpacks.manage.disableItem")
+                            : tt("modpacks.manage.enableItem")
+                        }
+                      >
+                        <span
+                          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${
+                            item.enabled ? "left-[1.125rem]" : "left-0.5"
+                          }`}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteItem(item)}
+                        className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
+                        title={language === "ru" ? "Удалить" : "Delete"}
+                      >
+                        <DeleteIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

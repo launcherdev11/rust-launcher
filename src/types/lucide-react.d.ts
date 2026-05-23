@@ -22,5 +22,14 @@ declare module "lucide-react" {
   export const UploadCloud: LucideIcon;
   export const Puzzle: LucideIcon;
   export const HardDrive: LucideIcon;
+  export const ArrowLeft: LucideIcon;
+  export const ArrowRight: LucideIcon;
+  export const ChevronRight: LucideIcon;
+  export const Check: LucideIcon;
+  export const AlertCircle: LucideIcon;
+  export const CheckCircle2: LucideIcon;
+  export const ExternalLink: LucideIcon;
+  export const Loader2: LucideIcon;
+  export const PartyPopper: LucideIcon;
 }
 

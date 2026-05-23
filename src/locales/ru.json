@@ -421,6 +421,11 @@
       "loaderVersionLabel": "Версия загрузчика:",
       "allVersions": "Все версии"
     },
+    "manage": {
+      "enableItem": "Включить",
+      "disableItem": "Отключить",
+      "toggleFailed": "Не удалось изменить состояние файла."
+    },
     "import": {
       "title": "Импорт Modrinth пакета",
       "chooseFile": "Выбрать файл",
@@ -547,6 +552,62 @@
       "mods": "Выбирает мод",
       "modpacks": "Выбирает профиль",
       "accounts": "Управляет аккаунтом"
+    }
+  },
+  "onboarding": {
+    "progress": "Шаг {{current}} из {{total}}",
+    "nav": {
+      "back": "Назад",
+      "next": "Далее"
+    },
+    "welcome": {
+      "title": "Добро пожаловать в 16Launcher!",
+      "subtitle": "Давайте настроим всё под ваш вкус",
+      "cta": "Давай!"
+    },
+    "language": {
+      "title": "Выберите язык",
+      "subtitle": "Язык можно изменить позже в настройках лаунчера",
+      "comingSoon": "Скоро",
+      "ruDesc": "Русский интерфейс лаунчера",
+      "enDesc": "English launcher interface",
+      "deDesc": "Немецкий язык появится в одном из обновлений"
+    },
+    "account": {
+      "title": "Вход в аккаунт",
+      "subtitle": "Выберите способ входа или пропустите — можно войти позже",
+      "elyTitle": "Ely.by",
+      "elyDesc": "Для игры с Ely-профилем и скинами Ely.by",
+      "microsoftTitle": "Microsoft",
+      "microsoftDesc": "Официальный аккаунт Minecraft / Microsoft",
+      "skip": "Пропустить · войти позже"
+    },
+    "ely": {
+      "title": "Вход через Ely.by",
+      "subtitle": "Введите данные Ely-профиля или откройте вход в браузере",
+      "loginLabel": "Логин",
+      "loginPlaceholder": "Имя пользователя Ely.by",
+      "passwordLabel": "Пароль",
+      "passwordPlaceholder": "Пароль",
+      "securityHint": "Данные хранятся локально на вашем устройстве и используются только для входа в игру.",
+      "submit": "Войти",
+      "oauth": "Войти через браузер (OAuth)",
+      "success": "Вход выполнен!",
+      "errorGeneric": "Не удалось войти. Проверьте логин и пароль."
+    },
+    "microsoft": {
+      "title": "Вход через Microsoft",
+      "subtitle": "Используйте официальный аккаунт Minecraft. После нажатия кнопки откроется страница авторизации Microsoft.",
+      "externalHint": "Откроется внешнее окно браузера для безопасного входа через Microsoft.",
+      "cta": "Продолжить с Microsoft",
+      "waiting": "Ожидание входа…",
+      "success": "Вход через Microsoft выполнен!",
+      "errorGeneric": "Не удалось начать вход через Microsoft."
+    },
+    "finish": {
+      "title": "Всё готово!",
+      "subtitle": "Настройка завершена. Можно переходить в лаунчер и начинать играть.",
+      "cta": "Начать играть"
     }
   }
 }

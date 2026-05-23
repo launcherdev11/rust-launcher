@@ -53,3 +53,9 @@ pub(crate) struct SelectedProfileFile {
     pub id: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct ProfileItemEntry {
+    pub name: String,
+    pub enabled: bool,
+}
+
