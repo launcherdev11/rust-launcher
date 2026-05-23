@@ -28,7 +28,13 @@ import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
+import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
+import {
+  isAnimatedBackgroundPath,
+  resolveLauncherBackgroundUrl,
+  shouldLoadBackgroundDataUri,
+} from "./lib/launcherBackground";
 import type { ProfileAvatarInput } from "./lib/avatar";
 import { useT, t } from "./i18n";
 import {
@@ -2824,14 +2830,10 @@ function App() {
   };
 
   const accentColor = settings?.background_accent_color ?? "#0b1530";
-  const rawBackgroundImage =
-    settings?.background_image_url && settings.background_image_url.trim().length > 0
-      ? settings.background_image_url.trim()
-      : "/launcher-assets/background.jpg";
 
   useEffect(() => {
     (async () => {
-      if (!settings?.background_image_url) {
+      if (!shouldLoadBackgroundDataUri(settings?.background_image_url)) {
         setBackgroundDataUri(null);
         return;
       }
@@ -2844,14 +2846,13 @@ function App() {
     })();
   }, [settings?.background_image_url]);
 
-  const backgroundImageUrl =
-    backgroundDataUri ??
-    (rawBackgroundImage.startsWith("http://") ||
-    rawBackgroundImage.startsWith("https://") ||
-    rawBackgroundImage.startsWith("data:") ||
-    rawBackgroundImage.startsWith("/launcher-assets/")
-      ? rawBackgroundImage
-      : convertFileSrc(rawBackgroundImage));
+  const backgroundImageUrl = resolveLauncherBackgroundUrl(
+    settings?.background_image_url,
+    backgroundDataUri,
+  );
+  const backgroundIsAnimated = isAnimatedBackgroundPath(
+    settings?.background_image_url ?? "",
+  );
 
   const renderMainTabContent = useCallback(
     (tab: SplittableTabId, inSplitPane = false) => {
@@ -3093,6 +3094,7 @@ function App() {
         setLanguage={setLanguage}
         accentColor={settings?.background_accent_color ?? "#0b1530"}
         backgroundImageUrl={backgroundImageUrl}
+        backgroundAnimated={backgroundIsAnimated}
         onLanguagePersist={(lang) => {
           void updateSettings({ interface_language: lang });
         }}
@@ -3120,20 +3122,10 @@ function App() {
       }
     >
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div
-          className="absolute inset-0 bg-center will-change-transform"
-          style={{
-            backgroundImage: `url(${backgroundImageUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            ...(settings?.background_blur_enabled ?? true
-              ? {
-                  filter: "blur(22px)",
-                  transform: "scale(1.08)",
-                }
-              : {}),
-          }}
+        <LauncherBackgroundImage
+          imageUrl={backgroundImageUrl}
+          blurEnabled={settings?.background_blur_enabled ?? true}
+          animated={backgroundIsAnimated}
         />
       </div>
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
