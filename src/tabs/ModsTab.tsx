@@ -1315,6 +1315,7 @@ export function ModsTab({
                                 }>("download_modrinth_modpack_and_import", {
                                   url: v.file_url,
                                   filename: v.filename,
+                                  iconUrl: modrinthSelectedProject?.icon_url ?? null,
                                 });
                                 await invoke("set_selected_profile", { id: imported.id });
                                 onOpenModpacksTab?.();
