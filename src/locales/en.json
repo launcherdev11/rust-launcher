@@ -425,7 +425,27 @@
       "loaderLabel": "Loader:",
       "gameVersionLabel": "Game version:",
       "loaderVersionLabel": "Loader version:",
-      "allVersions": "All versions"
+      "allVersions": "All versions",
+      "presetLabel": "Build preset:",
+      "noPreset": "No preset",
+      "saveFormAsPreset": "Save current options as preset"
+    },
+    "presets": {
+      "title": "Build presets",
+      "manage": "Presets",
+      "empty": "No presets yet. Save profile options as a preset.",
+      "apply": "Apply",
+      "delete": "Delete",
+      "saveFromProfile": "Save as preset",
+      "saveFromForm": "Save from form",
+      "namePrompt": "Preset name",
+      "saved": "Preset saved.",
+      "deleted": "Preset deleted.",
+      "applied": "Preset applied to the create form.",
+      "saveFailed": "Failed to save preset.",
+      "deleteFailed": "Failed to delete preset.",
+      "deleteConfirm": "Delete preset “{{name}}”?",
+      "loaderInfo": "{{loader}} · {{version}}"
     },
     "manage": {
       "enableItem": "Enable",

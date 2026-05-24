@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod arguments;
+pub mod build_presets;
 pub mod cache;
 pub mod console;
 pub mod core;
@@ -32,6 +33,10 @@ pub use install::{
 pub use integrity::check_version_files_integrity;
 pub use launcher::{
     cancel_download, is_game_running_now, launch_game, reset_download_cancel, stop_game,
+};
+pub use build_presets::{
+    create_build_preset_from_profile, delete_build_preset, get_build_preset_icon_data_uri,
+    list_build_presets, save_build_preset,
 };
 pub use profiles::{
     add_profile_files, create_profile, delete_item, delete_profile, get_profile_icon_data_uri,
