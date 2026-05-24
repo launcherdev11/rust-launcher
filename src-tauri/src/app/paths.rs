@@ -73,3 +73,7 @@ pub fn build_preset_icons_dir() -> Result<PathBuf, String> {
 pub fn build_preset_icon_path(preset_id: &str) -> Result<PathBuf, String> {
     Ok(build_preset_icons_dir()?.join(format!("{preset_id}.png")))
 }
+
+pub fn screenshots_dir() -> Result<PathBuf, String> {
+    Ok(game_root_dir()?.join("screenshots"))
+}

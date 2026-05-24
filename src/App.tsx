@@ -29,6 +29,7 @@ import { PlayTab } from "./tabs/PlayTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
+import { DeleteIcon } from "./components/delete_icon";
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
@@ -3605,7 +3606,7 @@ function App() {
               }}
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
             >
-              <img src="/launcher-assets/delete.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <DeleteIcon className="h-3.5 w-3.5" />
               <span>{language === "ru" ? "Удалить сборку" : "Delete profile"}</span>
             </button>
             <button
@@ -3750,12 +3751,7 @@ function App() {
                         className="interactive-press shrink-0 rounded-lg p-2 text-white/35 hover:bg-red-500/15 hover:text-red-300"
                         title={tt("app.accounts.removeTitle")}
                       >
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                          <path
-                            fill="currentColor"
-                            d="M9 3h6a1 1 0 0 1 1 1v1h4v2H4V5h4V4a1 1 0 0 1 1-1Zm1 5h2v9h-2V8Zm4 0h2v9h-2V8ZM6 8h2v9H6V8Z"
-                          />
-                        </svg>
+                        <DeleteIcon className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
@@ -4055,12 +4051,7 @@ function App() {
                           className="interactive-press shrink-0 self-center rounded-lg p-2.5 text-white/35 hover:bg-red-500/15 hover:text-red-300"
                           title={tt("app.accounts.removeTitle")}
                         >
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                            <path
-                              fill="currentColor"
-                              d="M9 3h6a1 1 0 0 1 1 1v1h4v2H4V5h4V4a1 1 0 0 1 1-1Zm1 5h2v9h-2V8Zm4 0h2v9h-2V8ZM6 8h2v9H6V8Z"
-                            />
-                          </svg>
+                          <DeleteIcon className="h-4 w-4" />
                         </button>
                       </li>
                     ))}
