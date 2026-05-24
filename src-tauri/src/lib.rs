@@ -1,12 +1,12 @@
 use tauri::Manager;
-
-mod mrpack_open;
-mod profile_launch;
-mod java_runtime;
-mod commands;
+use std::path::PathBuf;
 
 mod app;
+mod commands;
 mod infra;
+mod java_runtime;
+mod mrpack_open;
+mod profile_launch;
 mod models;
 mod services;
 
@@ -49,9 +49,34 @@ use mrpack_open::take_pending_mrpack_open;
 use profile_launch::{
     extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
     emit_profile_launch_request,
+    take_pending_profile_launch,
 };
-use profile_launch::take_pending_profile_launch;
 use services::shortcuts::create_profile_desktop_shortcut;
+
+#[tauri::command]
+fn get_launcher_logs_file() -> String {
+    std::fs::read_to_string("launcher.log")
+        .unwrap_or_else(|_| "Логи пусты или файл не найден".to_string())
+}
+
+#[tauri::command]
+fn get_screenshots_list() -> Vec<String> {
+    let screenshot_path = PathBuf::from(".minecraft/screenshots"); 
+    
+    match std::fs::read_dir(screenshot_path) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path().to_string_lossy().into_owned())
+            .filter(|path| path.ends_with(".png")) 
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[tauri::command]
+fn get_launcher_logs() -> String {
+    std::fs::read_to_string("launcher.log").unwrap_or_else(|_| "Логи пусты".to_string())
+}
 
 fn load_dotenv() {
     app::env::load_dotenv_files();
@@ -61,6 +86,14 @@ fn load_dotenv() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     load_dotenv();
+
+    #[cfg(target_os = "linux")]
+    {
+        let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
+        if is_wayland {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
 
     #[cfg(target_os = "linux")]
     infra::platform::configure_linux_display_backend();
@@ -100,6 +133,12 @@ pub fn run() {
             let pending_mrpack = pending_mrpack.clone();
             let pending_launch = pending_profile_launch.clone();
             move |_app| {
+                #[cfg(target_os = "linux")]
+                {
+                    if std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland" {
+                        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+                    }
+                }
                 mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
                 stash_argv_profile_launch_if_any(&pending_launch);
                 Ok(())
@@ -200,7 +239,10 @@ pub fn run() {
             get_ely_avatar,
             take_pending_mrpack_open,
             take_pending_profile_launch,
-            create_profile_desktop_shortcut
+            create_profile_desktop_shortcut,
+            get_launcher_logs_file,
+            get_screenshots_list,
+            get_launcher_logs
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
