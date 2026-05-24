@@ -62,6 +62,35 @@ type InstanceProfile = {
   directory: string;
 };
 
+type BuildPresetSettings = {
+  ram_mb?: number | null;
+  jvm_args?: string | null;
+  java_settings?: {
+    use_custom_jvm_args: boolean;
+    java_path: string | null;
+    xms: string | null;
+    xmx: string | null;
+    jvm_args: string | null;
+    preset: string | null;
+  } | null;
+  resolution_width?: number | null;
+  resolution_height?: number | null;
+  show_console_on_launch?: boolean | null;
+  close_launcher_on_game_start?: boolean | null;
+  check_game_processes?: boolean | null;
+};
+
+type BuildPreset = {
+  id: string;
+  name: string;
+  game_version: string;
+  loader: string;
+  loader_version?: string | null;
+  settings?: BuildPresetSettings | null;
+  created_at: number;
+  icon_path?: string | null;
+};
+
 type VersionSummary = {
   id: string;
   version_type: string;
@@ -291,6 +320,9 @@ const MODPACK_MANAGE_SPLIT_MIN = 0.22;
 const MODPACK_MANAGE_SPLIT_MAX = 0.9;
 const MODPACK_MANAGE_SPLIT_DEFAULT = 0.68;
 
+/** Пресеты сборок: бэкенд и хелперы в коде; в UI скрыто до включения. */
+const BUILD_PRESETS_UI_ENABLED = false;
+
 export function ModpackTab({
   language,
   showNotification,
@@ -342,6 +374,11 @@ export function ModpackTab({
   const [createAllVersions, setCreateAllVersions] = useState(false);
   const [createIconPath, setCreateIconPath] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
+  const [buildPresets, setBuildPresets] = useState<BuildPreset[]>([]);
+  const [buildPresetsLoading, setBuildPresetsLoading] = useState(false);
+  const [createSelectedPresetId, setCreateSelectedPresetId] = useState<string | null>(null);
+  const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
+  const [presetIconUris, setPresetIconUris] = useState<Record<string, string>>({});
   const [versionOptions, setVersionOptions] = useState<VersionSummary[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
@@ -608,6 +645,144 @@ export function ModpackTab({
     () => profiles.find((p) => p.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+
+  const selectedCreatePreset = useMemo(
+    () => buildPresets.find((p) => p.id === createSelectedPresetId) ?? null,
+    [buildPresets, createSelectedPresetId],
+  );
+
+  const refreshBuildPresets = useCallback(async () => {
+    setBuildPresetsLoading(true);
+    try {
+      const list = await invoke<BuildPreset[]>("list_build_presets");
+      setBuildPresets(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBuildPresetsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!BUILD_PRESETS_UI_ENABLED) return;
+    void refreshBuildPresets();
+  }, [refreshBuildPresets]);
+
+  useEffect(() => {
+    if (!BUILD_PRESETS_UI_ENABLED) return;
+    let cancelled = false;
+    (async () => {
+      for (const preset of buildPresets) {
+        try {
+          const uri = await invoke<string | null>("get_build_preset_icon_data_uri", {
+            presetId: preset.id,
+          });
+          if (cancelled || !uri) continue;
+          setPresetIconUris((prev) =>
+            prev[preset.id] ? prev : { ...prev, [preset.id]: uri },
+          );
+        } catch {
+          // ignore missing icons
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [buildPresets]);
+
+  function applyBuildPresetToCreateForm(preset: BuildPreset) {
+    const loader = preset.loader as LoaderId;
+    if (
+      loader === "vanilla" ||
+      loader === "fabric" ||
+      loader === "forge" ||
+      loader === "quilt" ||
+      loader === "neoforge"
+    ) {
+      setCreateLoader(loader);
+    }
+    setCreateGameVersion(preset.game_version);
+    setCreateLoaderVersion(preset.loader_version ?? "");
+    setLoaderVersionOptions([]);
+    setCreateSelectedPresetId(preset.id);
+  }
+
+  function clearCreatePresetSelection() {
+    setCreateSelectedPresetId(null);
+  }
+
+  async function handleSaveBuildPresetFromForm() {
+    const presetName = window.prompt(tt("modpacks.presets.namePrompt"), createName.trim() || "");
+    if (!presetName?.trim()) return;
+    const loaderVersion =
+      createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
+    if (createLoader !== "vanilla" && !loaderVersion) {
+      showNotification(
+        "warning",
+        language === "ru"
+          ? "Выберите версию загрузчика перед сохранением пресета."
+          : "Select a loader version before saving the preset.",
+      );
+      return;
+    }
+    try {
+      const preset = await invoke<BuildPreset>("save_build_preset", {
+        id: null,
+        name: presetName.trim(),
+        gameVersion: createGameVersion,
+        loader: createLoader,
+        loaderVersion,
+        settings: selectedCreatePreset?.settings ?? null,
+        iconSourcePath: createIconPath,
+      });
+      await refreshBuildPresets();
+      setCreateSelectedPresetId(preset.id);
+      showNotification("success", tt("modpacks.presets.saved"));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.presets.saveFailed"));
+    }
+  }
+
+  async function handleSaveBuildPresetFromProfile(profile: InstanceProfile) {
+    const presetName = window.prompt(tt("modpacks.presets.namePrompt"), profile.name);
+    if (!presetName?.trim()) return;
+    try {
+      await invoke<BuildPreset>("create_build_preset_from_profile", {
+        profileId: profile.id,
+        name: presetName.trim(),
+      });
+      await refreshBuildPresets();
+      showNotification("success", tt("modpacks.presets.saved"));
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      showNotification("error", `${tt("modpacks.presets.saveFailed")} ${msg}`);
+    }
+  }
+
+  async function handleDeleteBuildPreset(preset: BuildPreset) {
+    const ok = window.confirm(tt("modpacks.presets.deleteConfirm", { name: preset.name }));
+    if (!ok) return;
+    try {
+      await invoke("delete_build_preset", { presetId: preset.id });
+      if (createSelectedPresetId === preset.id) {
+        clearCreatePresetSelection();
+      }
+      setPresetIconUris((prev) => {
+        const next = { ...prev };
+        delete next[preset.id];
+        return next;
+      });
+      await refreshBuildPresets();
+      showNotification("success", tt("modpacks.presets.deleted"));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.presets.deleteFailed"));
+    }
+  }
 
   function parseIgnorePatterns(text: string): string[] {
     return text
@@ -1373,6 +1548,9 @@ export function ModpackTab({
         loader: createLoader,
         loaderVersion,
         iconSourcePath: createIconPath,
+        initialSettings: BUILD_PRESETS_UI_ENABLED
+          ? (selectedCreatePreset?.settings ?? null)
+          : null,
       });
 
       try {
@@ -1479,6 +1657,7 @@ export function ModpackTab({
       setCreateIconPath(null);
       setCreateLoaderVersion("");
       setLoaderVersionOptions([]);
+      clearCreatePresetSelection();
       setActiveView("manage");
       setSelectedProfileId(profile.id);
       try {
@@ -1911,6 +2090,18 @@ export function ModpackTab({
             />
           </div>
           <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
+            {BUILD_PRESETS_UI_ENABLED && (
+              <button
+                type="button"
+                onClick={() => {
+                  void refreshBuildPresets();
+                  setIsPresetsModalOpen(true);
+                }}
+                className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-white/20"
+              >
+                <span>{tt("modpacks.presets.manage")}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -2190,6 +2381,49 @@ export function ModpackTab({
           </div>
 
           <div className="flex flex-1 flex-col gap-3 min-w-0">
+            {BUILD_PRESETS_UI_ENABLED && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-white/70">
+                  {tt("modpacks.create.presetLabel")}
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={createSelectedPresetId ?? ""}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) {
+                        clearCreatePresetSelection();
+                        return;
+                      }
+                      const preset = buildPresets.find((p) => p.id === id);
+                      if (preset) {
+                        applyBuildPresetToCreateForm(preset);
+                        showNotification("info", tt("modpacks.presets.applied"));
+                      }
+                    }}
+                    className="min-w-[12rem] flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-white/40 focus:outline-none"
+                  >
+                    <option value="">{tt("modpacks.create.noPreset")}</option>
+                    {buildPresets.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void refreshBuildPresets();
+                      setIsPresetsModalOpen(true);
+                    }}
+                    className="interactive-press rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/20"
+                  >
+                    {tt("modpacks.presets.manage")}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="mb-1 block text-xs font-medium text-white/70">
                 {tt("modpacks.create.nameLabel")}
@@ -2359,7 +2593,21 @@ export function ModpackTab({
           </div>
         </div>
 
-        <div className="mt-2 flex justify-end">
+        <div
+          className={`mt-2 flex flex-wrap items-center gap-2 ${
+            BUILD_PRESETS_UI_ENABLED ? "justify-between" : "justify-end"
+          }`}
+        >
+          {BUILD_PRESETS_UI_ENABLED && (
+            <button
+              type="button"
+              disabled={createBusy}
+              onClick={() => void handleSaveBuildPresetFromForm()}
+              className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+            >
+              {tt("modpacks.create.saveFormAsPreset")}
+            </button>
+          )}
           <button
             type="button"
             disabled={createBusy}
@@ -2604,6 +2852,16 @@ export function ModpackTab({
                 {language === "ru" ? "Экспорт" : "Export"}
               </span>
             </button>
+            {BUILD_PRESETS_UI_ENABLED && (
+              <button
+                type="button"
+                onClick={() => void handleSaveBuildPresetFromProfile(selectedProfile)}
+                className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+                title={tt("modpacks.presets.saveFromProfile")}
+              >
+                <span className="truncate">{tt("modpacks.presets.saveFromProfile")}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void openProfileSettings(selectedProfile.id)}
@@ -3151,6 +3409,112 @@ export function ModpackTab({
                 {language === "ru" ? "Удалить" : "Delete"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {BUILD_PRESETS_UI_ENABLED && isPresetsModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setIsPresetsModalOpen(false)}
+        >
+          <div
+            className="glass-panel flex max-h-[80vh] w-full max-w-lg flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-white">
+                {tt("modpacks.presets.title")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsPresetsModalOpen(false)}
+                className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
+              >
+                {tt("modpacks.common.backToList")}
+              </button>
+            </div>
+
+            {buildPresetsLoading && (
+              <p className="text-sm text-white/60">{tt("modpacks.common.loading")}</p>
+            )}
+
+            {!buildPresetsLoading && buildPresets.length === 0 && (
+              <p className="text-sm text-white/70">{tt("modpacks.presets.empty")}</p>
+            )}
+
+            <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
+              {buildPresets.map((preset) => {
+                const iconUri = presetIconUris[preset.id];
+                const loaderVersionLabel =
+                  preset.loader === "vanilla"
+                    ? preset.game_version
+                    : `${preset.game_version}${preset.loader_version ? ` · ${preset.loader_version}` : ""}`;
+                return (
+                  <div
+                    key={preset.id}
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/40 px-3 py-2.5"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5">
+                      {iconUri ? (
+                        <img
+                          src={iconUri}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[10px] uppercase text-white/40">
+                          {preset.loader.slice(0, 2)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-white">
+                        {preset.name}
+                      </div>
+                      <div className="truncate text-[11px] text-white/55">
+                        {tt("modpacks.presets.loaderInfo", {
+                          loader: loaderLabels[preset.loader as LoaderId] ?? preset.loader,
+                          version: loaderVersionLabel,
+                        })}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          applyBuildPresetToCreateForm(preset);
+                          setActiveView("create");
+                          void ensureVersionsLoaded();
+                          setIsPresetsModalOpen(false);
+                          showNotification("info", tt("modpacks.presets.applied"));
+                        }}
+                        className="interactive-press rounded-xl accent-bg px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90"
+                      >
+                        {tt("modpacks.presets.apply")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteBuildPreset(preset)}
+                        className="interactive-press rounded-xl bg-red-600/80 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-500"
+                      >
+                        {tt("modpacks.presets.delete")}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {activeView === "create" && (
+              <button
+                type="button"
+                onClick={() => void handleSaveBuildPresetFromForm()}
+                className="interactive-press mt-4 w-full rounded-2xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                {tt("modpacks.presets.saveFromForm")}
+              </button>
+            )}
           </div>
         </div>
       )}

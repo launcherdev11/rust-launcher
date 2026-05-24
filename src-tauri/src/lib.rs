@@ -13,7 +13,9 @@ mod services;
 use services::background::{get_background_data_uri, set_background_image};
 use services::game::{
     add_launcher_account, add_profile_files, cancel_download, check_version_files_integrity,
-    clear_launcher_cache, create_profile, delete_item, delete_profile, detect_java_runtimes,
+    clear_launcher_cache, create_build_preset_from_profile, create_profile, delete_build_preset,
+    delete_item, delete_profile, detect_java_runtimes, get_build_preset_icon_data_uri,
+    list_build_presets, save_build_preset,
     download_modrinth_file, download_modrinth_modpack_and_import, export_launcher_settings_backup,
     fetch_all_versions, fetch_fabric_loaders, fetch_forge_builds_for_game, fetch_forge_versions,
     fetch_neoforge_builds_for_game, fetch_neoforge_versions, fetch_quilt_loaders,
@@ -136,6 +138,11 @@ pub fn run() {
             get_profile_icon_data_uri,
             get_profile_play_time_seconds,
             create_profile,
+            list_build_presets,
+            save_build_preset,
+            delete_build_preset,
+            create_build_preset_from_profile,
+            get_build_preset_icon_data_uri,
             set_profile,
             get_selected_profile,
             set_selected_profile,

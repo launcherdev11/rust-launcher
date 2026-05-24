@@ -320,7 +320,7 @@ pub async fn import_mrpack_as_new_profile(
                 .to_string()
         });
 
-    let profile = create_profile_impl(name, game_version, loader, None, None)?;
+    let profile = create_profile_impl(name, game_version, loader, None, None, None)?;
     let profile_id = profile.id.clone();
     let dir = instance_dir(&profile.id)?;
 

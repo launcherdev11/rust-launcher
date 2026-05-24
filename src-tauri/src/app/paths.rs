@@ -61,3 +61,15 @@ pub fn instance_settings_path(id: &str) -> Result<PathBuf, String> {
 pub fn selected_profile_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("selected_profile.json"))
 }
+
+pub fn build_presets_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("build_presets.json"))
+}
+
+pub fn build_preset_icons_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("build_preset_icons"))
+}
+
+pub fn build_preset_icon_path(preset_id: &str) -> Result<PathBuf, String> {
+    Ok(build_preset_icons_dir()?.join(format!("{preset_id}.png")))
+}
