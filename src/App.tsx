@@ -34,6 +34,11 @@ import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
+  useHotkeys,
+  type ModpackHotkeyActions,
+  type PlayConsoleHotkeyActions,
+} from "./hooks/useHotkeys";
+import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
   shouldLoadBackgroundDataUri,
@@ -866,6 +871,23 @@ function App() {
   const effectiveTabSplit =
     splitViewEnabled && tabSplitLayout ? tabSplitLayout : null;
 
+  const playConsoleHotkeysRef = useRef<PlayConsoleHotkeyActions | null>(null);
+  const modpackHotkeysRef = useRef<ModpackHotkeyActions | null>(null);
+
+  const registerPlayConsoleHotkeys = useCallback(
+    (actions: PlayConsoleHotkeyActions | null) => {
+      playConsoleHotkeysRef.current = actions;
+    },
+    [],
+  );
+
+  const registerModpackHotkeys = useCallback(
+    (actions: ModpackHotkeyActions | null) => {
+      modpackHotkeysRef.current = actions;
+    },
+    [],
+  );
+
   const splitDropZoneLabels = useMemo(
     () => ({
       left: tt("app.splitView.zones.left"),
@@ -1106,6 +1128,15 @@ function App() {
     initialPersistedConsole.sessions,
   );
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
+
+  useHotkeys({
+    activeTab: activeItem,
+    effectiveTabSplit,
+    isConsoleVisible,
+    playConsoleActionsRef: playConsoleHotkeysRef,
+    modpackActionsRef: modpackHotkeysRef,
+  });
+
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
   const [isStopping, setIsStopping] = useState(false);
   const lastRunningRef = useRef(false);
@@ -3003,6 +3034,7 @@ function App() {
               <ModpackTab
                 fillPane={inSplitPane}
                 language={language}
+                onRegisterModpackHotkeys={registerModpackHotkeys}
                 showNotification={showNotification}
                 registerDownloadJob={startDownloadJob}
                 updateDownloadJob={updateDownloadJobProgress}
@@ -3110,6 +3142,7 @@ function App() {
               gameStatus={gameStatus}
               consoleLines={consoleLines}
               isConsoleVisible={isConsoleVisible}
+              onRegisterConsoleHotkeys={registerPlayConsoleHotkeys}
               onToggleConsole={handleToggleConsole}
               onClearConsole={handleClearConsole}
               showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
@@ -3152,6 +3185,8 @@ function App() {
       handleCancelInstall,
       handleClearConsole,
       handleModpackProfileSelectionChange,
+      registerModpackHotkeys,
+      registerPlayConsoleHotkeys,
       handleOpenGameFolder,
       handlePauseInstall,
       handlePrimaryClick,
