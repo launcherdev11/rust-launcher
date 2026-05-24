@@ -2,14 +2,12 @@
   <a href="https://16luncher.ru"><img src="assets/readme.png" alt="16Launcher"></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
-  <em>Is an optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings.</em>
+  <em>Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.</em>
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-blue.svg" alt="Python"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20MacOS-lightgrey.svg" alt="Platform">
-  <img src="https://img.shields.io/badge/Downloads-30K+-brightgreen.svg" alt="Downloads">
+  <img src="https://img.shields.io/badge/react-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
+  <img src="https://img.shields.io/badge/typescript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" />
 </p>
 
 ---
@@ -18,15 +16,13 @@
 
 **Website**: [https://16luncher.ru](https://16-launcher.ru)
 
-**Contributing**: [Developer's Guide](CONTRIBUTING.md)
-
 ---
 
 ![readme_screen.png](public/launcher-assets/about.png)
 
 ---
     
-**16Launcher** - is an optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings.
+**16Launcher** - Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.
 
 ## Installation
 
@@ -59,7 +55,7 @@
 ## Support
 
 - Email: 16launcher@gmail.com
-- Website: [https://16luncher.ru](https://16-launcher.ru)
+- Website: [https://16-launcher.ru](https://16-launcher.ru)
 - Issues: [GitHub Issues](https://github.com/launcherdev11/rust-launcher/issues)
 
 ## License
