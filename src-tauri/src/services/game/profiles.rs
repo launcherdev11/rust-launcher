@@ -510,6 +510,7 @@ pub fn create_profile_impl(
     loader: String,
     loader_version: Option<String>,
     icon_source_path: Option<String>,
+    initial_settings: Option<InstanceSettings>,
 ) -> Result<InstanceProfileSummary, String> {
     let root = instances_root_dir()?;
     std::fs::create_dir_all(&root)
@@ -571,7 +572,7 @@ pub fn create_profile_impl(
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
     }
-    let settings = InstanceSettings::default();
+    let settings = initial_settings.unwrap_or_default();
     let settings_text = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
     std::fs::write(&settings_path, settings_text)
@@ -651,8 +652,16 @@ pub fn create_profile(
     loader: String,
     loader_version: Option<String>,
     icon_source_path: Option<String>,
+    initial_settings: Option<InstanceSettings>,
 ) -> Result<InstanceProfileSummary, String> {
-    create_profile_impl(name, game_version, loader, loader_version, icon_source_path)
+    create_profile_impl(
+        name,
+        game_version,
+        loader,
+        loader_version,
+        icon_source_path,
+        initial_settings,
+    )
 }
 
 #[command]

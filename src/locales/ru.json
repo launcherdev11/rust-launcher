@@ -425,7 +425,27 @@
       "loaderLabel": "Загрузчик:",
       "gameVersionLabel": "Версия игры:",
       "loaderVersionLabel": "Версия загрузчика:",
-      "allVersions": "Все версии"
+      "allVersions": "Все версии",
+      "presetLabel": "Пресет сборки:",
+      "noPreset": "Без пресета",
+      "saveFormAsPreset": "Сохранить текущие параметры как пресет"
+    },
+    "presets": {
+      "title": "Пресеты сборок",
+      "manage": "Пресеты",
+      "empty": "Пресетов пока нет. Сохраните параметры сборки как пресет.",
+      "apply": "Применить",
+      "delete": "Удалить",
+      "saveFromProfile": "Сохранить как пресет",
+      "saveFromForm": "Сохранить из формы",
+      "namePrompt": "Название пресета",
+      "saved": "Пресет сохранён.",
+      "deleted": "Пресет удалён.",
+      "applied": "Пресет применён к форме создания.",
+      "saveFailed": "Не удалось сохранить пресет.",
+      "deleteFailed": "Не удалось удалить пресет.",
+      "deleteConfirm": "Удалить пресет «{{name}}»?",
+      "loaderInfo": "{{loader}} · {{version}}"
     },
     "manage": {
       "enableItem": "Включить",
