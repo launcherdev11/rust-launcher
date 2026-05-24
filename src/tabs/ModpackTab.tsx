@@ -20,9 +20,11 @@ import { ChevronDown, Download, UploadCloud } from "lucide-react";
 import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
+import { DeleteIcon } from "../components/delete_icon";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
+import { ScreenshotsModal } from "../features/screenshots";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
@@ -214,10 +216,6 @@ function EditIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/edit.png" className={className} />;
 }
 
-function DeleteIcon({ className }: IconProps) {
-  return <ImageIcon src="/launcher-assets/delete.png" className={className} />;
-}
-
 function ExportIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/export.png" className={className} />;
 }
@@ -252,6 +250,10 @@ function GridViewIcon({ className }: IconProps) {
 
 function ListViewIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/list.png" className={className} />;
+}
+
+function ScreenshotsIcon({ className }: IconProps) {
+  return <ImageIcon src="/launcher-assets/pack_image.png" className={className} />;
 }
 
 function formatBytes(bytes: number, language: Language): string {
@@ -314,6 +316,9 @@ function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
 
 const MANAGE_ACTION_BTN_CLASS =
   "interactive-press inline-flex h-9 min-w-0 max-w-full items-center justify-center gap-1.5 overflow-hidden rounded-2xl px-2.5 py-2 text-xs font-semibold text-white sm:min-w-[8.75rem] sm:px-3";
+
+const MANAGE_ICON_BTN_CLASS =
+  "interactive-press inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white";
 
 const MODPACK_MANAGE_SPLIT_STORAGE_KEY = "modpack_manage_main_width_frac";
 const MODPACK_MANAGE_SPLIT_MIN = 0.22;
@@ -418,6 +423,7 @@ export function ModpackTab({
   const profileRamPendingRef = useRef<{ profileId: string; mb: number } | null>(null);
 
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isScreenshotsOpen, setIsScreenshotsOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
   const [exportTree, setExportTree] = useState<FileNode[] | null>(null);
   const [exportTreeLoading, setExportTreeLoading] = useState(false);
@@ -2724,8 +2730,8 @@ export function ModpackTab({
 
     return (
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
-        <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
-          <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3">
+        <div className="sticky top-0 z-20 -mx-1 flex w-full shrink-0 flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 w-fit max-w-full items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
             <ProfileInstanceIcon profile={selectedProfile} imageFit="contain" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -2819,7 +2825,7 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <div className="ml-auto flex w-fit shrink-0 flex-wrap items-center justify-end gap-2 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
             <button
               type="button"
               onClick={() => setActiveView("list")}
@@ -2833,24 +2839,26 @@ export function ModpackTab({
             <button
               type="button"
               onClick={() => void handleOpenFolder()}
-              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={language === "ru" ? "Открыть папку" : "Open folder"}
             >
-              <FolderIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {language === "ru" ? "Открыть папку" : "Open folder"}
-              </span>
+              <FolderIcon className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={() => void openExportModal()}
-              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={language === "ru" ? "Экспортировать сборку" : "Export build"}
             >
-              <ExportIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {language === "ru" ? "Экспорт" : "Export"}
-              </span>
+              <ExportIcon className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsScreenshotsOpen(true)}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={tt("modpacks.screenshots.title")}
+            >
+              <ScreenshotsIcon className="h-3.5 w-3.5" />
             </button>
             {BUILD_PRESETS_UI_ENABLED && (
               <button
@@ -2865,22 +2873,10 @@ export function ModpackTab({
             <button
               type="button"
               onClick={() => void openProfileSettings(selectedProfile.id)}
-              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={language === "ru" ? "Настройки сборки" : "Profile settings"}
             >
-              <img
-                src="/launcher-assets/setttings.png"
-                alt=""
-                className="h-4 w-4 shrink-0 object-contain"
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  img.style.display = "none";
-                }}
-              />
-              <SettingsIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {language === "ru" ? "Настройки" : "Settings"}
-              </span>
+              <SettingsIcon className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -4008,6 +4004,13 @@ export function ModpackTab({
           </div>
         </div>
       )}
+
+      <ScreenshotsModal
+        language={language}
+        open={isScreenshotsOpen}
+        onClose={() => setIsScreenshotsOpen(false)}
+        showNotification={showNotification}
+      />
     </div>
   );
 }

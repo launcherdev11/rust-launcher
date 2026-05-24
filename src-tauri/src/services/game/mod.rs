@@ -11,6 +11,7 @@ pub mod integrity;
 pub mod launcher;
 pub mod runtime;
 pub mod profiles;
+pub mod screenshots;
 pub mod settings;
 pub mod state;
 pub mod version_types;
@@ -43,6 +44,10 @@ pub use profiles::{
     get_profile_play_time_seconds, get_profiles,
     get_selected_profile, list_profile_items, rename_profile, set_profile_item_enabled, set_selected_profile,
     update_profile_settings,
+};
+pub use screenshots::{
+    delete_screenshot, get_screenshot_data_uri, list_screenshots, open_screenshot,
+    open_screenshots_folder,
 };
 pub use settings::{
     detect_java_runtimes, get_effective_settings, get_java_settings,

@@ -1,5 +1,4 @@
 use tauri::Manager;
-use std::path::PathBuf;
 
 mod app;
 mod commands;
@@ -28,8 +27,10 @@ use services::game::{
     install_fabric, install_forge, install_local_version, install_neoforge, install_quilt, install_version,
     is_game_running_now,
     launch_game, list_installed_fabric_game_versions, list_installed_quilt_game_versions,
-    list_installed_versions, list_launcher_accounts, list_profile_items, open_game_folder,
-    open_profile_folder, remove_launcher_account, rename_profile, reset_download_cancel,
+    list_installed_versions, list_launcher_accounts, list_profile_items,     open_game_folder,
+    open_profile_folder, delete_screenshot, get_screenshot_data_uri, list_screenshots,
+    open_screenshot, open_screenshots_folder, remove_launcher_account, rename_profile,
+    reset_download_cancel,
     reset_settings_to_default, set_java_settings, set_profile, set_profile_item_enabled,
     set_profile_java_settings, set_selected_profile, set_settings, stop_game, switch_launcher_account,
     update_profile_settings,
@@ -57,20 +58,6 @@ use services::shortcuts::create_profile_desktop_shortcut;
 fn get_launcher_logs_file() -> String {
     std::fs::read_to_string("launcher.log")
         .unwrap_or_else(|_| "Логи пусты или файл не найден".to_string())
-}
-
-#[tauri::command]
-fn get_screenshots_list() -> Vec<String> {
-    let screenshot_path = PathBuf::from(".minecraft/screenshots"); 
-    
-    match std::fs::read_dir(screenshot_path) {
-        Ok(entries) => entries
-            .filter_map(|entry| entry.ok())
-            .map(|entry| entry.path().to_string_lossy().into_owned())
-            .filter(|path| path.ends_with(".png")) 
-            .collect(),
-        Err(_) => Vec::new(),
-    }
 }
 
 #[tauri::command]
@@ -241,7 +228,11 @@ pub fn run() {
             take_pending_profile_launch,
             create_profile_desktop_shortcut,
             get_launcher_logs_file,
-            get_screenshots_list,
+            list_screenshots,
+            get_screenshot_data_uri,
+            delete_screenshot,
+            open_screenshots_folder,
+            open_screenshot,
             get_launcher_logs
         ])
         .build(tauri::generate_context!())

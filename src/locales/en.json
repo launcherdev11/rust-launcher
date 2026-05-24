@@ -452,6 +452,26 @@
       "disableItem": "Disable",
       "toggleFailed": "Failed to change item state."
     },
+    "screenshots": {
+      "title": "Screenshots",
+      "subtitle": "Game",
+      "button": "Screenshots",
+      "listTitle": "Gallery",
+      "loading": "Loading…",
+      "empty": "No screenshots yet. Take one in-game (F2) and it will show up here.",
+      "refresh": "Refresh",
+      "openFolder": "Open folder",
+      "close": "Close",
+      "open": "Open",
+      "delete": "Delete",
+      "selectHint": "Select a screenshot from the gallery.",
+      "previewFailed": "Failed to load preview.",
+      "deleted": "Screenshot deleted.",
+      "deleteConfirm": "Delete screenshot “{{name}}”?",
+      "deleteFailed": "Failed to delete screenshot: {{msg}}",
+      "openFolderFailed": "Failed to open folder: {{msg}}",
+      "openFailed": "Failed to open screenshot: {{msg}}"
+    },
     "import": {
       "title": "Import Modrinth pack",
       "chooseFile": "Choose file",
