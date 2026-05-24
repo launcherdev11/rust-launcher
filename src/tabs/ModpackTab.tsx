@@ -24,6 +24,7 @@ import { DeleteIcon } from "../components/delete_icon";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
+import type { ModpackHotkeyActions } from "../hooks/useHotkeys";
 import { ScreenshotsModal } from "../features/screenshots";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
@@ -148,6 +149,7 @@ type ModpackTabProps = {
   updateDownloadJob?: (id: string, percent: number | null) => void;
   finishDownloadJob?: (id: string) => void;
   makeDownloadJobId?: (prefix: string) => string;
+  onRegisterModpackHotkeys?: (actions: ModpackHotkeyActions | null) => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -349,6 +351,7 @@ export function ModpackTab({
   updateDownloadJob,
   finishDownloadJob,
   makeDownloadJobId,
+  onRegisterModpackHotkeys,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -1397,6 +1400,24 @@ export function ModpackTab({
     }
   }
 
+  const handleOpenCreateView = useCallback(() => {
+    setActiveView("create");
+    void ensureVersionsLoaded();
+  }, [versionOptions.length, versionsLoading, createAllVersions]);
+
+  const handleOpenImportView = useCallback(() => {
+    setActiveView("import");
+  }, []);
+
+  useEffect(() => {
+    if (!onRegisterModpackHotkeys) return;
+    onRegisterModpackHotkeys({
+      openCreate: handleOpenCreateView,
+      openImport: handleOpenImportView,
+    });
+    return () => onRegisterModpackHotkeys(null);
+  }, [handleOpenCreateView, handleOpenImportView, onRegisterModpackHotkeys]);
+
   const loadCreateLoaderVersions = useCallback(async () => {
     if (createLoader === "vanilla") {
       setLoaderVersionOptions([]);
@@ -2110,10 +2131,7 @@ export function ModpackTab({
             )}
             <button
               type="button"
-              onClick={() => {
-                setActiveView("create");
-                void ensureVersionsLoaded();
-              }}
+              onClick={handleOpenCreateView}
               className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90"
             >
               <PlusIcon className="h-4 w-4" />
@@ -2121,7 +2139,7 @@ export function ModpackTab({
             </button>
             <button
               type="button"
-              onClick={() => setActiveView("import")}
+              onClick={handleOpenImportView}
               className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-white/20"
             >
               <UploadCloud className="h-4 w-4" />

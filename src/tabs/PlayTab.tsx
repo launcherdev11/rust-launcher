@@ -65,12 +65,15 @@ function resolveBannerImageUrl(url: string): string {
 
 type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
+import type { PlayConsoleHotkeyActions } from "../hooks/useHotkeys";
+
 type PlayTabProps = {
   gameStatus: GameStatus;
   consoleLines: { id: number; line: string; source: "stdout" | "stderr" }[];
   isConsoleVisible: boolean;
   onToggleConsole: () => void;
   onClearConsole: () => void;
+  onRegisterConsoleHotkeys?: (actions: PlayConsoleHotkeyActions | null) => void;
   showConsoleOnLaunch: boolean;
   versions: VersionItem[];
   selectedVersion: VersionItem | null;
@@ -113,6 +116,7 @@ export function PlayTab({
   isConsoleVisible,
   onToggleConsole,
   onClearConsole,
+  onRegisterConsoleHotkeys,
   showConsoleOnLaunch,
   versions,
   selectedVersion,
@@ -208,6 +212,19 @@ export function PlayTab({
     }
     setIsConsoleDetached((prev) => !prev);
   }, [isConsoleDetached]);
+
+  useEffect(() => {
+    if (!onRegisterConsoleHotkeys) return;
+    onRegisterConsoleHotkeys({
+      copyConsole: handleCopyConsole,
+      toggleConsoleDetached: handleToggleConsoleDetached,
+    });
+    return () => onRegisterConsoleHotkeys(null);
+  }, [
+    handleCopyConsole,
+    handleToggleConsoleDetached,
+    onRegisterConsoleHotkeys,
+  ]);
 
   const handleConsoleHeaderPointerDown = useCallback(
     (e: import("react").PointerEvent<HTMLDivElement>) => {
