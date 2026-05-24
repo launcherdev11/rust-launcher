@@ -8,7 +8,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/react-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
   <img src="https://img.shields.io/badge/typescript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" />
-  <img "https://img.shields.io/badge/:badgeContent?style=for-the-badge&logo=Rust&logoColor=967127&label=Rust" />
+  <img src="https://img.shields.io/badge/:badgeContent?style=for-the-badge&logo=Rust&logoColor=967127&label=Rust" />
 
 </p>
 
