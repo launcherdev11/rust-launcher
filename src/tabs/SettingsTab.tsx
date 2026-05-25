@@ -282,7 +282,6 @@ export function SettingsTab({
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgressPayload>>(
     {},
   );
-
   const settingsTabRefs = useRef<
     Partial<Record<SettingsTabId, HTMLButtonElement | null>>
   >({});
