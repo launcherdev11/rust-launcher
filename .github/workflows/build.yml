@@ -182,24 +182,6 @@ jobs:
           fi
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout release notes repository
-        if: steps.release_tag.outputs.tag != '' && vars.RELEASE_NOTES_REPO != ''
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.RELEASE_NOTES_REPO }}
-          path: release-notes
-          ref: main
-          token: ${{ secrets.RELEASE_NOTES_TOKEN || github.token }}
-
-      - name: Load release notes
-        if: steps.release_tag.outputs.tag != ''
-        id: release_notes
-        shell: bash
-        run: |
-          chmod +x .github/scripts/read-release-notes.sh
-          RELEASE_TAG="${{ steps.release_tag.outputs.tag }}" \
-            .github/scripts/read-release-notes.sh
-
       - name: Build Tauri bundles and create Release (with updater artifacts)
         id: tauri_build
         uses: tauri-apps/tauri-action@v0.6.1
@@ -222,8 +204,6 @@ jobs:
           includeDebug: false
           includeRelease: true
           tagName: ${{ steps.release_tag.outputs.tag }}
-          releaseName: ${{ steps.release_notes.outputs.title }}
-          releaseBody: ${{ steps.release_notes.outputs.body }}
           prerelease: ${{ steps.release_tag.outputs.prerelease }}
 
       - name: Upload bundles as workflow artifact

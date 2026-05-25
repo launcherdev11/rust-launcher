@@ -75,23 +75,6 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Checkout release notes repository
-        if: vars.RELEASE_NOTES_REPO != ''
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.RELEASE_NOTES_REPO }}
-          path: release-notes
-          ref: main
-          token: ${{ secrets.RELEASE_NOTES_TOKEN || github.token }}
-
-      - name: Load release notes
-        id: release_notes
-        shell: bash
-        run: |
-          chmod +x .github/scripts/read-release-notes.sh
-          RELEASE_TAG="${{ steps.release_tag.outputs.tag }}" \
-            .github/scripts/read-release-notes.sh
-
       - name: Build and create GitHub release
         uses: tauri-apps/tauri-action@v0.6.1
         env:
@@ -109,7 +92,5 @@ jobs:
           projectPath: .
           tauriScript: "npm run tauri"
           tagName: "v__VERSION__"
-          releaseName: ${{ steps.release_notes.outputs.title }}
-          releaseBody: ${{ steps.release_notes.outputs.body }}
           prerelease: ${{ steps.release_tag.outputs.prerelease }}
 
