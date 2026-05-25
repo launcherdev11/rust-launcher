@@ -153,6 +153,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.make_release }}" == "true" ]]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout release notes repository
+        if: steps.release_tag.outputs.tag != '' && vars.RELEASE_NOTES_REPO != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.RELEASE_NOTES_REPO }}
+          path: release-notes
+          ref: main
+          token: ${{ secrets.RELEASE_NOTES_TOKEN || github.token }}
+
+      - name: Load release notes
+        if: steps.release_tag.outputs.tag != ''
+        id: release_notes
+        shell: bash
+        run: |
+          chmod +x .github/scripts/read-release-notes.sh
+          RELEASE_TAG="${{ steps.release_tag.outputs.tag }}" \
+            .github/scripts/read-release-notes.sh
+
       - name: Build Tauri bundles and create Release (with updater artifacts)
         id: tauri_build
         uses: tauri-apps/tauri-action@v0.6.1
@@ -174,9 +204,9 @@ jobs:
           tauriScript: "npm run tauri"
           includeDebug: false
           includeRelease: true
-          tagName: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true' && github.event.inputs.version) || '' }}
-          releaseName: "16Launcher ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version) || 'v0.0.0' }}"
-          releaseBody: "Автоматический релиз 16Launcher."
+          tagName: ${{ steps.release_tag.outputs.tag }}
+          releaseName: ${{ steps.release_notes.outputs.title }}
+          releaseBody: ${{ steps.release_notes.outputs.body }}
 
       - name: Upload bundles as workflow artifact
         uses: actions/upload-artifact@v4
