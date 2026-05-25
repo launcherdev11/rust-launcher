@@ -1,12 +1,16 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::SystemTime;
 
 use tauri::command;
 
-use crate::app::paths::launcher_data_dir;
 use crate::profile_launch::LAUNCH_PROFILE_ARG;
-use crate::services::game::profiles::{load_all_instance_profiles, profile_icon_file_path};
+use crate::services::game::profiles::load_all_instance_profiles;
+#[cfg(target_os = "linux")]
+use crate::services::game::profiles::profile_icon_file_path;
+#[cfg(target_os = "linux")]
+use crate::infra::window_icon::launcher_icon_file_path;
+#[cfg(windows)]
+use crate::infra::window_icon::windows_shortcut_icon_location;
 
 const SHORTCUT_SUFFIX: &str = " - 16Launcher";
 
@@ -62,86 +66,6 @@ fn unique_shortcut_path(desktop: &Path, base: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-fn file_modified(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
-}
-
-#[cfg(windows)]
-fn needs_icon_refresh(source: &Path, ico_path: &Path) -> bool {
-    if !ico_path.is_file() {
-        return true;
-    }
-    match (file_modified(source), file_modified(ico_path)) {
-        (Some(src), Some(dest)) => src > dest,
-        _ => true,
-    }
-}
-
-#[cfg(windows)]
-fn ensure_windows_shortcut_icon(source: &Path, profile_id: &str) -> Result<PathBuf, String> {
-    let ext = source
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase());
-    if ext.as_deref() == Some("ico") {
-        return Ok(source.to_path_buf());
-    }
-
-    let cache_dir = launcher_data_dir()?.join("shortcut-icons");
-    std::fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("Не удалось создать кэш иконок ярлыков: {e}"))?;
-    let ico_path = cache_dir.join(format!("{profile_id}.ico"));
-
-    if needs_icon_refresh(source, &ico_path) {
-        use image::imageops::FilterType;
-        use image::ImageFormat;
-
-        let img = image::open(source)
-            .map_err(|e| format!("Не удалось прочитать иконку сборки: {e}"))?;
-        let resized = img.resize(256, 256, FilterType::Lanczos3);
-        resized
-            .save_with_format(&ico_path, ImageFormat::Ico)
-            .map_err(|e| format!("Не удалось сохранить ICO для ярлыка: {e}"))?;
-    }
-
-    Ok(ico_path)
-}
-
-#[cfg(windows)]
-fn resolve_windows_icon_location(
-    profile_id: &str,
-    launcher_exe: &Path,
-) -> Result<Option<String>, String> {
-    if let Some(source) = profile_icon_file_path(profile_id) {
-        let ico = ensure_windows_shortcut_icon(&source, profile_id)?;
-        return Ok(Some(format!("{},0", ico.display())));
-    }
-
-    if let Some(fallback) = launcher_fallback_icon(launcher_exe) {
-        return Ok(Some(format!("{},0", fallback.display())));
-    }
-
-    Ok(None)
-}
-
-fn launcher_fallback_icon(exe: &Path) -> Option<PathBuf> {
-    let parent = exe.parent()?;
-    let candidates = [
-        parent.join("icons/icon.ico"),
-        parent.join("resources/icons/icon.ico"),
-        parent.join("../icons/icon.ico"),
-        parent.join("../../src-tauri/icons/icon.ico"),
-        parent.join("../../../src-tauri/icons/icon.ico"),
-    ];
-    for path in candidates {
-        if path.is_file() {
-            return path.canonicalize().ok().or(Some(path));
-        }
-    }
-    None
-}
-
-#[cfg(windows)]
 fn create_windows_shortcut(
     shortcut_path: &Path,
     exe: &Path,
@@ -159,9 +83,8 @@ fn create_windows_shortcut(
     let args = ps_quote(&format!("{LAUNCH_PROFILE_ARG} {profile_id}"));
     let work = ps_quote(&work_dir.to_string_lossy());
     let link = ps_quote(&shortcut_path.to_string_lossy());
-    let icon_line = resolve_windows_icon_location(profile_id, exe)?
-        .map(|loc| format!("$s.IconLocation = {};", ps_quote(&loc)))
-        .unwrap_or_default();
+    let icon_loc = windows_shortcut_icon_location(exe);
+    let icon_line = format!("$s.IconLocation = {};", ps_quote(&icon_loc));
 
     let script = format!(
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut({link}); \
@@ -196,7 +119,7 @@ fn create_windows_shortcut(
 
 #[cfg(target_os = "linux")]
 fn resolve_linux_icon(profile_id: &str, launcher_exe: &Path) -> Option<PathBuf> {
-    profile_icon_file_path(profile_id).or_else(|| launcher_fallback_icon(launcher_exe))
+    profile_icon_file_path(profile_id).or_else(|| launcher_icon_file_path(launcher_exe))
 }
 
 #[cfg(target_os = "linux")]

@@ -777,10 +777,10 @@ export function SettingsTab({
           version_id: version.id,
         });
       } else if (version.loader === "fabric") {
-        const loaders = await invoke<string[]>("fetch_fabric_loaders", {
+        const loaders = await invoke<{ version: string }[]>("fetch_fabric_loaders", {
           gameVersion: version.id,
         });
-        const loaderVersion = loaders[0];
+        const loaderVersion = loaders[0]?.version;
         if (!loaderVersion) throw new Error("No suitable Fabric loader");
         await invoke("install_fabric", {
           gameVersion: version.id,
