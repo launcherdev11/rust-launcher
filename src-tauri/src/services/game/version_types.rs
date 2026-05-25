@@ -333,3 +333,18 @@ pub struct NeoForgeVersionSummary {
 pub(crate) struct ForgePromotionsSlim {
     pub(crate) promos: HashMap<String, String>,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LoaderVersionChannel {
+    Stable,
+    Beta,
+    Alpha,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoaderVersionOption {
+    pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<LoaderVersionChannel>,
+}

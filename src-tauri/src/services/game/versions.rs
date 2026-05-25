@@ -13,7 +13,8 @@ use crate::services::game::state::{
 };
 use crate::services::game::version_types::{
     FabricLoaderEntry, FabricProfile, ForgePromotionsSlim, ForgeVersionSummary, LoaderMetaGameVersion,
-    NeoForgeVersionSummary, QuiltLoaderEntry, VersionDetail, VersionManifest, VersionSummary,
+    LoaderVersionChannel, LoaderVersionOption, NeoForgeVersionSummary, QuiltLoaderEntry, VersionDetail,
+    VersionManifest, VersionSummary,
 };
 
 const CUSTOM_VERSION_MARKER: &str = ".custom";
@@ -76,6 +77,99 @@ fn dedupe_sort_versions(mut versions: Vec<String>) -> Vec<String> {
     versions.sort_by(|a, b| cmp_dot_version_desc(a, b));
     versions.dedup();
     versions
+}
+
+fn channel_from_version_string(version: &str) -> Option<LoaderVersionChannel> {
+    let lower = version.to_lowercase();
+    if lower.contains("alpha") {
+        Some(LoaderVersionChannel::Alpha)
+    } else if lower.contains("beta")
+        || lower.contains("snapshot")
+        || lower.contains("-rc")
+        || lower.contains("pre")
+    {
+        Some(LoaderVersionChannel::Beta)
+    } else {
+        None
+    }
+}
+
+fn fabric_loader_channel(stable: bool) -> Option<LoaderVersionChannel> {
+    Some(if stable {
+        LoaderVersionChannel::Stable
+    } else {
+        LoaderVersionChannel::Beta
+    })
+}
+
+fn quilt_loader_channel(version: &str) -> Option<LoaderVersionChannel> {
+    channel_from_version_string(version).or(Some(LoaderVersionChannel::Stable))
+}
+
+async fn forge_promo_builds_for_mc(mc_version: &str) -> Result<(Option<String>, Option<String>), String> {
+    let settings = load_settings_from_disk();
+    let direct_client = http_client(false);
+    let text = match download_text_with_retries(
+        &direct_client,
+        FORGE_PROMOTIONS_URL,
+        DEFAULT_DOWNLOAD_RETRIES,
+    )
+    .await
+    {
+        Ok(text) => text,
+        Err(direct_err) => {
+            if settings.forge_proxy_fallback {
+                let proxy_client = http_client(true);
+                download_text_with_retries(
+                    &proxy_client,
+                    FORGE_PROMOTIONS_URL,
+                    DEFAULT_DOWNLOAD_RETRIES,
+                )
+                .await
+                .map_err(|proxy_err| {
+                    format!(
+                        "Ошибка загрузки Forge promotions без прокси: {direct_err}; через прокси: {proxy_err}"
+                    )
+                })?
+            } else {
+                return Err(format!("Ошибка загрузки Forge promotions: {direct_err}"));
+            }
+        }
+    };
+
+    let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
+
+    let mut recommended: Option<String> = None;
+    let mut latest: Option<String> = None;
+    for (promo_key, forge_build) in parsed.promos {
+        let Some((mc, suffix)) = promo_key.rsplit_once('-') else {
+            continue;
+        };
+        if mc != mc_version {
+            continue;
+        }
+        match suffix {
+            "recommended" => recommended = Some(forge_build),
+            "latest" => latest = Some(forge_build),
+            _ => {}
+        }
+    }
+    Ok((recommended, latest))
+}
+
+fn forge_build_channel(
+    build: &str,
+    recommended: &Option<String>,
+    latest: &Option<String>,
+) -> Option<LoaderVersionChannel> {
+    if recommended.as_deref() == Some(build) {
+        return Some(LoaderVersionChannel::Stable);
+    }
+    if latest.as_deref() == Some(build) && latest != recommended {
+        return Some(LoaderVersionChannel::Beta);
+    }
+    channel_from_version_string(build)
 }
 pub(crate) async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
     let client = http_client(false);
@@ -412,7 +506,7 @@ pub async fn fetch_neoforge_versions() -> Result<Vec<NeoForgeVersionSummary>, St
 
 
 #[tauri::command]
-pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<String>, String> {
+pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let url = format!("{FABRIC_META_LOADERS}/{game_version}");
     let client = http_client(false);
     let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
@@ -422,16 +516,24 @@ pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<String>, S
         let head = text.chars().take(200).collect::<String>();
         format!("Ошибка разбора списка Fabric: {e}. Первые символы ответа: {head}")
     })?;
-    let mut versions: Vec<(u32, String)> = list
+    let mut entries: Vec<(u32, LoaderVersionOption)> = list
         .into_iter()
-        .map(|e| (e.loader.build, e.loader.version))
+        .map(|e| {
+            (
+                e.loader.build,
+                LoaderVersionOption {
+                    version: e.loader.version.clone(),
+                    channel: fabric_loader_channel(e.loader.stable),
+                },
+            )
+        })
         .collect();
-    versions.sort_by(|a, b| b.0.cmp(&a.0));
-    let mut out: Vec<String> = Vec::new();
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut out: Vec<LoaderVersionOption> = Vec::new();
     let mut seen = HashSet::new();
-    for (_, v) in versions {
-        if seen.insert(v.clone()) {
-            out.push(v);
+    for (_, opt) in entries {
+        if seen.insert(opt.version.clone()) {
+            out.push(opt);
         }
     }
     Ok(out)
@@ -439,7 +541,7 @@ pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<String>, S
 
 
 #[tauri::command]
-pub async fn fetch_quilt_loaders(game_version: String) -> Result<Vec<String>, String> {
+pub async fn fetch_quilt_loaders(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let url = format!("https://meta.quiltmc.org/v3/versions/loader/{game_version}");
     let client = http_client(false);
     let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
@@ -449,16 +551,25 @@ pub async fn fetch_quilt_loaders(game_version: String) -> Result<Vec<String>, St
         let head = text.chars().take(200).collect::<String>();
         format!("Ошибка разбора списка Quilt: {e}. Первые символы ответа: {head}")
     })?;
-    let mut versions: Vec<(i32, String)> = list
+    let mut entries: Vec<(i32, LoaderVersionOption)> = list
         .into_iter()
-        .map(|e| (e.loader.build, e.loader.version))
+        .map(|e| {
+            let version = e.loader.version.clone();
+            (
+                e.loader.build,
+                LoaderVersionOption {
+                    channel: quilt_loader_channel(&version),
+                    version,
+                },
+            )
+        })
         .collect();
-    versions.sort_by(|a, b| b.0.cmp(&a.0));
-    let mut out: Vec<String> = Vec::new();
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut out: Vec<LoaderVersionOption> = Vec::new();
     let mut seen = HashSet::new();
-    for (_, v) in versions {
-        if seen.insert(v.clone()) {
-            out.push(v);
+    for (_, opt) in entries {
+        if seen.insert(opt.version.clone()) {
+            out.push(opt);
         }
     }
     Ok(out)
@@ -466,7 +577,7 @@ pub async fn fetch_quilt_loaders(game_version: String) -> Result<Vec<String>, St
 
 
 #[tauri::command]
-pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<String>, String> {
+pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let prefix = format!("{game_version}-");
     let settings = load_settings_from_disk();
     let direct_client = http_client(false);
@@ -509,12 +620,20 @@ pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<Str
         })
         .collect();
 
-    Ok(dedupe_sort_versions(builds))
+    let (recommended, latest) = forge_promo_builds_for_mc(&game_version).await.unwrap_or((None, None));
+    let sorted = dedupe_sort_versions(builds);
+    Ok(sorted
+        .into_iter()
+        .map(|version| LoaderVersionOption {
+            channel: forge_build_channel(&version, &recommended, &latest),
+            version,
+        })
+        .collect())
 }
 
 
 #[tauri::command]
-pub async fn fetch_neoforge_builds_for_game(game_version: String) -> Result<Vec<String>, String> {
+pub async fn fetch_neoforge_builds_for_game(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let client = http_client(true);
     let metadata = download_text_with_retries(
         &client,
@@ -529,7 +648,13 @@ pub async fn fetch_neoforge_builds_for_game(game_version: String) -> Result<Vec<
         .filter(|b| neoforge_build_matches_mc(b, &game_version))
         .collect();
 
-    Ok(dedupe_sort_versions(builds))
+    Ok(dedupe_sort_versions(builds)
+        .into_iter()
+        .map(|version| LoaderVersionOption {
+            channel: channel_from_version_string(&version),
+            version,
+        })
+        .collect())
 }
 
 

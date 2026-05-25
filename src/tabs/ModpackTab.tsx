@@ -28,6 +28,11 @@ import type { ModpackHotkeyActions } from "../hooks/useHotkeys";
 import { ScreenshotsModal } from "../features/screenshots";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
+type LoaderVersionChannel = "stable" | "beta" | "alpha";
+type LoaderVersionOption = {
+  version: string;
+  channel?: LoaderVersionChannel | null;
+};
 type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
 type Settings = {
@@ -327,7 +332,6 @@ const MODPACK_MANAGE_SPLIT_MIN = 0.22;
 const MODPACK_MANAGE_SPLIT_MAX = 0.9;
 const MODPACK_MANAGE_SPLIT_DEFAULT = 0.68;
 
-/** Пресеты сборок: бэкенд и хелперы в коде; в UI скрыто до включения. */
 const BUILD_PRESETS_UI_ENABLED = false;
 
 export function ModpackTab({
@@ -376,7 +380,7 @@ export function ModpackTab({
   const [createLoader, setCreateLoader] = useState<LoaderId>("fabric");
   const [createGameVersion, setCreateGameVersion] = useState("1.20.1");
   const [createLoaderVersion, setCreateLoaderVersion] = useState("");
-  const [loaderVersionOptions, setLoaderVersionOptions] = useState<string[]>([]);
+  const [loaderVersionOptions, setLoaderVersionOptions] = useState<LoaderVersionOption[]>([]);
   const [loaderVersionsLoading, setLoaderVersionsLoading] = useState(false);
   const [isLoaderVersionDropdownOpen, setIsLoaderVersionDropdownOpen] = useState(false);
   const [createAllVersions, setCreateAllVersions] = useState(false);
@@ -1426,28 +1430,28 @@ export function ModpackTab({
     }
     setLoaderVersionsLoading(true);
     try {
-      let options: string[] = [];
+      let options: LoaderVersionOption[] = [];
       if (createLoader === "fabric") {
-        options = await invoke<string[]>("fetch_fabric_loaders", {
+        options = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
           gameVersion: createGameVersion,
         });
       } else if (createLoader === "quilt") {
-        options = await invoke<string[]>("fetch_quilt_loaders", {
+        options = await invoke<LoaderVersionOption[]>("fetch_quilt_loaders", {
           gameVersion: createGameVersion,
         });
       } else if (createLoader === "forge") {
-        options = await invoke<string[]>("fetch_forge_builds_for_game", {
+        options = await invoke<LoaderVersionOption[]>("fetch_forge_builds_for_game", {
           gameVersion: createGameVersion,
         });
       } else if (createLoader === "neoforge") {
-        options = await invoke<string[]>("fetch_neoforge_builds_for_game", {
+        options = await invoke<LoaderVersionOption[]>("fetch_neoforge_builds_for_game", {
           gameVersion: createGameVersion,
         });
       }
-      options = [...new Set(options)];
       setLoaderVersionOptions(options);
+      const versionIds = options.map((o) => o.version);
       setCreateLoaderVersion((prev) =>
-        prev && options.includes(prev) ? prev : (options[0] ?? ""),
+        prev && versionIds.includes(prev) ? prev : (options[0]?.version ?? ""),
       );
     } catch (e) {
       console.error(e);
@@ -1464,7 +1468,20 @@ export function ModpackTab({
     } finally {
       setLoaderVersionsLoading(false);
     }
-  }, [createLoader, createGameVersion, language]);
+  }, [createLoader, createGameVersion, language, showNotification]);
+
+  const selectedLoaderVersionOption = useMemo(
+    () => loaderVersionOptions.find((o) => o.version === createLoaderVersion) ?? null,
+    [loaderVersionOptions, createLoaderVersion],
+  );
+
+  const loaderChannelLabel = useCallback(
+    (channel: LoaderVersionChannel | null | undefined) => {
+      if (!channel) return null;
+      return tt(`modpacks.create.loaderChannel.${channel}`);
+    },
+    [tt],
+  );
 
   useEffect(() => {
     if (activeView !== "create" || createLoader === "vanilla") {
@@ -2564,7 +2581,7 @@ export function ModpackTab({
                 <label className="text-xs font-medium text-white/70">
                   {tt("modpacks.create.loaderVersionLabel")}
                 </label>
-                <div className="relative inline-flex w-60 items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                <div className="relative inline-flex w-72 items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
                   <button
                     type="button"
                     onClick={() => {
@@ -2574,12 +2591,27 @@ export function ModpackTab({
                       setIsLoaderVersionDropdownOpen((v) => !v);
                     }}
                     disabled={loaderVersionsLoading}
-                    className="flex flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
                   >
-                    <span className="truncate">
-                      {loaderVersionsLoading
-                        ? tt("modpacks.common.loading")
-                        : createLoaderVersion || tt("modpacks.common.select")}
+                    <span className="flex min-w-0 items-center gap-2 truncate">
+                      <span className="truncate">
+                        {loaderVersionsLoading
+                          ? tt("modpacks.common.loading")
+                          : createLoaderVersion || tt("modpacks.common.select")}
+                      </span>
+                      {selectedLoaderVersionOption?.channel && (
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            selectedLoaderVersionOption.channel === "stable"
+                              ? "bg-emerald-500/20 text-emerald-200"
+                              : selectedLoaderVersionOption.channel === "alpha"
+                                ? "bg-violet-500/20 text-violet-200"
+                                : "bg-amber-500/20 text-amber-200"
+                          }`}
+                        >
+                          {loaderChannelLabel(selectedLoaderVersionOption.channel)}
+                        </span>
+                      )}
                     </span>
                     <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
                   </button>
@@ -2592,23 +2624,46 @@ export function ModpackTab({
                             : "No versions for this game"}
                         </div>
                       )}
-                      {loaderVersionOptions.map((v, idx) => (
-                        <button
-                          key={`${createLoader}-${v}-${idx}`}
-                          type="button"
-                          onClick={() => {
-                            setCreateLoaderVersion(v);
-                            setIsLoaderVersionDropdownOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
-                            createLoaderVersion === v
-                              ? "bg-white/90 text-black"
-                              : "text-white/80 hover:bg-white/10"
-                          }`}
-                        >
-                          <span>{v}</span>
-                        </button>
-                      ))}
+                      {loaderVersionOptions.map((opt, idx) => {
+                        const channelLabel = loaderChannelLabel(opt.channel ?? null);
+                        const selected = createLoaderVersion === opt.version;
+                        return (
+                          <button
+                            key={`${createLoader}-${opt.version}-${idx}`}
+                            type="button"
+                            onClick={() => {
+                              setCreateLoaderVersion(opt.version);
+                              setIsLoaderVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              selected
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span className="truncate">{opt.version}</span>
+                            {channelLabel && (
+                              <span
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                  selected
+                                    ? opt.channel === "stable"
+                                      ? "bg-emerald-600/25 text-emerald-900"
+                                      : opt.channel === "alpha"
+                                        ? "bg-violet-600/25 text-violet-900"
+                                        : "bg-amber-600/25 text-amber-900"
+                                    : opt.channel === "stable"
+                                      ? "bg-emerald-500/20 text-emerald-200"
+                                      : opt.channel === "alpha"
+                                        ? "bg-violet-500/20 text-violet-200"
+                                        : "bg-amber-500/20 text-amber-200"
+                                }`}
+                              >
+                                {channelLabel}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

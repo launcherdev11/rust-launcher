@@ -1443,6 +1443,70 @@ export function ModsTab({
                                                   : "modpacks",
                                         }),
                                 );
+                              } else if (
+                                modrinthContentType === "mod" &&
+                                contentProvider === "modrinth"
+                              ) {
+                                const downloaded = await invoke<
+                                  { filename: string; skipped: boolean }[]
+                                >("download_modrinth_with_dependencies", {
+                                  category: modrinthContentType,
+                                  versionId: v.id,
+                                  gameVersion: modrinthGameVersion,
+                                  loader: modrinthLoader,
+                                  profileId: activeProfileId ?? null,
+                                });
+                                if (activeProfileId) {
+                                  setInstalledFilenames((prev) => {
+                                    const next = new Set(prev);
+                                    for (const item of downloaded) {
+                                      next.add(item.filename);
+                                    }
+                                    return next;
+                                  });
+                                }
+                                const skippedCount = downloaded.filter(
+                                  (item) => item.skipped,
+                                ).length;
+                                const downloadedCount =
+                                  downloaded.length - skippedCount;
+                                if (downloadedCount === 0) {
+                                  showNotification(
+                                    "success",
+                                    tt("mods.alreadyInstalled", {
+                                      filename: v.filename,
+                                    }),
+                                  );
+                                } else if (skippedCount > 0) {
+                                  showNotification(
+                                    "success",
+                                    tt("mods.saveSuccessWithDepsSkipped", {
+                                      downloaded: downloadedCount,
+                                      skipped: skippedCount,
+                                    }),
+                                  );
+                                } else {
+                                  const depCount = Math.max(
+                                    0,
+                                    downloadedCount - 1,
+                                  );
+                                  showNotification(
+                                    "success",
+                                    depCount > 0
+                                      ? tt("mods.saveSuccessWithDeps", {
+                                          filename: v.filename,
+                                          count: depCount,
+                                        })
+                                      : activeProfileId
+                                        ? tt("mods.saveSuccessProfile", {
+                                            filename: v.filename,
+                                          })
+                                        : tt("mods.saveSuccessFolder", {
+                                            filename: v.filename,
+                                            folder: "mods",
+                                          }),
+                                  );
+                                }
                               } else {
                                 await invoke("download_modrinth_file", {
                                   category: modrinthContentType,
@@ -1464,11 +1528,9 @@ export function ModsTab({
                                     : tt("mods.saveSuccessFolder", {
                                         filename: v.filename,
                                         folder:
-                                          modrinthContentType === "mod"
-                                            ? "mods"
-                                            : modrinthContentType === "resourcepack"
-                                              ? "resourcepacks"
-                                              : "shaderpacks",
+                                          modrinthContentType === "resourcepack"
+                                            ? "resourcepacks"
+                                            : "shaderpacks",
                                       }),
                                 );
                               }

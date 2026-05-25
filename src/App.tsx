@@ -2839,10 +2839,10 @@ function App() {
         }
       } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
-        const loaders = await invoke<string[]>("fetch_fabric_loaders", {
+        const loaders = await invoke<{ version: string }[]>("fetch_fabric_loaders", {
           gameVersion: v.id,
         });
-        const loaderVersion = loaders[0];
+        const loaderVersion = loaders[0]?.version;
         if (!loaderVersion) throw new Error("Нет подходящего Fabric Loader для этой версии");
         const profileId = await invoke<string>("install_fabric", {
           gameVersion: v.id,

@@ -44,6 +44,9 @@ use services::curseforge::{
     curseforge_get_mod_files, curseforge_list_minecraft_versions, curseforge_search_mods,
     download_curseforge_file,
 };
+use services::modrinth::{
+    download_modrinth_with_dependencies, resolve_modrinth_required_dependencies,
+};
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 use commands::{export_build, get_ely_avatar, list_build_files, preview_export};
 use mrpack_open::take_pending_mrpack_open;
@@ -119,7 +122,7 @@ pub fn run() {
         .setup({
             let pending_mrpack = pending_mrpack.clone();
             let pending_launch = pending_profile_launch.clone();
-            move |_app| {
+            move |app| {
                 #[cfg(target_os = "linux")]
                 {
                     if std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland" {
@@ -128,6 +131,7 @@ pub fn run() {
                 }
                 mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
                 stash_argv_profile_launch_if_any(&pending_launch);
+                infra::window_icon::apply_launcher_icon_to_main_window(app);
                 Ok(())
             }
         })
@@ -188,6 +192,8 @@ pub fn run() {
             cancel_download,
             reset_download_cancel,
             download_modrinth_file,
+            download_modrinth_with_dependencies,
+            resolve_modrinth_required_dependencies,
             download_modrinth_modpack_and_import,
             curseforge_search_mods,
             curseforge_get_mod_files,

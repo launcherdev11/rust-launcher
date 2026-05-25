@@ -50,6 +50,9 @@
     },
     "noIcon": "No icon",
     "saveSuccessProfile": "File {{filename}} saved to profile.",
+    "saveSuccessWithDeps": "File {{filename}} and {{count}} dependencies saved to profile.",
+    "saveSuccessWithDepsSkipped": "Saved {{downloaded}} file(s), skipped {{skipped}} (already in profile, matching SHA1).",
+    "alreadyInstalled": "{{filename}} and all dependencies are already installed in the profile.",
     "saveSuccessFolder": "File {{filename}} saved to {{folder}} folder.",
     "downloadFailed": "Failed to download file.",
     "downloadFailedModrinth": "Failed to download Modrinth file.",
@@ -425,6 +428,11 @@
       "loaderLabel": "Loader:",
       "gameVersionLabel": "Game version:",
       "loaderVersionLabel": "Loader version:",
+      "loaderChannel": {
+        "stable": "Stable",
+        "beta": "Beta",
+        "alpha": "Alpha"
+      },
       "allVersions": "All versions",
       "presetLabel": "Build preset:",
       "noPreset": "No preset",

@@ -50,6 +50,9 @@
     },
     "noIcon": "Нет иконки",
     "saveSuccessProfile": "Файл {{filename}} сохранён в сборку.",
+    "saveSuccessWithDeps": "Файл {{filename}} и ещё {{count}} зависимостей сохранены в сборку.",
+    "saveSuccessWithDepsSkipped": "Сохранено {{downloaded}} файлов, пропущено {{skipped}} (уже в сборке, SHA1 совпадает).",
+    "alreadyInstalled": "Файл {{filename}} и все зависимости уже установлены в сборке.",
     "saveSuccessFolder": "Файл {{filename}} сохранён в папку {{folder}}.",
     "downloadFailed": "Не удалось скачать файл.",
     "downloadFailedModrinth": "Не удалось скачать файл Modrinth.",
@@ -425,6 +428,11 @@
       "loaderLabel": "Загрузчик:",
       "gameVersionLabel": "Версия игры:",
       "loaderVersionLabel": "Версия загрузчика:",
+      "loaderChannel": {
+        "stable": "Стабильная",
+        "beta": "Бета",
+        "alpha": "Альфа"
+      },
       "allVersions": "Все версии",
       "presetLabel": "Пресет сборки:",
       "noPreset": "Без пресета",
