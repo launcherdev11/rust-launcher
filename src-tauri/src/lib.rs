@@ -1,3 +1,7 @@
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+
 mod game_provider;
 mod java_runtime;
 mod ely_auth;
@@ -92,8 +96,40 @@ fn load_dotenv() {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+
+#[tauri::command]
+fn get_launcher_logs_file() -> String {
+    // Мы читаем файл "launcher.log" и возвращаем его содержимое как строку
+    std::fs::read_to_string("launcher.log")
+        .unwrap_or_else(|_| "Логи пусты или файл не найден".to_string())
+}
+
+#[tauri::command]
+fn get_screenshots_list() -> Vec<String> {
+    // В будущем путь можно брать динамически через get_game_root_dir
+    let screenshot_path = PathBuf::from(".minecraft/screenshots"); 
+    
+    match std::fs::read_dir(screenshot_path) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path().to_string_lossy().into_owned())
+            .filter(|path| path.ends_with(".png")) 
+            .collect(),
+        Err(_) => Vec::new(), // если папки нету, то обратно будет пустота
+    }
+}
+
 pub fn run() {
     load_dotenv();
+
+    #[cfg(target_os = "linux")]
+    {
+        // используется ли вайленд
+        let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
+        if is_wayland {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+    }
 
     #[cfg(target_os = "linux")]
     configure_linux_display_backend();
@@ -106,7 +142,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .setup(|_app| Ok(()))
+        .setup(|_app| {
+    #[cfg(target_os = "linux")]
+    {
+        // Если мы в Wayland, отключаем DMABUF, чтобы WebKit не вешал систему
+        if std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland" {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+    Ok(())
+})
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
             fetch_all_versions,
@@ -180,7 +225,9 @@ pub fn run() {
             list_launcher_accounts,
             switch_launcher_account,
             remove_launcher_account,
-            add_launcher_account
+            add_launcher_account,
+            get_launcher_logs_file,
+            get_screenshots_list,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -197,3 +244,10 @@ pub fn run() {
             _ => {}
         });
 }
+
+#[tauri::command]
+fn get_launcher_logs() -> String {
+    fs::read_to_string("launcher.log").unwrap_or_else(|_| "Логи пусты".to_string())
+}
+
+// фиксим линукс(проклинаю арч)
