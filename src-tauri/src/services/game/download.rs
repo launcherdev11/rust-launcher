@@ -546,39 +546,41 @@ pub async fn download_modrinth_modpack_and_import(
 }
 
 
-#[tauri::command]
-pub async fn download_modrinth_file(
-    category: String,
-    url: String,
-    filename: String,
-    profile_id: Option<String>,
+pub(crate) fn modrinth_content_subdir(category: &str) -> Result<&'static str, String> {
+    match category {
+        "mod" | "mods" => Ok("mods"),
+        "resourcepack" | "resourcepacks" => Ok("resourcepacks"),
+        "shader" | "shaderpack" | "shaderpacks" => Ok("shaderpacks"),
+        other => Err(format!(
+            "Неизвестный тип контента Modrinth: {other}. Ожидается mod, resourcepack или shader."
+        )),
+    }
+}
+
+pub async fn save_modrinth_file(
+    category: &str,
+    url: &str,
+    filename: &str,
+    profile_id: Option<&str>,
+    expected_sha1: Option<&str>,
 ) -> Result<(), String> {
-    let root = if let Some(ref id) = profile_id {
+    let root = if let Some(id) = profile_id {
         instance_dir(id)?
     } else {
         game_root_dir()?
     };
-    let subdir = match category.as_str() {
-        "mod" | "mods" => "mods",
-        "resourcepack" | "resourcepacks" => "resourcepacks",
-        "shader" | "shaderpack" | "shaderpacks" => "shaderpacks",
-        other => {
-            return Err(format!(
-                "Неизвестный тип контента Modrinth: {other}. Ожидается mod, resourcepack или shader."
-            ))
-        }
-    };
+    let subdir = modrinth_content_subdir(category)?;
 
     let target_dir = root.join(subdir);
     tokio::fs::create_dir_all(&target_dir)
         .await
         .map_err(|e| format!("Не удалось создать папку '{subdir}': {e}"))?;
 
-    let dest_path = target_dir.join(&filename);
+    let dest_path = target_dir.join(filename);
 
     let client = http_client(false);
     let resp = client
-        .get(&url)
+        .get(url)
         .send()
         .await
         .map_err(|e| format!("Ошибка загрузки файла Modrinth: {e}"))?;
@@ -595,11 +597,37 @@ pub async fn download_modrinth_file(
         .await
         .map_err(|e| format!("Ошибка чтения тела ответа Modrinth: {e}"))?;
 
+    if let Some(expected) = expected_sha1 {
+        let actual = crate::services::game::core::sha1_hex_of_bytes(&bytes);
+        if !actual.eq_ignore_ascii_case(expected) {
+            return Err(format!(
+                "SHA1 не совпал для {filename} (ожидалось {expected}, получено {actual})"
+            ));
+        }
+    }
+
     tokio::fs::write(&dest_path, &bytes)
         .await
         .map_err(|e| format!("Не удалось сохранить файл в {:?}: {e}", dest_path))?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn download_modrinth_file(
+    category: String,
+    url: String,
+    filename: String,
+    profile_id: Option<String>,
+) -> Result<(), String> {
+    save_modrinth_file(
+        &category,
+        &url,
+        &filename,
+        profile_id.as_deref(),
+        None,
+    )
+    .await
 }
 
 
