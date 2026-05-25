@@ -92,5 +92,6 @@ jobs:
           projectPath: .
           tauriScript: "npm run tauri"
           tagName: "v__VERSION__"
+          releaseName: "16Launcher v__VERSION__"
           prerelease: ${{ steps.release_tag.outputs.prerelease }}
 
