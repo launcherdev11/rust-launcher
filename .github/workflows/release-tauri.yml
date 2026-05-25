@@ -69,6 +69,11 @@ jobs:
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *beta* || "$VERSION" == *rc* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Checkout release notes repository
         if: vars.RELEASE_NOTES_REPO != ''
@@ -106,4 +111,5 @@ jobs:
           tagName: "v__VERSION__"
           releaseName: ${{ steps.release_notes.outputs.title }}
           releaseBody: ${{ steps.release_notes.outputs.body }}
+          prerelease: ${{ steps.release_tag.outputs.prerelease }}
 
