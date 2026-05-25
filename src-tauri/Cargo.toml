@@ -1,6 +1,6 @@
 [package]
 name = "mc16launcher"
-version = "2.1.0-beta.1"
+version = "2.1.0-beta.2"
 description = "An optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings."
 authors = ["16steyy"]
 edition = "2021"
