@@ -787,7 +787,7 @@ pub async fn launch_game(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
     #[cfg(target_os = "linux")]
-    crate::services::game::runtime::env::apply_linux_display_env(&mut cmd);
+    crate::services::game::runtime::apply_linux_display_env(&mut cmd);
     #[cfg(windows)]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
