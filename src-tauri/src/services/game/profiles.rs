@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::path::PathBuf;
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -77,6 +78,44 @@ fn generate_instance_id() -> String {
         .take(12)
         .map(char::from)
         .collect()
+}
+
+fn looks_like_legacy_instance_id(s: &str) -> bool {
+    s.len() == 12 && s.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+fn sanitize_instance_folder_name(name: &str) -> String {
+    let mut out: String = name
+        .chars()
+        .map(|c| {
+            if c == '<'
+                || c == '>'
+                || c == ':'
+                || c == '"'
+                || c == '/'
+                || c == '\\'
+                || c == '|'
+                || c == '?'
+                || c == '*'
+                || c.is_control()
+            {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+
+    out = out.trim().to_string();
+    out = out.trim_end_matches('.').trim_end_matches(' ').to_string();
+    if out.is_empty() {
+        out = "Build".to_string();
+    }
+
+    if out.len() > 120 {
+        out.truncate(120);
+    }
+    out
 }
 
 fn image_path_to_data_uri(path: &Path) -> Result<Option<String>, String> {
@@ -279,17 +318,13 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
         return Ok(Vec::new());
     }
 
-    let mut out = Vec::new();
+    let mut items: Vec<(InstanceConfig, PathBuf)> = Vec::new();
     for entry in std::fs::read_dir(&root).map_err(|e| format!("Ошибка чтения папки instances: {e}"))? {
         let entry = entry.map_err(|e| format!("Ошибка чтения entry: {e}"))?;
         let path = entry.path();
         if !path.is_dir() {
             continue;
         }
-        let _id = match path.file_name().and_then(|n| n.to_str()) {
-            Some(id) if !id.is_empty() => id.to_string(),
-            _ => continue,
-        }; //unused
         let config_path = path.join("config.json");
         if !config_path.exists() {
             continue;
@@ -302,7 +337,54 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
             Ok(c) => c,
             Err(_) => continue,
         };
+        items.push((cfg, path));
+    }
 
+    if items.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut used_names: HashSet<String> = items
+        .iter()
+        .filter_map(|(_, p)| p.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()))
+        .collect();
+
+    for (cfg, path) in &mut items {
+        let current_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) if !n.is_empty() => n,
+            _ => continue,
+        };
+
+        if !looks_like_legacy_instance_id(current_name) {
+            continue;
+        }
+
+        let desired_base = sanitize_instance_folder_name(&cfg.name);
+        if desired_base == current_name {
+            continue;
+        }
+
+        let mut target_name = desired_base.clone();
+        let mut i: u32 = 1;
+        while used_names.contains(&target_name) {
+            target_name = format!("{desired_base}-{i}");
+            i = i.saturating_add(1);
+        }
+
+        let target_path = root.join(&target_name);
+        if target_path.exists() {
+            continue;
+        }
+
+        if std::fs::rename(&path, &target_path).is_ok() {
+            used_names.remove(current_name);
+            used_names.insert(target_name.clone());
+            *path = target_path;
+        }
+    }
+
+    let mut out = Vec::new();
+    for (cfg, path) in &items {
         let mods_dir = path.join("mods");
         let res_dir = path.join("resourcepacks");
         let shader_dir = path.join("shaderpacks");
@@ -311,22 +393,24 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
         let (res_size, res_count) = cache_service::dir_size_and_count(&res_dir);
         let (shader_size, shader_count) = cache_service::dir_size_and_count(&shader_dir);
 
-        let total_size_bytes = mods_size.saturating_add(res_size).saturating_add(shader_size);
+        let total_size_bytes = mods_size
+            .saturating_add(res_size)
+            .saturating_add(shader_size);
 
         let directory = match path.to_str() {
             Some(s) => s.to_string(),
             None => continue,
         };
 
-        let icon_path = find_icon_png_in_profile(&path).or(cfg.icon_path);
+        let icon_path = find_icon_png_in_profile(path).or(cfg.icon_path.clone());
 
         out.push(InstanceProfileSummary {
-            id: cfg.id,
-            name: cfg.name,
+            id: cfg.id.clone(),
+            name: cfg.name.clone(),
             icon_path,
-            game_version: cfg.game_version,
-            loader: cfg.loader,
-            loader_version: cfg.loader_version,
+            game_version: cfg.game_version.clone(),
+            loader: cfg.loader.clone(),
+            loader_version: cfg.loader_version.clone(),
             created_at: cfg.created_at,
             play_time_seconds: cfg.play_time_seconds,
             mods_count,
@@ -419,9 +503,48 @@ pub fn rename_profile(id: String, name: String) -> Result<(), String> {
     }
     let text = std::fs::read_to_string(&cfg_path).map_err(|e| format!("Ошибка чтения config.json сборки: {e}"))?;
     let mut cfg: InstanceConfig = serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
-    cfg.name = name;
-    let new_text = serde_json::to_string_pretty(&cfg).map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
-    std::fs::write(&cfg_path, new_text).map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+    let old_dir = cfg_path.parent().ok_or_else(|| "Не удалось определить папку сборки".to_string())?;
+    let old_dir_name = old_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    cfg.name = name.clone();
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
+
+    let desired_base = sanitize_instance_folder_name(&name);
+    let already_migrated_variant = old_dir_name == desired_base
+        || (old_dir_name.starts_with(&format!("{desired_base}-"))
+            && old_dir_name
+                .get(desired_base.len() + 1..)
+                .is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit())));
+
+    if !already_migrated_variant {
+        let root = instances_root_dir()?;
+        let mut target_name = desired_base.clone();
+        let mut i: u32 = 1;
+        while root.join(&target_name).exists() {
+            if target_name == old_dir_name {
+                break;
+            }
+            target_name = format!("{desired_base}-{i}");
+            i = i.saturating_add(1);
+        }
+        let target_dir = root.join(&target_name);
+        if target_dir != old_dir && !target_dir.exists() {
+            if std::fs::rename(old_dir, &target_dir).is_ok() {
+                let new_cfg_path = target_dir.join("config.json");
+                std::fs::write(&new_cfg_path, new_text)
+                    .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+                return Ok(());
+            }
+        }
+    }
+
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
     Ok(())
 }
 
@@ -516,11 +639,17 @@ pub fn create_profile_impl(
     std::fs::create_dir_all(&root)
         .map_err(|e| format!("Не удалось создать папку instances: {e}"))?;
 
-    let mut id = generate_instance_id();
-    while instance_dir(&id)?.exists() {
-        id = generate_instance_id();
+    let id = generate_instance_id();
+
+    let base_dir_name = sanitize_instance_folder_name(&name);
+    let mut dir_name = base_dir_name.clone();
+    let mut i: u32 = 1;
+    let mut dir = root.join(&dir_name);
+    while dir.exists() {
+        dir_name = format!("{base_dir_name}-{i}");
+        dir = root.join(&dir_name);
+        i = i.saturating_add(1);
     }
-    let dir = instance_dir(&id)?;
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("Не удалось создать папку сборки: {e}"))?;
 
@@ -557,21 +686,13 @@ pub fn create_profile_impl(
         play_time_seconds: 0,
     };
 
-    let cfg_path = instance_config_path(&id)?;
+    let cfg_path = dir.join("config.json");
     let cfg_text = serde_json::to_string_pretty(&cfg)
         .map_err(|e| format!("Ошибка сериализации config.json сборки: {e}"))?;
-    if let Some(parent) = cfg_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку для config.json: {e}"))?;
-    }
     std::fs::write(&cfg_path, cfg_text)
         .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
 
-    let settings_path = instance_settings_path(&id)?;
-    if let Some(parent) = settings_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
-    }
+    let settings_path = dir.join("settings.json");
     let settings = initial_settings.unwrap_or_default();
     let settings_text = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
