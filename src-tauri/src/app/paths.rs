@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::services::game::settings as settings_service;
+use crate::models::profile::InstanceConfig;
 
 //корневая папка данных лаунчера (…/16Launcher)
 pub fn launcher_data_dir() -> Result<PathBuf, String> {
@@ -43,7 +44,42 @@ pub fn instances_root_dir() -> Result<PathBuf, String> {
 }
 
 pub fn instance_dir(id: &str) -> Result<PathBuf, String> {
-    Ok(instances_root_dir()?.join(id))
+    let root = instances_root_dir()?;
+    let legacy = root.join(id);
+    if legacy.is_dir() {
+        return Ok(legacy);
+    }
+
+    if !root.is_dir() {
+        return Ok(legacy);
+    }
+
+    let entries = std::fs::read_dir(&root)
+        .map_err(|e| format!("Ошибка чтения папки instances: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Ошибка чтения entry instances: {e}"))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let cfg_path = path.join("config.json");
+        if !cfg_path.is_file() {
+            continue;
+        }
+        let text = match std::fs::read_to_string(&cfg_path) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let cfg = match serde_json::from_str::<InstanceConfig>(&text) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        if cfg.id == id {
+            return Ok(path);
+        }
+    }
+
+    Ok(legacy)
 }
 
 pub fn instance_dir_for_id(id: &str) -> Result<PathBuf, String> {
