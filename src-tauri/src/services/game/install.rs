@@ -127,25 +127,36 @@ pub async fn install_fabric(
         ),
     );
 
-    let client_jar = root.join(format!("{profile_id}.jar"));
-    log_to_console(
-        &app,
-        &format!(
-            "[Fabric] Загрузка клиентского JAR в {}",
-            client_jar.display()
-        ),
-    );
-    let _ = download_file(
-        &client,
-        &mojang_dl.client.url,
-        &client_jar,
-        &app,
-        &profile_id,
-        total_size,
-        total_downloaded,
-    )
-    .await?;
-    total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    let client_jar = root.join(format!("{}.jar", profile.inherits_from));
+    if client_jar.is_file() {
+        log_to_console(
+            &app,
+            &format!(
+                "[Fabric] client.jar уже есть: {}",
+                client_jar.display()
+            ),
+        );
+        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    } else {
+        log_to_console(
+            &app,
+            &format!(
+                "[Fabric] Загрузка клиентского JAR в {}",
+                client_jar.display()
+            ),
+        );
+        let _ = download_file(
+            &client,
+            &mojang_dl.client.url,
+            &client_jar,
+            &app,
+            &profile_id,
+            total_size,
+            total_downloaded,
+        )
+        .await?;
+        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    }
 
     let natives_dir = vers_root.join(&profile_id).join("natives");
     tokio::fs::create_dir_all(&natives_dir)
@@ -420,25 +431,36 @@ pub async fn install_quilt(
         ),
     );
 
-    let client_jar = root.join(format!("{profile_id}.jar"));
-    log_to_console(
-        &app,
-        &format!(
-            "[Quilt] Загрузка клиентского JAR в {}",
-            client_jar.display()
-        ),
-    );
-    let _ = download_file(
-        &client,
-        &mojang_dl.client.url,
-        &client_jar,
-        &app,
-        &profile_id,
-        total_size,
-        total_downloaded,
-    )
-    .await?;
-    total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    let client_jar = root.join(format!("{}.jar", profile.inherits_from));
+    if client_jar.is_file() {
+        log_to_console(
+            &app,
+            &format!(
+                "[Quilt] client.jar уже есть: {}",
+                client_jar.display()
+            ),
+        );
+        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    } else {
+        log_to_console(
+            &app,
+            &format!(
+                "[Quilt] Загрузка клиентского JAR в {}",
+                client_jar.display()
+            ),
+        );
+        let _ = download_file(
+            &client,
+            &mojang_dl.client.url,
+            &client_jar,
+            &app,
+            &profile_id,
+            total_size,
+            total_downloaded,
+        )
+        .await?;
+        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    }
 
     let natives_dir = vers_root.join(&profile_id).join("natives");
     tokio::fs::create_dir_all(&natives_dir)

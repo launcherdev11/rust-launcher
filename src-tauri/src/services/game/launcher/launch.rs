@@ -25,7 +25,7 @@ use crate::services::game::runtime::{
     build_java_command, ensure_forge_ignore_list_includes_vanilla_client_jar,
     ensure_forge_safe_opens, ensure_lwjgl_fallback_for_modern_versions, ensure_library_artifacts_present_for_launch,
     ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args, offline_uuid_from_username,
-    remove_add_opens_for_java_under_9,
+    remove_add_opens_for_java_under_9, resolve_client_jar_path,
 };
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID};
@@ -76,14 +76,14 @@ pub async fn launch_game(
                 .map_err(|e| format!("Ошибка разбора: {e}"))?;
             let mut detail = VersionDetail {
                 downloads: None,
-                inherits_from: None,
+                inherits_from: Some(profile.inherits_from.clone()),
                 main_class: profile.main_class,
-                libraries: mojang_detail.libraries.clone(),
+                libraries: Vec::new(),
                 arguments: VersionArguments {
                     jvm: profile.arguments.jvm,
-                    game: mojang_detail.arguments.game,
+                    game: Vec::new(),
                 },
-                minecraft_arguments: mojang_detail.minecraft_arguments,
+                minecraft_arguments: None,
                 asset_index: mojang_detail.asset_index,
                 assets: mojang_detail.assets.clone(),
                 java_version: mojang_detail.java_version.clone(),
@@ -143,9 +143,17 @@ pub async fn launch_game(
         detail.arguments = merged_args;
     }
 
-    let jar_path = root.join(format!("{effective_jar_version}.jar"));
-    if detail.downloads.is_some() && !jar_path.exists() {
+    let inherits_for_jar = detail.inherits_from.as_deref();
+    let jar_path = resolve_client_jar_path(&root, &vers_root, &version_id, inherits_for_jar)
+        .unwrap_or_else(|| root.join(format!("{effective_jar_version}.jar")));
+    if detail.downloads.is_some() && !jar_path.is_file() {
         return Err("Версия не установлена. Сначала нажмите «Установить».".to_string());
+    }
+    if is_fabric && !jar_path.is_file() {
+        let base = inherits_for_jar.unwrap_or(&version_id);
+        return Err(format!(
+            "Не найден client.jar для Fabric (ожидался «{base}.jar» или «{version_id}.jar» в папке игры). Переустановите версию."
+        ));
     }
 
     let os_name = current_os_name();
@@ -217,7 +225,7 @@ pub async fn launch_game(
             }
         }
     }
-    if detail.downloads.is_some() || jar_path.exists() {
+    if detail.downloads.is_some() || jar_path.is_file() {
         let jar_key = jar_path.to_str().unwrap_or("").replace('\\', "/");
         if seen_paths.insert(jar_key) {
             classpath.push(jar_path.clone());
@@ -576,7 +584,9 @@ pub async fn launch_game(
                 classpath_str.clone(),
             ]
         } else if is_fabric {
+            let game_jar = jar_path.to_str().unwrap_or("").replace('\\', "/");
             let mut base = vec![
+                format!("-Dfabric.gameJarPath={game_jar}"),
                 "-Djava.library.path=".to_string() + natives_str,
                 "-cp".to_string(),
                 classpath_str.clone(),
