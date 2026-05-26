@@ -1,4 +1,30 @@
 use std::path::{Path, PathBuf};
+
+pub(crate) fn resolve_client_jar_path(
+    game_root: &Path,
+    versions_root: &Path,
+    version_id: &str,
+    inherits_from: Option<&str>,
+) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(base) = inherits_from.filter(|b| !b.is_empty() && *b != version_id) {
+        candidates.push(game_root.join(format!("{base}.jar")));
+        candidates.push(
+            versions_root
+                .join(base)
+                .join(format!("{base}.jar")),
+        );
+    }
+    candidates.push(game_root.join(format!("{version_id}.jar")));
+    for path in candidates {
+        if let Ok(meta) = std::fs::metadata(&path) {
+            if meta.is_file() && meta.len() > 0 {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
