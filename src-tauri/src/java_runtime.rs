@@ -23,14 +23,10 @@ fn http_client() -> Client {
         .unwrap_or_else(|_| Client::new())
 }
 
-fn launcher_root() -> Result<PathBuf, String> {
-    dirs::data_dir()
-        .ok_or_else(|| "Не удалось получить папку данных".to_string())
-        .map(|p| p.join("16Launcher"))
-}
-
 fn runtime_dir(major: u8, component: &str) -> Result<PathBuf, String> {
-    Ok(launcher_root()?.join("runtimes").join(format!("{component}-java{major}")))
+    Ok(crate::app::paths::game_root_dir()?
+        .join("runtimes")
+        .join(format!("{component}-java{major}")))
 }
 
 fn java_bin_path(root: &Path) -> PathBuf {

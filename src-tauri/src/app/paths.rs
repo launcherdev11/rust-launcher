@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
-use crate::services::game::settings as settings_service;
+use crate::app::game_data_migrate::{
+    game_root_from_directory_setting, migrate_between_game_roots, migrate_game_data_if_needed,
+};
 use crate::models::profile::InstanceConfig;
+use crate::services::game::settings as settings_service;
 
 //корневая папка данных лаунчера (…/16Launcher)
 pub fn launcher_data_dir() -> Result<PathBuf, String> {
@@ -18,17 +21,55 @@ pub fn launcher_accounts_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("accounts.json"))
 }
 
+pub fn default_game_root_dir() -> Result<PathBuf, String> {
+    game_root_from_directory_setting(None)
+}
+
 pub fn game_root_dir() -> Result<PathBuf, String> {
     let settings = settings_service::load_settings_from_disk();
-    if let Some(raw) = settings.game_directory {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed));
-        }
+    game_root_from_directory_setting(settings.game_directory.as_deref())
+}
+
+pub fn legacy_instances_root_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("instances"))
+}
+
+pub fn legacy_runtimes_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("runtimes"))
+}
+
+pub fn legacy_forge_installers_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("forge_installers"))
+}
+
+pub fn ensure_game_data_layout() -> Result<(), String> {
+    let target = game_root_dir()?;
+    let default_game = default_game_root_dir()?;
+
+    migrate_game_data_if_needed(
+        &target,
+        &legacy_instances_root_dir()?,
+        &legacy_runtimes_dir()?,
+        &legacy_forge_installers_dir()?,
+    )?;
+
+    if default_game != target && default_game.is_dir() {
+        migrate_between_game_roots(&default_game, &target)?;
     }
 
-    let base = dirs::data_dir().ok_or("Не удалось получить системную папку данных")?;
-    Ok(base.join("16Launcher").join("game"))
+    Ok(())
+}
+
+pub fn migrate_game_directory_change(
+    old_game_directory: Option<&str>,
+    new_game_directory: Option<&str>,
+) -> Result<(), String> {
+    let from = game_root_from_directory_setting(old_game_directory)?;
+    let to = game_root_from_directory_setting(new_game_directory)?;
+    if from != to {
+        migrate_between_game_roots(&from, &to)?;
+    }
+    ensure_game_data_layout()
 }
 
 pub fn libraries_dir() -> Result<PathBuf, String> {
@@ -40,7 +81,7 @@ pub fn versions_dir() -> Result<PathBuf, String> {
 }
 
 pub fn instances_root_dir() -> Result<PathBuf, String> {
-    Ok(launcher_data_dir()?.join("instances"))
+    Ok(game_root_dir()?.join("instances"))
 }
 
 pub fn instance_dir(id: &str) -> Result<PathBuf, String> {
