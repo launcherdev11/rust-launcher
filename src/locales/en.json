@@ -218,6 +218,13 @@
         "cleared": "Launcher cache cleared.",
         "clearFailed": "Failed to clear launcher cache."
       },
+      "sidebarPosition": {
+        "label": "Sidebar position:",
+        "left": "Left",
+        "right": "Right",
+        "top": "Top",
+        "bottom": "Bottom"
+      },
       "sidebarOrder": {
         "label": "Sidebar buttons order:",
         "moveUp": "Move up",

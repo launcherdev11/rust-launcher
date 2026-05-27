@@ -40,7 +40,18 @@ type Settings = {
   background_image_url: string | null;
   background_blur_enabled: boolean;
   split_view_enabled: boolean;
+  sidebar_position?: string;
 };
+
+const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
+type SidebarPosition = (typeof SIDEBAR_POSITIONS)[number];
+
+function parseSidebarPosition(value: string | undefined | null): SidebarPosition {
+  if (value && SIDEBAR_POSITIONS.includes(value as SidebarPosition)) {
+    return value as SidebarPosition;
+  }
+  return "left";
+}
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 
@@ -313,8 +324,10 @@ export function SettingsTab({
   const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
   const [isCacheLoading, setIsCacheLoading] = useState(false);
   const [isResettingSettings, setIsResettingSettings] = useState(false);
+  const [isSidebarPositionDropdownOpen, setIsSidebarPositionDropdownOpen] = useState(false);
   const versionsLoaderDropdownRef = useRef<HTMLDivElement | null>(null);
   const versionsFilterDropdownRef = useRef<HTMLDivElement | null>(null);
+  const sidebarPositionDropdownRef = useRef<HTMLDivElement | null>(null);
   const versionFilterInputRef = useRef<HTMLInputElement | null>(null);
   const versionFilterListRef = useRef<HTMLDivElement | null>(null);
   const selectedVersionFilterButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -691,6 +704,12 @@ export function SettingsTab({
         !versionsFilterDropdownRef.current.contains(target)
       ) {
         setIsVersionFilterDropdownOpen(false);
+      }
+      if (
+        sidebarPositionDropdownRef.current &&
+        !sidebarPositionDropdownRef.current.contains(target)
+      ) {
+        setIsSidebarPositionDropdownOpen(false);
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -2112,6 +2131,61 @@ export function SettingsTab({
                     value={settings?.background_blur_enabled ?? true}
                     onChange={(v) => updateSettings({ background_blur_enabled: v })}
                   />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm text-white/90">
+                    {tt("settings.launcher.sidebarPosition.label")}
+                  </span>
+                  <div
+                    ref={sidebarPositionDropdownRef}
+                    className="relative min-w-[10rem] shrink-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsSidebarPositionDropdownOpen((prev) => !prev)}
+                      className="interactive-press flex h-10 w-full min-w-[10rem] items-center justify-between rounded-xl border border-white/20 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/35 hover:bg-black/40"
+                    >
+                      <span>
+                        {tt(
+                          `settings.launcher.sidebarPosition.${parseSidebarPosition(settings?.sidebar_position)}`,
+                        )}
+                      </span>
+                      <span className="text-[10px] text-white/50">▾</span>
+                    </button>
+                    <AnimatePresence>
+                      {isSidebarPositionDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                          transition={{ duration: 0.14, ease: "easeOut" }}
+                          className="absolute right-0 z-30 mt-1 w-full min-w-[10rem] overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                        >
+                          {SIDEBAR_POSITIONS.map((pos) => {
+                            const active =
+                              parseSidebarPosition(settings?.sidebar_position) === pos;
+                            return (
+                              <button
+                                key={pos}
+                                type="button"
+                                onClick={() => {
+                                  updateSettings({ sidebar_position: pos });
+                                  setIsSidebarPositionDropdownOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                  active
+                                    ? "bg-white/90 text-black"
+                                    : "text-white/80 hover:bg-white/10"
+                                }`}
+                              >
+                                <span>{tt(`settings.launcher.sidebarPosition.${pos}`)}</span>
+                              </button>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm text-white/90">
