@@ -467,6 +467,25 @@
       "disableItem": "Disable",
       "toggleFailed": "Failed to change item state."
     },
+    "contentUpdates": {
+      "check": "Check for updates",
+      "checking": "Checking for updates…",
+      "checkFailed": "Could not check for updates: {{msg}}",
+      "noneFound": "All files on this tab are up to date (Modrinth and CurseForge).",
+      "found": "{{count}} update(s) available",
+      "modalTitle": "Updates",
+      "modalSubtitle": "Newer versions are available for this profile.",
+      "currentVersion": "Current",
+      "latestVersion": "Available",
+      "updateSelected": "Update selected",
+      "updateAll": "Update all",
+      "updating": "Downloading updates…",
+      "applied": "Updated {{count}} file(s)",
+      "applyFailed": "Update failed: {{msg}}",
+      "selectAtLeastOne": "Select at least one file to update.",
+      "notOnModrinth": "Files not found on Modrinth or CurseForge are skipped.",
+      "noneFoundForItem": "No updates for this file."
+    },
     "screenshots": {
       "title": "Screenshots",
       "subtitle": "Game",

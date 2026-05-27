@@ -2,8 +2,10 @@ mod client;
 mod dependencies;
 mod installed;
 mod types;
+mod updates;
 
 pub use types::ModrinthDownloadTarget;
+pub use updates::{apply_profile_content_updates, check_profile_content_updates};
 
 use std::path::PathBuf;
 

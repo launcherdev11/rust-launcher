@@ -165,6 +165,20 @@ type ProfileItemEntry = {
   enabled: boolean;
 };
 
+type ProfileContentUpdate = {
+  filename: string;
+  enabled: boolean;
+  projectId: string;
+  title: string;
+  currentVersionId: string;
+  currentVersionNumber: string;
+  latestVersionId: string;
+  latestVersionNumber: string;
+  latestUrl: string;
+  latestFilename: string;
+  latestSha1?: string | null;
+};
+
 type FileNode = {
   path: string;
   name: string;
@@ -403,6 +417,15 @@ export function ModpackTab({
   } | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [itemsSearch, setItemsSearch] = useState("");
+  const [contentUpdates, setContentUpdates] = useState<ProfileContentUpdate[]>([]);
+  const [contentUpdatesChecking, setContentUpdatesChecking] = useState(false);
+  const [contentUpdatesApplying, setContentUpdatesApplying] = useState(false);
+  const [contentUpdatesSingleApplyingFilename, setContentUpdatesSingleApplyingFilename] =
+    useState<string | null>(null);
+  const [isContentUpdatesModalOpen, setIsContentUpdatesModalOpen] = useState(false);
+  const [selectedContentUpdateFilenames, setSelectedContentUpdateFilenames] = useState<
+    Set<string>
+  >(new Set());
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [profilesLayout, setProfilesLayout] = useState<"list" | "grid">(() => {
@@ -2073,6 +2096,129 @@ export function ModpackTab({
     }
   }
 
+  async function handleCheckContentUpdates() {
+    if (!selectedProfile) return;
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+    setContentUpdatesChecking(true);
+    try {
+      const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+      });
+      setContentUpdates(updates);
+      if (updates.length === 0) {
+        showNotification("info", tt("modpacks.contentUpdates.noneFound"));
+        return;
+      }
+      setSelectedContentUpdateFilenames(new Set(updates.map((u) => u.filename)));
+      setIsContentUpdatesModalOpen(true);
+      showNotification(
+        "info",
+        tt("modpacks.contentUpdates.found", { count: updates.length }),
+      );
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.checkFailed", { msg }));
+    } finally {
+      setContentUpdatesChecking(false);
+    }
+  }
+
+  async function handleApplyContentUpdates(updateAll: boolean) {
+    if (!selectedProfile) return;
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+    const selected = updateAll
+      ? contentUpdates
+      : contentUpdates.filter((u) => selectedContentUpdateFilenames.has(u.filename));
+    if (selected.length === 0) {
+      showNotification("warning", tt("modpacks.contentUpdates.selectAtLeastOne"));
+      return;
+    }
+    setContentUpdatesApplying(true);
+    try {
+      const payload = selected.map((u) => ({
+        filename: u.filename,
+        enabled: u.enabled,
+        latestUrl: u.latestUrl,
+        latestFilename: u.latestFilename,
+        latestSha1: u.latestSha1 ?? null,
+      }));
+      const applied = await invoke<number>("apply_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+        updates: payload,
+      });
+      showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
+      setIsContentUpdatesModalOpen(false);
+      setContentUpdates([]);
+      setSelectedContentUpdateFilenames(new Set());
+      await refreshItems(selectedProfile.id, contentTab);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.applyFailed", { msg }));
+    } finally {
+      setContentUpdatesApplying(false);
+    }
+  }
+
+  async function handleUpdateSingleItem(item: ProfileItemEntry) {
+    if (!selectedProfile) return;
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+
+    setContentUpdatesSingleApplyingFilename(item.name);
+    try {
+      const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+      });
+      const update = updates.find((u) => u.filename === item.name);
+      if (!update) {
+        showNotification("info", tt("modpacks.contentUpdates.noneFoundForItem"));
+        return;
+      }
+
+      const applied = await invoke<number>("apply_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+        updates: [
+          {
+            filename: update.filename,
+            enabled: update.enabled,
+            latestUrl: update.latestUrl,
+            latestFilename: update.latestFilename,
+            latestSha1: update.latestSha1 ?? null,
+          },
+        ],
+      });
+
+      showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
+      await refreshItems(selectedProfile.id, contentTab);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.applyFailed", { msg }));
+    } finally {
+      setContentUpdatesSingleApplyingFilename(null);
+    }
+  }
+
   async function handleOpenFolder() {
     if (!selectedProfile) return;
     try {
@@ -2995,6 +3141,17 @@ export function ModpackTab({
               >
                 <RefreshIcon className="h-3.5 w-3.5" />
               </button>
+              <button
+                type="button"
+                onClick={() => void handleCheckContentUpdates()}
+                disabled={contentUpdatesChecking || !selectedProfile}
+                className="interactive-press rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                title={tt("modpacks.contentUpdates.check")}
+              >
+                {contentUpdatesChecking
+                  ? tt("modpacks.contentUpdates.checking")
+                  : tt("modpacks.contentUpdates.check")}
+              </button>
               <div className="relative">
                 <button
                   type="button"
@@ -3150,6 +3307,26 @@ export function ModpackTab({
                           }`}
                         />
                       </button>
+                      {contentTab === "mods" && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateSingleItem(item)}
+                          disabled={
+                            contentUpdatesApplying ||
+                            contentUpdatesChecking ||
+                            contentUpdatesSingleApplyingFilename === item.name
+                          }
+                          className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          title={language === "ru" ? "Обновить" : "Update"}
+                        >
+                          <img
+                            src="/launcher-assets/download.png"
+                            alt=""
+                            className="h-3.5 w-3.5 object-contain"
+                            aria-hidden="true"
+                          />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => void handleDeleteItem(item)}
@@ -3584,6 +3761,114 @@ export function ModpackTab({
                 {tt("modpacks.presets.saveFromForm")}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {isContentUpdatesModalOpen && selectedProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            if (contentUpdatesApplying) return;
+            setIsContentUpdatesModalOpen(false);
+          }}
+        >
+          <div
+            className="glass-panel w-full max-w-4xl rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.16em] text-white/50">
+                  {tt("modpacks.contentUpdates.modalTitle")}
+                </div>
+                <div className="truncate text-lg font-semibold text-white">
+                  {selectedProfile.name}
+                </div>
+                <div className="text-xs text-white/65">
+                  {tt("modpacks.contentUpdates.modalSubtitle")}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+                disabled={contentUpdatesApplying}
+                onClick={() => setIsContentUpdatesModalOpen(false)}
+              >
+                {language === "ru" ? "Закрыть" : "Close"}
+              </button>
+            </div>
+
+            <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+              {contentUpdates.map((update) => {
+                const checked = selectedContentUpdateFilenames.has(update.filename);
+                return (
+                  <label
+                    key={update.filename}
+                    className={`flex cursor-pointer select-none items-center gap-3 rounded-2xl border px-3 py-2 text-sm ${
+                      checked
+                        ? "border-emerald-400/35 bg-emerald-500/10 text-white/95"
+                        : "border-white/10 bg-black/35 text-white/90"
+                    }`}
+                    onClick={() => {
+                      if (contentUpdatesApplying) return;
+                      setSelectedContentUpdateFilenames((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(update.filename)) next.delete(update.filename);
+                        else next.add(update.filename);
+                        return next;
+                      });
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      readOnly
+                      className="accent-checkbox pointer-events-none"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{update.title}</div>
+                      <div className="truncate text-xs text-white/70">{update.filename}</div>
+                    </div>
+                    <div className="text-right text-xs text-white/70">
+                      <div>
+                        {tt("modpacks.contentUpdates.currentVersion")}: {update.currentVersionNumber}
+                      </div>
+                      <div>
+                        {tt("modpacks.contentUpdates.latestVersion")}: {update.latestVersionNumber}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">
+              {tt("modpacks.contentUpdates.notOnModrinth")}
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void handleApplyContentUpdates(false)}
+                disabled={contentUpdatesApplying}
+                className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {contentUpdatesApplying
+                  ? tt("modpacks.contentUpdates.updating")
+                  : tt("modpacks.contentUpdates.updateSelected")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleApplyContentUpdates(true)}
+                disabled={contentUpdatesApplying}
+                className="interactive-press rounded-2xl accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {contentUpdatesApplying
+                  ? tt("modpacks.contentUpdates.updating")
+                  : tt("modpacks.contentUpdates.updateAll")}
+              </button>
+            </div>
           </div>
         </div>
       )}

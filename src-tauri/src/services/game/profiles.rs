@@ -31,11 +31,11 @@ fn profile_content_subdir(category: &str) -> Result<&'static str, String> {
     }
 }
 
-fn profile_item_is_disabled(stored_name: &str) -> bool {
+pub(crate) fn profile_item_is_disabled(stored_name: &str) -> bool {
     stored_name.ends_with(PROFILE_ITEM_DISABLED_SUFFIX)
 }
 
-fn profile_item_display_name(stored_name: &str) -> String {
+pub(crate) fn profile_item_display_name(stored_name: &str) -> String {
     if profile_item_is_disabled(stored_name) {
         stored_name
             .strip_suffix(PROFILE_ITEM_DISABLED_SUFFIX)
@@ -46,7 +46,7 @@ fn profile_item_display_name(stored_name: &str) -> String {
     }
 }
 
-fn profile_item_stored_name(display_name: &str, enabled: bool) -> String {
+pub(crate) fn profile_item_stored_name(display_name: &str, enabled: bool) -> String {
     let base = profile_item_display_name(display_name);
     if enabled {
         base
@@ -55,7 +55,7 @@ fn profile_item_stored_name(display_name: &str, enabled: bool) -> String {
     }
 }
 
-fn resolve_profile_item_path(content_dir: &Path, filename: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_profile_item_path(content_dir: &Path, filename: &str) -> Option<PathBuf> {
     let direct = content_dir.join(filename);
     if direct.is_file() {
         return Some(direct);
