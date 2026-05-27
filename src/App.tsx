@@ -816,7 +816,13 @@ function App() {
   const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const notificationTimersRef = useRef(
-    new Map<number, { fade: ReturnType<typeof setTimeout>; remove?: ReturnType<typeof setTimeout> }>(),
+    new Map<
+      number,
+      {
+        fade?: ReturnType<typeof setTimeout>;
+        remove?: ReturnType<typeof setTimeout>;
+      }
+    >(),
   );
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
   const didLoadedRemoteNotificationsRef = useRef(false);
@@ -1275,6 +1281,7 @@ function App() {
     }
   };
 
+  const [openedMrpackPath, setOpenedMrpackPath] = useState<string | null>(null);
   const pendingProfileLaunchIdRef = useRef<string | null>(null);
   const handlePlayPinnedProfileRef = useRef<(profile: InstanceProfileCard) => Promise<void>>(
     async () => {},
@@ -1558,7 +1565,7 @@ function App() {
   const clearNotificationDismissTimers = useCallback((id: number) => {
     const t = notificationTimersRef.current.get(id);
     if (!t) return;
-    clearTimeout(t.fade);
+    if (t.fade !== undefined) clearTimeout(t.fade);
     if (t.remove !== undefined) clearTimeout(t.remove);
     notificationTimersRef.current.delete(id);
   }, []);
@@ -1579,7 +1586,7 @@ function App() {
         setNotifications((prev) => prev.filter((n) => n.id !== id));
         notificationTimersRef.current.delete(id);
       }, 200);
-      notificationTimersRef.current.set(id, { fade: remove });
+      notificationTimersRef.current.set(id, { remove });
     },
     [clearNotificationDismissTimers],
   );
@@ -1597,7 +1604,7 @@ function App() {
   useEffect(() => {
     return () => {
       for (const t of notificationTimersRef.current.values()) {
-        clearTimeout(t.fade);
+        if (t.fade !== undefined) clearTimeout(t.fade);
         if (t.remove !== undefined) clearTimeout(t.remove);
       }
       notificationTimersRef.current.clear();
@@ -2180,6 +2187,37 @@ function App() {
       unlisten?.();
     };
   }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const pending = await invoke<string | null>("take_pending_mrpack_open");
+        const p = pending?.trim();
+        if (p) {
+          activateSidebarTab("modpacks");
+          setOpenedMrpackPath(p);
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        unlisten = await listen<{ path: string }>("mrpack-open-request", (event) => {
+          const p = event.payload.path?.trim();
+          if (!p) return;
+          activateSidebarTab("modpacks");
+          setOpenedMrpackPath(p);
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      unlisten?.();
+    };
+  }, [activateSidebarTab]);
 
   useEffect(() => {
     const profileId = pendingProfileLaunchIdRef.current;
@@ -3068,6 +3106,8 @@ function App() {
                 makeDownloadJobId={makeDownloadJobId}
                 onProfileSelectionChange={handleModpackProfileSelectionChange}
                 initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+                openedMrpackPath={openedMrpackPath}
+                onOpenedMrpackPathConsumed={() => setOpenedMrpackPath(null)}
                 onProfilesChange={(profiles) => {
                   setKnownProfiles(
                     profiles.map((p) => ({
