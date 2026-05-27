@@ -44,8 +44,15 @@ pub struct Settings {
     #[serde(default)]
     pub split_view_enabled: bool,
 
+    #[serde(default = "default_sidebar_position")]
+    pub sidebar_position: String,
+
     #[serde(default)]
     pub onboarding_completed: bool,
+}
+
+pub fn default_sidebar_position() -> String {
+    "left".to_string()
 }
 
 pub fn default_interface_language() -> String {
@@ -90,6 +97,7 @@ impl Default for Settings {
             background_image_url: None,
             background_blur_enabled: true,
             split_view_enabled: false,
+            sidebar_position: default_sidebar_position(),
             onboarding_completed: false,
         }
     }
