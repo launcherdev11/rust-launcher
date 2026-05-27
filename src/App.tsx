@@ -112,8 +112,23 @@ type Settings = {
   background_image_url: string | null;
   background_blur_enabled: boolean;
   split_view_enabled: boolean;
+  sidebar_position?: string;
   onboarding_completed?: boolean;
 };
+
+const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
+type SidebarPosition = (typeof SIDEBAR_POSITIONS)[number];
+
+function parseSidebarPosition(value: string | undefined | null): SidebarPosition {
+  if (value && SIDEBAR_POSITIONS.includes(value as SidebarPosition)) {
+    return value as SidebarPosition;
+  }
+  return "left";
+}
+
+function isSidebarHorizontal(position: SidebarPosition): boolean {
+  return position === "top" || position === "bottom";
+}
 
 type InstanceProfileSummary = {
   id: string;
@@ -680,15 +695,18 @@ function App() {
     }
     return DEFAULT_SIDEBAR_ORDER;
   });
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const sidebarPosition = parseSidebarPosition(settings?.sidebar_position);
+  const sidebarHorizontal = isSidebarHorizontal(sidebarPosition);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarButtonRefs = useRef<
     Partial<Record<SidebarItemId, HTMLButtonElement | null>>
   >({});
   const [sidebarIndicator, setSidebarIndicator] = useState<{
-    top: number;
-    height: number;
+    offset: number;
+    span: number;
     ready: boolean;
-  }>({ top: 0, height: 32, ready: false });
+  }>({ offset: 0, span: 32, ready: false });
 
   const updateSidebarIndicator = useCallback(() => {
     const container = sidebarRef.current;
@@ -697,15 +715,23 @@ function App() {
 
     const containerRect = container.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
-    const height = 32;
-    const top = btnRect.top - containerRect.top + (btnRect.height - height) / 2;
+    const horizontal = isSidebarHorizontal(parseSidebarPosition(settings?.sidebar_position));
 
-    setSidebarIndicator({ top, height, ready: true });
-  }, [activeItem]);
+    if (horizontal) {
+      const span = Math.max(24, btnRect.width);
+      const offset = btnRect.left - containerRect.left;
+      setSidebarIndicator({ offset, span, ready: true });
+      return;
+    }
+
+    const span = 32;
+    const offset = btnRect.top - containerRect.top + (btnRect.height - span) / 2;
+    setSidebarIndicator({ offset, span, ready: true });
+  }, [activeItem, settings?.sidebar_position]);
 
   useLayoutEffect(() => {
     updateSidebarIndicator();
-  }, [updateSidebarIndicator]);
+  }, [updateSidebarIndicator, sidebarPosition]);
 
   useEffect(() => {
     let raf = 0;
@@ -795,7 +821,6 @@ function App() {
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
   const didLoadedRemoteNotificationsRef = useRef(false);
   const didLoadedBottomSocialRef = useRef(false);
-  const [settings, setSettings] = useState<Settings | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
   const [updateStatus, setUpdateStatus] = useState<
     "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
@@ -1654,6 +1679,7 @@ function App() {
     background_image_url: null,
     background_blur_enabled: true,
     split_view_enabled: false,
+    sidebar_position: "left",
     onboarding_completed: false,
   };
 
@@ -3841,21 +3867,58 @@ function App() {
         </div>
       </div>
 
-      <div className="relative z-10 flex h-[calc(100vh-2.25rem)]">
+      <div
+        className={`relative z-10 flex h-[calc(100vh-2.25rem)] ${
+          sidebarPosition === "top"
+            ? "flex-col"
+            : sidebarPosition === "bottom"
+              ? "flex-col-reverse"
+              : sidebarPosition === "right"
+                ? "flex-row-reverse"
+                : "flex-row"
+        }`}
+      >
         <aside
           ref={sidebarRef}
-          className="relative m-3 flex w-20 flex-col justify-between rounded-3xl bg-black/40 px-3 py-6 backdrop-blur-lg"
+          className={
+            sidebarHorizontal
+              ? `relative mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 rounded-3xl bg-black/40 px-4 py-3 backdrop-blur-lg ${
+                  sidebarPosition === "top" ? "mt-3 w-[calc(100%-1.5rem)]" : "mb-3 w-[calc(100%-1.5rem)]"
+                }`
+              : "relative m-3 flex w-20 shrink-0 flex-col justify-between rounded-3xl bg-black/40 px-3 py-6 backdrop-blur-lg"
+          }
         >
           <span
-            className="pointer-events-none absolute left-3 top-0 w-1 rounded-full accent-bg transition-transform duration-200 ease-out"
-            style={{
-              height: `${sidebarIndicator.height}px`,
-              transform: `translateY(${sidebarIndicator.top}px)`,
-              opacity: sidebarIndicator.ready ? 1 : 0,
-              willChange: "transform",
-            }}
+            className={`pointer-events-none absolute rounded-full accent-bg transition-transform duration-200 ease-out ${
+              sidebarHorizontal
+                ? sidebarPosition === "bottom"
+                  ? "bottom-3 left-0 h-1"
+                  : "top-3 left-0 h-1"
+                : sidebarPosition === "right"
+                  ? "right-3 top-0 w-1"
+                  : "left-3 top-0 w-1"
+            }`}
+            style={
+              sidebarHorizontal
+                ? {
+                    width: `${sidebarIndicator.span}px`,
+                    transform: `translateX(${sidebarIndicator.offset}px)`,
+                    opacity: sidebarIndicator.ready ? 1 : 0,
+                    willChange: "transform",
+                  }
+                : {
+                    height: `${sidebarIndicator.span}px`,
+                    transform: `translateY(${sidebarIndicator.offset}px)`,
+                    opacity: sidebarIndicator.ready ? 1 : 0,
+                    willChange: "transform",
+                  }
+            }
           />
-          <div className="flex flex-col gap-3">
+          <div
+            className={
+              sidebarHorizontal ? "flex flex-row items-center gap-3" : "flex flex-col gap-3"
+            }
+          >
             {orderedSidebarItems.map((item) => {
               const tabId = item.id as SplittableTabId;
               return (
@@ -3876,7 +3939,9 @@ function App() {
                 className="interactive-press group relative flex items-center"
               >
                 <div
-                  className={`sidebar-icon ml-2 flex items-center justify-center ${sidebarIconClass(tabId)}`}
+                  className={`sidebar-icon flex items-center justify-center ${
+                    sidebarHorizontal ? "" : "ml-2"
+                  } ${sidebarIconClass(tabId)}`}
                   onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
                   onPointerMove={handleSidebarTabPointerMove}
                   onPointerUp={handleSidebarTabPointerUp}
@@ -3902,7 +3967,13 @@ function App() {
             })}
           </div>
 
-          <div className="mt-40 flex flex-col items-center gap-2">
+          <div
+            className={
+              sidebarHorizontal
+                ? "flex flex-row items-center gap-2"
+                : "mt-40 flex flex-col items-center gap-2"
+            }
+          >
             {pinnedProfiles.map((profile) => (
               <button
                 key={profile.id}
@@ -3954,7 +4025,13 @@ function App() {
             ))}
           </div>
 
-          <div className="border-t border-white/10 pt-4">
+          <div
+            className={
+              sidebarHorizontal
+                ? "flex shrink-0 items-center border-l border-white/10 pl-4"
+                : "border-t border-white/10 pt-4"
+            }
+          >
             <button
               type="button"
               onClick={() => setActiveItemWithSound("accounts")}
@@ -3962,10 +4039,14 @@ function App() {
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
               }}
-              className="interactive-press group relative flex items-center justify-center w-full"
+              className={`interactive-press group relative flex items-center justify-center ${
+                sidebarHorizontal ? "" : "w-full"
+              }`}
             >
               <div
-                className={`sidebar-icon ml-2 flex items-center justify-center rounded-full ${
+                className={`sidebar-icon flex items-center justify-center rounded-full ${
+                  sidebarHorizontal ? "" : "ml-2"
+                } ${
                   activeItem === "accounts" ? "sidebar-icon-active" : "bg-black/40 hover:bg-black/70"
                 }`}
               >
