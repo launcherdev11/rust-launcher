@@ -420,6 +420,11 @@ export function ModpackTab({
   const [contentUpdates, setContentUpdates] = useState<ProfileContentUpdate[]>([]);
   const [contentUpdatesChecking, setContentUpdatesChecking] = useState(false);
   const [contentUpdatesApplying, setContentUpdatesApplying] = useState(false);
+  const [contentUpdatesAvailableFilenames, setContentUpdatesAvailableFilenames] = useState<
+    Set<string>
+  >(new Set());
+  const [contentUpdatesAvailabilityLoading, setContentUpdatesAvailabilityLoading] =
+    useState(false);
   const [contentUpdatesSingleApplyingFilename, setContentUpdatesSingleApplyingFilename] =
     useState<string | null>(null);
   const [isContentUpdatesModalOpen, setIsContentUpdatesModalOpen] = useState(false);
@@ -2111,6 +2116,9 @@ export function ModpackTab({
         category,
       });
       setContentUpdates(updates);
+      if (category === "mods") {
+        setContentUpdatesAvailableFilenames(new Set(updates.map((u) => u.filename)));
+      }
       if (updates.length === 0) {
         showNotification("info", tt("modpacks.contentUpdates.noneFound"));
         return;
@@ -2190,6 +2198,12 @@ export function ModpackTab({
       });
       const update = updates.find((u) => u.filename === item.name);
       if (!update) {
+        setContentUpdatesAvailableFilenames((prev) => {
+          if (!prev.has(item.name)) return prev;
+          const next = new Set(prev);
+          next.delete(item.name);
+          return next;
+        });
         showNotification("info", tt("modpacks.contentUpdates.noneFoundForItem"));
         return;
       }
@@ -2210,6 +2224,12 @@ export function ModpackTab({
 
       showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
       await refreshItems(selectedProfile.id, contentTab);
+      setContentUpdatesAvailableFilenames((prev) => {
+        if (!prev.has(item.name)) return prev;
+        const next = new Set(prev);
+        next.delete(item.name);
+        return next;
+      });
     } catch (e) {
       console.error(e);
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
@@ -2218,6 +2238,37 @@ export function ModpackTab({
       setContentUpdatesSingleApplyingFilename(null);
     }
   }
+
+  useEffect(() => {
+    if (!selectedProfile) {
+      setContentUpdatesAvailableFilenames(new Set());
+      setContentUpdatesAvailabilityLoading(false);
+      return;
+    }
+    if (contentTab !== "mods") return;
+
+    let cancelled = false;
+    setContentUpdatesAvailabilityLoading(true);
+    (async () => {
+      try {
+        const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+          profileId: selectedProfile.id,
+          category: "mods",
+        });
+        if (cancelled) return;
+        setContentUpdatesAvailableFilenames(new Set(updates.map((u) => u.filename)));
+      } catch {
+        if (cancelled) return;
+        setContentUpdatesAvailableFilenames(new Set());
+      } finally {
+        if (!cancelled) setContentUpdatesAvailabilityLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProfile?.id, contentTab]);
 
   async function handleOpenFolder() {
     if (!selectedProfile) return;
@@ -3307,7 +3358,9 @@ export function ModpackTab({
                           }`}
                         />
                       </button>
-                      {contentTab === "mods" && (
+                      {contentTab === "mods" &&
+                        !contentUpdatesAvailabilityLoading &&
+                        contentUpdatesAvailableFilenames.has(item.name) && (
                         <button
                           type="button"
                           onClick={() => void handleUpdateSingleItem(item)}

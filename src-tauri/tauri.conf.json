@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' https: asset: http://asset.localhost data: blob:; media-src 'self' https: asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
       "assetProtocol": {
         "enable": true,
         "scope": {
@@ -36,6 +36,14 @@
   "bundle": {
     "active": true,
     "targets": ["appimage", "deb", "rpm", "nsis", "dmg"],
+    "fileAssociations": [
+      {
+        "ext": ["mrpack"],
+        "name": "Modrinth Modpack",
+        "description": "Modrinth modpack (.mrpack)",
+        "mimeType": "application/octet-stream"
+      }
+    ],
     "resources": [
       "resources/bootstrap.jar"
     ],
