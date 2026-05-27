@@ -11,6 +11,7 @@ pub mod integrity;
 pub mod launcher;
 pub mod runtime;
 pub mod profiles;
+pub mod external_import;
 pub mod screenshots;
 pub mod settings;
 pub mod state;
@@ -44,6 +45,11 @@ pub use profiles::{
     get_profile_play_time_seconds, get_profiles,
     get_selected_profile, list_profile_items, rename_profile, set_profile_item_enabled, set_selected_profile,
     update_profile_settings,
+};
+pub use external_import::{
+    default_external_launcher_path,
+    import_selected_external_instance,
+    list_importable_instances,
 };
 pub use screenshots::{
     delete_screenshot, get_screenshot_data_uri, list_screenshots, open_screenshot,

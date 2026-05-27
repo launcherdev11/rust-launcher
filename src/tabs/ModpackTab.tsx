@@ -70,6 +70,29 @@ type InstanceProfile = {
   directory: string;
 };
 
+type ExternalLauncherType =
+  | "auto"
+  | "multimc"
+  | "prism_launcher"
+  | "atlauncher"
+  | "gdlauncher"
+  | "curseforge"
+  | "unknown";
+
+type ImportableExternalInstance = {
+  id: string;
+  launcher_type: ExternalLauncherType;
+  path: string;
+  display_name: string;
+  loader: string | null;
+  game_version: string | null;
+  icon_path: string | null;
+  icon_data_uri: string | null;
+  approx_size_bytes: number | null;
+  mods_count: number | null;
+  last_modified: number | null;
+};
+
 type BuildPresetSettings = {
   ram_mb?: number | null;
   jvm_args?: string | null;
@@ -415,6 +438,24 @@ export function ModpackTab({
     total?: number;
     message?: string;
   } | null>(null);
+
+  const [externalImportLauncher, setExternalImportLauncher] =
+    useState<ExternalLauncherType>("auto");
+  const [externalImportPath, setExternalImportPath] = useState("");
+  const [externalImportBusy, setExternalImportBusy] = useState(false);
+  const [externalImportProgress, setExternalImportProgress] = useState<{
+    phase: string;
+    current?: number;
+    total?: number;
+    message?: string;
+  } | null>(null);
+  const [externalImportScanBusy, setExternalImportScanBusy] = useState(false);
+  const [externalImportScanError, setExternalImportScanError] = useState<string | null>(null);
+  const [externalImportInstances, setExternalImportInstances] = useState<
+    ImportableExternalInstance[]
+  >([]);
+  const [externalImportSearch, setExternalImportSearch] = useState("");
+  const [externalImportSort, setExternalImportSort] = useState<"name" | "date" | "size">("name");
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [itemsSearch, setItemsSearch] = useState("");
   const [contentUpdates, setContentUpdates] = useState<ProfileContentUpdate[]>([]);
@@ -1301,6 +1342,23 @@ export function ModpackTab({
     };
   }, [language, showNotification, updateDownloadJob]);
 
+  useEffect(() => {
+    const unlistenPromise = listen<{
+      phase: string;
+      current?: number;
+      total?: number;
+      message?: string;
+    }>("external-import-progress", (event) => {
+      setExternalImportProgress(event.payload);
+      if (event.payload.phase === "start") {
+        showNotification("info", language === "ru" ? "Импорт начат…" : "Import started…");
+      }
+    });
+    return () => {
+      unlistenPromise.then((fn) => fn());
+    };
+  }, [language, showNotification]);
+
   async function refreshProfiles() {
     setLoadingProfiles(true);
     try {
@@ -1929,6 +1987,105 @@ export function ModpackTab({
     }
   }
 
+  const ensureExternalImportPathDefault = useCallback(async () => {
+    if (externalImportPath.trim().length > 0) return;
+    if (externalImportLauncher === "unknown") return;
+    if (externalImportLauncher === "auto") return;
+    try {
+      const p = await invoke<string | null>("default_external_launcher_path", {
+        launcherType: externalImportLauncher,
+      });
+      if (p) setExternalImportPath(p);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [externalImportLauncher, externalImportPath]);
+
+  const handleBrowseExternalImportPath = useCallback(async () => {
+    try {
+      const p = await openFileDialog({ directory: true, multiple: false });
+      if (typeof p === "string") {
+        setExternalImportPath(p);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const handleScanExternalInstances = useCallback(async () => {
+    setExternalImportScanBusy(true);
+    setExternalImportScanError(null);
+    setExternalImportInstances([]);
+    try {
+      const list = await invoke<ImportableExternalInstance[]>("list_importable_instances", {
+        launcherType: externalImportLauncher,
+        basePath: externalImportPath.trim().length ? externalImportPath.trim() : null,
+      });
+      setExternalImportInstances(list ?? []);
+      if (!list || list.length === 0) {
+        setExternalImportScanError(
+          language === "ru"
+            ? "Профили не найдены. Попробуйте указать корень лаунчера (не папку instances) — но instances тоже поддерживается."
+            : "No profiles found. Try the launcher's root (not instances) — but instances is supported too.",
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      setExternalImportScanError(msg);
+    } finally {
+      setExternalImportScanBusy(false);
+    }
+  }, [externalImportLauncher, externalImportPath, language]);
+
+  const handleImportExternalInstance = useCallback(
+    async (inst: ImportableExternalInstance) => {
+      if (externalImportBusy) return;
+      setExternalImportBusy(true);
+      setExternalImportProgress(null);
+      try {
+        const newProfile = await invoke<InstanceProfile>("import_selected_external_instance", {
+          launcherType: externalImportLauncher,
+          basePath: externalImportPath.trim().length ? externalImportPath.trim() : null,
+          instancePath: inst.path,
+          displayName: inst.display_name,
+          loader: inst.loader,
+          gameVersion: inst.game_version,
+          iconPath: inst.icon_path,
+        });
+        await invoke("set_selected_profile", { id: newProfile.id });
+        await refreshProfiles();
+        setSelectedProfileId(newProfile.id);
+        setContentTab("mods");
+        setActiveView("manage");
+        await refreshItems(newProfile.id, "mods");
+        showNotification(
+          "success",
+          language === "ru" ? "Профиль импортирован." : "Profile imported.",
+        );
+      } catch (e) {
+        console.error(e);
+        const msg =
+          e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+        showNotification(
+          "error",
+          language === "ru" ? `Не удалось импортировать профиль: ${msg}` : `Import failed: ${msg}`,
+        );
+      } finally {
+        setExternalImportBusy(false);
+        setExternalImportProgress(null);
+      }
+    },
+    [
+      externalImportBusy,
+      externalImportLauncher,
+      externalImportPath,
+      language,
+      showNotification,
+    ],
+  );
+
   useEffect(() => {
     if (!openedMrpackPath) return;
     const path = openedMrpackPath;
@@ -1936,6 +2093,11 @@ export function ModpackTab({
     void handleImportMrpack(path);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- реакция только на путь из ОС
   }, [openedMrpackPath, onOpenedMrpackPathConsumed]);
+
+  useEffect(() => {
+    if (activeView !== "import") return;
+    void ensureExternalImportPathDefault();
+  }, [activeView, ensureExternalImportPathDefault]);
 
   useEffect(() => {
     if (activeView !== "import") return;
@@ -2984,6 +3146,211 @@ export function ModpackTab({
               <span>{tt("modpacks.import.chooseFile")}</span>
             </button>
           </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/15 bg-black/45 px-5 py-4 backdrop-blur-xl">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-white">
+                {language === "ru" ? "Импорт из другого лаунчера" : "Import from another launcher"}
+              </h3>
+              <p className="mt-1 text-xs text-white/60">
+                {language === "ru"
+                  ? "Укажите корень PrismLauncher/MultiMC (не папку instances), но вставка instances тоже поддерживается."
+                  : "Prefer PrismLauncher/MultiMC root (not instances), but instances input is supported too."}
+              </p>
+            </div>
+          </div>
+
+          {externalImportBusy && (
+            <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
+              <p className="text-xs font-medium text-white">
+                {externalImportProgress?.phase === "copy"
+                  ? language === "ru"
+                    ? "Копирование файлов…"
+                    : "Copying files…"
+                  : language === "ru"
+                    ? "Импорт…"
+                    : "Import…"}
+              </p>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                <div className="h-full w-1/2 rounded-full bg-emerald-500/90" />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="sm:col-span-1">
+              <label className="mb-1 block text-[11px] font-semibold text-white/70">
+                {language === "ru" ? "Лаунчер" : "Launcher"}
+              </label>
+              <select
+                value={externalImportLauncher}
+                onChange={(e) => {
+                  const v = e.target.value as ExternalLauncherType;
+                  setExternalImportLauncher(v);
+                  setExternalImportInstances([]);
+                  setExternalImportScanError(null);
+                  setExternalImportSearch("");
+                  setExternalImportSort("name");
+                  setTimeout(() => void ensureExternalImportPathDefault(), 0);
+                }}
+                className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
+              >
+                <option value="auto">{language === "ru" ? "Auto" : "Auto"}</option>
+                <option value="multimc">MultiMC</option>
+                <option value="prism_launcher">PrismLauncher</option>
+                <option value="atlauncher">ATLauncher</option>
+                <option value="gdlauncher">GDLauncher</option>
+                <option value="curseforge">CurseForge</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-[11px] font-semibold text-white/70">
+                {language === "ru" ? "Путь" : "Path"}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={externalImportPath}
+                  onChange={(e) => setExternalImportPath(e.target.value)}
+                  placeholder={
+                    language === "ru"
+                      ? "Например: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher"
+                      : "Example: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher"
+                  }
+                  className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={externalImportScanBusy || externalImportBusy}
+                  onClick={() => void handleBrowseExternalImportPath()}
+                  className="interactive-press shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+                >
+                  {language === "ru" ? "Обзор" : "Browse"}
+                </button>
+                <button
+                  type="button"
+                  disabled={externalImportScanBusy || externalImportBusy}
+                  onClick={() => void handleScanExternalInstances()}
+                  className="interactive-press shrink-0 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
+                >
+                  {externalImportScanBusy
+                    ? language === "ru"
+                      ? "Сканирование…"
+                      : "Scanning…"
+                    : language === "ru"
+                      ? "Сканировать"
+                      : "Scan"}
+                </button>
+              </div>
+              {externalImportScanError && (
+                <p className="mt-2 text-xs text-amber-200/90">{externalImportScanError}</p>
+              )}
+            </div>
+          </div>
+
+          {externalImportInstances.length > 0 && (
+            <div className="mt-4 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <input
+                  type="text"
+                  value={externalImportSearch}
+                  onChange={(e) => setExternalImportSearch(e.target.value)}
+                  placeholder={language === "ru" ? "Поиск…" : "Search…"}
+                  className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none sm:w-72"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-white/60">
+                    {language === "ru" ? "Сортировка" : "Sort"}
+                  </span>
+                  <select
+                    value={externalImportSort}
+                    onChange={(e) =>
+                      setExternalImportSort(e.target.value as "name" | "date" | "size")
+                    }
+                    className="rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
+                  >
+                    <option value="name">{language === "ru" ? "Имя" : "Name"}</option>
+                    <option value="date">{language === "ru" ? "Дата" : "Date"}</option>
+                    <option value="size">{language === "ru" ? "Размер" : "Size"}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {externalImportInstances
+                  .filter((p) => {
+                    const q = externalImportSearch.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      p.display_name.toLowerCase().includes(q) ||
+                      p.path.toLowerCase().includes(q) ||
+                      (p.loader ?? "").toLowerCase().includes(q) ||
+                      (p.game_version ?? "").toLowerCase().includes(q)
+                    );
+                  })
+                  .slice()
+                  .sort((a, b) => {
+                    if (externalImportSort === "size") {
+                      return (b.approx_size_bytes ?? 0) - (a.approx_size_bytes ?? 0);
+                    }
+                    if (externalImportSort === "date") {
+                      return (b.last_modified ?? 0) - (a.last_modified ?? 0);
+                    }
+                    return a.display_name.toLowerCase().localeCompare(b.display_name.toLowerCase());
+                  })
+                  .map((p) => {
+                    const iconSrc = p.icon_data_uri || p.icon_path || "/launcher-assets/modpack_icon.png";
+                    const meta = [
+                      p.loader ? p.loader : null,
+                      p.game_version ? p.game_version : null,
+                      p.mods_count != null
+                        ? language === "ru"
+                          ? `${p.mods_count} модов`
+                          : `${p.mods_count} mods`
+                        : null,
+                      p.approx_size_bytes != null ? formatBytes(p.approx_size_bytes, language) : null,
+                    ].filter(Boolean) as string[];
+
+                    return (
+                      <div
+                        key={`${p.launcher_type}:${p.id}:${p.path}`}
+                        className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <img
+                            src={iconSrc}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-xl bg-black/40 object-contain ring-1 ring-white/10"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-white">
+                              {p.display_name}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/60">
+                              {meta.length > 0 && <span>{meta.join(" • ")}</span>}
+                              <span className="truncate">{p.path}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={externalImportBusy}
+                            onClick={() => void handleImportExternalInstance(p)}
+                            className="interactive-press rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
+                          >
+                            {language === "ru" ? "Импорт" : "Import"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -4427,5 +4794,3 @@ export function ModpackTab({
 }
 
 export default ModpackTab;
-
-
