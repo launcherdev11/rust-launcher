@@ -467,6 +467,25 @@
       "disableItem": "Отключить",
       "toggleFailed": "Не удалось изменить состояние файла."
     },
+    "contentUpdates": {
+      "check": "Проверить обновления",
+      "checking": "Проверка обновлений…",
+      "checkFailed": "Не удалось проверить обновления: {{msg}}",
+      "noneFound": "Все файлы на этой вкладке актуальны (Modrinth и CurseForge).",
+      "found": "Доступно обновлений: {{count}}",
+      "modalTitle": "Обновления",
+      "modalSubtitle": "Найдены более новые версии для выбранной сборки.",
+      "currentVersion": "Сейчас",
+      "latestVersion": "Доступно",
+      "updateSelected": "Обновить выбранные",
+      "updateAll": "Обновить все",
+      "updating": "Загрузка обновлений…",
+      "applied": "Обновлено файлов: {{count}}",
+      "applyFailed": "Не удалось обновить: {{msg}}",
+      "selectAtLeastOne": "Выберите хотя бы один файл для обновления.",
+      "notOnModrinth": "Файлы, не найденные в Modrinth или CurseForge, пропускаются.",
+      "noneFoundForItem": "Для этого файла обновления не найдены."
+    },
     "screenshots": {
       "title": "Скриншоты",
       "subtitle": "Игра",

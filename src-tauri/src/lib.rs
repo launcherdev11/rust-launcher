@@ -45,6 +45,7 @@ use services::curseforge::{
     download_curseforge_file,
 };
 use services::modrinth::{
+    apply_profile_content_updates, check_profile_content_updates,
     download_modrinth_with_dependencies, resolve_modrinth_required_dependencies,
 };
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
@@ -197,6 +198,8 @@ pub fn run() {
             download_modrinth_file,
             download_modrinth_with_dependencies,
             resolve_modrinth_required_dependencies,
+            check_profile_content_updates,
+            apply_profile_content_updates,
             download_modrinth_modpack_and_import,
             curseforge_search_mods,
             curseforge_get_mod_files,

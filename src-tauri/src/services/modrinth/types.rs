@@ -39,9 +39,40 @@ pub struct ModrinthVersion {
     pub id: String,
     pub project_id: String,
     #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub version_number: String,
+    #[serde(default)]
     pub dependencies: Vec<ModrinthDependency>,
     #[serde(default)]
     pub files: Vec<ModrinthVersionFile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileContentUpdate {
+    pub filename: String,
+    pub enabled: bool,
+    pub project_id: String,
+    pub title: String,
+    pub current_version_id: String,
+    pub current_version_number: String,
+    pub latest_version_id: String,
+    pub latest_version_number: String,
+    pub latest_url: String,
+    pub latest_filename: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_sha1: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyProfileContentUpdate {
+    pub filename: String,
+    pub enabled: bool,
+    pub latest_url: String,
+    pub latest_filename: String,
+    pub latest_sha1: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
