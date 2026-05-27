@@ -131,6 +131,9 @@ pub fn run() {
                 }
                 mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
                 stash_argv_profile_launch_if_any(&pending_launch);
+                if let Err(e) = app::paths::ensure_game_data_layout() {
+                    eprintln!("[16Launcher] game data migration: {e}");
+                }
                 infra::window_icon::apply_launcher_icon_to_main_window(app);
                 Ok(())
             }

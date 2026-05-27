@@ -9,7 +9,7 @@ use crate::models::{JavaArgsValidationResult, JavaRuntimeInfo, JavaSettings, Set
 use crate::models::profile::InstanceSettings;
 use crate::services::java as java_service;
 
-use crate::app::paths::{instance_settings_path, launcher_data_dir};
+use crate::app::paths::{instance_settings_path, launcher_data_dir, migrate_game_directory_change};
 use crate::services::game::profiles::read_selected_profile_id;
 
 fn settings_path() -> Result<PathBuf, String> {
@@ -80,8 +80,13 @@ pub fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
 
 #[command]
 pub fn reset_settings_to_default() -> Result<Settings, String> {
+    let previous = load_settings_from_disk();
     let defaults = Settings::default();
     save_settings_to_disk(&defaults)?;
+    migrate_game_directory_change(
+        previous.game_directory.as_deref(),
+        defaults.game_directory.as_deref(),
+    )?;
     Ok(defaults)
 }
 
@@ -200,7 +205,16 @@ pub fn get_settings() -> Result<Settings, String> {
 
 #[command]
 pub fn set_settings(settings: Settings) -> Result<(), String> {
-    save_settings_to_disk(&settings)
+    let previous = load_settings_from_disk();
+    let old_dir = previous.game_directory.clone();
+    let new_dir = settings.game_directory.clone();
+    save_settings_to_disk(&settings)?;
+    if old_dir != new_dir {
+        migrate_game_directory_change(old_dir.as_deref(), new_dir.as_deref())?;
+    } else {
+        crate::app::paths::ensure_game_data_layout()?;
+    }
+    Ok(())
 }
 
 #[command]

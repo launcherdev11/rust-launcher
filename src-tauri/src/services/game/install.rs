@@ -6,7 +6,7 @@ use futures_util::StreamExt;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 
-use crate::app::paths::{game_root_dir, launcher_data_dir, libraries_dir, versions_dir};
+use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::http::{
     http_client, http_client_for_binary_download, http_client_for_binary_download_with_preferred_proxy_host,
 };
@@ -658,7 +658,7 @@ pub async fn install_forge(
     } else {
         http_client_for_binary_download_with_preferred_proxy_host(true, false)
     };
-    let installer_dir = launcher_data_dir()?.join("forge_installers").join(&version_id);
+    let installer_dir = game_root_dir()?.join("forge_installers").join(&version_id);
     tokio::fs::create_dir_all(&installer_dir)
         .await
         .map_err(|e| format!("Не удалось создать папку для Forge installer: {e}"))?;

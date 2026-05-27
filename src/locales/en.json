@@ -107,7 +107,7 @@
         "label": "Game directory:",
         "choose": "Choose",
         "defaultPathHint": "Default (launcher data folder)",
-        "hint": ""
+        "hint": "Versions, libraries, modpacks, worlds, and mods are stored here. Changing the folder copies your data automatically."
       },
       "windowSize": {
         "label": "Window size on launch:",
