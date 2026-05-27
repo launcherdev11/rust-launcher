@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod background;
 pub mod curseforge;
+pub mod importers;
 pub mod modrinth;
 pub mod export;
 pub mod game;
