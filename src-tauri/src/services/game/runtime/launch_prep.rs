@@ -1,4 +1,14 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use tauri::AppHandle;
+
+use crate::infra::http::http_client_for_binary_download;
+use crate::services::game::core::library_applies;
+use crate::services::game::console::log_to_console;
+use crate::services::game::runtime::downloads::download_file_checked;
+use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES};
+use crate::services::game::version_types::Library;
 
 pub(crate) fn resolve_client_jar_path(
     game_root: &Path,
@@ -25,17 +35,6 @@ pub(crate) fn resolve_client_jar_path(
     }
     None
 }
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-
-use tauri::AppHandle;
-
-use crate::infra::http::http_client_for_binary_download;
-use crate::services::game::core::library_applies;
-use crate::services::game::console::log_to_console;
-use crate::services::game::runtime::downloads::download_file_checked;
-use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES};
-use crate::services::game::version_types::Library;
 
 pub(crate) async fn ensure_library_artifacts_present_for_launch(
     app: &AppHandle,

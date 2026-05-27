@@ -250,6 +250,22 @@ pub async fn launch_game(
     let game_dir_str = game_dir
         .to_str()
         .ok_or("Путь к папке игры не в UTF-8")?;
+    if let Err(e) = std::fs::create_dir_all(&game_dir) {
+        return Err(format!(
+            "Не удалось создать папку сборки/игры: {} — {e}",
+            game_dir.display()
+        ));
+    }
+    if is_fabric {
+        // Fabric пишет remapped jars в .fabric/remappedJars и не всегда создаёт дерево папок сам.
+        let remapped_root = game_dir.join(".fabric").join("remappedJars");
+        if let Err(e) = std::fs::create_dir_all(&remapped_root) {
+            return Err(format!(
+                "Не удалось подготовить папки Fabric (remappedJars): {} — {e}",
+                remapped_root.display()
+            ));
+        }
+    }
     let natives_dir = vers_root.join(&version_id).join("natives");
     std::fs::create_dir_all(&natives_dir)
         .map_err(|e| format!("Не удалось создать папку natives при запуске: {e}"))?;
