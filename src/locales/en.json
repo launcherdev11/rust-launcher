@@ -148,7 +148,26 @@
       "action": {
         "install": "Install",
         "reinstall": "Reinstall",
-        "installing": "Installing..."
+        "installing": "Installing...",
+        "delete": "Delete",
+        "deleting": "Deleting..."
+      },
+      "manage": {
+        "reinstallTitle": "Reinstall {{version}}",
+        "reinstallHint": "Pick a loader version. Base Minecraft version: {{gameVersion}}.",
+        "reinstallConfirm": "Reinstall",
+        "loaderVersionLabel": "Loader version:",
+        "loaderRequired": "Select a loader version."
+      },
+      "delete": {
+        "title": "Delete {{version}}?",
+        "simplePrompt": "Remove Minecraft {{version}} files? Shared libraries folder is not affected.",
+        "choicePrompt": "What should be removed for {{version}}?",
+        "gameOnly": "Minecraft {{gameVersion}} only",
+        "loaderOnly": "Loader only{{loaderSuffix}}",
+        "all": "Everything",
+        "success": "Removed: {{target}}.",
+        "failed": "Could not delete: {{msg}}"
       },
       "loadFailed": "Failed to load Minecraft versions list.",
       "refreshFailed": "Failed to refresh versions list.",
