@@ -8,7 +8,8 @@ use crate::services::game::core::download_text_with_retries;
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_GAME, FABRIC_META_LOADERS, FORGE_MAVEN_BASE,
-    FORGE_MAVEN_METADATA_URL, FORGE_PROMOTIONS_URL, NEOFORGE_MAVEN_BASE, NEOFORGE_MAVEN_METADATA_URL,
+    FORGE_MAVEN_METADATA_URL, FORGE_MAVEN_OFFICIAL_METADATA_URL, FORGE_PROMOTIONS_URL,
+    NEOFORGE_MAVEN_BASE, NEOFORGE_MAVEN_METADATA_URL,
     QUILT_META_GAME, VERSION_MANIFEST_URL,
 };
 use crate::services::game::version_types::{
@@ -107,35 +108,10 @@ fn quilt_loader_channel(version: &str) -> Option<LoaderVersionChannel> {
 }
 
 async fn forge_promo_builds_for_mc(mc_version: &str) -> Result<(Option<String>, Option<String>), String> {
-    let settings = load_settings_from_disk();
     let direct_client = http_client(false);
-    let text = match download_text_with_retries(
-        &direct_client,
-        FORGE_PROMOTIONS_URL,
-        DEFAULT_DOWNLOAD_RETRIES,
-    )
-    .await
-    {
-        Ok(text) => text,
-        Err(direct_err) => {
-            if settings.forge_proxy_fallback {
-                let proxy_client = http_client(true);
-                download_text_with_retries(
-                    &proxy_client,
-                    FORGE_PROMOTIONS_URL,
-                    DEFAULT_DOWNLOAD_RETRIES,
-                )
-                .await
-                .map_err(|proxy_err| {
-                    format!(
-                        "Ошибка загрузки Forge promotions без прокси: {direct_err}; через прокси: {proxy_err}"
-                    )
-                })?
-            } else {
-                return Err(format!("Ошибка загрузки Forge promotions: {direct_err}"));
-            }
-        }
-    };
+    let text = download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
+        .await
+        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
 
     let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
@@ -395,23 +371,10 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
 
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
-    let settings = load_settings_from_disk();
     let direct_client = http_client(false);
-    let text = match download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES).await {
-        Ok(text) => text,
-        Err(direct_err) => {
-            if settings.forge_proxy_fallback {
-                let proxy_client = http_client(true);
-                download_text_with_retries(&proxy_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
-                    .await
-                    .map_err(|proxy_err| format!(
-                        "Ошибка загрузки Forge promotions без прокси: {direct_err}; через прокси: {proxy_err}"
-                    ))?
-            } else {
-                return Err(format!("Ошибка загрузки Forge promotions: {direct_err}"));
-            }
-        }
-    };
+    let text = download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
+        .await
+        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
 
     let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
@@ -591,16 +554,15 @@ pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<Loa
         Ok(text) => text,
         Err(direct_err) => {
             if settings.forge_proxy_fallback {
-                let proxy_client = http_client(true);
                 download_text_with_retries(
-                    &proxy_client,
-                    FORGE_MAVEN_METADATA_URL,
+                    &direct_client,
+                    FORGE_MAVEN_OFFICIAL_METADATA_URL,
                     DEFAULT_DOWNLOAD_RETRIES,
                 )
                 .await
-                .map_err(|proxy_err| {
+                .map_err(|fallback_err| {
                     format!(
-                        "Ошибка загрузки Forge metadata без прокси: {direct_err}; через прокси: {proxy_err}"
+                        "Ошибка загрузки Forge metadata с зеркала: {direct_err}; официальный Maven: {fallback_err}"
                     )
                 })?
             } else {

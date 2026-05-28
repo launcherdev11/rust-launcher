@@ -17,7 +17,12 @@ use crate::services::game::core::{download_text_with_retries, sha1_hex_of_file};
 use crate::services::game::console::log_to_console;
 use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_CONCURRENCY, DEFAULT_DOWNLOAD_RETRIES, FORGE_INSTALLER_MIN_BYTES,
+    FORGE_MAVEN_MIRROR_BASE, FORGE_MAVEN_OFFICIAL_BASE,
 };
+
+const FORGE_MAVEN_OFFICIAL_HOST: &str = "https://maven.minecraftforge.net";
+const FORGE_MAVEN_MIRROR_HOST: &str = "https://forgemvn.lumintomc.ru";
+const FORGE_FILES_OFFICIAL_MAVEN: &str = "https://files.minecraftforge.net/maven";
 use crate::services::game::version_types::{AssetIndexJson, AssetIndexRef, QuiltLoaderEntry};
 pub(crate) async fn download_file(
     client: &Client,
@@ -134,6 +139,69 @@ pub(crate) fn ensure_launcher_profiles_json(game_dir: &Path, mc_version: &str) -
         .map_err(|e| format!("Не удалось сериализовать launcher_profiles.json: {e}"))?;
     std::fs::write(&launcher_profiles_path, text)
         .map_err(|e| format!("Не удалось записать launcher_profiles.json: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn forge_installer_url_with_official_maven(installer_url: &str) -> String {
+    installer_url.replace(FORGE_MAVEN_MIRROR_BASE, FORGE_MAVEN_OFFICIAL_BASE)
+}
+
+pub(crate) fn patch_forge_installer_maven_mirror(installer_path: &Path) -> Result<(), String> {
+    let file = std::fs::File::open(installer_path)
+        .map_err(|e| format!("Не удалось открыть Forge installer: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Ошибка zip Forge installer: {e}"))?;
+
+    let mut patched_profile: Option<String> = None;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Ошибка чтения entry Forge installer: {e}"))?;
+        if entry.name() != "install_profile.json" {
+            continue;
+        }
+        let mut text = String::new();
+        entry
+            .read_to_string(&mut text)
+            .map_err(|e| format!("Не удалось прочитать install_profile.json: {e}"))?;
+        text = text.replace(FORGE_MAVEN_OFFICIAL_HOST, FORGE_MAVEN_MIRROR_HOST);
+        text = text.replace(FORGE_FILES_OFFICIAL_MAVEN, FORGE_MAVEN_MIRROR_HOST);
+        patched_profile = Some(text);
+        break;
+    }
+
+    let Some(patched) = patched_profile else {
+        return Ok(());
+    };
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "forge-install-profile-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Не удалось создать временную папку: {e}"))?;
+    let profile_path = temp_dir.join("install_profile.json");
+    std::fs::write(&profile_path, patched)
+        .map_err(|e| format!("Не удалось записать install_profile.json: {e}"))?;
+
+    let jar_out = std::process::Command::new("jar")
+        .arg("uf")
+        .arg(installer_path)
+        .arg("-C")
+        .arg(&temp_dir)
+        .arg("install_profile.json")
+        .output()
+        .map_err(|e| format!("Не удалось запустить jar для patch Forge installer: {e}"))?;
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    if !jar_out.status.success() {
+        return Err(format!(
+            "Не удалось обновить install_profile.json в Forge installer (jar {}): {}",
+            jar_out.status,
+            String::from_utf8_lossy(&jar_out.stderr)
+        ));
+    }
+
     Ok(())
 }
 

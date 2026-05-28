@@ -1752,7 +1752,7 @@ export function ModpackTab({
             match?.id ?? `${createGameVersion}-forge-${loaderVersion}`;
           const installerUrl =
             match?.installer_url ??
-            `https://maven.minecraftforge.net/net/minecraftforge/forge/${createGameVersion}-${loaderVersion}/forge-${createGameVersion}-${loaderVersion}-installer.jar`;
+            `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${createGameVersion}-${loaderVersion}/forge-${createGameVersion}-${loaderVersion}-installer.jar`;
           showNotification(
             "info",
             language === "ru"
