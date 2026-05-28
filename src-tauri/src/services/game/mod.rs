@@ -16,6 +16,7 @@ pub mod screenshots;
 pub mod settings;
 pub mod state;
 pub mod version_types;
+pub mod version_remove;
 pub mod versions;
 
 pub use accounts::{
@@ -60,6 +61,7 @@ pub use settings::{
     get_profile_java_settings, get_settings, get_system_memory_gb, reset_settings_to_default,
     set_java_settings, set_profile_java_settings, set_settings, validate_java_args,
 };
+pub use version_remove::{delete_minecraft_installation, get_version_install_details};
 pub use versions::{
     fetch_all_versions, fetch_fabric_loaders, fetch_forge_builds_for_game, fetch_forge_versions,
     fetch_neoforge_builds_for_game, fetch_neoforge_versions, fetch_quilt_loaders,
