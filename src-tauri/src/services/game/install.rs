@@ -7,10 +7,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 
 use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
-use crate::infra::http::{
-    http_client, http_client_for_binary_download, http_client_for_binary_download_with_preferred_proxy_host,
-};
-use crate::infra::proxy::env_var_trim;
+use crate::infra::http::{http_client, http_client_for_binary_download};
 use crate::models::events::{DownloadProgressPayload, EVENT_DOWNLOAD_PROGRESS};
 use crate::services::game::core::{
     current_os_name, download_text_with_retries, fabric_library_path,
@@ -18,9 +15,10 @@ use crate::services::game::core::{
 };
 use crate::services::game::console::log_to_console;
 use crate::services::game::runtime::{
-    build_java_http_proxy_args_with_preferred_host, download_assets, download_file, download_file_checked,
-    download_forge_installer_once, ensure_launcher_profiles_json, ensure_proxy_auth_bootstrap_jar,
-    extract_natives_jar, file_starts_with_pk, parse_forge_id, parse_neoforge_id, select_latest_quilt_loader,
+    download_assets, download_file, download_file_checked, download_forge_installer_once,
+    ensure_launcher_profiles_json, extract_natives_jar, file_starts_with_pk,
+    forge_installer_url_with_official_maven, parse_forge_id, parse_neoforge_id,
+    patch_forge_installer_maven_mirror, select_latest_quilt_loader,
 };
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
@@ -653,11 +651,7 @@ pub async fn install_forge(
     ensure_launcher_profiles_json(&root, &mc_version)?;
 
     let launcher_settings = load_settings_from_disk();
-    let installer_client_primary = if launcher_settings.forge_ipv6_download {
-        http_client_for_binary_download_with_preferred_proxy_host(true, true)
-    } else {
-        http_client_for_binary_download_with_preferred_proxy_host(true, false)
-    };
+    let installer_client = http_client_for_binary_download(false);
     let installer_dir = game_root_dir()?.join("forge_installers").join(&version_id);
     tokio::fs::create_dir_all(&installer_dir)
         .await
@@ -674,7 +668,7 @@ pub async fn install_forge(
     let total_done = Arc::new(AtomicU64::new(0));
     if need_download {
         let mut download_error = match download_forge_installer_once(
-            &installer_client_primary,
+            &installer_client,
             &installer_url,
             &installer_path,
             &app,
@@ -692,57 +686,29 @@ pub async fn install_forge(
 
         if let Some(primary_error) = download_error.take() {
             if launcher_settings.forge_proxy_fallback {
+                let official_url = forge_installer_url_with_official_maven(&installer_url);
                 let _ = log_to_console(
                     &app,
-                    &format!("[Forge] Основная загрузка installer не удалась: {primary_error}. Пробуем fallback."),
+                    &format!(
+                        "[Forge] Загрузка installer с зеркала не удалась: {primary_error}. Пробуем официальный Maven."
+                    ),
                 );
-
-                let mut fallback_errors: Vec<String> = vec![primary_error];
-
-                if launcher_settings.forge_ipv6_download {
-                    let fallback_proxy_client =
-                        http_client_for_binary_download_with_preferred_proxy_host(true, false);
-                    match download_forge_installer_once(
-                        &fallback_proxy_client,
-                        &installer_url,
-                        &installer_path,
-                        &app,
-                        &version_id,
-                        total_done.clone(),
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            fallback_errors.clear();
-                        }
-                        Err(e) => fallback_errors.push(format!("fallback proxy: {e}")),
+                match download_forge_installer_once(
+                    &installer_client,
+                    &official_url,
+                    &installer_path,
+                    &app,
+                    &version_id,
+                    total_done.clone(),
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(fallback_err) => {
+                        return Err(format!(
+                            "Ошибка скачивания Forge installer. Зеркало: {primary_error}; официальный Maven: {fallback_err}"
+                        ));
                     }
-                }
-
-                if !fallback_errors.is_empty() {
-                    let fallback_direct_client = http_client_for_binary_download(false);
-                    match download_forge_installer_once(
-                        &fallback_direct_client,
-                        &installer_url,
-                        &installer_path,
-                        &app,
-                        &version_id,
-                        total_done.clone(),
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            fallback_errors.clear();
-                        }
-                        Err(e) => fallback_errors.push(format!("fallback direct: {e}")),
-                    }
-                }
-
-                if !fallback_errors.is_empty() {
-                    return Err(format!(
-                        "Ошибка скачивания Forge installer. Попытки: {}",
-                        fallback_errors.join(" | ")
-                    ));
                 }
             } else {
                 return Err(primary_error);
@@ -750,6 +716,14 @@ pub async fn install_forge(
         }
     }
 
+    if let Err(e) = patch_forge_installer_maven_mirror(&installer_path) {
+        let _ = log_to_console(
+            &app,
+            &format!(
+                "[Forge] Не удалось пропатчить install_profile.json под зеркало ({e}). Продолжаем без патча."
+            ),
+        );
+    }
 
     let vanilla_client_jar = vers_root.join(&mc_version).join(format!("{mc_version}.jar"));
     if !vanilla_client_jar.exists() {
@@ -762,13 +736,13 @@ pub async fn install_forge(
             log_to_console(
                 &app,
                 &format!(
-                    "[Forge] Предзагрузка vanilla client.jar (через прокси лаунчера): {}",
+                    "[Forge] Предзагрузка vanilla client.jar: {}",
                     vanilla_client_jar.display()
                 ),
             );
             let total_done_pre = Arc::new(AtomicU64::new(0));
             if let Err(e) = download_file_checked(
-                &installer_client_primary,
+                &installer_client,
                 &downloads.client.url,
                 &vanilla_client_jar,
                 downloads.client.sha1.clone(),
@@ -794,9 +768,6 @@ pub async fn install_forge(
     let game_dir = root.clone();
     let java_installer = installer_path.clone();
 
-    let java_http_proxy_args =
-        build_java_http_proxy_args_with_preferred_host(launcher_settings.forge_ipv6_download);
-
     let mut forge_java_bin =
         crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
     #[cfg(target_os = "windows")]
@@ -816,59 +787,13 @@ pub async fn install_forge(
     let output = tokio::task::spawn_blocking(move || {
         use std::process::{Command, Stdio};
 
-        let cp_sep = if cfg!(windows) { ";" } else { ":" };
-
-        let proxy_user = env_var_trim("PROXY_USER");
-        let proxy_pass = env_var_trim("PROXY_PASS");
-        let has_proxy_auth = proxy_user.is_some() && proxy_pass.is_some();
-
-        let bootstrap_jar_path = if has_proxy_auth {
-            match ensure_proxy_auth_bootstrap_jar(&app_for_forge_install, &java_installer) {
-                Ok(path) => Some(path),
-                Err(e) => {
-                    let _ = log_to_console(
-                        &app_for_forge_install,
-                        &format!(
-                            "[Forge] ProxyAuth bootstrap недоступен ({e}). Продолжаем без bootstrap (без proxy auth classpath)."
-                        ),
-                    );
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        let classpath_opt = bootstrap_jar_path.as_ref().map(|b| {
-            format!("{}{}{}", b.display(), cp_sep, java_installer.display())
-        });
-
-        let help_output = if let Some(ref classpath) = classpath_opt {
-            let mut cmd_help = Command::new(&forge_java_bin_for_thread);
-            for a in &java_http_proxy_args {
-                cmd_help.arg(a);
-            }
-            cmd_help
-                .arg("-cp")
-                .arg(classpath)
-                .arg("ProxyAuthBootstrap")
-                .arg("--help")
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-            cmd_help.output()
-        } else {
-            let mut cmd_help = Command::new(&forge_java_bin_for_thread);
-            for a in &java_http_proxy_args {
-                cmd_help.arg(a);
-            }
-            cmd_help
-                .arg("-jar")
-                .arg(&java_installer)
-                .arg("--help")
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-            cmd_help.output()
-        };
+        let help_output = Command::new(&forge_java_bin_for_thread)
+            .arg("-jar")
+            .arg(&java_installer)
+            .arg("--help")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
 
         let help_text = help_output
             .as_ref()
@@ -883,94 +808,34 @@ pub async fn install_forge(
         let has_install_client = help_text.contains("--installClient");
         let has_install_server = help_text.contains("--installServer");
 
+        let game_dir_arg = game_dir.to_string_lossy().into_owned();
+
+        let run_installer = |args: &[&str]| {
+            let mut cmd = Command::new(&forge_java_bin_for_thread);
+            cmd.current_dir(&game_dir);
+            cmd.arg("-jar").arg(&java_installer);
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            cmd.output()
+        };
+
         if has_install_client {
             let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: --installClient");
-            if let Some(ref classpath) = classpath_opt {
-                let mut cmd = Command::new(&forge_java_bin_for_thread);
-                for a in &java_http_proxy_args {
-                    cmd.arg(a);
-                }
-                cmd.current_dir(&game_dir);
-                cmd.arg("-cp")
-                    .arg(classpath)
-                    .arg("ProxyAuthBootstrap")
-                    .arg("--installClient")
-                    .arg(&game_dir)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-                cmd.output()
-            } else {
-                let mut cmd = Command::new(&forge_java_bin_for_thread);
-                for a in &java_http_proxy_args {
-                    cmd.arg(a);
-                }
-                cmd.current_dir(&game_dir);
-                cmd.arg("-jar")
-                    .arg(&java_installer)
-                    .arg("--installClient")
-                    .arg(&game_dir)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-                cmd.output()
-            }
+            run_installer(&["--installClient", &game_dir_arg])
         } else if has_install_server {
-            let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: --installServer (cwd=game_dir)");
-            if let Some(ref classpath) = classpath_opt {
-                let mut cmd = Command::new(&forge_java_bin_for_thread);
-                for a in &java_http_proxy_args {
-                    cmd.arg(a);
-                }
-                cmd.current_dir(&game_dir);
-                cmd.arg("-cp")
-                    .arg(classpath)
-                    .arg("ProxyAuthBootstrap")
-                    .arg("--installServer")
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-                cmd.output()
-            } else {
-                let mut cmd = Command::new(&forge_java_bin_for_thread);
-                for a in &java_http_proxy_args {
-                    cmd.arg(a);
-                }
-                cmd.current_dir(&game_dir);
-                cmd.arg("-jar")
-                    .arg(&java_installer)
-                    .arg("--installServer")
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-                cmd.output()
-            }
+            let _ = log_to_console(
+                &app_for_forge_install,
+                "[Forge] Installer mode: --installServer (cwd=game_dir)",
+            );
+            run_installer(&["--installServer"])
         } else {
-            let _ = log_to_console(&app_for_forge_install, "[Forge] Installer mode: fallback --installClient");
-            if let Some(ref classpath) = classpath_opt {
-                let mut cmd = Command::new(&forge_java_bin_for_thread);
-                for a in &java_http_proxy_args {
-                    cmd.arg(a);
-                }
-                cmd.current_dir(&game_dir);
-                cmd.arg("-cp")
-                    .arg(classpath)
-                    .arg("ProxyAuthBootstrap")
-                    .arg("--installClient")
-                    .arg(&game_dir)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-                cmd.output()
-            } else {
-                let mut cmd = Command::new(&forge_java_bin_for_thread);
-                for a in &java_http_proxy_args {
-                    cmd.arg(a);
-                }
-                cmd.current_dir(&game_dir);
-                cmd.arg("-jar")
-                    .arg(&java_installer)
-                    .arg("--installClient")
-                    .arg(&game_dir)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-                cmd.output()
-            }
+            let _ = log_to_console(
+                &app_for_forge_install,
+                "[Forge] Installer mode: fallback --installClient",
+            );
+            run_installer(&["--installClient", &game_dir_arg])
         }
     })
     .await
