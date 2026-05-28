@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
 import type { CSSProperties } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
 import { useT } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
@@ -131,6 +131,36 @@ type VersionIntegrityCheckResult = {
   missing_files: number;
   corrupted_files: number;
 };
+
+type LoaderVersionChannel = "stable" | "beta" | "alpha";
+
+type LoaderVersionOption = {
+  version: string;
+  channel?: LoaderVersionChannel | null;
+};
+
+type VersionInstallDetails = {
+  gameVersion: string;
+  hasGameFiles: boolean;
+  hasLoader: boolean;
+  loaderVersions: string[];
+  profileIds: string[];
+  loaderVersionId: string | null;
+};
+
+type VersionDeleteScope = "game" | "loader" | "all";
+
+function gameVersionFromListItem(version: VersionListItem): string {
+  if (version.loader === "forge") {
+    const m = /^(.+)-forge-/.exec(version.id);
+    return m?.[1] ?? version.id;
+  }
+  if (version.loader === "neoforge") {
+    const m = /^(.+)-neoforge-/.exec(version.id);
+    return m?.[1] ?? version.id;
+  }
+  return version.id;
+}
 
 type LauncherSettingsBackupV1 = {
   format_version: number;
@@ -282,6 +312,19 @@ export function SettingsTab({
     version: VersionListItem;
     result: VersionIntegrityCheckResult;
   } | null>(null);
+  const [reinstallDialog, setReinstallDialog] = useState<{
+    version: VersionListItem;
+    gameVersion: string;
+    selectedLoaderVersion: string;
+  } | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    version: VersionListItem;
+    details: VersionInstallDetails;
+  } | null>(null);
+  const [reinstallLoaderOptions, setReinstallLoaderOptions] = useState<LoaderVersionOption[]>([]);
+  const [reinstallLoaderLoading, setReinstallLoaderLoading] = useState(false);
+  const [isReinstallLoaderDropdownOpen, setIsReinstallLoaderDropdownOpen] = useState(false);
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
   const [skipRepairPrompt, setSkipRepairPrompt] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -781,24 +824,85 @@ export function SettingsTab({
     }
   };
 
-  const handleInstallVersion = async (version: VersionListItem, options?: { silentSuccess?: boolean }) => {
+  const loadReinstallLoaderOptions = useCallback(
+    async (version: VersionListItem, gameVersion: string) => {
+      if (version.loader === "vanilla") {
+        setReinstallLoaderOptions([]);
+        return;
+      }
+      setReinstallLoaderLoading(true);
+      try {
+        let options: LoaderVersionOption[] = [];
+        if (version.loader === "fabric") {
+          options = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+            gameVersion,
+          });
+        } else if (version.loader === "quilt") {
+          options = await invoke<LoaderVersionOption[]>("fetch_quilt_loaders", {
+            gameVersion,
+          });
+        } else if (version.loader === "forge") {
+          options = await invoke<LoaderVersionOption[]>("fetch_forge_builds_for_game", {
+            gameVersion,
+          });
+        } else if (version.loader === "neoforge") {
+          options = await invoke<LoaderVersionOption[]>("fetch_neoforge_builds_for_game", {
+            gameVersion,
+          });
+        }
+        setReinstallLoaderOptions(options);
+      } catch (e) {
+        console.error("Failed to load loader versions:", e);
+        setReinstallLoaderOptions([]);
+      } finally {
+        setReinstallLoaderLoading(false);
+      }
+    },
+    [],
+  );
+
+  const handleInstallVersion = async (
+    version: VersionListItem,
+    options?: { silentSuccess?: boolean; loaderVersion?: string },
+  ) => {
     try {
       setInstallingVersionId(version.id);
+      const pickedLoader = options?.loaderVersion?.trim() || null;
       if (version.loader === "forge") {
-        if (!version.installer_url) throw new Error("Missing Forge installer URL");
+        const gameVersion = gameVersionFromListItem(version);
+        let versionId = version.id;
+        let installerUrl = version.installer_url;
+        if (pickedLoader) {
+          const builds = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+          const match = builds.find(
+            (v) => v.mc_version === gameVersion && v.forge_build === pickedLoader,
+          );
+          versionId = match?.id ?? `${gameVersion}-forge-${pickedLoader}`;
+          installerUrl =
+            match?.installer_url ??
+            `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${pickedLoader}/forge-${gameVersion}-${pickedLoader}-installer.jar`;
+        }
+        if (!installerUrl) throw new Error("Missing Forge installer URL");
         await invoke("install_forge", {
-          versionId: version.id,
-          installerUrl: version.installer_url,
+          versionId,
+          installerUrl,
         });
       } else if (version.loader === "neoforge") {
+        const gameVersion = gameVersionFromListItem(version);
+        const versionId = pickedLoader
+          ? `${gameVersion}-neoforge-${pickedLoader}`
+          : version.id;
         await invoke("install_neoforge", {
-          version_id: version.id,
+          version_id: versionId,
         });
       } else if (version.loader === "fabric") {
-        const loaders = await invoke<{ version: string }[]>("fetch_fabric_loaders", {
-          gameVersion: version.id,
-        });
-        const loaderVersion = loaders[0]?.version;
+        let loaderVersion = pickedLoader;
+        if (!loaderVersion) {
+          const loaders = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+            gameVersion: version.id,
+          });
+          loaderVersion = loaders[0]?.version;
+        }
         if (!loaderVersion) throw new Error("No suitable Fabric loader");
         await invoke("install_fabric", {
           gameVersion: version.id,
@@ -807,7 +911,7 @@ export function SettingsTab({
       } else if (version.loader === "quilt") {
         await invoke("install_quilt", {
           gameVersion: version.id,
-          loaderVersion: null,
+          loaderVersion: pickedLoader,
         });
       } else if (version.version_type === "custom" || !version.url) {
         await invoke("install_local_version", { versionId: version.id });
@@ -871,6 +975,139 @@ export function SettingsTab({
       );
     } finally {
       setCheckingVersionId(null);
+    }
+  };
+
+  const openReinstallDialog = async (version: VersionListItem) => {
+    if (version.loader === "vanilla") {
+      void handleInstallVersion(version);
+      return;
+    }
+    const gameVersion = gameVersionFromListItem(version);
+    let selectedLoaderVersion = "";
+    try {
+      const details = await invoke<VersionInstallDetails>("get_version_install_details", {
+        loader: version.loader,
+        itemId: version.id,
+      });
+      selectedLoaderVersion = details.loaderVersions[0] ?? "";
+    } catch {
+      // ignore
+    }
+    setReinstallDialog({ version, gameVersion, selectedLoaderVersion });
+    setIsReinstallLoaderDropdownOpen(false);
+    void loadReinstallLoaderOptions(version, gameVersion);
+  };
+
+  useEffect(() => {
+    if (!reinstallDialog || reinstallLoaderLoading || reinstallLoaderOptions.length === 0) {
+      return;
+    }
+    if (reinstallDialog.selectedLoaderVersion) return;
+    const first = reinstallLoaderOptions[0]?.version;
+    if (!first) return;
+    setReinstallDialog((prev) => (prev ? { ...prev, selectedLoaderVersion: first } : null));
+  }, [reinstallDialog, reinstallLoaderLoading, reinstallLoaderOptions]);
+
+  const confirmReinstall = async () => {
+    if (!reinstallDialog) return;
+    const { version, selectedLoaderVersion } = reinstallDialog;
+    const loaderVersion = selectedLoaderVersion.trim();
+    if (!loaderVersion) {
+      showNotification("error", tt("settings.versions.manage.loaderRequired"));
+      return;
+    }
+    setReinstallDialog(null);
+    try {
+      if (version.loader !== "vanilla") {
+        const details = await invoke<VersionInstallDetails>("get_version_install_details", {
+          loader: version.loader,
+          itemId: version.id,
+        });
+        const changingLoader =
+          details.hasLoader &&
+          details.loaderVersions.length > 0 &&
+          !details.loaderVersions.includes(loaderVersion);
+        if (changingLoader) {
+          await invoke("delete_minecraft_installation", {
+            loader: version.loader,
+            itemId: version.id,
+            scope: "loader" as VersionDeleteScope,
+          });
+        }
+      }
+      await handleInstallVersion(version, { loaderVersion });
+    } catch (e) {
+      console.error("Failed to reinstall version:", e);
+    }
+  };
+
+  const performDelete = async (
+    version: VersionListItem,
+    scope: VersionDeleteScope,
+    targetLabel: string,
+  ) => {
+    try {
+      setDeletingVersionId(version.id);
+      await invoke("delete_minecraft_installation", {
+        loader: version.loader,
+        itemId: version.id,
+        scope,
+      });
+      showNotification(
+        "success",
+        tt("settings.versions.delete.success", { target: targetLabel }),
+        { sound: true },
+      );
+      await loadInstalledVersions();
+      const available = await loadAvailableByLoader(versionsLoader);
+      setAvailableVersions(available);
+    } catch (e) {
+      console.error("Failed to delete version:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", tt("settings.versions.delete.failed", { msg }));
+    } finally {
+      setDeletingVersionId(null);
+    }
+  };
+
+  const openDeleteFlow = async (version: VersionListItem) => {
+    try {
+      const details = await invoke<VersionInstallDetails>("get_version_install_details", {
+        loader: version.loader,
+        itemId: version.id,
+      });
+      if (!details.hasGameFiles && !details.hasLoader) {
+        showNotification(
+          "warning",
+          tt("settings.versions.delete.simplePrompt", { version: version.id }),
+        );
+        return;
+      }
+      const needsChoice =
+        version.loader !== "vanilla" && details.hasGameFiles && details.hasLoader;
+      if (!needsChoice) {
+        const scope: VersionDeleteScope = !details.hasGameFiles
+          ? "loader"
+          : details.hasLoader
+            ? "all"
+            : "game";
+        const target = version.id;
+        if (
+          !window.confirm(
+            tt("settings.versions.delete.simplePrompt", { version: version.id }),
+          )
+        ) {
+          return;
+        }
+        await performDelete(version, scope, target);
+        return;
+      }
+      setDeleteDialog({ version, details });
+    } catch (e) {
+      console.error("Failed to prepare delete:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", tt("settings.versions.delete.failed", { msg }));
     }
   };
 
@@ -1114,6 +1351,174 @@ export function SettingsTab({
         fillPane ? "h-full flex-1" : "flex-1 items-center"
       }`}
     >
+      {reinstallDialog && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setReinstallDialog(null)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-sm font-semibold text-white">
+              {tt("settings.versions.manage.reinstallTitle", {
+                version: reinstallDialog.version.id,
+              })}
+            </h3>
+            <p className="mb-4 text-xs text-white/70">
+              {tt("settings.versions.manage.reinstallHint", {
+                gameVersion: reinstallDialog.gameVersion,
+              })}
+            </p>
+            <label className="mb-1 block text-xs text-white/70">
+              {tt("settings.versions.manage.loaderVersionLabel")}
+            </label>
+            <div className="relative mb-4">
+              <button
+                type="button"
+                disabled={reinstallLoaderLoading}
+                onClick={() => setIsReinstallLoaderDropdownOpen((v) => !v)}
+                className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/20 bg-black/30 px-3 text-sm text-white/90"
+              >
+                <span className="truncate">
+                  {reinstallLoaderLoading
+                    ? tt("common.loading")
+                    : reinstallDialog.selectedLoaderVersion || tt("modpacks.common.select")}
+                </span>
+                <span className="text-[10px] text-white/50">▾</span>
+              </button>
+              {isReinstallLoaderDropdownOpen && (
+                <div className="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-1 text-xs shadow-soft">
+                  {reinstallLoaderOptions.map((opt) => (
+                    <button
+                      key={opt.version}
+                      type="button"
+                      onClick={() => {
+                        setReinstallDialog((prev) =>
+                          prev ? { ...prev, selectedLoaderVersion: opt.version } : null,
+                        );
+                        setIsReinstallLoaderDropdownOpen(false);
+                      }}
+                      className={`flex w-full rounded-lg px-3 py-1.5 text-left ${
+                        reinstallDialog.selectedLoaderVersion === opt.version
+                          ? "bg-white/90 text-black"
+                          : "text-white/80 hover:bg-white/10"
+                      }`}
+                    >
+                      {opt.version}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReinstallDialog(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={installingVersionId === reinstallDialog.version.id}
+                onClick={() => void confirmReinstall()}
+                className="interactive-press rounded-xl bg-white/90 px-4 py-1.5 text-xs font-semibold text-black hover:bg-white"
+              >
+                {tt("settings.versions.manage.reinstallConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteDialog && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setDeleteDialog(null)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-sm font-semibold text-white">
+              {tt("settings.versions.delete.title", { version: deleteDialog.version.id })}
+            </h3>
+            <p className="mb-4 text-xs text-white/70">
+              {tt("settings.versions.delete.choicePrompt", {
+                version: deleteDialog.version.id,
+              })}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={deletingVersionId === deleteDialog.version.id}
+                onClick={() => {
+                  const { version, details } = deleteDialog;
+                  setDeleteDialog(null);
+                  void performDelete(
+                    version,
+                    "game",
+                    tt("settings.versions.delete.gameOnly", {
+                      gameVersion: details.gameVersion,
+                    }),
+                  );
+                }}
+                className="interactive-press rounded-xl border border-white/20 px-4 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+              >
+                {tt("settings.versions.delete.gameOnly", {
+                  gameVersion: deleteDialog.details.gameVersion,
+                })}
+              </button>
+              <button
+                type="button"
+                disabled={deletingVersionId === deleteDialog.version.id}
+                onClick={() => {
+                  const { version, details } = deleteDialog;
+                  const suffix =
+                    details.loaderVersions.length > 0
+                      ? ` (${details.loaderVersions.join(", ")})`
+                      : "";
+                  setDeleteDialog(null);
+                  void performDelete(
+                    version,
+                    "loader",
+                    tt("settings.versions.delete.loaderOnly", { loaderSuffix: suffix }),
+                  );
+                }}
+                className="interactive-press rounded-xl border border-white/20 px-4 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+              >
+                {tt("settings.versions.delete.loaderOnly", {
+                  loaderSuffix:
+                    deleteDialog.details.loaderVersions.length > 0
+                      ? ` (${deleteDialog.details.loaderVersions.join(", ")})`
+                      : "",
+                })}
+              </button>
+              <button
+                type="button"
+                disabled={deletingVersionId === deleteDialog.version.id}
+                onClick={() => {
+                  const { version } = deleteDialog;
+                  setDeleteDialog(null);
+                  void performDelete(version, "all", version.id);
+                }}
+                className="interactive-press rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-2 text-left text-xs font-semibold text-rose-100 hover:bg-rose-500/25"
+              >
+                {tt("settings.versions.delete.all")}
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteDialog(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {repairPrompt && (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -1693,8 +2098,12 @@ export function SettingsTab({
                               )}
                               <button
                                 type="button"
-                                disabled={installingVersionId === v.id}
-                                onClick={() => void handleInstallVersion(v)}
+                                disabled={
+                                  installingVersionId === v.id || deletingVersionId === v.id
+                                }
+                                onClick={() =>
+                                  void (installed ? openReinstallDialog(v) : handleInstallVersion(v))
+                                }
                                 className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
                                   installingVersionId === v.id
                                     ? "cursor-default bg-white/10 text-white/60"
@@ -1708,20 +2117,42 @@ export function SettingsTab({
                                     : tt("settings.versions.action.install")}
                               </button>
                               {installed && (
-                                <button
-                                  type="button"
-                                  disabled={checkingVersionId === v.id || installingVersionId === v.id}
-                                  onClick={() => void handleCheckVersionFiles(v)}
-                                  className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
-                                    checkingVersionId === v.id
-                                      ? "cursor-default bg-white/10 text-white/60"
-                                      : "border border-white/25 text-white/80 hover:border-white/40 hover:text-white"
-                                  }`}
-                                >
-                                  {checkingVersionId === v.id
-                                    ? tt("settings.versions.verify.checking")
-                                    : tt("settings.versions.verify.button")}
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      checkingVersionId === v.id ||
+                                      installingVersionId === v.id ||
+                                      deletingVersionId === v.id
+                                    }
+                                    onClick={() => void handleCheckVersionFiles(v)}
+                                    className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+                                      checkingVersionId === v.id
+                                        ? "cursor-default bg-white/10 text-white/60"
+                                        : "border border-white/25 text-white/80 hover:border-white/40 hover:text-white"
+                                    }`}
+                                  >
+                                    {checkingVersionId === v.id
+                                      ? tt("settings.versions.verify.checking")
+                                      : tt("settings.versions.verify.button")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      installingVersionId === v.id || deletingVersionId === v.id
+                                    }
+                                    onClick={() => void openDeleteFlow(v)}
+                                    className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+                                      deletingVersionId === v.id
+                                        ? "cursor-default bg-white/10 text-white/60"
+                                        : "border border-rose-400/35 text-rose-200 hover:border-rose-300/55 hover:text-rose-100"
+                                    }`}
+                                  >
+                                    {deletingVersionId === v.id
+                                      ? tt("settings.versions.action.deleting")
+                                      : tt("settings.versions.action.delete")}
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>

@@ -148,7 +148,26 @@
       "action": {
         "install": "Установить",
         "reinstall": "Переустановить",
-        "installing": "Установка..."
+        "installing": "Установка...",
+        "delete": "Удалить",
+        "deleting": "Удаление..."
+      },
+      "manage": {
+        "reinstallTitle": "Переустановка {{version}}",
+        "reinstallHint": "Выберите версию загрузчика. Базовая версия Minecraft: {{gameVersion}}.",
+        "reinstallConfirm": "Переустановить",
+        "loaderVersionLabel": "Версия загрузчика:",
+        "loaderRequired": "Выберите версию загрузчика."
+      },
+      "delete": {
+        "title": "Удалить {{version}}?",
+        "simplePrompt": "Удалить файлы версии Minecraft {{version}}? Библиотеки в общей папке не затрагиваются.",
+        "choicePrompt": "Что удалить для {{version}}?",
+        "gameOnly": "Только Minecraft {{gameVersion}}",
+        "loaderOnly": "Только загрузчик{{loaderSuffix}}",
+        "all": "Всё вместе",
+        "success": "Удалено: {{target}}.",
+        "failed": "Не удалось удалить: {{msg}}"
       },
       "loadFailed": "Не удалось загрузить список версий Minecraft.",
       "refreshFailed": "Не удалось обновить список версий.",
