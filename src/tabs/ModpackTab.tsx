@@ -669,6 +669,10 @@ export function ModpackTab({
   }, [manageConsoleExpanded]);
 
   useEffect(() => {
+    setSelectedLogSessionId("live");
+  }, [selectedProfileId]);
+
+  useEffect(() => {
     if (selectedLogSessionId === "live") return;
     const exists = consoleHistorySessions.some((s) => s.id === selectedLogSessionId);
     if (!exists) setSelectedLogSessionId("live");
@@ -4820,6 +4824,7 @@ export function ModpackTab({
 
       <ScreenshotsModal
         language={language}
+        profileId={selectedProfileId}
         open={isScreenshotsOpen}
         onClose={() => setIsScreenshotsOpen(false)}
         showNotification={showNotification}
