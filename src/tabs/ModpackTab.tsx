@@ -26,6 +26,11 @@ import { resolveIconSrc } from "../lib/profile-icon";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
 import type { ModpackHotkeyActions } from "../hooks/useHotkeys";
 import { ScreenshotsModal } from "../features/screenshots";
+import {
+  ProfileInfoIcon,
+  ProfileInfoModal,
+  type ProfileInfoData,
+} from "../components/profile_info_modal";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type LoaderVersionChannel = "stable" | "beta" | "alpha";
@@ -500,6 +505,7 @@ export function ModpackTab({
 
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isScreenshotsOpen, setIsScreenshotsOpen] = useState(false);
+  const [profileInfoProfile, setProfileInfoProfile] = useState<ProfileInfoData | null>(null);
   const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
   const [exportTree, setExportTree] = useState<FileNode[] | null>(null);
   const [exportTreeLoading, setExportTreeLoading] = useState(false);
@@ -3395,17 +3401,27 @@ export function ModpackTab({
                   </h2>
                 )}
                 {!isRenaming && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRenameValue(selectedProfile.name);
-                      setIsRenaming(true);
-                    }}
-                    className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
-                    title={language === "ru" ? "Переименовать" : "Rename"}
-                  >
-                    <EditIcon className="h-3.5 w-3.5" />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setProfileInfoProfile(selectedProfile)}
+                      className="interactive-press rounded-full bg-white/10 p-0.5 text-white/70 hover:bg-white/20"
+                      title={tt("modpacks.profileInfo.buttonTitle")}
+                    >
+                      <ProfileInfoIcon className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRenameValue(selectedProfile.name);
+                        setIsRenaming(true);
+                      }}
+                      className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
+                      title={language === "ru" ? "Переименовать" : "Rename"}
+                    >
+                      <EditIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </>
                 )}
                 {isRenaming && (
                   <>
@@ -3940,9 +3956,22 @@ export function ModpackTab({
                 const profile = profiles.find((p) => p.id === contextMenu.profileId);
                 setContextMenu(null);
                 if (!profile) return;
-                void openProfileSettings(profile.id);
+                setProfileInfoProfile(profile);
               }}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <ProfileInfoIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.profileInfo.menuItem")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void openProfileSettings(profile.id);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
               <SettingsIcon className="h-3.5 w-3.5" />
               <span>{language === "ru" ? "Настройки" : "Settings"}</span>
@@ -4292,6 +4321,12 @@ export function ModpackTab({
           </div>
         </div>
       )}
+
+      <ProfileInfoModal
+        language={language}
+        profile={profileInfoProfile}
+        onClose={() => setProfileInfoProfile(null)}
+      />
 
       {isProfileSettingsOpen && selectedProfile && (
         <div
