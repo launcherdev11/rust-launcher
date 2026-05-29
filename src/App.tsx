@@ -62,6 +62,7 @@ import {
   isSplittableTab,
   loadTabSplitLayout,
   saveTabSplitLayout,
+  tabAfterClosingSplitPane,
   tabPaneRole,
   TAB_DRAG_THRESHOLD_PX,
   TAB_SPLIT_RATIO_MAX,
@@ -705,6 +706,7 @@ function App() {
     y: number;
   } | null>(null);
   const [tabDropZone, setTabDropZone] = useState<TabDropZone | null>(null);
+  const tabDropZoneRef = useRef<TabDropZone | null>(null);
   const [isTabSplitDividerDragging, setIsTabSplitDividerDragging] = useState(false);
   const mainSplitRef = useRef<HTMLElement | null>(null);
   const sidebarTabDragRef = useRef<{
@@ -713,6 +715,7 @@ function App() {
     startY: number;
     active: boolean;
   } | null>(null);
+  const sidebarTabDragListenersRef = useRef<(() => void) | null>(null);
   const sidebarDragConsumedRef = useRef(false);
   const tabSplitDividerDragRef = useRef<{
     startCoord: number;
@@ -1019,24 +1022,42 @@ function App() {
     [effectiveTabSplit, setActiveItemWithSound],
   );
 
+  const dismissTabSplitPane = useCallback(
+    (role: "primary" | "secondary") => {
+      if (!effectiveTabSplit) return;
+      const keepTab = tabAfterClosingSplitPane(effectiveTabSplit, role);
+      setTabSplitLayout(null);
+      setActiveItemWithSound(keepTab);
+    },
+    [effectiveTabSplit, setActiveItemWithSound],
+  );
+
   const finishTabDrag = useCallback(
-    (clientX: number, clientY: number) => {
-      const drag = sidebarTabDragRef.current;
+    (clientX: number, clientY: number, draggedTab: SplittableTabId) => {
       sidebarTabDragRef.current = null;
       setTabDrag(null);
       setTabDropZone(null);
 
-      if (!drag?.active || !splitViewEnabled) return;
+      if (!splitViewEnabled) {
+        tabDropZoneRef.current = null;
+        return;
+      }
 
       sidebarDragConsumedRef.current = true;
       const mainEl = mainSplitRef.current;
-      if (!mainEl) return;
+      if (!mainEl) {
+        tabDropZoneRef.current = null;
+        return;
+      }
 
       const rect = mainEl.getBoundingClientRect();
-      const zone = detectDropZone(clientX, clientY, rect);
+      const zone =
+        tabDropZoneRef.current ?? detectDropZone(clientX, clientY, rect);
+      tabDropZoneRef.current = null;
+
       const currentTab = isSplittableTab(activeItem) ? activeItem : "play";
       const { layout, focusedTab } = applyTabDrop(
-        drag.tab,
+        draggedTab,
         zone,
         currentTab,
         effectiveTabSplit,
@@ -1047,65 +1068,78 @@ function App() {
     [activeItem, effectiveTabSplit, setActiveItemWithSound, splitViewEnabled],
   );
 
+  const cleanupSidebarTabDragListeners = useCallback(() => {
+    sidebarTabDragListenersRef.current?.();
+    sidebarTabDragListenersRef.current = null;
+  }, []);
+
+  const updateTabDragPointer = useCallback((clientX: number, clientY: number, tab: SplittableTabId) => {
+    setTabDrag({ tab, x: clientX, y: clientY });
+    const mainEl = mainSplitRef.current;
+    if (mainEl) {
+      const zone = detectDropZone(clientX, clientY, mainEl.getBoundingClientRect());
+      tabDropZoneRef.current = zone;
+      setTabDropZone(zone);
+    }
+  }, []);
+
   const handleSidebarTabPointerDown = useCallback(
     (tab: SplittableTabId, e: ReactPointerEvent<HTMLDivElement>) => {
       if (!splitViewEnabled || e.button !== 0) return;
+      e.preventDefault();
+      cleanupSidebarTabDragListeners();
+
+      const pointerId = e.pointerId;
       sidebarTabDragRef.current = {
         tab,
         startX: e.clientX,
         startY: e.clientY,
         active: false,
       };
-      e.currentTarget.setPointerCapture(e.pointerId);
+
+      const onMove = (ev: PointerEvent) => {
+        if (ev.pointerId !== pointerId) return;
+        const drag = sidebarTabDragRef.current;
+        if (!drag) return;
+        const dx = ev.clientX - drag.startX;
+        const dy = ev.clientY - drag.startY;
+        if (
+          !drag.active &&
+          (Math.abs(dx) > TAB_DRAG_THRESHOLD_PX || Math.abs(dy) > TAB_DRAG_THRESHOLD_PX)
+        ) {
+          drag.active = true;
+        }
+        if (!drag.active) return;
+        updateTabDragPointer(ev.clientX, ev.clientY, drag.tab);
+      };
+
+      const onEnd = (ev: PointerEvent) => {
+        if (ev.pointerId !== pointerId) return;
+        cleanupSidebarTabDragListeners();
+        const drag = sidebarTabDragRef.current;
+        if (drag?.active) {
+          finishTabDrag(ev.clientX, ev.clientY, drag.tab);
+        } else {
+          sidebarTabDragRef.current = null;
+          tabDropZoneRef.current = null;
+          setTabDrag(null);
+          setTabDropZone(null);
+        }
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onEnd);
+      window.addEventListener("pointercancel", onEnd);
+      sidebarTabDragListenersRef.current = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onEnd);
+        window.removeEventListener("pointercancel", onEnd);
+      };
     },
-    [splitViewEnabled],
+    [cleanupSidebarTabDragListeners, finishTabDrag, splitViewEnabled, updateTabDragPointer],
   );
 
-  const handleSidebarTabPointerMove = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = sidebarTabDragRef.current;
-      if (!drag) return;
-      const dx = e.clientX - drag.startX;
-      const dy = e.clientY - drag.startY;
-      if (
-        !drag.active &&
-        (Math.abs(dx) > TAB_DRAG_THRESHOLD_PX || Math.abs(dy) > TAB_DRAG_THRESHOLD_PX)
-      ) {
-        drag.active = true;
-        setTabDrag({ tab: drag.tab, x: e.clientX, y: e.clientY });
-      }
-      if (!drag.active) return;
-      setTabDrag({ tab: drag.tab, x: e.clientX, y: e.clientY });
-      const mainEl = mainSplitRef.current;
-      if (mainEl) {
-        setTabDropZone(detectDropZone(e.clientX, e.clientY, mainEl.getBoundingClientRect()));
-      }
-    },
-    [],
-  );
-
-  const handleSidebarTabPointerUp = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = sidebarTabDragRef.current;
-      if (!drag) return;
-      if (drag.active) {
-        finishTabDrag(e.clientX, e.clientY);
-      } else {
-        sidebarTabDragRef.current = null;
-      }
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-      }
-    },
-    [finishTabDrag],
-  );
-
-  const handleSidebarTabPointerCancel = useCallback(() => {
-    sidebarTabDragRef.current = null;
-    setTabDrag(null);
-    setTabDropZone(null);
-  }, []);
+  useEffect(() => () => cleanupSidebarTabDragListeners(), [cleanupSidebarTabDragListeners]);
 
   const sidebarIconClass = useCallback(
     (tab: SplittableTabId) => {
@@ -4094,48 +4128,71 @@ function App() {
           >
             {orderedSidebarItems.map((item) => {
               const tabId = item.id as SplittableTabId;
+              const splitRole =
+                effectiveTabSplit && tabPaneRole(tabId, effectiveTabSplit);
               return (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                onClick={() => {
-                  if (sidebarDragConsumedRef.current) {
-                    sidebarDragConsumedRef.current = false;
-                    return;
-                  }
-                  activateSidebarTab(tabId);
-                }}
-                title={tt(item.labelKey)}
-                ref={(el) => {
-                  sidebarButtonRefs.current[item.id] = el;
-                }}
                 className="interactive-press group relative flex items-center"
               >
-                <div
-                  className={`sidebar-icon flex items-center justify-center ${
-                    sidebarHorizontal ? "" : "ml-2"
-                  } ${sidebarIconClass(tabId)}`}
-                  onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
-                  onPointerMove={handleSidebarTabPointerMove}
-                  onPointerUp={handleSidebarTabPointerUp}
-                  onPointerCancel={handleSidebarTabPointerCancel}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sidebarDragConsumedRef.current) {
+                      sidebarDragConsumedRef.current = false;
+                      return;
+                    }
+                    activateSidebarTab(tabId);
+                  }}
+                  title={tt(item.labelKey)}
+                  ref={(el) => {
+                    sidebarButtonRefs.current[item.id] = el;
+                  }}
+                  className="relative flex items-center"
                 >
-                  {SIDEBAR_ICON_PATHS[item.id] ? (
-                    <img
-                      src={SIDEBAR_ICON_PATHS[item.id]}
-                      alt=""
-                      className="h-7 w-7 object-contain"
-                    />
-                  ) : (
-                    <>
-                      {item.id === "play" && <PlayIcon />}
-                      {item.id === "settings" && <SettingsIcon />}
-                      {item.id === "mods" && <ModsIcon />}
-                      {item.id === "modpacks" && <ModpackIcon />}
-                    </>
-                  )}
-                </div>
-              </button>
+                  <div
+                    className={`sidebar-icon flex items-center justify-center ${
+                      sidebarHorizontal ? "" : "ml-2"
+                    } ${sidebarIconClass(tabId)}`}
+                    onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
+                  >
+                    {SIDEBAR_ICON_PATHS[item.id] ? (
+                      <img
+                        src={SIDEBAR_ICON_PATHS[item.id]}
+                        alt=""
+                        className="h-7 w-7 object-contain"
+                      />
+                    ) : (
+                      <>
+                        {item.id === "play" && <PlayIcon />}
+                        {item.id === "settings" && <SettingsIcon />}
+                        {item.id === "mods" && <ModsIcon />}
+                        {item.id === "modpacks" && <ModpackIcon />}
+                      </>
+                    )}
+                  </div>
+                </button>
+                {splitRole ? (
+                  <button
+                    type="button"
+                    className={[
+                      "tab-split-sidebar-close interactive-press no-shift",
+                      sidebarHorizontal
+                        ? "tab-split-sidebar-close-horizontal"
+                        : "tab-split-sidebar-close-vertical",
+                    ].join(" ")}
+                    title={tt("app.splitView.closePane")}
+                    aria-label={tt("app.splitView.closePane")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dismissTabSplitPane(splitRole);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <CloseIcon />
+                  </button>
+                ) : null}
+              </div>
             );
             })}
           </div>
@@ -4479,6 +4536,19 @@ function App() {
                   }
                 }}
               >
+                <button
+                  type="button"
+                  className="tab-split-pane-close interactive-press no-shift"
+                  title={tt("app.splitView.closePane")}
+                  aria-label={tt("app.splitView.closePane")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissTabSplitPane("primary");
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <CloseIcon />
+                </button>
                 <div className="tab-split-pane-inner">
                   {renderMainTabContent(effectiveTabSplit.primary, true)}
                 </div>
@@ -4511,6 +4581,19 @@ function App() {
                   }
                 }}
               >
+                <button
+                  type="button"
+                  className="tab-split-pane-close interactive-press no-shift"
+                  title={tt("app.splitView.closePane")}
+                  aria-label={tt("app.splitView.closePane")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissTabSplitPane("secondary");
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <CloseIcon />
+                </button>
                 <div className="tab-split-pane-inner">
                   {renderMainTabContent(effectiveTabSplit.secondary, true)}
                 </div>
