@@ -63,6 +63,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
+      - name: Generate changelog with commit links
+        id: generate_changelog
+        run: |
+          REPO="${{ github.repository }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude="v${{ needs.extract-version.outputs.version }}" HEAD~1 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --oneline --no-decorate)
+          else
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --oneline --no-decorate)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            CHANGELOG="Нет изменений"
+          else
+            while IFS= read -r line; do
+              if [ -n "$line" ]; then
+                COMMIT_HASH=$(echo "$line" | cut -d' ' -f1)
+                COMMIT_MSG=$(echo "$line" | cut -d' ' -f2-)
+                echo "- [$COMMIT_HASH](https://github.com/$REPO/commit/$COMMIT_HASH) $COMMIT_MSG"
+              fi
+            done <<< "$COMMITS" > /tmp/changelog.md
+            CHANGELOG=$(cat /tmp/changelog.md)
+          fi
+
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Build and create GitHub release
         uses: tauri-apps/tauri-action@v0.6.1
         env:
@@ -81,5 +109,5 @@ jobs:
           tauriScript: "npm run tauri"
           tagName: "v__VERSION__"
           releaseName: "16Launcher v__VERSION__"
-          releaseBody: "Автоматический релиз 16Launcher v__VERSION__."
+          releaseBody: ${{ steps.generate_changelog.outputs.CHANGELOG }}
 
