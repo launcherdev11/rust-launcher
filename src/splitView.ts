@@ -17,7 +17,7 @@ export const TAB_SPLIT_RATIO_MIN = 0.22;
 export const TAB_SPLIT_RATIO_MAX = 0.78;
 export const TAB_SPLIT_RATIO_DEFAULT = 0.5;
 export const TAB_DRAG_THRESHOLD_PX = 8;
-export const TAB_DROP_EDGE_FRAC = 0.22;
+export const TAB_DROP_EDGE_FRAC = 0.28;
 
 const SPLITTABLE_ORDER: SplittableTabId[] = ["play", "mods", "modpacks", "settings"];
 
@@ -39,8 +39,10 @@ export function detectDropZone(
   clientY: number,
   rect: DOMRect,
 ): TabDropZone {
-  const rx = (clientX - rect.left) / rect.width;
-  const ry = (clientY - rect.top) / rect.height;
+  const w = rect.width > 0 ? rect.width : 1;
+  const h = rect.height > 0 ? rect.height : 1;
+  const rx = Math.min(1, Math.max(0, (clientX - rect.left) / w));
+  const ry = Math.min(1, Math.max(0, (clientY - rect.top) / h));
   if (rx < TAB_DROP_EDGE_FRAC) return "left";
   if (rx > 1 - TAB_DROP_EDGE_FRAC) return "right";
   if (ry < TAB_DROP_EDGE_FRAC) return "top";
@@ -98,7 +100,10 @@ export function applyTabDrop(
   existing: TabSplitLayout | null,
 ): { layout: TabSplitLayout | null; focusedTab: SplittableTabId } {
   if (zone === "center") {
-    return { layout: null, focusedTab: dragged };
+    if (existing) {
+      return { layout: null, focusedTab: dragged };
+    }
+    zone = "right";
   }
 
   const direction: SplitDirection =
@@ -161,4 +166,11 @@ export function tabPaneRole(
   if (tab === layout.primary) return "primary";
   if (tab === layout.secondary) return "secondary";
   return null;
+}
+
+export function tabAfterClosingSplitPane(
+  layout: TabSplitLayout,
+  role: "primary" | "secondary",
+): SplittableTabId {
+  return role === "primary" ? layout.secondary : layout.primary;
 }
