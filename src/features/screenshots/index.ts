@@ -2,6 +2,7 @@ export type { ScreenshotInfo } from "./types";
 export {
   deleteScreenshot,
   getScreenshotDataUri,
+  getScreenshotThumbnail,
   listScreenshots,
   openScreenshot,
   openScreenshotsFolder,

@@ -53,8 +53,8 @@ pub use external_import::{
     list_importable_instances,
 };
 pub use screenshots::{
-    delete_screenshot, get_screenshot_data_uri, list_screenshots, open_screenshot,
-    open_screenshots_folder,
+    delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail, list_screenshots,
+    open_screenshot, open_screenshots_folder,
 };
 pub use settings::{
     detect_java_runtimes, get_effective_settings, get_java_settings,

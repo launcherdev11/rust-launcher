@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { DeleteIcon } from "../../components/delete_icon";
 import type { Language } from "../../i18n";
@@ -7,6 +7,7 @@ import { useScreenshots } from "./useScreenshots";
 
 type ScreenshotsModalProps = {
   language: Language;
+  profileId: string | null;
   open: boolean;
   onClose: () => void;
   showNotification: (
@@ -32,13 +33,72 @@ function formatDate(ts: number, language: Language): string {
   }
 }
 
+type ScreenshotGridItemProps = {
+  name: string;
+  active: boolean;
+  thumb: string | undefined;
+  scrollRoot: Element | null;
+  onSelect: () => void;
+  onVisible: (name: string) => void;
+};
+
+function ScreenshotGridItem({
+  name,
+  active,
+  thumb,
+  scrollRoot,
+  onSelect,
+  onVisible,
+}: ScreenshotGridItemProps) {
+  const ref = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) onVisible(name);
+      },
+      { root: scrollRoot, rootMargin: "120px", threshold: 0.01 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [name, onVisible, scrollRoot]);
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onSelect}
+      className={`interactive-press overflow-hidden rounded-xl border text-left transition-colors ${
+        active
+          ? "border-white/40 bg-white/15"
+          : "border-white/10 bg-black/30 hover:bg-white/10"
+      }`}
+    >
+      <div className="aspect-video w-full bg-black/50">
+        {thumb ? (
+          <img src={thumb} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[10px] text-white/40">
+            …
+          </div>
+        )}
+      </div>
+      <div className="truncate px-2 py-1 text-[10px] text-white/75">{name}</div>
+    </button>
+  );
+}
+
 export function ScreenshotsModal({
   language,
+  profileId,
   open,
   onClose,
   showNotification,
 }: ScreenshotsModalProps) {
   const tt = useT(language);
+  const [listScrollEl, setListScrollEl] = useState<HTMLDivElement | null>(null);
   const {
     items,
     loading,
@@ -47,11 +107,12 @@ export function ScreenshotsModal({
     setSelectedName,
     previewUri,
     previewLoading,
+    requestThumbnail,
     refresh,
     remove,
     openFolder,
     openInSystem,
-  } = useScreenshots(open);
+  } = useScreenshots(open, profileId);
 
   const selected = useMemo(
     () => items.find((s) => s.name === selectedName) ?? null,
@@ -127,7 +188,10 @@ export function ScreenshotsModal({
             <div className="mb-2 text-xs font-semibold text-white/75">
               {tt("modpacks.screenshots.listTitle")} ({items.length})
             </div>
-            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+            <div
+              ref={setListScrollEl}
+              className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
+            >
               {loading && items.length === 0 ? (
                 <div className="flex h-32 items-center justify-center text-xs text-white/55">
                   {tt("modpacks.screenshots.loading")}
@@ -138,39 +202,17 @@ export function ScreenshotsModal({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {items.map((item) => {
-                    const active = item.name === selectedName;
-                    const thumb = thumbnails[item.name];
-                    return (
-                      <button
-                        key={item.name}
-                        type="button"
-                        onClick={() => setSelectedName(item.name)}
-                        className={`interactive-press overflow-hidden rounded-xl border text-left transition-colors ${
-                          active
-                            ? "border-white/40 bg-white/15"
-                            : "border-white/10 bg-black/30 hover:bg-white/10"
-                        }`}
-                      >
-                        <div className="aspect-video w-full bg-black/50">
-                          {thumb ? (
-                            <img
-                              src={thumb}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-[10px] text-white/40">
-                              …
-                            </div>
-                          )}
-                        </div>
-                        <div className="truncate px-2 py-1 text-[10px] text-white/75">
-                          {item.name}
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {items.map((item) => (
+                    <ScreenshotGridItem
+                      key={item.name}
+                      name={item.name}
+                      active={item.name === selectedName}
+                      thumb={thumbnails[item.name]}
+                      scrollRoot={listScrollEl}
+                      onSelect={() => setSelectedName(item.name)}
+                      onVisible={requestThumbnail}
+                    />
+                  ))}
                 </div>
               )}
             </div>
