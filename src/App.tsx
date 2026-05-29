@@ -30,6 +30,11 @@ import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
 import { DeleteIcon } from "./components/delete_icon";
+import {
+  ProfileInfoIcon,
+  ProfileInfoModal,
+  type ProfileInfoData,
+} from "./components/profile_info_modal";
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
@@ -140,6 +145,12 @@ type InstanceProfileSummary = {
 
 type InstanceProfileCard = InstanceProfileSummary & {
   icon_path: string | null;
+  created_at: number;
+  play_time_seconds: number;
+  mods_count: number;
+  resourcepacks_count: number;
+  shaderpacks_count: number;
+  total_size_bytes: number;
   directory: string;
 };
 
@@ -1194,6 +1205,7 @@ function App() {
     x: number;
     y: number;
   } | null>(null);
+  const [profileInfoProfile, setProfileInfoProfile] = useState<ProfileInfoData | null>(null);
   const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
@@ -2153,6 +2165,12 @@ function App() {
             loader: p.loader,
             loader_version: p.loader_version ?? null,
             icon_path: p.icon_path,
+            created_at: p.created_at,
+            play_time_seconds: p.play_time_seconds,
+            mods_count: p.mods_count,
+            resourcepacks_count: p.resourcepacks_count,
+            shaderpacks_count: p.shaderpacks_count,
+            total_size_bytes: p.total_size_bytes,
             directory: p.directory,
           })),
         );
@@ -3115,7 +3133,14 @@ function App() {
                       name: p.name,
                       game_version: p.game_version,
                       loader: p.loader,
+                      loader_version: p.loader_version ?? null,
                       icon_path: p.icon_path,
+                      created_at: p.created_at,
+                      play_time_seconds: p.play_time_seconds ?? 0,
+                      mods_count: p.mods_count,
+                      resourcepacks_count: p.resourcepacks_count,
+                      shaderpacks_count: p.shaderpacks_count,
+                      total_size_bytes: p.total_size_bytes,
                       directory: p.directory,
                     })),
                   );
@@ -3127,7 +3152,14 @@ function App() {
                     name: profile.name,
                     game_version: profile.game_version,
                     loader: profile.loader,
+                    loader_version: profile.loader_version ?? null,
                     icon_path: profile.icon_path,
+                    created_at: profile.created_at,
+                    play_time_seconds: profile.play_time_seconds ?? 0,
+                    mods_count: profile.mods_count,
+                    resourcepacks_count: profile.resourcepacks_count,
+                    shaderpacks_count: profile.shaderpacks_count,
+                    total_size_bytes: profile.total_size_bytes,
                     directory: profile.directory,
                   })
                 }
@@ -3640,6 +3672,12 @@ function App() {
         </div>
       )}
 
+      <ProfileInfoModal
+        language={language}
+        profile={profileInfoProfile}
+        onClose={() => setProfileInfoProfile(null)}
+      />
+
       {pinnedContextMenu && (
         <div
           className="fixed inset-0 z-[320]"
@@ -3664,9 +3702,22 @@ function App() {
                 const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
                 setPinnedContextMenu(null);
                 if (!profile) return;
-                void handleOpenProfileInModpacks(profile.id);
+                setProfileInfoProfile(profile);
               }}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <ProfileInfoIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.profileInfo.menuItem")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
+                setPinnedContextMenu(null);
+                if (!profile) return;
+                void handleOpenProfileInModpacks(profile.id);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
               <img src="/launcher-assets/settings.png" alt="" className="h-3.5 w-3.5 object-contain" />
               <span>{language === "ru" ? "Настройки" : "Settings"}</span>
