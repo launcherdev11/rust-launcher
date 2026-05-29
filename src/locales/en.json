@@ -434,6 +434,22 @@
       "renamed": "Profile renamed.",
       "renameFailed": "Failed to rename profile."
     },
+    "profileInfo": {
+      "title": "Profile information",
+      "menuItem": "Profile information",
+      "buttonTitle": "Profile information",
+      "gameVersion": "Minecraft version",
+      "loader": "Loader",
+      "loaderVersion": "Loader version",
+      "launcherVersion": "Launcher version",
+      "playtime": "Playtime",
+      "createdAt": "Created",
+      "size": "Disk size",
+      "content": "Content",
+      "folder": "Folder",
+      "profileId": "Profile ID",
+      "close": "Close"
+    },
     "list": {
       "searchPlaceholder": "Search...",
       "activeBadge": "Active",

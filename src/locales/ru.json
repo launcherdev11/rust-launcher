@@ -434,6 +434,22 @@
       "renamed": "Название сборки изменено.",
       "renameFailed": "Не удалось переименовать сборку."
     },
+    "profileInfo": {
+      "title": "Информация о сборке",
+      "menuItem": "Информация о сборке",
+      "buttonTitle": "Информация о сборке",
+      "gameVersion": "Версия Minecraft",
+      "loader": "Загрузчик",
+      "loaderVersion": "Версия загрузчика",
+      "launcherVersion": "Версия лаунчера",
+      "playtime": "Наиграно",
+      "createdAt": "Дата создания",
+      "size": "Размер на диске",
+      "content": "Контент",
+      "folder": "Папка",
+      "profileId": "Идентификатор",
+      "close": "Закрыть"
+    },
     "list": {
       "searchPlaceholder": "Поиск...",
       "activeBadge": "Выбран",
