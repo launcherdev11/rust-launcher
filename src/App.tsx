@@ -243,69 +243,99 @@ type GameConsoleSession = {
   lines: GameConsoleLine[];
 };
 
-const GAME_CONSOLE_STORAGE_KEY = "game_console_persist_v1";
+type ProfileConsoleData = {
+  lines: GameConsoleLine[];
+  sessions: GameConsoleSession[];
+};
+
+const GAME_CONSOLE_STORAGE_KEY = "game_console_persist_v2";
+const GAME_CONSOLE_STORAGE_KEY_V1 = "game_console_persist_v1";
 const MAX_CONSOLE_LINES = 2000;
 const MAX_ARCHIVED_SESSIONS = 25;
 
-function loadPersistedGameConsole(): {
-  lines: GameConsoleLine[];
-  sessions: GameConsoleSession[];
-} {
-  if (typeof window === "undefined") {
+function normalizeConsoleLine(l: unknown, i: number): GameConsoleLine | null {
+  if (!l || typeof l !== "object") return null;
+  const o = l as Record<string, unknown>;
+  const line = typeof o.line === "string" ? o.line : "";
+  const source = o.source === "stderr" ? "stderr" : "stdout";
+  const id =
+    typeof o.id === "number" && Number.isFinite(o.id)
+      ? o.id
+      : Date.now() + i + Math.random();
+  return { id, line, source };
+}
+
+function normalizeConsoleSessions(sessionsRaw: unknown): GameConsoleSession[] {
+  if (!Array.isArray(sessionsRaw)) return [];
+  return sessionsRaw
+    .flatMap((s, si): GameConsoleSession[] => {
+      if (!s || typeof s !== "object") return [];
+      const o = s as Record<string, unknown>;
+      const id = typeof o.id === "string" ? o.id : `${Date.now()}-${si}`;
+      const startedAt =
+        typeof o.startedAt === "number" && Number.isFinite(o.startedAt)
+          ? o.startedAt
+          : Date.now();
+      const endedAt =
+        typeof o.endedAt === "number" && Number.isFinite(o.endedAt) ? o.endedAt : undefined;
+      const lr = Array.isArray(o.lines) ? o.lines : [];
+      const slines = lr
+        .map((l, i) => normalizeConsoleLine(l, i + si * 1000))
+        .filter((x): x is GameConsoleLine => x !== null)
+        .slice(-MAX_CONSOLE_LINES);
+      const session: GameConsoleSession = { id, startedAt, lines: slines };
+      if (endedAt !== undefined) session.endedAt = endedAt;
+      return [session];
+    })
+    .slice(0, MAX_ARCHIVED_SESSIONS);
+}
+
+function normalizeProfileConsoleData(raw: unknown): ProfileConsoleData {
+  if (!raw || typeof raw !== "object") {
     return { lines: [], sessions: [] };
   }
+  const o = raw as Record<string, unknown>;
+  const linesRaw = Array.isArray(o.lines) ? o.lines : [];
+  const lines = linesRaw
+    .map((l, i) => normalizeConsoleLine(l, i))
+    .filter((x): x is GameConsoleLine => x !== null)
+    .slice(-MAX_CONSOLE_LINES);
+  return { lines, sessions: normalizeConsoleSessions(o.sessions) };
+}
+
+function loadPersistedGameConsoleByProfile(): Record<string, ProfileConsoleData> {
+  if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(GAME_CONSOLE_STORAGE_KEY);
-    if (!raw) return { lines: [], sessions: [] };
-    const data = JSON.parse(raw) as {
-      lines?: unknown;
-      sessions?: unknown;
-    };
-    const normalizeLine = (l: unknown, i: number): GameConsoleLine | null => {
-      if (!l || typeof l !== "object") return null;
-      const o = l as Record<string, unknown>;
-      const line = typeof o.line === "string" ? o.line : "";
-      const source = o.source === "stderr" ? "stderr" : "stdout";
-      const id =
-        typeof o.id === "number" && Number.isFinite(o.id)
-          ? o.id
-          : Date.now() + i + Math.random();
-      return { id, line, source };
-    };
-    const linesRaw = Array.isArray(data.lines) ? data.lines : [];
-    const lines = linesRaw
-      .map((l, i) => normalizeLine(l, i))
-      .filter((x): x is GameConsoleLine => x !== null)
-      .slice(-MAX_CONSOLE_LINES);
+    const rawV2 = window.localStorage.getItem(GAME_CONSOLE_STORAGE_KEY);
+    if (rawV2) {
+      const data = JSON.parse(rawV2) as { byProfile?: unknown };
+      const byProfileRaw =
+        data.byProfile && typeof data.byProfile === "object"
+          ? (data.byProfile as Record<string, unknown>)
+          : {};
+      const out: Record<string, ProfileConsoleData> = {};
+      for (const [profileId, value] of Object.entries(byProfileRaw)) {
+        if (typeof profileId !== "string" || !profileId.trim()) continue;
+        out[profileId] = normalizeProfileConsoleData(value);
+      }
+      return out;
+    }
 
-    const sessionsRaw = Array.isArray(data.sessions) ? data.sessions : [];
-    const sessions: GameConsoleSession[] = sessionsRaw
-      .flatMap((s, si): GameConsoleSession[] => {
-        if (!s || typeof s !== "object") return [];
-        const o = s as Record<string, unknown>;
-        const id = typeof o.id === "string" ? o.id : `${Date.now()}-${si}`;
-        const startedAt =
-          typeof o.startedAt === "number" && Number.isFinite(o.startedAt)
-            ? o.startedAt
-            : Date.now();
-        const endedAt =
-          typeof o.endedAt === "number" && Number.isFinite(o.endedAt)
-            ? o.endedAt
-            : undefined;
-        const lr = Array.isArray(o.lines) ? o.lines : [];
-        const slines = lr
-          .map((l, i) => normalizeLine(l, i + si * 1000))
-          .filter((x): x is GameConsoleLine => x !== null)
-          .slice(-MAX_CONSOLE_LINES);
-        const session: GameConsoleSession = { id, startedAt, lines: slines };
-        if (endedAt !== undefined) session.endedAt = endedAt;
-        return [session];
-      })
-      .slice(0, MAX_ARCHIVED_SESSIONS);
+    const rawV1 = window.localStorage.getItem(GAME_CONSOLE_STORAGE_KEY_V1);
+    if (!rawV1) return {};
+    const data = JSON.parse(rawV1) as { lines?: unknown; sessions?: unknown };
+    const migrated = normalizeProfileConsoleData(data);
+    if (migrated.lines.length === 0 && migrated.sessions.length === 0) return {};
 
-    return { lines, sessions };
+    let migrateProfileId: string | null = null;
+    try {
+      migrateProfileId = window.localStorage.getItem("modpacks_selected_profile_id");
+    } catch {
+    }
+    if (!migrateProfileId?.trim()) return {};
+    return { [migrateProfileId]: migrated };
   } catch {
-    return { lines: [], sessions: [] };
+    return {};
   }
 }
 
@@ -1162,13 +1192,14 @@ function App() {
   const activeAccountLabel =
     activeAccountFromList?.label ?? (displayedNickname.trim() || "—");
   const activeAccountKind = activeAccountFromList?.kind ?? "offline";
-  const initialPersistedConsole = useMemo(() => loadPersistedGameConsole(), []);
-  const [consoleLines, setConsoleLines] = useState<GameConsoleLine[]>(
-    initialPersistedConsole.lines,
+  const initialPersistedConsoleByProfile = useMemo(
+    () => loadPersistedGameConsoleByProfile(),
+    [],
   );
-  const [consoleHistorySessions, setConsoleHistorySessions] = useState<GameConsoleSession[]>(
-    initialPersistedConsole.sessions,
-  );
+  const [consoleByProfile, setConsoleByProfile] = useState<
+    Record<string, ProfileConsoleData>
+  >(initialPersistedConsoleByProfile);
+  const runningConsoleProfileIdRef = useRef<string | null>(null);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
 
   useHotkeys({
@@ -1184,6 +1215,19 @@ function App() {
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
+
+  const consoleLines = useMemo(() => {
+    const profileId = activeInstanceProfile?.id;
+    if (!profileId) return [];
+    return consoleByProfile[profileId]?.lines ?? [];
+  }, [activeInstanceProfile?.id, consoleByProfile]);
+
+  const consoleHistorySessions = useMemo(() => {
+    const profileId = activeInstanceProfile?.id;
+    if (!profileId) return [];
+    return consoleByProfile[profileId]?.sessions ?? [];
+  }, [activeInstanceProfile?.id, consoleByProfile]);
+
   const [knownProfiles, setKnownProfiles] = useState<InstanceProfileCard[]>([]);
   const [profilesHydrated, setProfilesHydrated] = useState(false);
   const [pinnedProfileIds, setPinnedProfileIds] = useState<string[]>(() => {
@@ -1220,22 +1264,55 @@ function App() {
     [profile.nickname, profile.ely_username, profile.ely_uuid, profile.mc_uuid],
   );
 
-  const archiveCurrentConsoleAndClear = useCallback(() => {
-    setConsoleLines((prev) => {
-      if (prev.length > 0) {
-        const session: GameConsoleSession = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          startedAt: Date.now(),
-          endedAt: Date.now(),
-          lines: prev.slice(-MAX_CONSOLE_LINES),
-        };
-        setConsoleHistorySessions((sessionsPrev) =>
-          [session, ...sessionsPrev].slice(0, MAX_ARCHIVED_SESSIONS),
-        );
+  const archiveCurrentConsoleAndClear = useCallback((profileId: string) => {
+    setConsoleByProfile((prev) => {
+      const current = prev[profileId] ?? { lines: [], sessions: [] };
+      if (current.lines.length === 0) {
+        return { ...prev, [profileId]: { lines: [], sessions: current.sessions } };
       }
-      return [];
+      const session: GameConsoleSession = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+        lines: current.lines.slice(-MAX_CONSOLE_LINES),
+      };
+      return {
+        ...prev,
+        [profileId]: {
+          lines: [],
+          sessions: [session, ...current.sessions].slice(0, MAX_ARCHIVED_SESSIONS),
+        },
+      };
     });
   }, []);
+
+  const appendConsoleLine = useCallback(
+    (profileId: string, text: string, source: "stdout" | "stderr") => {
+      setConsoleByProfile((prev) => {
+        const current = prev[profileId] ?? { lines: [], sessions: [] };
+        const nextLines: GameConsoleLine[] = [
+          ...current.lines,
+          { id: Date.now() + Math.random(), line: text, source },
+        ];
+        const trimmed =
+          nextLines.length > MAX_CONSOLE_LINES
+            ? nextLines.slice(nextLines.length - MAX_CONSOLE_LINES)
+            : nextLines;
+        return { ...prev, [profileId]: { ...current, lines: trimmed } };
+      });
+    },
+    [],
+  );
+
+  const resolveLaunchConsoleProfileId = useCallback(async (): Promise<string | null> => {
+    if (activeInstanceProfile?.id) return activeInstanceProfile.id;
+    try {
+      const selected = await invoke<InstanceProfileSummary | null>("get_selected_profile");
+      return selected?.id ?? null;
+    } catch {
+      return null;
+    }
+  }, [activeInstanceProfile?.id]);
 
   const orderedSidebarItems = useMemo(() => {
     const byId = new Map(sidebarItems.map((i) => [i.id, i]));
@@ -1342,7 +1419,9 @@ function App() {
       } else if (profile.loader === "neoforge" && profileLoaderVersion) {
         launchVersionId = `${profile.game_version}-neoforge-${profileLoaderVersion}`;
       }
-      archiveCurrentConsoleAndClear();
+      const consoleProfileId = profile.id;
+      runningConsoleProfileIdRef.current = consoleProfileId;
+      archiveCurrentConsoleAndClear(consoleProfileId);
       if (settings?.show_console_on_launch) {
         setIsConsoleVisible(true);
       }
@@ -1352,6 +1431,7 @@ function App() {
         versionUrl: null,
       });
     } catch (error) {
+      runningConsoleProfileIdRef.current = null;
       const msg = error instanceof Error ? error.message : String(error);
       showNotification("error", tt("app.errors.launchError", { msg }));
     }
@@ -1467,6 +1547,7 @@ function App() {
         } else {
           if (lastRunningRef.current) {
             lastRunningRef.current = false;
+            runningConsoleProfileIdRef.current = null;
             setGameStatus((prev) => {
               const lastLine = consoleLines[consoleLines.length - 1]?.line ?? "";
               const lower = lastLine.toLowerCase();
@@ -1533,19 +1614,10 @@ function App() {
               : payload.source === "stderr"
                 ? "stderr"
                 : "stdout";
-          setConsoleLines((prev) => {
-            const next: GameConsoleLine[] = [
-              ...prev,
-              {
-                id: Date.now() + Math.random(),
-                line: text,
-                source,
-              },
-            ];
-            return next.length > MAX_CONSOLE_LINES
-              ? next.slice(next.length - MAX_CONSOLE_LINES)
-              : next;
-          });
+          const profileId =
+            runningConsoleProfileIdRef.current ?? activeInstanceProfile?.id;
+          if (!profileId) return;
+          appendConsoleLine(profileId, text, source);
         });
       } catch (e) {
         console.error("Не удалось подписаться на консоль игры:", e);
@@ -1555,7 +1627,7 @@ function App() {
     return () => {
       if (unlisten) unlisten();
     };
-  }, []);
+  }, [activeInstanceProfile?.id, appendConsoleLine]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1563,16 +1635,13 @@ function App() {
       try {
         window.localStorage.setItem(
           GAME_CONSOLE_STORAGE_KEY,
-          JSON.stringify({
-            lines: consoleLines.slice(-MAX_CONSOLE_LINES),
-            sessions: consoleHistorySessions.slice(0, MAX_ARCHIVED_SESSIONS),
-          }),
+          JSON.stringify({ byProfile: consoleByProfile }),
         );
       } catch {
       }
     }, 400);
     return () => window.clearTimeout(t);
-  }, [consoleLines, consoleHistorySessions]);
+  }, [consoleByProfile]);
 
   const clearNotificationDismissTimers = useCallback((id: number) => {
     const t = notificationTimersRef.current.get(id);
@@ -2782,7 +2851,15 @@ function App() {
   };
 
   const handleClearConsole = () => {
-    setConsoleLines([]);
+    const profileId = activeInstanceProfile?.id;
+    if (!profileId) return;
+    setConsoleByProfile((prev) => ({
+      ...prev,
+      [profileId]: {
+        lines: [],
+        sessions: prev[profileId]?.sessions ?? [],
+      },
+    }));
   };
 
   const handleOpenGameFolder = async () => {
@@ -3028,7 +3105,11 @@ function App() {
             : loader === "quilt" && quiltProfileId
               ? quiltProfileId
               : selectedVersion.id;
-        archiveCurrentConsoleAndClear();
+        const consoleProfileId = await resolveLaunchConsoleProfileId();
+        if (consoleProfileId) {
+          runningConsoleProfileIdRef.current = consoleProfileId;
+          archiveCurrentConsoleAndClear(consoleProfileId);
+        }
         if (settings?.show_console_on_launch) {
           setIsConsoleVisible(true);
         }
@@ -3038,6 +3119,7 @@ function App() {
           versionUrl: versionUrl ?? null,
         });
       } catch (error) {
+        runningConsoleProfileIdRef.current = null;
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Ошибка запуска игры:", error);
         showNotification(
