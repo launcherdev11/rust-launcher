@@ -893,7 +893,7 @@ export function SettingsTab({
           ? `${gameVersion}-neoforge-${pickedLoader}`
           : version.id;
         await invoke("install_neoforge", {
-          version_id: versionId,
+          versionId,
         });
       } else if (version.loader === "fabric") {
         let loaderVersion = pickedLoader;

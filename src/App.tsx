@@ -2927,9 +2927,25 @@ function App() {
     }
 
     const versionId = activeInstanceProfile.game_version;
+    const loaderVer = activeInstanceProfile.loader_version?.trim() || null;
     const match = versions.find((v) => {
       if (isForgeVersion(v)) {
-        return v.mc_version === versionId;
+        if (loaderVer) {
+          return (
+            v.id === `${versionId}-forge-${loaderVer}` ||
+            (v.mc_version === versionId && v.forge_build === loaderVer)
+          );
+        }
+        return v.mc_version === versionId || v.id === versionId;
+      }
+      if (isNeoForgeVersion(v)) {
+        if (loaderVer) {
+          return (
+            v.id === `${versionId}-neoforge-${loaderVer}` ||
+            (v.mc_version === versionId && v.neoforge_build === loaderVer)
+          );
+        }
+        return v.mc_version === versionId || v.id === versionId;
       }
       return (v as VersionSummary).id === versionId;
     });
@@ -3062,7 +3078,7 @@ function App() {
         });
       } else if (loader === "neoforge" && isNeoForgeVersion(selectedVersion)) {
         await invoke("install_neoforge", {
-          version_id: selectedVersion.id,
+          versionId: selectedVersion.id,
         });
       } else {
         throw new Error("Неизвестный тип версии");
