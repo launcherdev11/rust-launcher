@@ -88,6 +88,7 @@ jobs:
           PROXY_PASS: ${{ secrets.PROXY_PASS }}
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_RPC_LARGE_IMAGE_KEY: ${{ secrets.DISCORD_RPC_LARGE_IMAGE_KEY }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         with:
           projectPath: .
           tauriScript: "npm run tauri"
