@@ -949,8 +949,8 @@ export function ModpackTab({
     try {
       const res = await invoke<PreviewResult>("preview_export", {
         buildId: selectedProfile.id,
-        selectedPaths: selected,
-        ignorePatterns: parseIgnorePatterns(ignorePatternsText),
+        selected,
+        ignores: parseIgnorePatterns(ignorePatternsText),
       });
       setPreviewResult(res);
     } catch (e) {
@@ -1005,8 +1005,8 @@ export function ModpackTab({
     try {
       await invoke("export_build", {
         buildId: selectedProfile.id,
-        selectedPaths: selected,
-        ignorePatterns: parseIgnorePatterns(ignorePatternsText),
+        selected,
+        ignores: parseIgnorePatterns(ignorePatternsText),
         format: exportFormat,
         outPath,
       });
