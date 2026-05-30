@@ -14,27 +14,122 @@ use crate::services::game::state::{
 };
 use crate::services::game::version_types::{
     FabricLoaderEntry, FabricProfile, ForgePromotionsSlim, ForgeVersionSummary, LoaderMetaGameVersion,
-    LoaderVersionChannel, LoaderVersionOption, NeoForgeVersionSummary, QuiltLoaderEntry, VersionDetail,
-    VersionManifest, VersionSummary,
+    LoaderVersionChannel, LoaderVersionOption, ManifestVersion, NeoForgeVersionSummary, QuiltLoaderEntry,
+    VersionDetail, VersionManifest, VersionSummary,
 };
 
 const CUSTOM_VERSION_MARKER: &str = ".custom";
 
 pub(crate) fn parse_neoforge_mc_version(build: &str) -> Option<String> {
-    let mut parts = build.split('.');
-    let major = parts.next()?;
-    let minor = parts.next()?;
-    if !major.chars().all(|c| c.is_ascii_digit()) || !minor.chars().all(|c| c.is_ascii_digit()) {
+    let head = build
+        .split(|c: char| c == '-' || c == '+')
+        .next()?
+        .trim();
+    let parts: Vec<&str> = head.split('.').filter(|s| !s.is_empty()).collect();
+    if parts.len() < 2 {
         return None;
     }
+    let major: u32 = parts[0].parse().ok()?;
+    let minor: u32 = parts[1].parse().ok()?;
+    if !parts[0].chars().all(|c| c.is_ascii_digit())
+        || !parts[1].chars().all(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+
+    if major >= 26 {
+        if parts.len() >= 3 {
+            let patch: u32 = parts[2].parse().ok()?;
+            return Some(format!("{major}.{minor}.{patch}"));
+        }
+        return Some(format!("{major}.{minor}"));
+    }
+
     Some(format!("1.{major}.{minor}"))
 }
 
+pub(crate) fn neoforge_build_snapshot_manifest_id(build: &str) -> Option<String> {
+    let (_, snap_num) = build.rsplit_once("+snapshot-")?;
+    let snap_num = snap_num.trim();
+    if snap_num.is_empty() || !snap_num.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let mc = parse_neoforge_mc_version(build)?;
+    let mut segments = mc.split('.');
+    let year = segments.next()?;
+    let release = segments.next()?;
+    Some(format!("{year}.{release}-snapshot-{snap_num}"))
+}
+
+pub(crate) fn neoforge_minecraft_version_for_install(build: &str, mc_from_version_id: &str) -> String {
+    neoforge_build_snapshot_manifest_id(build).unwrap_or_else(|| mc_from_version_id.to_string())
+}
+
+fn minecraft_versions_match(a: &str, b: &str) -> bool {
+    a == b || a.starts_with(&format!("{b}.")) || b.starts_with(&format!("{a}."))
+}
+
 fn neoforge_build_matches_mc(build: &str, mc_version: &str) -> bool {
-    let Some(suffix) = mc_version.strip_prefix("1.") else {
+    let Some(inferred) = parse_neoforge_mc_version(build) else {
         return false;
     };
-    build.starts_with(&format!("{suffix}.")) || build == suffix
+    if minecraft_versions_match(&inferred, mc_version) {
+        return true;
+    }
+    if let Some(suffix) = mc_version.strip_prefix("1.") {
+        let build_head = build.split(|c: char| c == '-' || c == '+').next().unwrap_or(build);
+        return build_head.starts_with(&format!("{suffix}.")) || build_head == suffix;
+    }
+    false
+}
+
+fn resolve_manifest_version_id(
+    versions: &[ManifestVersion],
+    requested: &str,
+) -> Option<String> {
+    if versions.iter().any(|v| v.id == requested) {
+        return Some(requested.to_string());
+    }
+
+    let req_parts: Vec<u32> = requested
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let year = req_parts.first().copied().unwrap_or(0);
+
+    if year >= 26 && req_parts.len() >= 2 {
+        let prefix = format!("{}.{}", req_parts[0], req_parts[1]);
+
+        let mut best_release: Option<&ManifestVersion> = None;
+        for v in versions.iter() {
+            if v.version_type != "release" {
+                continue;
+            }
+            if !v.id.starts_with(&format!("{prefix}.")) {
+                continue;
+            }
+            let rest = &v.id[prefix.len() + 1..];
+            if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            if best_release.is_none()
+                || cmp_dot_version_desc(&v.id, &best_release.unwrap().id) == std::cmp::Ordering::Less
+            {
+                best_release = Some(v);
+            }
+        }
+        if let Some(v) = best_release {
+            return Some(v.id.clone());
+        }
+
+        for v in versions.iter() {
+            if v.id.starts_with(&format!("{prefix}-")) {
+                return Some(v.id.clone());
+            }
+        }
+    }
+
+    None
 }
 
 fn cmp_dot_version_desc(a: &str, b: &str) -> std::cmp::Ordering {
@@ -72,6 +167,33 @@ fn parse_maven_metadata_versions(metadata: &str) -> Vec<String> {
         }
     }
     out
+}
+
+async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
+    let direct_client = http_client(false);
+    match download_text_with_retries(
+        &direct_client,
+        NEOFORGE_MAVEN_METADATA_URL,
+        DEFAULT_DOWNLOAD_RETRIES,
+    )
+    .await
+    {
+        Ok(text) => return Ok(text),
+        Err(direct_err) => {
+            let proxy_client = http_client(true);
+            download_text_with_retries(
+                &proxy_client,
+                NEOFORGE_MAVEN_METADATA_URL,
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await
+            .map_err(|proxy_err| {
+                format!(
+                    "Ошибка загрузки NeoForge metadata: {direct_err}; через прокси: {proxy_err}"
+                )
+            })
+        }
+    }
 }
 
 fn dedupe_sort_versions(mut versions: Vec<String>) -> Vec<String> {
@@ -165,19 +287,31 @@ pub(crate) async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
     Ok(summaries)
 }
 
-pub(crate) async fn get_mojang_version_url(version_id: &str) -> Result<String, String> {
+pub(crate) async fn resolve_mojang_version(
+    version_id: &str,
+) -> Result<(String, String), String> {
     let client = http_client(false);
     let text = download_text_with_retries(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса манифеста: {e}"))?;
     let manifest: VersionManifest = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора манифеста: {e}"))?;
-    manifest
-        .versions
-        .into_iter()
-        .find(|v| v.id == version_id)
-        .map(|v| v.url)
-        .ok_or_else(|| format!("Версия {version_id} не найдена в манифесте Mojang"))
+
+    if let Some(v) = manifest.versions.iter().find(|v| v.id == version_id) {
+        return Ok((v.id.clone(), v.url.clone()));
+    }
+
+    if let Some(resolved) = resolve_manifest_version_id(&manifest.versions, version_id) {
+        if let Some(v) = manifest.versions.iter().find(|v| v.id == resolved) {
+            return Ok((v.id.clone(), v.url.clone()));
+        }
+    }
+
+    Err(format!("Версия {version_id} не найдена в манифесте Mojang"))
+}
+
+pub(crate) async fn get_mojang_version_url(version_id: &str) -> Result<String, String> {
+    Ok(resolve_mojang_version(version_id).await?.1)
 }
 #[tauri::command]
 pub async fn fetch_all_versions() -> Result<Vec<VersionSummary>, String> {
@@ -428,27 +562,14 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
 pub async fn fetch_neoforge_versions() -> Result<Vec<NeoForgeVersionSummary>, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
-    let client = http_client(true);
-    let metadata = download_text_with_retries(
-        &client,
-        NEOFORGE_MAVEN_METADATA_URL,
-        DEFAULT_DOWNLOAD_RETRIES,
-    )
-    .await
-    .map_err(|e| format!("Ошибка загрузки NeoForge metadata: {e}"))?;
+    let metadata = fetch_neoforge_maven_metadata().await?;
 
     let mut out: Vec<NeoForgeVersionSummary> = Vec::new();
-    for entry in metadata.match_indices("<version>") {
-        let start = entry.0 + "<version>".len();
-        let rest = &metadata[start..];
-        let Some(end_rel) = rest.find("</version>") else {
-            continue;
-        };
-        let build = rest[..end_rel].trim();
+    for build in parse_maven_metadata_versions(&metadata) {
         if build.is_empty() || !build.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             continue;
         }
-        let Some(mc_version) = parse_neoforge_mc_version(build) else {
+        let Some(mc_version) = parse_neoforge_mc_version(&build) else {
             continue;
         };
 
@@ -457,7 +578,7 @@ pub async fn fetch_neoforge_versions() -> Result<Vec<NeoForgeVersionSummary>, St
         out.push(NeoForgeVersionSummary {
             id,
             mc_version,
-            neoforge_build: build.to_string(),
+            neoforge_build: build,
             installer_url,
         });
     }
@@ -596,14 +717,7 @@ pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<Loa
 
 #[tauri::command]
 pub async fn fetch_neoforge_builds_for_game(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
-    let client = http_client(true);
-    let metadata = download_text_with_retries(
-        &client,
-        NEOFORGE_MAVEN_METADATA_URL,
-        DEFAULT_DOWNLOAD_RETRIES,
-    )
-    .await
-    .map_err(|e| format!("Ошибка загрузки NeoForge metadata: {e}"))?;
+    let metadata = fetch_neoforge_maven_metadata().await?;
 
     let builds: Vec<String> = parse_maven_metadata_versions(&metadata)
         .into_iter()
@@ -809,5 +923,42 @@ pub fn list_installed_versions() -> Result<Vec<String>, String> {
     let mut result: Vec<String> = ids.into_iter().collect();
     result.sort();
     Ok(result)
+}
+
+#[cfg(test)]
+mod neoforge_version_tests {
+    use super::*;
+
+    #[test]
+    fn parse_legacy_neoforge_builds() {
+        assert_eq!(
+            parse_neoforge_mc_version("21.1.233").as_deref(),
+            Some("1.21.1")
+        );
+        assert_eq!(
+            parse_neoforge_mc_version("21.11.42").as_deref(),
+            Some("1.21.11")
+        );
+    }
+
+    #[test]
+    fn parse_minecraft_26_neoforge_builds() {
+        assert_eq!(
+            parse_neoforge_mc_version("26.1.0.10-beta").as_deref(),
+            Some("26.1.0")
+        );
+        assert_eq!(
+            parse_neoforge_mc_version("26.1.0.0-alpha.10+snapshot-6").as_deref(),
+            Some("26.1.0")
+        );
+    }
+
+    #[test]
+    fn snapshot_manifest_id_from_neoforge_build() {
+        assert_eq!(
+            neoforge_build_snapshot_manifest_id("26.1.0.0-alpha.10+snapshot-6").as_deref(),
+            Some("26.1-snapshot-6")
+        );
+    }
 }
 
