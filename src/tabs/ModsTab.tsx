@@ -668,6 +668,13 @@ export function ModsTab({
     scheduleUpdate();
     window.addEventListener("resize", scheduleUpdate);
 
+    const containerEl = modrinthTabsContainerRef.current;
+    let resizeObserver: ResizeObserver | undefined;
+    if (containerEl && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(scheduleUpdate);
+      resizeObserver.observe(containerEl);
+    }
+
     if (typeof document !== "undefined" && (document as any).fonts?.ready) {
       void (document as any).fonts.ready
         .then(() => {
@@ -682,8 +689,9 @@ export function ModsTab({
       cancelled = true;
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", scheduleUpdate);
+      resizeObserver?.disconnect();
     };
-  }, [modrinthContentType]);
+  }, [modrinthContentType, contentProvider]);
 
   const filteredModrinthVersions = modrinthVersions.filter((v) => {
     if (modrinthGameVersion && !v.game_versions.includes(modrinthGameVersion)) {
@@ -850,44 +858,75 @@ export function ModsTab({
           </div>
         </div>
       )}
-      <div className="relative z-[80] mb-4 mt-2 flex items-center justify-between gap-3">
-        <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl">
-          {(["modrinth", "curseforge"] as ContentProvider[]).map((provider) => (
-            <button
-              key={provider}
-              type="button"
-              onClick={() => setContentProviderPersisted(provider)}
-              className={`interactive-press rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                contentProvider === provider
-                  ? "bg-white/90 text-black"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              {provider === "modrinth"
-                ? tt("mods.provider.modrinth")
-                : tt("mods.provider.curseforge")}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 py-2 shadow-soft backdrop-blur-xl">
-          <img
-            src="/launcher-assets/search.png"
-            alt=""
-            className="h-5 w-5 shrink-0 object-contain"
-          />
-          <input
-            type="text"
-            placeholder={tt("mods.searchPlaceholder")}
-            value={modrinthSearch}
-            onChange={(e) => {
-              setModrinthSearch(e.target.value);
-              setModrinthPage(0);
-              setCurseforgePage(0);
-            }}
-            className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
-          />
-        </div>
-        <div className="relative flex items-center gap-2 rounded-2xl border border-white/12 bg-black/40 px-3 py-2 shadow-soft backdrop-blur-xl">
+      <div className="relative z-[80] mb-4 mt-2 flex flex-col gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-10 shrink-0 items-center gap-1 rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl">
+            {(["modrinth", "curseforge"] as ContentProvider[]).map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => setContentProviderPersisted(provider)}
+                className={`interactive-press rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  contentProvider === provider
+                    ? "bg-white/90 text-black"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {provider === "modrinth"
+                  ? tt("mods.provider.modrinth")
+                  : tt("mods.provider.curseforge")}
+              </button>
+            ))}
+          </div>
+          <div
+            ref={modrinthTabsContainerRef}
+            className="relative grid h-10 min-w-0 flex-1 grid-cols-4 items-center overflow-hidden rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl"
+          >
+            <div
+              className="pointer-events-none absolute top-1 bottom-1 rounded-lg bg-white/90 transition-all duration-200 ease-out"
+              style={{
+                left: `${modrinthIndicator.left}px`,
+                width: `${modrinthIndicator.width}px`,
+              }}
+            />
+            {(["mod", "resourcepack", "shader", "modpack"] as ModrinthContentType[]).map(
+              (kind) => {
+                const label =
+                  kind === "mod"
+                    ? tt("mods.tab.mods")
+                    : kind === "resourcepack"
+                      ? tt("mods.tab.resources")
+                      : kind === "shader"
+                        ? tt("mods.tab.shaders")
+                        : tt("mods.tab.modpacks");
+                const disabled = false;
+                const active = modrinthContentType === kind;
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    disabled={disabled}
+                    ref={(el) => {
+                      modrinthTabRefs.current[kind] = el;
+                    }}
+                    onClick={() => {
+                      setModrinthContentType(kind);
+                      setModrinthPage(0);
+                      setCurseforgePage(0);
+                    }}
+                    className={`interactive-press relative z-10 rounded-xl px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap transition-colors ${
+                      active
+                        ? "text-black"
+                        : "text-white/70 hover:text-white"
+                    } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+                  >
+                    {label}
+                  </button>
+                );
+              },
+            )}
+          </div>
+          <div className="relative ml-auto flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-white/12 bg-black/40 px-3 shadow-soft backdrop-blur-xl">
           <span className="mr-1 text-[11px] uppercase tracking-[0.16em] text-gray-400">
             {tt("mods.version")}
           </span>
@@ -1012,55 +1051,27 @@ export function ModsTab({
             )}
           </div>
         </div>
-        <div
-          ref={modrinthTabsContainerRef}
-          className="relative flex items-center gap-0 rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden"
-        >
-          <div
-            className="pointer-events-none absolute top-1.5 bottom-1.5 rounded-lg bg-white/90 transition-all duration-200 ease-out"
-            style={{
-              left: `${modrinthIndicator.left}px`,
-              width: `${modrinthIndicator.width}px`,
-            }}
-          />
-          {(["mod", "resourcepack", "shader", "modpack"] as ModrinthContentType[]).map(
-            (kind) => {
-              const label =
-                kind === "mod"
-                  ? tt("mods.tab.mods")
-                  : kind === "resourcepack"
-                    ? tt("mods.tab.resources")
-                    : kind === "shader"
-                      ? tt("mods.tab.shaders")
-                      : tt("mods.tab.modpacks");
-              const disabled = false;
-              const active = modrinthContentType === kind;
-              return (
-                <button
-                  key={kind}
-                  type="button"
-                  disabled={disabled}
-                  ref={(el) => {
-                    modrinthTabRefs.current[kind] = el;
-                  }}
-                  onClick={() => {
-                    setModrinthContentType(kind);
-                    setModrinthPage(0);
-                    setCurseforgePage(0);
-                  }}
-                  className={`interactive-press relative z-10 flex-1 rounded-xl px-3 py-1 text-xs font-semibold text-center transition-colors ${
-                    active
-                      ? "text-black"
-                      : "text-white/70 hover:text-white"
-                  } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-                >
-                  {label}
-                </button>
-              );
-            },
-          )}
         </div>
-        <div className="flex items-center gap-1 rounded-2xl border border-white/20 bg-black/40 p-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 shadow-soft backdrop-blur-xl">
+            <img
+              src="/launcher-assets/search.png"
+              alt=""
+              className="h-4 w-4 shrink-0 object-contain"
+            />
+            <input
+              type="text"
+              placeholder={tt("mods.searchPlaceholder")}
+              value={modrinthSearch}
+              onChange={(e) => {
+                setModrinthSearch(e.target.value);
+                setModrinthPage(0);
+                setCurseforgePage(0);
+              }}
+              className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-white/40 focus:outline-none"
+            />
+          </div>
+          <div className="flex h-10 shrink-0 items-center gap-1 rounded-2xl border border-white/20 bg-black/40 p-1">
           <button
             type="button"
             onClick={() => {
@@ -1117,6 +1128,7 @@ export function ModsTab({
               className="h-4 w-4 object-contain"
             />
           </button>
+        </div>
         </div>
       </div>
 
