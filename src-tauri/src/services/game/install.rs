@@ -25,7 +25,9 @@ use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_CONCURRENCY, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_PROFILE, NEOFORGE_MAVEN_BASE,
 };
 use crate::services::game::version_types::*;
-use crate::services::game::versions::get_mojang_version_url;
+use crate::services::game::versions::{
+    get_mojang_version_url, neoforge_minecraft_version_for_install, resolve_mojang_version,
+};
 
 #[tauri::command]
 pub async fn install_fabric(
@@ -641,14 +643,19 @@ pub async fn install_forge(
         .await
         .map_err(|e| format!("Не удалось создать папку версий: {e}"))?;
 
+    let manifest_mc_request = if is_neoforge {
+        neoforge_minecraft_version_for_install(&forge_build, &mc_version)
+    } else {
+        mc_version.clone()
+    };
+    let (resolved_mc, vanilla_url) = resolve_mojang_version(&manifest_mc_request).await?;
     let base_version_json_path =
-        vers_root.join(&mc_version).join(format!("{mc_version}.json"));
+        vers_root.join(&resolved_mc).join(format!("{resolved_mc}.json"));
     if !base_version_json_path.exists() {
-        let vanilla_url = get_mojang_version_url(&mc_version).await?;
-        install_version(app.clone(), mc_version.clone(), vanilla_url).await?;
+        install_version(app.clone(), resolved_mc.clone(), vanilla_url).await?;
     }
 
-    ensure_launcher_profiles_json(&root, &mc_version)?;
+    ensure_launcher_profiles_json(&root, &resolved_mc)?;
 
     let launcher_settings = load_settings_from_disk();
     let installer_client = http_client_for_binary_download(false);
