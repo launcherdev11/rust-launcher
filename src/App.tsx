@@ -41,6 +41,8 @@ import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
   useHotkeys,
   type ModpackHotkeyActions,
+  type ModpackNavigationActions,
+  type ModpackViewId,
   type PlayConsoleHotkeyActions,
 } from "./hooks/useHotkeys";
 import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
@@ -873,6 +875,10 @@ function App() {
   const didLoadedRemoteNotificationsRef = useRef(false);
   const didLoadedBottomSocialRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
+  const [modpackView, setModpackView] = useState<ModpackViewId>("list");
+  const [requestedModpackView, setRequestedModpackView] = useState<ModpackViewId | null>(
+    null,
+  );
   const [updateStatus, setUpdateStatus] = useState<
     "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
   >("idle");
@@ -949,6 +955,7 @@ function App() {
 
   const playConsoleHotkeysRef = useRef<PlayConsoleHotkeyActions | null>(null);
   const modpackHotkeysRef = useRef<ModpackHotkeyActions | null>(null);
+  const modpackNavRef = useRef<ModpackNavigationActions | null>(null);
 
   const registerPlayConsoleHotkeys = useCallback(
     (actions: PlayConsoleHotkeyActions | null) => {
@@ -963,6 +970,17 @@ function App() {
     },
     [],
   );
+
+  const registerModpackNavigation = useCallback(
+    (actions: ModpackNavigationActions | null) => {
+      modpackNavRef.current = actions;
+    },
+    [],
+  );
+
+  const clearRequestedModpackView = useCallback(() => {
+    setRequestedModpackView(null);
+  }, []);
 
   const splitDropZoneLabels = useMemo(
     () => ({
@@ -1237,12 +1255,19 @@ function App() {
   const runningConsoleProfileIdRef = useRef<string | null>(null);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
 
-  useHotkeys({
+  const { handleModpackSidebarClick } = useHotkeys({
     activeTab: activeItem,
     effectiveTabSplit,
     isConsoleVisible,
     playConsoleActionsRef: playConsoleHotkeysRef,
     modpackActionsRef: modpackHotkeysRef,
+    settingsTab,
+    modpackView,
+    modpackNavRef,
+    setActiveItem: setActiveItemWithSound,
+    setSettingsTab,
+    setModpackView,
+    setRequestedModpackView,
   });
 
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
@@ -3261,6 +3286,10 @@ function App() {
                 fillPane={inSplitPane}
                 language={language}
                 onRegisterModpackHotkeys={registerModpackHotkeys}
+                onRegisterModpackNavigation={registerModpackNavigation}
+                onActiveViewChange={setModpackView}
+                requestedModpackView={requestedModpackView}
+                onRequestedModpackViewApplied={clearRequestedModpackView}
                 showNotification={showNotification}
                 registerDownloadJob={startDownloadJob}
                 updateDownloadJob={updateDownloadJobProgress}
@@ -4173,6 +4202,17 @@ function App() {
                     if (sidebarDragConsumedRef.current) {
                       sidebarDragConsumedRef.current = false;
                       return;
+                    }
+                    if (tabId === "modpacks") {
+                      const modpacksPaneVisible =
+                        effectiveTabSplit != null
+                          ? effectiveTabSplit.primary === "modpacks" ||
+                            effectiveTabSplit.secondary === "modpacks"
+                          : activeItem === "modpacks";
+                      if (modpacksPaneVisible && handleModpackSidebarClick()) {
+                        activateSidebarTab(tabId);
+                        return;
+                      }
                     }
                     activateSidebarTab(tabId);
                   }}
