@@ -24,7 +24,7 @@ import { DeleteIcon } from "../components/delete_icon";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
-import type { ModpackHotkeyActions } from "../hooks/useHotkeys";
+import type { ModpackHotkeyActions, ModpackNavigationActions } from "../hooks/useHotkeys";
 import { ScreenshotsModal } from "../features/screenshots";
 import {
   ProfileInfoIcon,
@@ -183,6 +183,10 @@ type ModpackTabProps = {
   finishDownloadJob?: (id: string) => void;
   makeDownloadJobId?: (prefix: string) => string;
   onRegisterModpackHotkeys?: (actions: ModpackHotkeyActions | null) => void;
+  onActiveViewChange?: (view: ViewId) => void;
+  onRegisterModpackNavigation?: (actions: ModpackNavigationActions | null) => void;
+  requestedModpackView?: ViewId | null;
+  onRequestedModpackViewApplied?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -398,6 +402,10 @@ export function ModpackTab({
   finishDownloadJob,
   makeDownloadJobId,
   onRegisterModpackHotkeys,
+  onActiveViewChange,
+  onRegisterModpackNavigation,
+  requestedModpackView,
+  onRequestedModpackViewApplied,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -774,7 +782,6 @@ export function ModpackTab({
             prev[preset.id] ? prev : { ...prev, [preset.id]: uri },
           );
         } catch {
-          // ignore missing icons
         }
       }
     })();
@@ -1517,6 +1524,32 @@ export function ModpackTab({
     });
     return () => onRegisterModpackHotkeys(null);
   }, [handleOpenCreateView, handleOpenImportView, onRegisterModpackHotkeys]);
+
+  useEffect(() => {
+    onActiveViewChange?.(activeView);
+  }, [activeView, onActiveViewChange]);
+
+  const goToModpackList = useCallback(() => {
+    setActiveView("list");
+  }, []);
+
+  useEffect(() => {
+    if (!onRegisterModpackNavigation) return;
+    onRegisterModpackNavigation({
+      getActiveView: () => activeView,
+      goToList: goToModpackList,
+      setActiveView,
+    });
+    return () => onRegisterModpackNavigation(null);
+  }, [activeView, goToModpackList, onRegisterModpackNavigation]);
+
+  useEffect(() => {
+    if (!requestedModpackView) return;
+    if (requestedModpackView !== activeView) {
+      setActiveView(requestedModpackView);
+    }
+    onRequestedModpackViewApplied?.();
+  }, [requestedModpackView, onRequestedModpackViewApplied]);
 
   const loadCreateLoaderVersions = useCallback(async () => {
     if (createLoader === "vanilla") {
@@ -2763,7 +2796,7 @@ export function ModpackTab({
               className="interactive-press flex h-28 w-24 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 text-xs text-white/70 hover:bg-black/60"
             >
               {createIconPath ? (
-                // eslint-disable-next-line jsx-a11y/img-redundant-alt
+                //eslint-disable-next-line jsx-a11y/img-redundant-alt
                 <img
                   src={resolveIconSrc(createIconPath)}
                   alt="icon"
