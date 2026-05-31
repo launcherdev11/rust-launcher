@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GameConsolePanel } from "../components/GameConsolePanel";
 import { useT } from "../i18n";
+import { copyTextToClipboard } from "../lib/clipboard";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type Language = "ru" | "en";
@@ -74,6 +76,8 @@ type PlayTabProps = {
   onToggleConsole: () => void;
   onClearConsole: () => void;
   onRegisterConsoleHotkeys?: (actions: PlayConsoleHotkeyActions | null) => void;
+  isConsoleDetached?: boolean;
+  onToggleConsoleDetached?: () => void | Promise<void>;
   showConsoleOnLaunch: boolean;
   versions: VersionItem[];
   selectedVersion: VersionItem | null;
@@ -117,6 +121,8 @@ export function PlayTab({
   onToggleConsole,
   onClearConsole,
   onRegisterConsoleHotkeys,
+  isConsoleDetached = false,
+  onToggleConsoleDetached,
   showConsoleOnLaunch,
   versions,
   selectedVersion,
@@ -150,68 +156,18 @@ export function PlayTab({
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState(false);
 
-  const [isConsoleDetached, setIsConsoleDetached] = useState(false);
-  const [consolePos, setConsolePos] = useState({ x: 24, y: 110 });
-  const consoleWindowRef = useRef<HTMLDivElement | null>(null);
-
-  const [isDraggingConsole, setIsDraggingConsole] = useState(false);
-  const consoleDragStartRef = useRef<{
-    pointerX: number;
-    pointerY: number;
-    startX: number;
-    startY: number;
-  } | null>(null);
-
-  const [isCopyingConsole, setIsCopyingConsole] = useState(false);
-  const [isConsoleCopied, setIsConsoleCopied] = useState(false);
-
   const consoleText = useMemo(
     () => consoleLines.map((e) => e.line).join("\n"),
     [consoleLines],
   );
 
   const handleCopyConsole = useCallback(async () => {
-    if (isCopyingConsole) return;
-    setIsCopyingConsole(true);
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(consoleText);
-      ok = true;
-    } catch {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = consoleText;
-        ta.style.position = "fixed";
-        ta.style.left = "-10000px";
-        ta.style.top = "-10000px";
-        ta.setAttribute("readonly", "true");
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-      } catch {
-        // ignore
-      }
-    } finally {
-      setIsCopyingConsole(false);
-    }
-
-    if (ok) {
-      setIsConsoleCopied(true);
-      window.setTimeout(() => setIsConsoleCopied(false), 1200);
-    }
-  }, [consoleText, isCopyingConsole]);
+    await copyTextToClipboard(consoleText);
+  }, [consoleText]);
 
   const handleToggleConsoleDetached = useCallback(() => {
-    if (!isConsoleDetached) {
-      const rect = consoleWindowRef.current?.getBoundingClientRect();
-      if (rect) {
-        setConsolePos({ x: Math.round(rect.left), y: Math.round(rect.top) });
-      }
-    }
-    setIsConsoleDetached((prev) => !prev);
-  }, [isConsoleDetached]);
+    void onToggleConsoleDetached?.();
+  }, [onToggleConsoleDetached]);
 
   useEffect(() => {
     if (!onRegisterConsoleHotkeys) return;
@@ -225,72 +181,6 @@ export function PlayTab({
     handleToggleConsoleDetached,
     onRegisterConsoleHotkeys,
   ]);
-
-  const handleConsoleHeaderPointerDown = useCallback(
-    (e: import("react").PointerEvent<HTMLDivElement>) => {
-      const target = e.target as HTMLElement;
-      if (target.closest("button")) return;
-      if (e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isConsoleDetached) return;
-
-      consoleDragStartRef.current = {
-        pointerX: e.clientX,
-        pointerY: e.clientY,
-        startX: consolePos.x,
-        startY: consolePos.y,
-      };
-      setIsDraggingConsole(true);
-      document.body.style.userSelect = "none";
-      document.body.style.cursor = "grabbing";
-    },
-    [consolePos.x, consolePos.y, isConsoleDetached],
-  );
-
-  useEffect(() => {
-    if (!isDraggingConsole) return;
-
-    const onMove = (e: PointerEvent) => {
-      const drag = consoleDragStartRef.current;
-      if (!drag) return;
-
-      const panel = consoleWindowRef.current;
-      const panelWidth = panel?.offsetWidth ?? 720;
-      const panelHeight = panel?.offsetHeight ?? 320;
-
-      const dx = e.clientX - drag.pointerX;
-      const dy = e.clientY - drag.pointerY;
-
-      const nextX = drag.startX + dx;
-      const nextY = drag.startY + dy;
-
-      const maxX = window.innerWidth - panelWidth - 8;
-      const maxY = window.innerHeight - panelHeight - 8;
-
-      setConsolePos({
-        x: Math.max(8, Math.min(nextX, maxX)),
-        y: Math.max(8, Math.min(nextY, maxY)),
-      });
-    };
-
-    const onUp = () => {
-      consoleDragStartRef.current = null;
-      setIsDraggingConsole(false);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-    };
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, [isDraggingConsole]);
 
   const currentBanner =
     banners.length > 0 &&
@@ -440,15 +330,6 @@ export function PlayTab({
       );
     });
   }, [isVersionDropdownOpen, filteredVersions.length]);
-
-  const statusDotClass =
-    gameStatus === "running"
-      ? "bg-emerald-400"
-      : gameStatus === "crashed"
-        ? "bg-red-500"
-        : gameStatus === "stopped"
-          ? "bg-sky-400"
-          : "bg-gray-500";
 
   const bannerClass = fillPane
     ? "glass-panel relative flex min-h-[7rem] max-h-[min(220px,42%)] w-full max-w-none flex-1 overflow-hidden rounded-3xl"
@@ -753,216 +634,21 @@ export function PlayTab({
         </div>
       )}
 
-      {showConsoleOnLaunch && (
-        <>
-          {!isConsoleDetached ? (
-            <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
-              <div
-                ref={consoleWindowRef}
-                className="glass-panel pointer-events-auto w-full max-w-3xl rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl"
-              >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`}
-                    />
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
-                      {tt("play.console.title")}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={onClearConsole}
-                      data-no-console-drag
-                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
-                    >
-                      {tt("play.console.clear")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onToggleConsole}
-                      data-no-console-drag
-                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
-                    >
-                      {isConsoleVisible
-                        ? tt("play.console.hide")
-                        : tt("play.console.show")}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCopyConsole}
-                      data-no-console-drag
-                      disabled={isCopyingConsole}
-                      className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20 disabled:opacity-50"
-                      title={
-                        isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")
-                      }
-                      aria-label={tt("app.toast.copy")}
-                    >
-                      <img
-                        src="/launcher-assets/copy.png"
-                        alt=""
-                        className="h-4 w-4 object-contain"
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleToggleConsoleDetached}
-                      data-no-console-drag
-                      className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20"
-                      title={tt("play.console.detach")}
-                      aria-label={tt("play.console.detach")}
-                    >
-                      <img
-                        src="/launcher-assets/move.png"
-                        alt=""
-                        className="h-4 w-4 object-contain"
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                {isConsoleVisible && (
-                  <>
-                    {consoleLines.length > 0 ? (
-                      <div className="mt-2 h-44 w-full overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80">
-                        {consoleLines.map((entry) => (
-                          <div
-                            key={entry.id}
-                            className={`whitespace-pre break-all ${
-                              entry.source === "stderr"
-                                ? "text-red-300"
-                                : "text-emerald-200"
-                            }`}
-                          >
-                            {entry.line}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60">
-                        {tt("play.console.empty")}
-                      </div>
-                    )}
-
-                    <p className="mt-2 text-[10px] text-white/40">
-                      {tt("play.console.hint")}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div
-              ref={consoleWindowRef}
-              className="pointer-events-auto fixed z-50 w-[min(90vw,48rem)] rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl"
-              style={{
-                left: consolePos.x,
-                top: consolePos.y,
-              }}
-            >
-              <div
-                className="mb-2 flex items-center justify-between gap-2 select-none touch-none"
-                style={{ cursor: isDraggingConsole ? "grabbing" : "grab" }}
-                onPointerDown={handleConsoleHeaderPointerDown}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`}
-                  />
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
-                    {tt("play.console.title")}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={onClearConsole}
-                    data-no-console-drag
-                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
-                  >
-                    {tt("play.console.clear")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onToggleConsole}
-                    data-no-console-drag
-                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20"
-                  >
-                    {isConsoleVisible
-                      ? tt("play.console.hide")
-                      : tt("play.console.show")}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleCopyConsole}
-                    data-no-console-drag
-                    disabled={isCopyingConsole}
-                    className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20 disabled:opacity-50"
-                    title={
-                      isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")
-                    }
-                    aria-label={tt("app.toast.copy")}
-                  >
-                    <img
-                      src="/launcher-assets/copy.png"
-                      alt=""
-                      className="h-4 w-4 object-contain"
-                    />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleToggleConsoleDetached}
-                    data-no-console-drag
-                    className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20"
-                    title={tt("play.console.attach")}
-                    aria-label={tt("play.console.attach")}
-                  >
-                    <img
-                      src="/launcher-assets/move.png"
-                      alt=""
-                      className="h-4 w-4 object-contain"
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {isConsoleVisible && (
-                <>
-                  {consoleLines.length > 0 ? (
-                    <div className="mt-2 h-44 w-full overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[11px] font-mono text-white/80">
-                      {consoleLines.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className={`whitespace-pre break-all ${
-                            entry.source === "stderr"
-                              ? "text-red-300"
-                              : "text-emerald-200"
-                          }`}
-                        >
-                          {entry.line}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-2 flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[11px] text-white/60">
-                      {tt("play.console.empty")}
-                    </div>
-                  )}
-
-                  <p className="mt-2 text-[10px] text-white/40">
-                    {tt("play.console.hint")}
-                  </p>
-                </>
-              )}
-            </div>
-          )}
-        </>
+      {showConsoleOnLaunch && !isConsoleDetached && (
+        <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
+          <GameConsolePanel
+            embedded
+            className="glass-panel pointer-events-auto w-full max-w-3xl"
+            consoleLines={consoleLines}
+            isConsoleVisible={isConsoleVisible}
+            gameStatus={gameStatus}
+            language={language}
+            isDetached={false}
+            onClearConsole={onClearConsole}
+            onToggleConsole={onToggleConsole}
+            onToggleDetached={handleToggleConsoleDetached}
+          />
+        </div>
       )}
     </>
   );

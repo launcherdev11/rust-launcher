@@ -43,6 +43,7 @@ import {
   type ModpackHotkeyActions,
   type PlayConsoleHotkeyActions,
 } from "./hooks/useHotkeys";
+import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
 import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
@@ -2896,6 +2897,17 @@ function App() {
     }));
   };
 
+  const { isConsoleDetached, toggleConsoleDetached } = useGameConsoleWindow({
+    enabled: settings?.show_console_on_launch ?? false,
+    profileName: activeInstanceProfile?.name ?? null,
+    language,
+    consoleLines,
+    isConsoleVisible,
+    gameStatus,
+    onClearConsole: handleClearConsole,
+    onToggleConsole: handleToggleConsole,
+  });
+
   const handleOpenGameFolder = async () => {
     try {
       await invoke("open_game_folder", {
@@ -3400,6 +3412,8 @@ function App() {
               installedVersionIds={installedVersionIdsForDropdown}
               showSnapshots={settings?.show_snapshots ?? false}
               activeProfileName={activeInstanceProfile?.name ?? null}
+              isConsoleDetached={isConsoleDetached}
+              onToggleConsoleDetached={toggleConsoleDetached}
             />
             </div>
           );
@@ -3422,6 +3436,8 @@ function App() {
       handlePrimaryClick,
       handleResumeInstall,
       handleToggleConsole,
+      isConsoleDetached,
+      toggleConsoleDetached,
       handleToggleSidebarPin,
       installPaused,
       installUpdate,
