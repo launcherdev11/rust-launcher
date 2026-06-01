@@ -77,20 +77,15 @@ fn load_dotenv() {
     crate::services::game::runtime::load_project_env_for_runtime();
 }
 
+#[cfg(target_os = "linux")]
+pub fn linux_startup_init() {
+    infra::platform::configure_linux_startup();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     load_dotenv();
 
-    #[cfg(target_os = "linux")]
-    {
-        let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
-        if is_wayland {
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    infra::platform::configure_linux_display_backend();
     #[cfg(target_os = "windows")]
     infra::platform::configure_windows_webview_memory();
 
@@ -127,12 +122,6 @@ pub fn run() {
             let pending_mrpack = pending_mrpack.clone();
             let pending_launch = pending_profile_launch.clone();
             move |app| {
-                #[cfg(target_os = "linux")]
-                {
-                    if std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland" {
-                        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-                    }
-                }
                 mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
                 stash_argv_profile_launch_if_any(&pending_launch);
                 if let Err(e) = app::paths::ensure_game_data_layout() {

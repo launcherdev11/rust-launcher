@@ -38,6 +38,9 @@ fn load_dotenv_files() {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    mc16launcher_lib::linux_startup_init();
+
     load_dotenv_files();
     mc16launcher_lib::run();
 }
