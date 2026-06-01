@@ -103,18 +103,24 @@ pub fn run() {
 
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
-                mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
-            }
-            if let Some(profile_id) = extract_profile_launch_from_os_args(&args) {
-                emit_profile_launch_request(&app, profile_id);
-            }
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }));
+        // identifier `com.16steyy.16Launcher` is invalid for D-Bus (segments must not start with a digit).
+        builder = builder.plugin(
+            tauri_plugin_single_instance::Builder::new()
+                .dbus_id("com.steyy.sixteenlauncher")
+                .callback(|app, args, _cwd| {
+                    if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
+                        mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
+                    }
+                    if let Some(profile_id) = extract_profile_launch_from_os_args(&args) {
+                        emit_profile_launch_request(&app, profile_id);
+                    }
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                })
+                .build(),
+        );
     }
 
     builder
