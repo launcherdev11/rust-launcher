@@ -103,10 +103,9 @@ pub fn run() {
 
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
-        // identifier `com.16steyy.16Launcher` is invalid for D-Bus (segments must not start with a digit).
         builder = builder.plugin(
             tauri_plugin_single_instance::Builder::new()
-                .dbus_id("com.steyy.sixteenlauncher")
+                .dbus_id("com.steyy.mc16launcher")
                 .callback(|app, args, _cwd| {
                     if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
                         mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
