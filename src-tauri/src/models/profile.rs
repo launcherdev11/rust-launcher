@@ -15,6 +15,8 @@ pub struct InstanceConfig {
     pub created_at: u64,
     #[serde(default)]
     pub play_time_seconds: u64,
+    #[serde(default)]
+    pub last_played_at: Option<u64>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -41,6 +43,8 @@ pub struct InstanceProfileSummary {
     pub loader_version: Option<String>,
     pub created_at: u64,
     pub play_time_seconds: u64,
+    #[serde(default)]
+    pub last_played_at: Option<u64>,
     pub mods_count: u32,
     pub resourcepacks_count: u32,
     pub shaderpacks_count: u32,

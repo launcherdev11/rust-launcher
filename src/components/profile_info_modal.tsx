@@ -13,6 +13,7 @@ export type ProfileInfoData = {
   loader_version?: string | null;
   created_at: number;
   play_time_seconds: number | null;
+  last_played_at?: number | null;
   mods_count?: number;
   resourcepacks_count?: number;
   shaderpacks_count?: number;
@@ -67,8 +68,8 @@ function formatPlaytimeDetailed(seconds: number | null, language: Language): str
   return parts.length > 0 ? parts.join(" ") : "0s";
 }
 
-function formatCreatedAt(ts: number, language: Language): string {
-  if (!ts) return "—";
+function formatTimestamp(ts: number | null | undefined, language: Language): string {
+  if (ts == null || !Number.isFinite(ts) || ts <= 0) return "—";
   try {
     return new Date(ts * 1000).toLocaleString(language === "ru" ? "ru-RU" : "en-US", {
       dateStyle: "long",
@@ -194,8 +195,12 @@ export function ProfileInfoModal({ language, profile, onClose }: ProfileInfoModa
             value={formatPlaytimeDetailed(profile.play_time_seconds, language)}
           />
           <InfoRow
+            label={tt("modpacks.profileInfo.lastPlayedAt")}
+            value={formatTimestamp(profile.last_played_at, language)}
+          />
+          <InfoRow
             label={tt("modpacks.profileInfo.createdAt")}
-            value={formatCreatedAt(profile.created_at, language)}
+            value={formatTimestamp(profile.created_at, language)}
           />
           {profile.total_size_bytes != null ? (
             <InfoRow

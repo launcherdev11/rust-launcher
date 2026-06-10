@@ -459,6 +459,7 @@
       "loaderVersion": "Loader version",
       "launcherVersion": "Launcher version",
       "playtime": "Playtime",
+      "lastPlayedAt": "Last played",
       "createdAt": "Created",
       "size": "Disk size",
       "content": "Content",
@@ -471,6 +472,7 @@
       "activeBadge": "Active",
       "playSelectedTitle": "Launch game with this profile",
       "playtimeLabel": "Playtime",
+      "lastPlayed": "Last played: {{date}}",
       "empty": "No profiles yet. Click “Create” to add one.",
       "layout": {
         "list": "List",
