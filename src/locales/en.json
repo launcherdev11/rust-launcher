@@ -703,6 +703,7 @@
     },
     "playAction": {
       "play": "PLAY",
+      "launching": "Launching...",
       "install": "Install",
       "stop": "STOP"
     },
