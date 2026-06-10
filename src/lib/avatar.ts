@@ -57,6 +57,25 @@ function getDiskCache(cacheKey: string): AvatarCacheEntry | null {
   }
 }
 
+export function clearLauncherAvatarCache(): void {
+  memoryCache.clear();
+  if (typeof window === "undefined") return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith(ELY_AVATAR_CACHE_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
+    }
+  } catch (error) {
+    console.debug("[avatar] failed to clear Ely disk cache", error);
+  }
+}
+
 function putCache(cacheKey: string, src: string): void {
   const entry: AvatarCacheEntry = { src, expiresAt: Date.now() + AVATAR_CACHE_TTL_MS };
   memoryCache.set(cacheKey, entry);

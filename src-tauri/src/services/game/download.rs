@@ -6,7 +6,7 @@ use rand::Rng;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::app::paths::{game_root_dir, instance_dir, launcher_data_dir};
+use crate::app::paths::{game_root_dir, instance_dir};
 use crate::infra::http::http_client;
 use crate::models::events::{MrpackImportProgressPayload, EVENT_MRPACK_IMPORT_PROGRESS};
 use crate::models::profile::InstanceProfileSummary;
@@ -489,9 +489,7 @@ pub async fn download_modrinth_modpack_and_import(
     filename: String,
     icon_url: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
-    let root = launcher_data_dir()?
-        .join("tmp")
-        .join("modrinth_modpacks");
+    let root = cache_service::tmp_cache_dir()?.join("modrinth_modpacks");
     tokio::fs::create_dir_all(&root)
         .await
         .map_err(|e| format!("Не удалось создать temp-папку: {e}"))?;

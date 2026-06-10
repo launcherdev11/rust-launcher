@@ -226,6 +226,7 @@
       },
       "cache": {
         "label": "Кэш лаунчера:",
+        "description": "Аватары Ely и временные загрузки.",
         "loading": "Подсчёт размера кэша…",
         "sizeLabel": "Размер: {{size}}",
         "sizeUnknown": "Размер неизвестен",
@@ -459,6 +460,36 @@
       "layout": {
         "list": "Список",
         "grid": "Сетка"
+      },
+      "ungroupedTitle": "Без группы",
+      "createGroupMenu": "Новая группа сборок",
+      "editGroupMenu": "Изменить группу",
+      "deleteGroupMenu": "Удалить группу",
+      "dropHint": "Перетащите сюда",
+      "selectedCount": "Выбрано: {{count}}"
+    },
+    "groups": {
+      "createTitle": "Новая группа сборок",
+      "editTitle": "Изменить группу",
+      "nameLabel": "Название группы",
+      "namePlaceholder": "Например: Выживание, Техника…",
+      "colorLabel": "Цвет",
+      "profilesLabel": "Сборки в группе",
+      "profilesPlaceholder": "Выберите сборки…",
+      "profilesSelected": "Выбрано: {{count}}",
+      "create": "Создать группу",
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "created": "Группа «{{name}}» создана.",
+      "updated": "Группа «{{name}}» обновлена.",
+      "deleted": "Группа удалена.",
+      "nameRequired": "Введите название группы.",
+      "color": {
+        "purple": "Фиолетовый",
+        "orange": "Оранжевый",
+        "red": "Красный",
+        "yellow": "Жёлтый",
+        "green": "Зелёный"
       }
     },
     "create": {
