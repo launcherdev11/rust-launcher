@@ -226,6 +226,7 @@
       },
       "cache": {
         "label": "Launcher cache:",
+        "description": "Ely avatars and temporary downloads.",
         "loading": "Calculating cache size…",
         "sizeLabel": "Size: {{size}}",
         "sizeUnknown": "Size unknown",
@@ -459,6 +460,36 @@
       "layout": {
         "list": "List",
         "grid": "Grid"
+      },
+      "ungroupedTitle": "Ungrouped",
+      "createGroupMenu": "New profile group",
+      "editGroupMenu": "Edit group",
+      "deleteGroupMenu": "Delete group",
+      "dropHint": "Drop here",
+      "selectedCount": "Selected: {{count}}"
+    },
+    "groups": {
+      "createTitle": "New profile group",
+      "editTitle": "Edit group",
+      "nameLabel": "Group name",
+      "namePlaceholder": "e.g. Survival, Tech…",
+      "colorLabel": "Color",
+      "profilesLabel": "Profiles in group",
+      "profilesPlaceholder": "Select profiles…",
+      "profilesSelected": "Selected: {{count}}",
+      "create": "Create group",
+      "save": "Save",
+      "cancel": "Cancel",
+      "created": "Group “{{name}}” created.",
+      "updated": "Group “{{name}}” updated.",
+      "deleted": "Group deleted.",
+      "nameRequired": "Enter a group name.",
+      "color": {
+        "purple": "Purple",
+        "orange": "Orange",
+        "red": "Red",
+        "yellow": "Yellow",
+        "green": "Green"
       }
     },
     "create": {

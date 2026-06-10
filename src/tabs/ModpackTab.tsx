@@ -23,6 +23,19 @@ import { useT } from "../i18n";
 import { DeleteIcon } from "../components/delete_icon";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
+import {
+  assignProfilesToGroup,
+  loadProfileGroups,
+  newProfileGroupId,
+  PROFILE_GROUP_COLOR_STYLES,
+  PROFILE_GROUP_COLORS,
+  sanitizeProfileGroups,
+  saveProfileGroups,
+  subscribeProfileGroups,
+  ungroupProfiles,
+  type ProfileGroup,
+  type ProfileGroupColor,
+} from "../lib/profile-groups";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
 import type { ModpackHotkeyActions, ModpackNavigationActions } from "../hooks/useHotkeys";
 import { ScreenshotsModal } from "../features/screenshots";
@@ -425,6 +438,8 @@ export function ModpackTab({
   const [items, setItems] = useState<ProfileItemEntry[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const profilesLoadedRef = useRef(false);
+  const profileGroupsHydratedRef = useRef(false);
   const [search, setSearch] = useState("");
   const [createName, setCreateName] = useState("");
   const [createLoader, setCreateLoader] = useState<LoaderId>("fabric");
@@ -501,6 +516,23 @@ export function ModpackTab({
     x: number;
     y: number;
   } | null>(null);
+  const [listContextMenu, setListContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [groupContextMenu, setGroupContextMenu] = useState<{
+    groupId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [profileGroups, setProfileGroups] = useState<ProfileGroup[]>(() => loadProfileGroups());
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [groupFormName, setGroupFormName] = useState("");
+  const [groupFormColor, setGroupFormColor] = useState<ProfileGroupColor>("purple");
+  const [groupFormProfileIds, setGroupFormProfileIds] = useState<Set<string>>(new Set());
+  const [isGroupProfilesDropdownOpen, setIsGroupProfilesDropdownOpen] = useState(false);
+  const [multiSelectedProfileIds, setMultiSelectedProfileIds] = useState<Set<string>>(new Set());
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+  const profileDragIdsRef = useRef<string[]>([]);
+  const groupProfilesDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
     null,
   );
@@ -1380,6 +1412,7 @@ export function ModpackTab({
     setLoadingProfiles(true);
     try {
       const list = await invoke<InstanceProfile[]>("get_profiles");
+      profilesLoadedRef.current = true;
       setProfiles(list);
       onProfilesChange?.(list);
       try {
@@ -1627,6 +1660,83 @@ export function ModpackTab({
       p.game_version.toLowerCase().includes(query),
     );
   }, [profiles, search]);
+
+  const profilesById = useMemo(
+    () => new Map(profiles.map((p) => [p.id, p])),
+    [profiles],
+  );
+
+  const groupedProfileIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const group of profileGroups) {
+      for (const id of group.profileIds) ids.add(id);
+    }
+    return ids;
+  }, [profileGroups]);
+
+  const ungroupedProfiles = useMemo(
+    () => filteredProfiles.filter((p) => !groupedProfileIds.has(p.id)),
+    [filteredProfiles, groupedProfileIds],
+  );
+
+  const visibleProfileGroups = useMemo(() => {
+    const query = search.trim();
+    return profileGroups.map((group) => ({
+      ...group,
+      profiles: group.profileIds
+        .map((id) => profilesById.get(id))
+        .filter((p): p is InstanceProfile => !!p)
+        .filter((p) =>
+          !query ||
+          p.name.toLowerCase().includes(query.toLowerCase()) ||
+          p.game_version.toLowerCase().includes(query.toLowerCase()),
+        ),
+    }));
+  }, [profileGroups, profilesById, search]);
+
+  useEffect(
+    () =>
+      subscribeProfileGroups(() => {
+        setProfileGroups((prev) => {
+          const stored = loadProfileGroups();
+          return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored;
+        });
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    if (!profilesLoadedRef.current) return;
+    const validIds = new Set(profiles.map((p) => p.id));
+    setProfileGroups((prev) => {
+      let base = prev;
+      if (!profileGroupsHydratedRef.current) {
+        profileGroupsHydratedRef.current = true;
+        const stored = loadProfileGroups();
+        if (prev.length === 0 && stored.length > 0) {
+          base = stored;
+        }
+      }
+      const next = sanitizeProfileGroups(base, validIds);
+      if (JSON.stringify(base) !== JSON.stringify(next)) {
+        saveProfileGroups(next);
+        return next;
+      }
+      return base;
+    });
+  }, [profiles]);
+
+  useEffect(() => {
+    if (!isGroupProfilesDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = groupProfilesDropdownRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setIsGroupProfilesDropdownOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [isGroupProfilesDropdownOpen]);
 
   const totalProfilesLabel =
     language === "ru"
@@ -2517,12 +2627,289 @@ export function ModpackTab({
     }
   }
 
+  function openCreateGroupModal() {
+    setEditingGroupId(null);
+    setGroupFormName("");
+    setGroupFormColor("purple");
+    setGroupFormProfileIds(new Set());
+    setIsGroupProfilesDropdownOpen(false);
+    setIsGroupModalOpen(true);
+  }
+
+  function openEditGroupModal(group: ProfileGroup) {
+    setEditingGroupId(group.id);
+    setGroupFormName(group.name);
+    setGroupFormColor(group.color);
+    setGroupFormProfileIds(new Set(group.profileIds));
+    setIsGroupProfilesDropdownOpen(false);
+    setIsGroupModalOpen(true);
+  }
+
+  function handleSaveGroup() {
+    const name = groupFormName.trim();
+    if (!name) {
+      showNotification("warning", tt("modpacks.groups.nameRequired"));
+      return;
+    }
+    const profileIds = [...groupFormProfileIds];
+    if (editingGroupId) {
+      setProfileGroups((prev) => {
+        const withoutMoved = ungroupProfiles(prev, profileIds);
+        const next = withoutMoved.map((g) =>
+          g.id === editingGroupId
+            ? { ...g, name, color: groupFormColor, profileIds }
+            : g,
+        );
+        saveProfileGroups(next);
+        return next;
+      });
+      showNotification("success", tt("modpacks.groups.updated", { name }));
+    } else {
+      const newGroup: ProfileGroup = {
+        id: newProfileGroupId(),
+        name,
+        color: groupFormColor,
+        profileIds,
+        collapsed: false,
+      };
+      setProfileGroups((prev) => {
+        const cleaned = profileIds.length > 0 ? ungroupProfiles(prev, profileIds) : prev;
+        const next = [...cleaned, newGroup];
+        saveProfileGroups(next);
+        return next;
+      });
+      showNotification("success", tt("modpacks.groups.created", { name }));
+    }
+    setIsGroupModalOpen(false);
+  }
+
+  function handleDeleteGroup(groupId: string) {
+    setProfileGroups((prev) => {
+      const next = prev.filter((g) => g.id !== groupId);
+      saveProfileGroups(next);
+      return next;
+    });
+    showNotification("info", tt("modpacks.groups.deleted"));
+  }
+
+  function toggleGroupCollapsed(groupId: string) {
+    setProfileGroups((prev) => {
+      const next = prev.map((g) => (g.id === groupId ? { ...g, collapsed: !g.collapsed } : g));
+      saveProfileGroups(next);
+      return next;
+    });
+  }
+
+  function handleDropProfilesOnGroup(groupId: string | "ungrouped") {
+    const ids = profileDragIdsRef.current;
+    if (ids.length === 0) return;
+    if (groupId === "ungrouped") {
+      setProfileGroups((prev) => {
+        const next = ungroupProfiles(prev, ids);
+        saveProfileGroups(next);
+        return next;
+      });
+    } else {
+      setProfileGroups((prev) => {
+        const next = assignProfilesToGroup(prev, groupId, ids);
+        saveProfileGroups(next);
+        return next;
+      });
+    }
+    setDragOverGroupId(null);
+    setMultiSelectedProfileIds(new Set());
+    profileDragIdsRef.current = [];
+  }
+
+  function handleProfileDragStart(profileId: string, e: React.DragEvent) {
+    const dragIds =
+      multiSelectedProfileIds.has(profileId) && multiSelectedProfileIds.size > 0
+        ? [...multiSelectedProfileIds]
+        : [profileId];
+    profileDragIdsRef.current = dragIds;
+    e.dataTransfer.setData("text/plain", dragIds.join(","));
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleListAreaContextMenuCapture(e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-profile-card]")) return;
+    if (target.closest("[data-group-header]")) return;
+    if (target.closest("button, input, textarea, select, a, label")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setListContextMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  function renderProfileCard(p: InstanceProfile) {
+    const isSelected = selectedProfileId === p.id;
+    const isPinned = isPinnedInSidebar?.(p.id) ?? false;
+    const isMultiSelected = multiSelectedProfileIds.has(p.id);
+    return (
+      <div
+        key={p.id}
+        data-profile-card
+        draggable
+        onDragStart={(e) => handleProfileDragStart(p.id, e)}
+        onDragEnd={() => {
+          setDragOverGroupId(null);
+          profileDragIdsRef.current = [];
+        }}
+        className={`relative flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
+          isMultiSelected
+            ? "border-sky-400/80 bg-sky-500/10 ring-1 ring-sky-400/40"
+            : isSelected
+              ? "border-emerald-400/80 bg-white/15"
+              : "border-white/10 bg-black/40 hover:border-white/40 hover:bg-black/60"
+        }`}
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey) {
+            e.stopPropagation();
+            setMultiSelectedProfileIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(p.id)) next.delete(p.id);
+              else next.add(p.id);
+              return next;
+            });
+            return;
+          }
+          setSelectedProfileId(p.id);
+          setActiveView("manage");
+          void invoke("set_selected_profile", { id: p.id });
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenu({
+            profileId: p.id,
+            x: e.clientX,
+            y: e.clientY,
+          });
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <ProfileInstanceIcon profile={p} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-white">{p.name}</span>
+              {isPinned && (
+                <img
+                  src="/launcher-assets/favorite.png"
+                  alt=""
+                  className="h-3.5 w-3.5 object-contain opacity-90"
+                />
+              )}
+              {isSelected && (
+                <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+                  {tt("modpacks.list.activeBadge")}
+                </span>
+              )}
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+              <span>{`${p.game_version} • ${p.loader}`}</span>
+              <span className="flex items-center gap-1">
+                <img
+                  src="/launcher-assets/cllock.png"
+                  alt=""
+                  title={tt("modpacks.list.playtimeLabel")}
+                  className="h-3 w-3 object-contain opacity-80"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.dataset.failedOnce !== "1") {
+                      img.dataset.failedOnce = "1";
+                      img.src = "/launcher-assets/clock.png";
+                      return;
+                    }
+                    img.style.display = "none";
+                  }}
+                />
+                <span>{formatPlaytime(p.play_time_seconds, language)}</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <ModsIcon className="h-3 w-3" />
+                <span>{countLabel(p.mods_count, language)}</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <WeightIcon className="h-3 w-3" />
+                <span>{formatBytes(p.total_size_bytes, language)}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isSelected && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlaySelectedProfile?.();
+              }}
+              className="interactive-press rounded-xl accent-bg px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-soft hover:opacity-90"
+              title={tt("modpacks.list.playSelectedTitle")}
+            >
+              {tt("modpacks.actions.play")}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSelectProfile(p);
+            }}
+            className={`interactive-press inline-flex shrink-0 items-center justify-center rounded-xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap ${
+              isSelected
+                ? "min-w-[96px] bg-white/10 text-white/80 hover:bg-white/20"
+                : "accent-bg text-white hover:opacity-90"
+            }`}
+          >
+            {isSelected ? tt("modpacks.actions.unselect") : tt("modpacks.actions.select")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderGroupDropZone(
+    groupId: string | "ungrouped",
+    children: ReactNode,
+    className?: string,
+  ) {
+    const isOver = dragOverGroupId === groupId;
+    return (
+      <div
+        className={className}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDragOverGroupId(groupId);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setDragOverGroupId((prev) => (prev === groupId ? null : prev));
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          handleDropProfilesOnGroup(groupId);
+        }}
+      >
+        {isOver && (
+          <div className="pointer-events-none mb-2 rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-2 text-center text-[11px] text-white/60">
+            {tt("modpacks.list.dropHint")}
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
+
   function renderListView() {
     return (
       <div
         className={`flex w-full min-h-0 flex-1 flex-col gap-3 ${
           fillPane ? "h-full" : ""
         }`}
+        onContextMenuCapture={handleListAreaContextMenuCapture}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
@@ -2633,139 +3020,129 @@ export function ModpackTab({
           </div>
         </div>
 
-        <div className="glass-panel relative flex-1 overflow-hidden">
-          <div className="mb-1 flex items-center justify-between pl-3 text-xs text-white/60">
-            <span>{totalProfilesLabel}</span>
-            {loadingProfiles && (
-              <span>
-                {tt("modpacks.common.loading")}
-              </span>
-            )}
+        <div className="glass-panel relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="mb-1 flex shrink-0 items-center justify-between pl-3 text-xs text-white/60">
+            <div className="flex items-center gap-3">
+              <span>{totalProfilesLabel}</span>
+              {multiSelectedProfileIds.size > 0 && (
+                <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-medium text-sky-200">
+                  {tt("modpacks.list.selectedCount", { count: multiSelectedProfileIds.size })}
+                </span>
+              )}
+            </div>
+            {loadingProfiles && <span>{tt("modpacks.common.loading")}</span>}
           </div>
-          <div className="custom-scrollbar -mr-2 h-full overflow-y-auto px-4 pr-3">
-            <div
-              className={
-                profilesLayout === "grid"
-                  ? "grid grid-cols-1 gap-2 md:grid-cols-2"
-                  : "flex flex-col gap-2"
-              }
-            >
-              {filteredProfiles.map((p) => {
-                const isSelected = selectedProfileId === p.id;
-                const isPinned = isPinnedInSidebar?.(p.id) ?? false;
+          <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto px-4 pr-3">
+            <div className="flex flex-col gap-4">
+              {visibleProfileGroups.map((group) => {
+                const styles = PROFILE_GROUP_COLOR_STYLES[group.color];
+                const showProfiles = !group.collapsed;
+                if (search.trim() && group.profileIds.length > 0 && group.profiles.length === 0) {
+                  return null;
+                }
                 return (
                   <div
-                    key={p.id}
-                    className={`relative flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
-                      isSelected
-                        ? "border-emerald-400/80 bg-white/15"
-                        : "border-white/10 bg-black/40 hover:border-white/40 hover:bg-black/60"
+                    key={group.id}
+                    className={`rounded-2xl border p-2 transition ${styles.border} ${
+                      dragOverGroupId === group.id ? `ring-2 ${styles.ring}` : ""
                     }`}
-                    onClick={() => {
-                      setSelectedProfileId(p.id);
-                      setActiveView("manage");
-                      void invoke("set_selected_profile", { id: p.id });
-                    }}
-                    onContextMenu={(e) => {
+                    onDragOver={(e) => {
                       e.preventDefault();
-                      e.stopPropagation();
-                      setContextMenu({
-                        profileId: p.id,
-                        x: e.clientX,
-                        y: e.clientY,
-                      });
+                      e.dataTransfer.dropEffect = "move";
+                      setDragOverGroupId(group.id);
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverGroupId((prev) => (prev === group.id ? null : prev));
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDropProfilesOnGroup(group.id);
                     }}
                   >
-                    <div className="flex items-center gap-3">
-                      <ProfileInstanceIcon profile={p} />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-white">
-                            {p.name}
-                          </span>
-                          {isPinned && (
-                            <img
-                              src="/launcher-assets/favorite.png"
-                              alt=""
-                              className="h-3.5 w-3.5 object-contain opacity-90"
-                            />
-                          )}
-                          {isSelected && (
-                            <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-                              {tt("modpacks.list.activeBadge")}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
-                          <span>{`${p.game_version} • ${p.loader}`}</span>
-                          <span className="flex items-center gap-1">
-                            <img
-                              src="/launcher-assets/cllock.png"
-                              alt=""
-                              title={tt("modpacks.list.playtimeLabel")}
-                              className="h-3 w-3 object-contain opacity-80"
-                              onError={(e) => {
-                                const img = e.currentTarget;
-                                if (img.dataset.failedOnce !== "1") {
-                                  img.dataset.failedOnce = "1";
-                                  img.src = "/launcher-assets/clock.png";
-                                  return;
-                                }
-                                img.style.display = "none";
-                              }}
-                            />
-                            <span>{formatPlaytime(p.play_time_seconds, language)}</span>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <ModsIcon className="h-3 w-3" />
-                            <span>{countLabel(p.mods_count, language)}</span>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <WeightIcon className="h-3 w-3" />
-                            <span>{formatBytes(p.total_size_bytes, language)}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                    {isSelected && (
+                    <div
+                      data-group-header
+                      className={`mb-2 flex items-center gap-2 rounded-xl px-3 py-2 ${styles.headerBg}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setGroupContextMenu({
+                          groupId: group.id,
+                          x: e.clientX,
+                          y: e.clientY,
+                        });
+                      }}
+                    >
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPlaySelectedProfile?.();
-                        }}
-                      className="interactive-press rounded-xl accent-bg px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-soft hover:opacity-90"
-                        title={tt("modpacks.list.playSelectedTitle")}
+                        onClick={() => toggleGroupCollapsed(group.id)}
+                        className="interactive-press rounded-lg p-1 text-white/70 hover:bg-white/10"
+                        aria-label={group.collapsed ? "Expand" : "Collapse"}
                       >
-                        {tt("modpacks.actions.play")}
+                        <ChevronDown
+                          className={`h-4 w-4 transition ${group.collapsed ? "-rotate-90" : ""}`}
+                        />
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleSelectProfile(p);
-                      }}
-                      className={`interactive-press inline-flex shrink-0 items-center justify-center rounded-xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap ${
-                        isSelected
-                          ? "min-w-[96px] bg-white/10 text-white/80 hover:bg-white/20"
-                          : "accent-bg text-white hover:opacity-90"
-                      }`}
-                    >
-                        {isSelected ? tt("modpacks.actions.unselect") : tt("modpacks.actions.select")}
-                      </button>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`} />
+                      <span className={`truncate text-sm font-semibold ${styles.accent}`}>
+                        {group.name}
+                      </span>
+                      <span className="text-[11px] text-white/45">{group.profileIds.length}</span>
                     </div>
+                    {showProfiles && (
+                      <div
+                        className={
+                          profilesLayout === "grid"
+                            ? "grid grid-cols-1 gap-2 md:grid-cols-2"
+                            : "flex flex-col gap-2"
+                        }
+                      >
+                        {group.profiles.map((p) => renderProfileCard(p))}
+                        {group.profiles.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-white/15 px-3 py-4 text-center text-[11px] text-white/45">
+                            {tt("modpacks.list.dropHint")}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!showProfiles && dragOverGroupId === group.id && (
+                      <div className="rounded-xl border border-dashed border-white/20 bg-white/5 px-3 py-2 text-center text-[11px] text-white/55">
+                        {tt("modpacks.list.dropHint")}
+                      </div>
+                    )}
                   </div>
                 );
               })}
-            </div>
 
-            {!loadingProfiles && filteredProfiles.length === 0 && (
-              <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-black/40 px-4 py-6 text-center text-sm text-white/70">
-                {tt("modpacks.list.empty")}
-              </div>
-            )}
+              {(ungroupedProfiles.length > 0 || profileGroups.length === 0) &&
+                renderGroupDropZone(
+                  "ungrouped",
+                  <div>
+                    {(profileGroups.length > 0 || ungroupedProfiles.length > 0) && (
+                      <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                        {tt("modpacks.list.ungroupedTitle")}
+                      </div>
+                    )}
+                    <div
+                      className={
+                        profilesLayout === "grid"
+                          ? "grid grid-cols-1 gap-2 md:grid-cols-2"
+                          : "flex flex-col gap-2"
+                      }
+                    >
+                      {ungroupedProfiles.map((p) => renderProfileCard(p))}
+                    </div>
+                  </div>,
+                  dragOverGroupId === "ungrouped" ? "rounded-2xl ring-2 ring-white/25" : "",
+                )}
+
+              {!loadingProfiles && filteredProfiles.length === 0 && (
+                <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-black/40 px-4 py-6 text-center text-sm text-white/70">
+                  {tt("modpacks.list.empty")}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -4085,6 +4462,217 @@ export function ModpackTab({
                   : "Rename profile"}
               </span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {listContextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setListContextMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setListContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            style={{ top: listContextMenu.y, left: listContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setListContextMenu(null);
+                openCreateGroupModal();
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.list.createGroupMenu")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {groupContextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setGroupContextMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setGroupContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            style={{ top: groupContextMenu.y, left: groupContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const group = profileGroups.find((g) => g.id === groupContextMenu.groupId);
+                setGroupContextMenu(null);
+                if (!group) return;
+                openEditGroupModal(group);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <EditIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.list.editGroupMenu")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const groupId = groupContextMenu.groupId;
+                setGroupContextMenu(null);
+                handleDeleteGroup(groupId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
+            >
+              <DeleteIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.list.deleteGroupMenu")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isGroupModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setIsGroupModalOpen(false)}
+        >
+          <div
+            className="glass-panel flex w-full max-w-md flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-4 text-lg font-semibold text-white">
+              {editingGroupId ? tt("modpacks.groups.editTitle") : tt("modpacks.groups.createTitle")}
+            </h3>
+
+            <label className="mb-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-white/60">
+                {tt("modpacks.groups.nameLabel")}
+              </span>
+              <input
+                type="text"
+                value={groupFormName}
+                onChange={(e) => setGroupFormName(e.target.value)}
+                placeholder={tt("modpacks.groups.namePlaceholder")}
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-white/30"
+                autoFocus
+              />
+            </label>
+
+            <div className="mb-3">
+              <span className="mb-1.5 block text-xs font-medium text-white/60">
+                {tt("modpacks.groups.colorLabel")}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {PROFILE_GROUP_COLORS.map((color) => {
+                  const styles = PROFILE_GROUP_COLOR_STYLES[color];
+                  const selected = groupFormColor === color;
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setGroupFormColor(color)}
+                      className={`interactive-press flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs ${
+                        selected
+                          ? `${styles.border} ${styles.headerBg} ${styles.accent}`
+                          : "border-white/10 bg-black/30 text-white/60 hover:bg-white/10"
+                      }`}
+                    >
+                      <span className={`h-3 w-3 rounded-full ${styles.dot}`} />
+                      {tt(`modpacks.groups.color.${color}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-4" ref={groupProfilesDropdownRef}>
+              <span className="mb-1.5 block text-xs font-medium text-white/60">
+                {tt("modpacks.groups.profilesLabel")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsGroupProfilesDropdownOpen((v) => !v)}
+                className="interactive-press flex w-full items-center justify-between gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-left text-sm text-white/85 hover:bg-black/55"
+              >
+                <span className="truncate">
+                  {groupFormProfileIds.size > 0
+                    ? tt("modpacks.groups.profilesSelected", {
+                        count: groupFormProfileIds.size,
+                      })
+                    : tt("modpacks.groups.profilesPlaceholder")}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-white/50 transition ${
+                    isGroupProfilesDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {isGroupProfilesDropdownOpen && (
+                <div className="custom-scrollbar mt-1 max-h-48 overflow-y-auto rounded-xl border border-white/15 bg-black/80 p-1 shadow-soft">
+                  {profiles.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-white/50">{tt("modpacks.list.empty")}</div>
+                  ) : (
+                    profiles.map((p) => {
+                      const checked = groupFormProfileIds.has(p.id);
+                      return (
+                        <label
+                          key={p.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-white/85 hover:bg-white/10"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setGroupFormProfileIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(p.id)) next.delete(p.id);
+                                else next.add(p.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded border-white/30 bg-black/40"
+                          />
+                          <ProfileInstanceIcon profile={p} className="h-6 w-6 shrink-0 rounded-lg" />
+                          <span className="min-w-0 truncate">{p.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsGroupModalOpen(false)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white/80 hover:bg-white/20"
+              >
+                {tt("modpacks.groups.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveGroup}
+                className="interactive-press rounded-xl accent-bg px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+              >
+                {editingGroupId ? tt("modpacks.groups.save") : tt("modpacks.groups.create")}
+              </button>
+            </div>
           </div>
         </div>
       )}
