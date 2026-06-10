@@ -20,6 +20,106 @@ use crate::services::game::cache as cache_service;
 
 const PROFILE_ITEM_DISABLED_SUFFIX: &str = ".disabled";
 
+const PROFILE_CONTENT_DIRS: &[&str] = &[
+    "mods",
+    "resourcepacks",
+    "shaderpacks",
+    "saves",
+    "config",
+    "datapacks",
+    "server-resource-packs",
+];
+
+const PROFILE_CONTENT_FILES: &[&str] = &["options.txt", "servers.dat"];
+
+fn merge_dir_contents_non_destructive(from: &Path, to: &Path) -> Result<(), String> {
+    if !from.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(to)
+        .map_err(|e| format!("Не удалось создать папку {}: {e}", to.display()))?;
+    for entry in std::fs::read_dir(from)
+        .map_err(|e| format!("Ошибка чтения {}: {e}", from.display()))?
+    {
+        let entry = entry.map_err(|e| format!("Ошибка чтения {}: {e}", from.display()))?;
+        let src = entry.path();
+        let dst = to.join(entry.file_name());
+        if src.is_dir() {
+            merge_dir_contents_non_destructive(&src, &dst)?;
+        } else if src.is_file() && !dst.exists() {
+            if let Some(parent) = dst.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Не удалось создать папку {}: {e}", parent.display()))?;
+            }
+            std::fs::copy(&src, &dst).map_err(|e| {
+                format!(
+                    "Не удалось скопировать {} → {}: {e}",
+                    src.display(),
+                    dst.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn consolidate_profile_game_content(profile_dir: &Path) -> Result<(), String> {
+    for sub in PROFILE_CONTENT_DIRS {
+        let target = profile_dir.join(sub);
+        std::fs::create_dir_all(&target)
+            .map_err(|e| format!("Не удалось создать папку {}: {e}", target.display()))?;
+    }
+
+    for nested in [profile_dir.join(".minecraft"), profile_dir.join("minecraft")] {
+        if !nested.is_dir() {
+            continue;
+        }
+        for sub in PROFILE_CONTENT_DIRS {
+            merge_dir_contents_non_destructive(&nested.join(sub), &profile_dir.join(sub))?;
+        }
+        for file in PROFILE_CONTENT_FILES {
+            let from = nested.join(file);
+            let to = profile_dir.join(file);
+            if from.is_file() && !to.exists() {
+                std::fs::copy(&from, &to).map_err(|e| {
+                    format!(
+                        "Не удалось скопировать {} → {}: {e}",
+                        from.display(),
+                        to.display()
+                    )
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn clear_loader_version_caches(profile_dir: &Path, loader: &str) -> Result<(), String> {
+    match loader {
+        "fabric" | "quilt" => {
+            let remapped = profile_dir.join(".fabric").join("remappedJars");
+            if remapped.is_dir() {
+                std::fs::remove_dir_all(&remapped).map_err(|e| {
+                    format!(
+                        "Не удалось очистить кэш {}: {e}",
+                        remapped.display()
+                    )
+                })?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn migrate_profile_content_for_version_change(
+    profile_dir: &Path,
+    loader: &str,
+) -> Result<(), String> {
+    consolidate_profile_game_content(profile_dir)?;
+    clear_loader_version_caches(profile_dir, loader)
+}
+
 fn profile_content_subdir(category: &str) -> Result<&'static str, String> {
     match category {
         "mod" | "mods" => Ok("mods"),
@@ -493,6 +593,99 @@ pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<()
     }
     std::fs::write(&path, text).map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
     Ok(())
+}
+
+fn instance_profile_summary_for_dir(cfg: &InstanceConfig, path: &Path) -> Result<InstanceProfileSummary, String> {
+    let mods_dir = path.join("mods");
+    let res_dir = path.join("resourcepacks");
+    let shader_dir = path.join("shaderpacks");
+
+    let (mods_size, mods_count) = cache_service::dir_size_and_count(&mods_dir);
+    let (res_size, res_count) = cache_service::dir_size_and_count(&res_dir);
+    let (shader_size, shader_count) = cache_service::dir_size_and_count(&shader_dir);
+
+    let total_size_bytes = mods_size
+        .saturating_add(res_size)
+        .saturating_add(shader_size);
+
+    let directory = path
+        .to_str()
+        .ok_or("Путь к папке сборки не в UTF-8")?
+        .to_string();
+
+    let icon_path = find_icon_png_in_profile(path).or(cfg.icon_path.clone());
+
+    Ok(InstanceProfileSummary {
+        id: cfg.id.clone(),
+        name: cfg.name.clone(),
+        icon_path,
+        game_version: cfg.game_version.clone(),
+        loader: cfg.loader.clone(),
+        loader_version: cfg.loader_version.clone(),
+        created_at: cfg.created_at,
+        play_time_seconds: cfg.play_time_seconds,
+        mods_count,
+        resourcepacks_count: res_count,
+        shaderpacks_count: shader_count,
+        total_size_bytes,
+        directory,
+    })
+}
+
+#[command]
+pub fn change_profile_version(
+    id: String,
+    game_version: String,
+    loader_version: Option<String>,
+) -> Result<InstanceProfileSummary, String> {
+    let game_version = game_version.trim().to_string();
+    if game_version.is_empty() {
+        return Err("Версия Minecraft не указана".to_string());
+    }
+
+    let cfg_path = instance_config_path(&id)?;
+    if !cfg_path.exists() {
+        return Err("config.json сборки не найден".to_string());
+    }
+    let profile_dir = cfg_path
+        .parent()
+        .ok_or_else(|| "Не удалось определить папку сборки".to_string())?;
+
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json сборки: {e}"))?;
+    let mut cfg: InstanceConfig =
+        serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+
+    let loader = cfg.loader.trim().to_lowercase();
+    let normalized_loader_version = loader_version
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+
+    if loader != "vanilla" && normalized_loader_version.is_none() {
+        return Err("Для модового загрузчика нужно указать его версию".to_string());
+    }
+
+    let same_game = cfg.game_version == game_version;
+    let same_loader = cfg.loader_version == normalized_loader_version;
+    if same_game && same_loader {
+        return Err("Сборка уже использует выбранную версию".to_string());
+    }
+
+    migrate_profile_content_for_version_change(profile_dir, &loader)?;
+
+    cfg.game_version = game_version;
+    cfg.loader_version = if loader == "vanilla" {
+        None
+    } else {
+        normalized_loader_version
+    };
+
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+
+    instance_profile_summary_for_dir(&cfg, profile_dir)
 }
 
 #[command]
