@@ -1275,6 +1275,7 @@ function App() {
   });
 
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
+  const [isLaunching, setIsLaunching] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
@@ -1491,11 +1492,17 @@ function App() {
       if (settings?.show_console_on_launch) {
         setIsConsoleVisible(true);
       }
-      setGameStatus("running");
-      await invoke("launch_game", {
-        versionId: launchVersionId,
-        versionUrl: null,
-      });
+      setIsLaunching(true);
+      try {
+        await invoke("launch_game", {
+          versionId: launchVersionId,
+          versionUrl: null,
+        });
+        lastRunningRef.current = true;
+        setGameStatus("running");
+      } finally {
+        setIsLaunching(false);
+      }
     } catch (error) {
       runningConsoleProfileIdRef.current = null;
       const msg = error instanceof Error ? error.message : String(error);
@@ -2898,11 +2905,16 @@ function App() {
   }, [installedGameVersions, installedIds, loader]);
 
   const primaryColorClasses =
-    gameStatus === "running" || isStopping
-      ? "bg-red-600 hover:bg-red-500"
-      : "accent-bg hover:opacity-90";
+    isLaunching
+      ? "accent-bg opacity-60 cursor-not-allowed"
+      : gameStatus === "running" || isStopping
+        ? "bg-red-600 hover:bg-red-500"
+        : "accent-bg hover:opacity-90";
 
   const primaryLabel = useMemo(() => {
+    if (isLaunching) {
+      return tt("app.playAction.launching");
+    }
     if (gameStatus === "running" || isStopping) {
       return tt("app.playAction.stop");
     }
@@ -2910,7 +2922,7 @@ function App() {
       return tt("app.playAction.play");
     }
     return tt("app.playAction.install");
-  }, [gameStatus, isStopping, isInstalled, tt]);
+  }, [gameStatus, isLaunching, isStopping, isInstalled, tt]);
 
   const handleToggleConsole = () => {
     setIsConsoleVisible((prev) => !prev);
@@ -3162,7 +3174,7 @@ function App() {
   };
 
   const handlePrimaryClick = async () => {
-    if (!selectedVersion || isInstalling || isStopping) return;
+    if (!selectedVersion || isInstalling || isLaunching || isStopping) return;
 
     if (isInstalled) {
       if (gameStatus === "running") {
@@ -3207,11 +3219,17 @@ function App() {
         if (settings?.show_console_on_launch) {
           setIsConsoleVisible(true);
         }
-        setGameStatus("running");
-        await invoke("launch_game", {
-          versionId,
-          versionUrl: versionUrl ?? null,
-        });
+        setIsLaunching(true);
+        try {
+          await invoke("launch_game", {
+            versionId,
+            versionUrl: versionUrl ?? null,
+          });
+          lastRunningRef.current = true;
+          setGameStatus("running");
+        } finally {
+          setIsLaunching(false);
+        }
       } catch (error) {
         runningConsoleProfileIdRef.current = null;
         const msg = error instanceof Error ? error.message : String(error);
@@ -3436,6 +3454,7 @@ function App() {
               handlePauseInstall={handlePauseInstall}
               handleCancelInstall={handleCancelInstall}
               handlePrimaryClick={handlePrimaryClick}
+              isLaunching={isLaunching}
               primaryColorClasses={primaryColorClasses}
               primaryLabel={primaryLabel}
               progress={progress}
@@ -3480,6 +3499,7 @@ function App() {
       installedVersionIdsForDropdown,
       isConsoleVisible,
       isInstalling,
+      isLaunching,
       isLoaderDropdownOpen,
       isVersionDropdownOpen,
       language,
