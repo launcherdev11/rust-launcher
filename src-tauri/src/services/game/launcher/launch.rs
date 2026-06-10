@@ -257,7 +257,6 @@ pub async fn launch_game(
         ));
     }
     if is_fabric {
-        // Fabric пишет remapped jars в .fabric/remappedJars и не всегда создаёт дерево папок сам.
         let remapped_root = game_dir.join(".fabric").join("remappedJars");
         if let Err(e) = std::fs::create_dir_all(&remapped_root) {
             return Err(format!(
@@ -357,22 +356,6 @@ pub async fn launch_game(
             }
         }
     }
-    let lwjgl_in_cp: Vec<String> = classpath
-        .iter()
-        .filter_map(|p| {
-            let s = p.to_string_lossy().replace('\\', "/");
-            if s.contains("/org/lwjgl/") {
-                Some(s)
-            } else {
-                None
-            }
-        })
-        .collect();
-    log_to_console(&app, &format!("[Launch] LWJGL в classpath: {}", lwjgl_in_cp.join(" | ")));
-    log_to_console(
-        &app,
-        &format!("[Launch] LWJGL natives dir: {}", natives_dir.display()),
-    );
     let natives_str = natives_dir.to_str().unwrap_or("");
     let assets_root = root.join("assets");
     let assets_str = assets_root.to_str().unwrap_or("");
@@ -775,14 +758,16 @@ pub async fn launch_game(
     };
 
     eprintln!("[Launch] Forge: {}, Java: {}", is_forge, java_path.display());
-    eprintln!("[Launch] JVM args (final): {:?}", jvm_args);
     if !removed_for_log.is_empty() {
         eprintln!(
             "[Launch] Forge: удалены проблемные JVM args: {:?}",
             removed_for_log
         );
     }
-    eprintln!("[Launch] Game args: {:?}", game_args);
+    log_to_console(
+        &app,
+        &format!("[Launch] Запуск {} ({})", version_id, java_path.display()),
+    );
 
     let _jar_path_str = jar_path.to_str().ok_or("Путь к jar не в UTF-8")?;
 

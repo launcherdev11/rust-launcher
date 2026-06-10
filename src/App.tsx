@@ -52,6 +52,10 @@ import {
   shouldLoadBackgroundDataUri,
 } from "./lib/launcherBackground";
 import type { ProfileAvatarInput } from "./lib/avatar";
+import {
+  isGameConsoleLineImportant,
+  resetGameConsoleFilter,
+} from "./lib/gameConsoleFilter";
 import { useT, t } from "./i18n";
 import {
   OnboardingFlow,
@@ -1325,6 +1329,7 @@ function App() {
   );
 
   const archiveCurrentConsoleAndClear = useCallback((profileId: string) => {
+    resetGameConsoleFilter();
     setConsoleByProfile((prev) => {
       const current = prev[profileId] ?? { lines: [], sessions: [] };
       if (current.lines.length === 0) {
@@ -1348,6 +1353,7 @@ function App() {
 
   const appendConsoleLine = useCallback(
     (profileId: string, text: string, source: "stdout" | "stderr") => {
+      if (!isGameConsoleLineImportant(text, source)) return;
       setConsoleByProfile((prev) => {
         const current = prev[profileId] ?? { lines: [], sessions: [] };
         const nextLines: GameConsoleLine[] = [
@@ -2913,6 +2919,7 @@ function App() {
   const handleClearConsole = () => {
     const profileId = activeInstanceProfile?.id;
     if (!profileId) return;
+    resetGameConsoleFilter();
     setConsoleByProfile((prev) => ({
       ...prev,
       [profileId]: {
