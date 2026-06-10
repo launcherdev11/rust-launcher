@@ -42,9 +42,9 @@ pub use build_presets::{
     list_build_presets, save_build_preset,
 };
 pub use profiles::{
-    add_profile_files, create_profile, delete_item, delete_profile, get_profile_icon_data_uri,
-    get_profile_play_time_seconds, get_profiles,
-    get_selected_profile, list_profile_items, rename_profile, set_profile_item_enabled, set_selected_profile,
+    add_profile_files, change_profile_version, create_profile, delete_item, delete_profile,
+    get_profile_icon_data_uri, get_profile_play_time_seconds, get_profiles, get_selected_profile,
+    list_profile_items, rename_profile, set_profile_item_enabled, set_selected_profile,
     update_profile_settings,
 };
 pub use external_import::{

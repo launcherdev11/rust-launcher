@@ -413,6 +413,21 @@
       "saved": "Profile settings saved.",
       "saveFailed": "Failed to save profile settings."
     },
+    "changeVersion": {
+      "button": "Change profile version",
+      "title": "Change profile version",
+      "description": "Mods, resource packs, shaders, and worlds stay in this profile and remain available after the version change. The selected Minecraft and loader versions will be installed. Mods built for the old version may need updating.",
+      "currentVersion": "Current version",
+      "gameVersionLabel": "New Minecraft version",
+      "loaderVersionLabel": "Loader version",
+      "allVersions": "Show snapshots and alphas",
+      "confirm": "Migrate",
+      "migrating": "Migrating…",
+      "success": "Profile version changed.",
+      "failed": "Failed to change profile version: {{msg}}",
+      "sameVersion": "Choose a different Minecraft or loader version.",
+      "selectLoaderVersion": "Select a loader version."
+    },
     "common": {
       "loading": "Loading...",
       "backToList": "Back to list",
