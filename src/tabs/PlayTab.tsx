@@ -91,6 +91,7 @@ type PlayTabProps = {
   handlePauseInstall: () => void;
   handleCancelInstall: () => void;
   handlePrimaryClick: () => void;
+  isLaunching?: boolean;
   primaryColorClasses: string;
   primaryLabel: string;
   progress: DownloadProgressPayload | null;
@@ -136,6 +137,7 @@ export function PlayTab({
   handlePauseInstall,
   handleCancelInstall,
   handlePrimaryClick,
+  isLaunching = false,
   primaryColorClasses,
   primaryLabel,
   progress,
@@ -561,7 +563,8 @@ export function PlayTab({
                 <button
                   type="button"
                   onClick={handlePrimaryClick}
-                  className={`interactive-press rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses}`}
+                  disabled={isLaunching}
+                  className={`rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses} ${isLaunching ? "" : "interactive-press"}`}
                 >
                   {primaryLabel}
                 </button>
