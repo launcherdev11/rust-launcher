@@ -5,6 +5,7 @@ pub const EVENT_GAME_CONSOLE_LINE: &str = "game-console-line";
 pub const EVENT_MRPACK_IMPORT_PROGRESS: &str = "mrpack-import-progress";
 pub const EVENT_EXTERNAL_IMPORT_PROGRESS: &str = "external-import-progress";
 pub const EVENT_PLAYTIME_UPDATED: &str = "playtime-updated";
+pub const EVENT_LAST_PLAYED_UPDATED: &str = "last-played-updated";
 
 #[derive(Debug, Serialize, Clone)]
 pub struct MrpackImportProgressPayload {
@@ -32,6 +33,12 @@ pub struct GameConsoleLinePayload {
 pub struct PlaytimeUpdatedPayload {
     pub profile_id: String,
     pub delta_seconds: u64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct LastPlayedUpdatedPayload {
+    pub profile_id: String,
+    pub last_played_at: u64,
 }
 
 #[derive(Debug, Serialize, Clone)]

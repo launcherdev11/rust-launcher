@@ -472,6 +472,7 @@ pub async fn import_mrpack_as_new_profile(
         loader_version: profile.loader_version,
         created_at: profile.created_at,
         play_time_seconds: profile.play_time_seconds,
+        last_played_at: profile.last_played_at,
         mods_count,
         resourcepacks_count: res_count,
         shaderpacks_count: shader_count,
