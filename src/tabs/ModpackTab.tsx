@@ -81,6 +81,7 @@ type InstanceProfile = {
   loader_version?: string | null;
   created_at: number;
   play_time_seconds: number | null;
+  last_played_at?: number | null;
   mods_count: number;
   resourcepacks_count: number;
   shaderpacks_count: number;
@@ -238,6 +239,7 @@ type ExportProgressPayload = { bytes_written: number; total_bytes: number; curre
 type ExportFinishedPayload = { path: string; skipped_files: string[] };
 type ExportErrorPayload = { message: string };
 type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
+type LastPlayedUpdatedPayload = { profile_id: string; last_played_at: number };
 
 const loaderLabels: Record<LoaderId, string> = {
   vanilla: "Vanilla",
@@ -353,6 +355,18 @@ function formatPlaytime(seconds: number | null, language: Language): string {
 
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+function formatLastPlayedAt(ts: number | null | undefined, language: Language): string {
+  if (ts == null || !Number.isFinite(ts) || ts <= 0) return "—";
+  try {
+    return new Date(ts * 1000).toLocaleString(language === "ru" ? "ru-RU" : "en-US", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return "—";
+  }
 }
 
 const contentTabLabelsRu: Record<ContentTab, string> = {
@@ -1702,7 +1716,7 @@ export function ModpackTab({
   }
 
   useEffect(() => {
-    const unlistenPromise = listen<PlaytimeUpdatedPayload>(
+    const unlistenPlaytime = listen<PlaytimeUpdatedPayload>(
       "playtime-updated",
       (event) => {
         const { profile_id } = event.payload;
@@ -1723,8 +1737,20 @@ export function ModpackTab({
         })();
       },
     );
+    const unlistenLastPlayed = listen<LastPlayedUpdatedPayload>(
+      "last-played-updated",
+      (event) => {
+        const { profile_id, last_played_at } = event.payload;
+        setProfiles((prev) =>
+          prev.map((p) =>
+            p.id === profile_id ? { ...p, last_played_at } : p,
+          ),
+        );
+      },
+    );
     return () => {
-      unlistenPromise.then((fn) => fn());
+      unlistenPlaytime.then((fn) => fn());
+      unlistenLastPlayed.then((fn) => fn());
     };
   }, []);
 
@@ -3071,34 +3097,43 @@ export function ModpackTab({
                 </span>
               )}
             </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
-              <span>{`${p.game_version} • ${p.loader}`}</span>
-              <span className="flex items-center gap-1">
-                <img
-                  src="/launcher-assets/cllock.png"
-                  alt=""
-                  title={tt("modpacks.list.playtimeLabel")}
-                  className="h-3 w-3 object-contain opacity-80"
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    if (img.dataset.failedOnce !== "1") {
-                      img.dataset.failedOnce = "1";
-                      img.src = "/launcher-assets/clock.png";
-                      return;
-                    }
-                    img.style.display = "none";
-                  }}
-                />
-                <span>{formatPlaytime(p.play_time_seconds, language)}</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <ModsIcon className="h-3 w-3" />
-                <span>{countLabel(p.mods_count, language)}</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <WeightIcon className="h-3 w-3" />
-                <span>{formatBytes(p.total_size_bytes, language)}</span>
-              </span>
+            <div className="mt-0.5 flex flex-col gap-1 text-[11px] text-white/70">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>{`${p.game_version} • ${p.loader}`}</span>
+                <span className="flex items-center gap-1">
+                  <img
+                    src="/launcher-assets/cllock.png"
+                    alt=""
+                    title={tt("modpacks.list.playtimeLabel")}
+                    className="h-3 w-3 object-contain opacity-80"
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      if (img.dataset.failedOnce !== "1") {
+                        img.dataset.failedOnce = "1";
+                        img.src = "/launcher-assets/clock.png";
+                        return;
+                      }
+                      img.style.display = "none";
+                    }}
+                  />
+                  <span>{formatPlaytime(p.play_time_seconds, language)}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <ModsIcon className="h-3 w-3" />
+                  <span>{countLabel(p.mods_count, language)}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1">
+                  <WeightIcon className="h-3 w-3" />
+                  <span>{formatBytes(p.total_size_bytes, language)}</span>
+                </span>
+                <span className="text-white/55">
+                  {tt("modpacks.list.lastPlayed", {
+                    date: formatLastPlayedAt(p.last_played_at, language),
+                  })}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -4122,38 +4157,47 @@ export function ModpackTab({
                   </>
                 )}
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-white/70">
-                <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
-                <span className="flex items-center gap-1">
-                  <img
-                    src="/launcher-assets/cllock.png"
-                    alt=""
-                    title={tt("modpacks.list.playtimeLabel")}
-                    className="h-3 w-3 object-contain opacity-80"
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      if (img.dataset.failedOnce !== "1") {
-                        img.dataset.failedOnce = "1";
-                        img.src = "/launcher-assets/clock.png";
-                        return;
-                      }
-                      img.style.display = "none";
-                    }}
-                  />
-                  <span>
-                    {formatPlaytime(selectedProfile.play_time_seconds, language)}
+              <div className="mt-0.5 flex flex-col gap-1 text-xs text-white/70">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
+                  <span className="flex items-center gap-1">
+                    <img
+                      src="/launcher-assets/cllock.png"
+                      alt=""
+                      title={tt("modpacks.list.playtimeLabel")}
+                      className="h-3 w-3 object-contain opacity-80"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.failedOnce !== "1") {
+                          img.dataset.failedOnce = "1";
+                          img.src = "/launcher-assets/clock.png";
+                          return;
+                        }
+                        img.style.display = "none";
+                      }}
+                    />
+                    <span>
+                      {formatPlaytime(selectedProfile.play_time_seconds, language)}
+                    </span>
                   </span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <ModsIcon className="h-3 w-3" />
-                  <span>{countLabel(selectedProfile.mods_count, language)}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <WeightIcon className="h-3 w-3" />
-                  <span>
-                    {formatBytes(selectedProfile.total_size_bytes, language)}
+                  <span className="flex items-center gap-1">
+                    <ModsIcon className="h-3 w-3" />
+                    <span>{countLabel(selectedProfile.mods_count, language)}</span>
                   </span>
-                </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="flex items-center gap-1">
+                    <WeightIcon className="h-3 w-3" />
+                    <span>
+                      {formatBytes(selectedProfile.total_size_bytes, language)}
+                    </span>
+                  </span>
+                  <span className="text-white/55">
+                    {tt("modpacks.list.lastPlayed", {
+                      date: formatLastPlayedAt(selectedProfile.last_played_at, language),
+                    })}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

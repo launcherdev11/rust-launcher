@@ -155,6 +155,7 @@ type InstanceProfileCard = InstanceProfileSummary & {
   icon_path: string | null;
   created_at: number;
   play_time_seconds: number;
+  last_played_at?: number | null;
   mods_count: number;
   resourcepacks_count: number;
   shaderpacks_count: number;
@@ -2309,6 +2310,7 @@ function App() {
             icon_path: p.icon_path,
             created_at: p.created_at,
             play_time_seconds: p.play_time_seconds,
+            last_played_at: p.last_played_at ?? null,
             mods_count: p.mods_count,
             resourcepacks_count: p.resourcepacks_count,
             shaderpacks_count: p.shaderpacks_count,
@@ -3335,6 +3337,7 @@ function App() {
                       icon_path: p.icon_path,
                       created_at: p.created_at,
                       play_time_seconds: p.play_time_seconds ?? 0,
+                      last_played_at: p.last_played_at ?? null,
                       mods_count: p.mods_count,
                       resourcepacks_count: p.resourcepacks_count,
                       shaderpacks_count: p.shaderpacks_count,
@@ -3354,6 +3357,7 @@ function App() {
                     icon_path: profile.icon_path,
                     created_at: profile.created_at,
                     play_time_seconds: profile.play_time_seconds ?? 0,
+                    last_played_at: profile.last_played_at ?? null,
                     mods_count: profile.mods_count,
                     resourcepacks_count: profile.resourcepacks_count,
                     shaderpacks_count: profile.shaderpacks_count,

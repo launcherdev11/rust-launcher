@@ -9,7 +9,10 @@ use tauri::{AppHandle, Emitter};
 
 use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
-use crate::models::events::{GameConsoleLinePayload, PlaytimeUpdatedPayload, EVENT_GAME_CONSOLE_LINE, EVENT_PLAYTIME_UPDATED};
+use crate::models::events::{
+    GameConsoleLinePayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload, EVENT_GAME_CONSOLE_LINE,
+    EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
+};
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 use crate::services::game::accounts::get_profile;
 use crate::services::game::arguments::resolve_arguments;
@@ -19,7 +22,8 @@ use crate::services::game::core::{
 };
 use crate::services::game::console::log_to_console;
 use crate::services::game::profiles::{
-    add_play_time_seconds_to_profile, load_selected_instance_settings, read_selected_profile_id, selected_instance_dir,
+    add_play_time_seconds_to_profile, load_selected_instance_settings, read_selected_profile_id,
+    record_profile_last_played, selected_instance_dir,
 };
 use crate::services::game::runtime::{
     build_java_command, ensure_forge_ignore_list_includes_vanilla_client_jar,
@@ -820,6 +824,18 @@ pub async fn launch_game(
         }
     })?;
     GAME_PROCESS_PID.store(child.id() as u64, Ordering::SeqCst);
+
+    if let Some(ref profile_id) = playtime_profile_id {
+        if let Ok(last_played_at) = record_profile_last_played(profile_id) {
+            if last_played_at > 0 {
+                let payload = LastPlayedUpdatedPayload {
+                    profile_id: profile_id.clone(),
+                    last_played_at,
+                };
+                let _ = app.emit(EVENT_LAST_PLAYED_UPDATED, payload);
+            }
+        }
+    }
 
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();

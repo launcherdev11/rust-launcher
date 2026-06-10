@@ -368,6 +368,36 @@ pub fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Re
     Ok(())
 }
 
+pub fn record_profile_last_played(profile_id: &str) -> Result<u64, String> {
+    let cfg_path = instance_config_path(profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(0);
+    }
+
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для last_played_at: {e}"))?;
+
+    let mut cfg: InstanceConfig = match serde_json::from_str(&text) {
+        Ok(c) => c,
+        Err(_) => return Ok(0),
+    };
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| Duration::from_secs(0))
+        .as_secs();
+
+    cfg.last_played_at = Some(now);
+
+    let new_text = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json для last_played_at: {e}"))?;
+
+    std::fs::write(&cfg_path, new_text)
+        .map_err(|e| format!("Ошибка записи config.json для last_played_at: {e}"))?;
+
+    Ok(now)
+}
+
 pub fn selected_instance_dir() -> Option<PathBuf> {
     let id = read_selected_profile_id()?;
     let dir = instance_dir(&id).ok()?;
@@ -513,6 +543,7 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
             loader_version: cfg.loader_version.clone(),
             created_at: cfg.created_at,
             play_time_seconds: cfg.play_time_seconds,
+            last_played_at: cfg.last_played_at,
             mods_count,
             resourcepacks_count: res_count,
             shaderpacks_count: shader_count,
@@ -624,6 +655,7 @@ fn instance_profile_summary_for_dir(cfg: &InstanceConfig, path: &Path) -> Result
         loader_version: cfg.loader_version.clone(),
         created_at: cfg.created_at,
         play_time_seconds: cfg.play_time_seconds,
+        last_played_at: cfg.last_played_at,
         mods_count,
         resourcepacks_count: res_count,
         shaderpacks_count: shader_count,
@@ -877,6 +909,7 @@ pub fn create_profile_impl(
         loader_version: loader_version.clone(),
         created_at,
         play_time_seconds: 0,
+        last_played_at: None,
     };
 
     let cfg_path = dir.join("config.json");
@@ -913,6 +946,7 @@ pub fn create_profile_impl(
         loader_version,
         created_at,
         play_time_seconds: 0,
+        last_played_at: None,
         mods_count,
         resourcepacks_count: res_count,
         shaderpacks_count: shader_count,
