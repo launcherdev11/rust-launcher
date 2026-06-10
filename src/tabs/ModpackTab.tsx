@@ -539,6 +539,17 @@ export function ModpackTab({
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
   const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
+  const [isChangeVersionOpen, setIsChangeVersionOpen] = useState(false);
+  const [migrateGameVersion, setMigrateGameVersion] = useState("");
+  const [migrateLoaderVersion, setMigrateLoaderVersion] = useState("");
+  const [migrateLoaderVersionOptions, setMigrateLoaderVersionOptions] = useState<LoaderVersionOption[]>([]);
+  const [migrateLoaderVersionsLoading, setMigrateLoaderVersionsLoading] = useState(false);
+  const [migrateBusy, setMigrateBusy] = useState(false);
+  const [isMigrateVersionDropdownOpen, setIsMigrateVersionDropdownOpen] = useState(false);
+  const [isMigrateLoaderVersionDropdownOpen, setIsMigrateLoaderVersionDropdownOpen] = useState(false);
+  const [migrateAllVersions, setMigrateAllVersions] = useState(false);
+  const [migrateVersionOptions, setMigrateVersionOptions] = useState<VersionSummary[]>([]);
+  const [migrateVersionsLoading, setMigrateVersionsLoading] = useState(false);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const profileRamSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRamPendingRef = useRef<{ profileId: string; mb: number } | null>(null);
@@ -1225,6 +1236,261 @@ export function ModpackTab({
     }
     setIsProfileSettingsOpen(false);
   }
+
+  async function ensureMigrateVersionsLoaded() {
+    if (migrateVersionOptions.length > 0 || migrateVersionsLoading) return;
+    setMigrateVersionsLoading(true);
+    try {
+      const all = await invoke<VersionSummary[]>("fetch_all_versions");
+      const filtered = all.filter((v) =>
+        migrateAllVersions ? true : v.version_type === "release",
+      );
+      setMigrateVersionOptions(filtered);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setMigrateVersionsLoading(false);
+    }
+  }
+
+  const loadMigrateLoaderVersions = useCallback(async () => {
+    if (!selectedProfile) return;
+    const loader = selectedProfile.loader as LoaderId;
+    if (loader === "vanilla") {
+      setMigrateLoaderVersionOptions([]);
+      setMigrateLoaderVersion("");
+      return;
+    }
+    setMigrateLoaderVersionsLoading(true);
+    try {
+      let options: LoaderVersionOption[] = [];
+      if (loader === "fabric") {
+        options = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+          gameVersion: migrateGameVersion,
+        });
+      } else if (loader === "quilt") {
+        options = await invoke<LoaderVersionOption[]>("fetch_quilt_loaders", {
+          gameVersion: migrateGameVersion,
+        });
+      } else if (loader === "forge") {
+        options = await invoke<LoaderVersionOption[]>("fetch_forge_builds_for_game", {
+          gameVersion: migrateGameVersion,
+        });
+      } else if (loader === "neoforge") {
+        options = await invoke<LoaderVersionOption[]>("fetch_neoforge_builds_for_game", {
+          gameVersion: migrateGameVersion,
+        });
+      }
+      setMigrateLoaderVersionOptions(options);
+      const versionIds = options.map((o) => o.version);
+      setMigrateLoaderVersion((prev) =>
+        prev && versionIds.includes(prev) ? prev : (options[0]?.version ?? ""),
+      );
+    } catch (e) {
+      console.error(e);
+      setMigrateLoaderVersionOptions([]);
+      setMigrateLoaderVersion("");
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification(
+        "error",
+        language === "ru"
+          ? `Не удалось загрузить версии загрузчика: ${msg}`
+          : `Failed to load loader versions: ${msg}`,
+      );
+    } finally {
+      setMigrateLoaderVersionsLoading(false);
+    }
+  }, [selectedProfile, migrateGameVersion, language, showNotification]);
+
+  const installGameAndLoader = useCallback(
+    async (
+      gameVersion: string,
+      loader: LoaderId,
+      loaderVersion: string | null,
+      versions: VersionSummary[],
+    ) => {
+      let versionUrl: string | null = versions.find((v) => v.id === gameVersion)?.url ?? null;
+      if (!versionUrl) {
+        const all = await invoke<VersionSummary[]>("fetch_all_versions");
+        versionUrl = all.find((v) => v.id === gameVersion)?.url ?? null;
+      }
+      if (!versionUrl) {
+        throw new Error(
+          language === "ru"
+            ? `Не удалось определить URL манифеста версии ${gameVersion}.`
+            : `Failed to resolve manifest URL for version ${gameVersion}.`,
+        );
+      }
+
+      try {
+        await invoke("reset_download_cancel");
+      } catch (e) {
+        console.error(e);
+      }
+
+      const installed = await invoke<string[]>("list_installed_versions");
+      if (!installed.includes(gameVersion)) {
+        const versionJobId = `version:${gameVersion}`;
+        registerDownloadJob?.({
+          id: versionJobId,
+          label: gameVersion,
+          kind: "version",
+        });
+        showNotification(
+          "info",
+          language === "ru"
+            ? `Версия ${gameVersion} не установлена. Начинаю загрузку…`
+            : `Version ${gameVersion} is not installed. Starting download…`,
+        );
+        try {
+          await invoke("install_version", {
+            versionId: gameVersion,
+            versionUrl,
+          });
+        } finally {
+          finishDownloadJob?.(versionJobId);
+        }
+        showNotification(
+          "success",
+          language === "ru"
+            ? `Версия ${gameVersion} установлена.`
+            : `Version ${gameVersion} installed.`,
+        );
+      }
+
+      if (loader === "fabric" && loaderVersion) {
+        showNotification(
+          "info",
+          language === "ru"
+            ? `Устанавливаю Fabric ${loaderVersion}…`
+            : `Installing Fabric ${loaderVersion}…`,
+        );
+        await invoke("install_fabric", {
+          gameVersion,
+          loaderVersion,
+        });
+      } else if (loader === "quilt" && loaderVersion) {
+        showNotification(
+          "info",
+          language === "ru"
+            ? `Устанавливаю Quilt ${loaderVersion}…`
+            : `Installing Quilt ${loaderVersion}…`,
+        );
+        await invoke("install_quilt", {
+          gameVersion,
+          loaderVersion,
+        });
+      } else if (loader === "forge" && loaderVersion) {
+        const forgeList = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+        const match = forgeList.find(
+          (v) => v.mc_version === gameVersion && v.forge_build === loaderVersion,
+        );
+        const versionId = match?.id ?? `${gameVersion}-forge-${loaderVersion}`;
+        const installerUrl =
+          match?.installer_url ??
+          `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${loaderVersion}/forge-${gameVersion}-${loaderVersion}-installer.jar`;
+        showNotification(
+          "info",
+          language === "ru"
+            ? `Устанавливаю Forge ${loaderVersion}…`
+            : `Installing Forge ${loaderVersion}…`,
+        );
+        await invoke("install_forge", { versionId, installerUrl });
+      } else if (loader === "neoforge" && loaderVersion) {
+        const versionId = `${gameVersion}-neoforge-${loaderVersion}`;
+        showNotification(
+          "info",
+          language === "ru"
+            ? `Устанавливаю NeoForge ${loaderVersion}…`
+            : `Installing NeoForge ${loaderVersion}…`,
+        );
+        await invoke("install_neoforge", { versionId });
+      }
+    },
+    [language, showNotification, registerDownloadJob, finishDownloadJob],
+  );
+
+  function openChangeVersionModal() {
+    if (!selectedProfile) return;
+    setMigrateGameVersion(selectedProfile.game_version);
+    setMigrateLoaderVersion(selectedProfile.loader_version ?? "");
+    setMigrateLoaderVersionOptions([]);
+    setMigrateVersionOptions([]);
+    setMigrateAllVersions(false);
+    setIsMigrateVersionDropdownOpen(false);
+    setIsMigrateLoaderVersionDropdownOpen(false);
+    setIsChangeVersionOpen(true);
+    void ensureMigrateVersionsLoaded();
+  }
+
+  function closeChangeVersionModal() {
+    if (migrateBusy) return;
+    setIsChangeVersionOpen(false);
+    setIsMigrateVersionDropdownOpen(false);
+    setIsMigrateLoaderVersionDropdownOpen(false);
+  }
+
+  async function handleChangeProfileVersion() {
+    if (!selectedProfile || migrateBusy) return;
+    const loader = selectedProfile.loader as LoaderId;
+    const loaderVersion =
+      loader === "vanilla" ? null : migrateLoaderVersion.trim() || null;
+    if (loader !== "vanilla" && !loaderVersion) {
+      showNotification("warning", tt("modpacks.changeVersion.selectLoaderVersion"));
+      return;
+    }
+    const sameGame = migrateGameVersion === selectedProfile.game_version;
+    const sameLoader =
+      (selectedProfile.loader_version ?? null) === loaderVersion;
+    if (sameGame && sameLoader) {
+      showNotification("warning", tt("modpacks.changeVersion.sameVersion"));
+      return;
+    }
+
+    setMigrateBusy(true);
+    try {
+      await installGameAndLoader(
+        migrateGameVersion,
+        loader,
+        loaderVersion,
+        migrateVersionOptions,
+      );
+      const updated = await invoke<InstanceProfile>("change_profile_version", {
+        id: selectedProfile.id,
+        gameVersion: migrateGameVersion,
+        loaderVersion,
+      });
+      setProfiles((prev) => {
+        const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+        onProfilesChange?.(next);
+        return next;
+      });
+      onProfileSelectionChange?.(updated);
+      await refreshItems(selectedProfile.id, contentTab);
+      setIsChangeVersionOpen(false);
+      showNotification("success", tt("modpacks.changeVersion.success"));
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.changeVersion.failed", { msg }));
+    } finally {
+      setMigrateBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isChangeVersionOpen || !selectedProfile) return;
+    if (selectedProfile.loader === "vanilla") return;
+    void loadMigrateLoaderVersions();
+  }, [isChangeVersionOpen, selectedProfile, migrateGameVersion, loadMigrateLoaderVersions]);
+
+  useEffect(() => {
+    if (!isChangeVersionOpen) return;
+    setMigrateVersionOptions([]);
+    void ensureMigrateVersionsLoaded();
+  }, [migrateAllVersions]);
 
   useEffect(() => () => clearProfileRamSaveDebounce(), []);
 
@@ -5048,6 +5314,31 @@ export function ModpackTab({
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                  <div className="mb-2 text-xs font-medium text-white/70">
+                    {tt("modpacks.changeVersion.currentVersion")}
+                  </div>
+                  <div className="mb-3 text-sm text-white/90">
+                    {selectedProfile.game_version}
+                    {selectedProfile.loader !== "vanilla" && (
+                      <span className="text-white/60">
+                        {" "}
+                        · {loaderLabels[selectedProfile.loader as LoaderId] ?? selectedProfile.loader}
+                        {selectedProfile.loader_version
+                          ? ` ${selectedProfile.loader_version}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openChangeVersionModal}
+                    className="interactive-press w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+                  >
+                    {tt("modpacks.changeVersion.button")}
+                  </button>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                   <SettingsSlider
                     label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
                     min={1}
@@ -5086,6 +5377,175 @@ export function ModpackTab({
                 profileId={selectedProfile.id}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {isChangeVersionOpen && selectedProfile && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={closeChangeVersionModal}
+        >
+          <div
+            className="glass-panel w-full max-w-lg rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-white/50">
+                {tt("modpacks.changeVersion.title")}
+              </div>
+              <div className="mt-1 text-sm text-white/70">
+                {tt("modpacks.changeVersion.description")}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-white/70">
+                  {tt("modpacks.changeVersion.gameVersionLabel")}
+                </label>
+                <div className="relative inline-flex w-full items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void ensureMigrateVersionsLoaded();
+                      setIsMigrateVersionDropdownOpen((v) => !v);
+                    }}
+                    disabled={migrateBusy}
+                    className="flex flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                  >
+                    <span className="truncate">
+                      {migrateVersionsLoading
+                        ? tt("modpacks.common.loading")
+                        : migrateGameVersion || tt("modpacks.common.select")}
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-white/60" />
+                  </button>
+                  {isMigrateVersionDropdownOpen && (
+                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                      {migrateVersionsLoading && (
+                        <div className="px-3 py-2 text-white/60">
+                          {tt("modpacks.common.loading")}
+                        </div>
+                      )}
+                      {!migrateVersionsLoading &&
+                        migrateVersionOptions.map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => {
+                              setMigrateGameVersion(v.id);
+                              setIsMigrateVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              migrateGameVersion === v.id
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span>{v.id}</span>
+                            <span className="ml-2 text-[10px] uppercase text-gray-400">
+                              {v.version_type}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={migrateAllVersions}
+                    onChange={(e) => setMigrateAllVersions(e.target.checked)}
+                    disabled={migrateBusy}
+                    className="accent-checkbox"
+                  />
+                  <span>{tt("modpacks.changeVersion.allVersions")}</span>
+                </label>
+              </div>
+
+              {selectedProfile.loader !== "vanilla" && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-white/70">
+                    {tt("modpacks.changeVersion.loaderVersionLabel")} (
+                    {loaderLabels[selectedProfile.loader as LoaderId] ?? selectedProfile.loader})
+                  </label>
+                  <div className="relative inline-flex w-full items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (migrateLoaderVersionOptions.length === 0) {
+                          void loadMigrateLoaderVersions();
+                        }
+                        setIsMigrateLoaderVersionDropdownOpen((v) => !v);
+                      }}
+                      disabled={migrateBusy || migrateLoaderVersionsLoading}
+                      className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                    >
+                      <span className="truncate">
+                        {migrateLoaderVersionsLoading
+                          ? tt("modpacks.common.loading")
+                          : migrateLoaderVersion || tt("modpacks.common.select")}
+                      </span>
+                      <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+                    </button>
+                    {isMigrateLoaderVersionDropdownOpen && (
+                      <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                        {migrateLoaderVersionOptions.length === 0 &&
+                          !migrateLoaderVersionsLoading && (
+                            <div className="px-3 py-2 text-white/60">
+                              {tt("modpacks.common.select")}
+                            </div>
+                          )}
+                        {migrateLoaderVersionOptions.map((o) => (
+                          <button
+                            key={o.version}
+                            type="button"
+                            onClick={() => {
+                              setMigrateLoaderVersion(o.version);
+                              setIsMigrateLoaderVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              migrateLoaderVersion === o.version
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span>{o.version}</span>
+                            {o.channel && (
+                              <span className="ml-2 text-[10px] uppercase text-gray-400">
+                                {loaderChannelLabel(o.channel)}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeChangeVersionModal}
+                disabled={migrateBusy}
+                className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {language === "ru" ? "Отмена" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleChangeProfileVersion()}
+                disabled={migrateBusy || !migrateGameVersion}
+                className="interactive-press rounded-2xl accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {migrateBusy
+                  ? tt("modpacks.changeVersion.migrating")
+                  : tt("modpacks.changeVersion.confirm")}
+              </button>
+            </div>
           </div>
         </div>
       )}
