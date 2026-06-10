@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
+import { clearLauncherAvatarCache } from "../lib/avatar";
 import { useT } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 
@@ -1207,6 +1208,7 @@ export function SettingsTab({
     setIsCacheLoading(true);
     try {
       await invoke("clear_launcher_cache");
+      clearLauncherAvatarCache();
       const next = await invoke<number>("get_launcher_cache_size").catch(() => null);
       setCacheSizeBytes(next ?? 0);
       showNotification(
@@ -2677,6 +2679,9 @@ export function SettingsTab({
                     <div className="flex flex-col">
                       <span className="text-sm text-white/90">
                         {tt("settings.launcher.cache.label")}
+                      </span>
+                      <span className="text-xs text-white/60">
+                        {tt("settings.launcher.cache.description")}
                       </span>
                       <span className="text-xs text-white/60">
                         {isCacheLoading

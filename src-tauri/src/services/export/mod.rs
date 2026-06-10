@@ -14,6 +14,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::app::paths::instance_dir_for_id;
 use crate::models::profile::InstanceConfig;
+use crate::services::game::cache;
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -261,12 +262,8 @@ pub fn export_build(
 const ELY_AVATAR_CACHE_TTL_SECS: u64 = 24 * 60 * 60;
 
 fn ely_avatar_cache_dir() -> Result<PathBuf, String> {
-    let base = dirs::cache_dir()
-        .or_else(dirs::data_local_dir)
-        .ok_or_else(|| "No cache directory available".to_string())?;
-    let dir = base.join("mc16launcher").join("avatars").join("ely");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
+    cache::ensure_launcher_cache_layout()?;
+    Ok(cache::avatars_ely_cache_dir()?)
 }
 
 fn normalize_avatar_cache_key(username: &str) -> String {
