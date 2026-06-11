@@ -56,7 +56,7 @@ import {
   isGameConsoleLineImportant,
   resetGameConsoleFilter,
 } from "./lib/gameConsoleFilter";
-import { useT, t } from "./i18n";
+import { useT, t, isLanguage, readStoredLanguage, type Language } from "./i18n";
 import {
   OnboardingFlow,
   ONBOARDING_COMPLETED_STORAGE_KEY,
@@ -98,8 +98,6 @@ type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "game" | "versions" | "launcher";
-
-type Language = "ru" | "en";
 
 type Settings = {
   game_directory: string | null;
@@ -890,7 +888,9 @@ function App() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateDownloadPercent, setUpdateDownloadPercent] = useState<number | null>(null);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
-  const [language, setLanguage] = useState<Language>("ru");
+  const [language, setLanguage] = useState<Language>(
+    () => readStoredLanguage() ?? "ru",
+  );
   const [onboardingVisible, setOnboardingVisible] = useState<boolean | null>(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [launcherVersion, setLauncherVersion] = useState<string | null>(null);
@@ -1319,6 +1319,7 @@ function App() {
   const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
+  const languageHydratedRef = useRef(false);
 
   const profileAvatarInput = useMemo<ProfileAvatarInput>(
     () => ({
@@ -1429,12 +1430,7 @@ function App() {
       return [...prev, profile.id];
     });
     if (pinLimitReached) {
-      showNotification(
-        "warning",
-        language === "ru"
-          ? "Можно закрепить не более 3 сборок."
-          : "You can pin up to 3 profiles.",
-      );
+      showNotification("warning", tt("app.pinnedProfiles.pinLimit"));
     }
   };
 
@@ -1462,11 +1458,7 @@ function App() {
           loaderVersion: profileLoaderVersion,
         });
         if (!installedFabricId) {
-          throw new Error(
-            language === "ru"
-              ? "Fabric-профиль не установлен для этой версии."
-              : "Fabric profile is not installed for this version.",
-          );
+          throw new Error(tt("app.pinnedProfiles.fabricNotInstalled"));
         }
         launchVersionId = installedFabricId;
       } else if (profile.loader === "quilt") {
@@ -1475,11 +1467,7 @@ function App() {
           loaderVersion: profileLoaderVersion,
         });
         if (!installedQuiltId) {
-          throw new Error(
-            language === "ru"
-              ? "Quilt-профиль не установлен для этой версии."
-              : "Quilt profile is not installed for this version.",
-          );
+          throw new Error(tt("app.pinnedProfiles.quiltNotInstalled"));
         }
         launchVersionId = installedQuiltId;
       } else if (profile.loader === "forge" && profileLoaderVersion) {
@@ -1539,13 +1527,10 @@ function App() {
       if (activeInstanceProfile?.id === profileId) {
         setActiveInstanceProfile(null);
       }
-      showNotification("success", language === "ru" ? "Сборка удалена." : "Profile deleted.");
+      showNotification("success", tt("modpacks.toast.profileDeleted"));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      showNotification(
-        "error",
-        language === "ru" ? `Не удалось удалить сборку: ${msg}` : `Failed to delete profile: ${msg}`,
-      );
+      showNotification("error", tt("modpacks.toast.deleteProfileFailedWithMsg", { msg }));
     }
   };
 
@@ -1569,41 +1554,34 @@ function App() {
   );
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("launcher_language");
-      if (saved === "ru" || saved === "en") {
-        setLanguage(saved);
-        return;
-      }
+    if (!settings || languageHydratedRef.current) return;
+    languageHydratedRef.current = true;
+
+    let lang: Language | null = readStoredLanguage();
+
+    if (!lang && settings.interface_language && isLanguage(settings.interface_language)) {
+      lang = settings.interface_language;
+    }
+
+    if (!lang) {
       const browserLang =
         typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "ru";
-      if (browserLang.startsWith("en")) {
-        setLanguage("en");
-      } else {
-        setLanguage("ru");
-      }
-    } catch {
-      setLanguage("ru");
+      if (browserLang.startsWith("de")) lang = "de";
+      else if (browserLang.startsWith("es")) lang = "es";
+      else if (browserLang.startsWith("en")) lang = "en";
+      else lang = "ru";
     }
-  }, []);
 
-  useEffect(() => {
-    if (!settings) return;
-    let lang = settings.interface_language;
-    if (lang !== "ru" && lang !== "en") {
-      try {
-        const saved = window.localStorage.getItem("launcher_language");
-        if (saved === "ru" || saved === "en") {
-          lang = saved;
-          invoke("set_settings", {
-            settings: { ...settings, interface_language: lang },
-          }).catch(() => {});
-        }
-      } catch {
-      }
+    setLanguage(lang);
+    try {
+      window.localStorage.setItem("launcher_language", lang);
+    } catch {
     }
-    if (lang === "ru" || lang === "en") {
-      setLanguage(lang);
+
+    if (settings.interface_language !== lang) {
+      const synced = { ...settings, interface_language: lang };
+      setSettings(synced);
+      void invoke("set_settings", { settings: synced }).catch(() => {});
     }
   }, [settings]);
 
@@ -1650,15 +1628,6 @@ function App() {
       window.clearInterval(id);
     };
   }, [consoleLines]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (onboardingVisible !== false) return;
-    try {
-      window.localStorage.setItem("launcher_language", language);
-    } catch {
-    }
-  }, [language, onboardingVisible]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1843,6 +1812,7 @@ function App() {
     split_view_enabled: false,
     sidebar_position: "left",
     onboarding_completed: false,
+    interface_language: "ru",
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -1851,6 +1821,13 @@ function App() {
         profileId != null && profileId !== ""
           ? await invoke<Settings>("get_effective_settings", { profileId })
           : await invoke<Settings>("get_settings");
+      const storedLang = readStoredLanguage();
+      if (storedLang && storedLang !== s.interface_language) {
+        const synced = { ...s, interface_language: storedLang };
+        setSettings(synced);
+        void invoke("set_settings", { settings: synced }).catch(() => {});
+        return;
+      }
       setSettings(s);
     } catch (e) {
       console.error("Не удалось загрузить настройки:", e);
@@ -1892,11 +1869,16 @@ function App() {
 
       const legacyMigrated =
         window.localStorage.getItem(ONBOARDING_LEGACY_MIGRATED_KEY) === "1";
-      if (!legacyMigrated && window.localStorage.getItem("launcher_language")) {
+      const storedLang = readStoredLanguage();
+      if (!legacyMigrated && storedLang) {
         window.localStorage.setItem(ONBOARDING_LEGACY_MIGRATED_KEY, "1");
         window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
         void invoke("set_settings", {
-          settings: { ...settings, onboarding_completed: true },
+          settings: {
+            ...settings,
+            onboarding_completed: true,
+            interface_language: storedLang,
+          },
         }).catch(() => {});
         setOnboardingVisible(false);
         return;
@@ -1954,7 +1936,11 @@ function App() {
         } else {
           await invoke("set_settings", { settings: snapshotNext });
         }
-        showSettingsSavedNotification();
+        const languageOnly =
+          Object.keys(patch).length === 1 && patch.interface_language !== undefined;
+        if (!languageOnly) {
+          showSettingsSavedNotification();
+        }
       } catch (e) {
         console.error("Не удалось сохранить настройки:", e);
       }
@@ -1962,6 +1948,18 @@ function App() {
     [showSettingsSavedNotification, setActiveItemWithSound],
   );
 
+  const persistInterfaceLanguage = useCallback(
+    (lang: Language) => {
+      setLanguage(lang);
+      try {
+        window.localStorage.setItem("launcher_language", lang);
+      } catch {
+      }
+      setSettings((prev) => (prev ? { ...prev, interface_language: lang } : prev));
+      void updateSettings({ interface_language: lang });
+    },
+    [updateSettings],
+  );
 
   useEffect(() => {
     (async () => {
@@ -3110,7 +3108,7 @@ function App() {
           gameVersion: v.id,
         });
         const loaderVersion = loaders[0]?.version;
-        if (!loaderVersion) throw new Error("Нет подходящего Fabric Loader для этой версии");
+        if (!loaderVersion) throw new Error(tt("app.install.noFabricLoader"));
         const profileId = await invoke<string>("install_fabric", {
           gameVersion: v.id,
           loaderVersion,
@@ -3139,7 +3137,7 @@ function App() {
           versionId: selectedVersion.id,
         });
       } else {
-        throw new Error("Неизвестный тип версии");
+        throw new Error(tt("app.install.unknownVersionType"));
       }
 
       showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
@@ -3398,7 +3396,7 @@ function App() {
               SettingsSlider={SettingsSlider}
               SettingsToggle={SettingsToggle}
               language={language}
-              setLanguage={setLanguage}
+              setLanguage={persistInterfaceLanguage}
               sidebarOrder={
                 sidebarOrder.filter(
                   (id) =>
@@ -3516,7 +3514,7 @@ function App() {
       setDiscordModsTitle,
       setIsLoaderDropdownOpen,
       setIsVersionDropdownOpen,
-      setLanguage,
+      persistInterfaceLanguage,
       setLoader,
       setSelectedVersion,
       setSettingsTab,
@@ -3549,13 +3547,10 @@ function App() {
     return (
       <OnboardingFlow
         language={language}
-        setLanguage={setLanguage}
         accentColor={settings?.background_accent_color ?? "#0b1530"}
         backgroundImageUrl={backgroundImageUrl}
         backgroundAnimated={backgroundIsAnimated}
-        onLanguagePersist={(lang) => {
-          void updateSettings({ interface_language: lang });
-        }}
+        onLanguagePersist={persistInterfaceLanguage}
         onProfileUpdated={loadProfile}
         onComplete={async () => {
           try {
@@ -3928,7 +3923,7 @@ function App() {
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
               <img src="/launcher-assets/settings.png" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+              <span>{tt("modpacks.contextMenu.settings")}</span>
             </button>
             <button
               type="button"
@@ -3954,7 +3949,7 @@ function App() {
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
               <img src="/launcher-assets/favorite.png" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{language === "ru" ? "Открепить от сайдбара" : "Unpin from sidebar"}</span>
+              <span>{tt("modpacks.contextMenu.unpinFromSidebar")}</span>
             </button>
             <button
               type="button"
@@ -3967,7 +3962,7 @@ function App() {
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
             >
               <DeleteIcon className="h-3.5 w-3.5" />
-              <span>{language === "ru" ? "Удалить сборку" : "Delete profile"}</span>
+              <span>{tt("modpacks.contextMenu.deleteProfile")}</span>
             </button>
             <button
               type="button"
@@ -3978,7 +3973,7 @@ function App() {
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
               <img src="/launcher-assets/edit.png" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{language === "ru" ? "Редактировать сборку" : "Edit profile"}</span>
+              <span>{tt("modpacks.contextMenu.editProfile")}</span>
             </button>
           </div>
         </div>
@@ -4001,7 +3996,7 @@ function App() {
               {launcherVersionBadgeKind === "latest" ? (
                 <span
                   className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-emerald-200"
-                  title={language === "ru" ? "У вас последняя версия" : "You have the latest version"}
+                  title={tt("app.versionBadge.latest")}
                 >
                   LAST
                 </span>
@@ -4010,12 +4005,8 @@ function App() {
                   className="rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-amber-100"
                   title={
                     updateVersion
-                      ? language === "ru"
-                        ? `Доступна новая версия: ${updateVersion}`
-                        : `New version available: ${updateVersion}`
-                      : language === "ru"
-                        ? "Доступна новая версия"
-                        : "New version available"
+                      ? tt("app.versionBadge.outdatedWithVersion", { version: updateVersion })
+                      : tt("app.versionBadge.outdated")
                   }
                 >
                   OUTDATED
@@ -4023,11 +4014,7 @@ function App() {
               ) : (
                 <span
                   className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-white/45"
-                  title={
-                    language === "ru"
-                      ? "Статус обновления станет известен после проверки"
-                      : "Update status will be known after a check"
-                  }
+                  title={tt("app.versionBadge.unknown")}
                 >
                   LAST
                 </span>

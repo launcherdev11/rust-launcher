@@ -6,14 +6,12 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
 import { clearLauncherAvatarCache } from "../lib/avatar";
-import { useT } from "../i18n";
+import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 
 const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
 
 type SettingsTabId = "game" | "versions" | "launcher";
-
-type Language = "ru" | "en";
 
 type SidebarItemId = "play" | "settings" | "friends" | "mods" | "modpacks";
 
@@ -2079,7 +2077,7 @@ export function SettingsTab({
                               <div className="mt-0.5 text-[11px] text-white/60">
                                 {v.release_time
                                   ? new Date(v.release_time).toLocaleString(
-                                      language === "ru" ? "ru-RU" : "en-US",
+                                      localeTag(language),
                                     )
                                   : "—"}
                               </div>
@@ -2285,36 +2283,23 @@ export function SettingsTab({
                         width: `${languageIndicator.width}px`,
                       }}
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLanguage("ru");
-                        updateSettings({ interface_language: "ru" });
-                      }}
-                      ref={(el) => {
-                        languageTabRefs.current.ru = el;
-                      }}
-                      className={`interactive-press relative z-10 min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-                        language === "ru" ? "text-black" : "text-white/70 hover:text-white"
-                      }`}
-                    >
-                      {tt("settings.launcher.interfaceLanguage.ru")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLanguage("en");
-                        updateSettings({ interface_language: "en" });
-                      }}
-                      ref={(el) => {
-                        languageTabRefs.current.en = el;
-                      }}
-                      className={`interactive-press relative z-10 min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-                        language === "en" ? "text-black" : "text-white/70 hover:text-white"
-                      }`}
-                    >
-                      {tt("settings.launcher.interfaceLanguage.en")}
-                    </button>
+                    {SUPPORTED_LANGUAGES.map((langCode) => (
+                      <button
+                        key={langCode}
+                        type="button"
+                        onClick={() => {
+                          setLanguage(langCode);
+                        }}
+                        ref={(el) => {
+                          languageTabRefs.current[langCode] = el;
+                        }}
+                        className={`interactive-press relative z-10 min-w-[72px] rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          language === langCode ? "text-black" : "text-white/70 hover:text-white"
+                        }`}
+                      >
+                        {tt(`settings.launcher.interfaceLanguage.${langCode}`)}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-4">

@@ -11,7 +11,7 @@ import {
   type GameStatus,
 } from "../lib/gameConsoleWindow";
 
-type Language = "ru" | "en";
+import type { Language } from "../i18n";
 
 type UseGameConsoleWindowOptions = {
   enabled: boolean;

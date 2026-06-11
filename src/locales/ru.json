@@ -5,7 +5,25 @@
     "change": "Сменить",
     "save": "Сохранить",
     "loading": "Загрузка…",
-    "search": "Поиск…"
+    "search": "Поиск…",
+    "yes": "Да",
+    "no": "Нет",
+    "close": "Закрыть",
+    "add": "Добавить",
+    "rename": "Переименовать",
+    "browse": "Обзор",
+    "format": {
+      "modsCount": "Модов: {{count}}",
+      "playtimeHoursMinutes": "{{h}}ч {{m}}м",
+      "playtimeMinutes": "{{m}}м",
+      "playtimeDays": "{{d}} дн.",
+      "playtimeHours": "{{h}} ч.",
+      "playtimeMinutesLong": "{{m}} мин.",
+      "playtimeSeconds": "{{s}} сек.",
+      "playtimeZero": "0 сек.",
+      "archiveLabel": "Архив: {{date}}",
+      "modsMeta": "{{count}} модов"
+    }
   },
   "mods": {
     "provider": {
@@ -205,7 +223,9 @@
       "interfaceLanguage": {
         "label": "Язык интерфейса:",
         "ru": "Русский",
-        "en": "English"
+        "en": "English",
+        "de": "Deutsch",
+        "es": "Español"
       },
       "accentColor": {
         "label": "Цвет элементов:",
@@ -465,7 +485,10 @@
       "content": "Контент",
       "folder": "Папка",
       "profileId": "Идентификатор",
-      "close": "Закрыть"
+      "close": "Закрыть",
+      "contentMods": "{{count}} мод.",
+      "contentResourcepacks": "{{count}} ресурспак.",
+      "contentShaders": "{{count}} шейдер."
     },
     "list": {
       "searchPlaceholder": "Поиск...",
@@ -545,11 +568,6 @@
       "deleteConfirm": "Удалить пресет «{{name}}»?",
       "loaderInfo": "{{loader}} · {{version}}"
     },
-    "manage": {
-      "enableItem": "Включить",
-      "disableItem": "Отключить",
-      "toggleFailed": "Не удалось изменить состояние файла."
-    },
     "contentUpdates": {
       "check": "Проверить обновления",
       "checking": "Проверка обновлений…",
@@ -601,7 +619,220 @@
       "dropzone": {
         "title": "Перетащите сюда .mrpack файл",
         "hint": "Будет создана новая сборка с именем пакета и версией игры из .mrpack. Моды и ресурсы скачаются автоматически."
-      }
+      },
+      "started": "Импорт начат…",
+      "finishedWithVersion": "Импорт завершён. Сборка создана с версией игры из пакета.",
+      "failed": "Не удалось импортировать .mrpack: {{msg}}",
+      "cancelledKeyword": "отменена"
+    },
+    "header": {
+      "profiles": "Сборки",
+      "importMrpack": "Импортировать .mrpack",
+      "totalProfiles": "Всего сборок: {{count}}"
+    },
+    "contentTabs": {
+      "mods": "Моды",
+      "resourcepacks": "Ресурспаки",
+      "shaderpacks": "Шейдеры"
+    },
+    "toast": {
+      "selectLoaderBeforePreset": "Выберите версию загрузчика перед сохранением пресета.",
+      "loadProfilesFailed": "Не удалось загрузить список сборок.",
+      "loadFilesFailed": "Не удалось загрузить файлы сборки.",
+      "filesAdded": "Файлы добавлены в сборку.",
+      "addFilesFailed": "Не удалось добавить файлы.",
+      "deleteFileFailed": "Не удалось удалить файл.",
+      "openFolderFailed": "Не удалось открыть папку сборки.",
+      "noMatchingFiles": "Нет подходящих файлов для этой вкладки (проверьте расширение).",
+      "enterProfileName": "Введите название сборки.",
+      "selectLoaderVersion": "Выберите версию загрузчика.",
+      "manifestUrlFailed": "Не удалось определить URL манифеста версии {{version}}.",
+      "versionNotInstalled": "Версия {{version}} не установлена. Начинаю загрузку…",
+      "versionInstalled": "Версия {{version}} установлена.",
+      "installingFabric": "Устанавливаю Fabric {{version}}…",
+      "installingQuilt": "Устанавливаю Quilt {{version}}…",
+      "installingForge": "Устанавливаю Forge {{version}}…",
+      "installingNeoForge": "Устанавливаю NeoForge {{version}}…",
+      "profileCreatedInstallFailed": "Сборка создана, но не удалось установить версию: {{msg}}",
+      "profileCreated": "Сборка создана.",
+      "createProfileFailed": "Не удалось создать сборку: {{msg}}",
+      "profileUnselected": "Профиль «{{name}}» снят с выбора.",
+      "profileSelected": "Профиль «{{name}}» выбран.",
+      "selectProfileFailed": "Не удалось выбрать профиль.",
+      "profileDeleted": "Сборка удалена.",
+      "deleteProfileFailed": "Не удалось удалить сборку.",
+      "deleteProfileFailedWithMsg": "Не удалось удалить сборку: {{msg}}",
+      "loadLoaderVersionsFailed": "Не удалось загрузить версии загрузчика: {{msg}}",
+      "profileImported": "Профиль импортирован.",
+      "importProfileFailed": "Не удалось импортировать профиль: {{msg}}",
+      "noProfilesFound": "Профили не найдены. Попробуйте указать корень лаунчера (не папку instances) — но instances тоже поддерживается."
+    },
+    "manage": {
+      "enableItem": "Включить",
+      "disableItem": "Отключить",
+      "toggleFailed": "Не удалось изменить состояние файла.",
+      "backToList": "К списку сборок",
+      "openFolder": "Открыть папку",
+      "exportBuild": "Экспортировать сборку",
+      "profileSettings": "Настройки сборки",
+      "selectProfile": "Выбрать сборку",
+      "searchFiles": "Поиск файлов...",
+      "rescan": "Пересканировать",
+      "downloadFromCatalog": "Скачать из каталога",
+      "chooseFileFromPc": "Выбрать файл с ПК",
+      "loadingFiles": "Загрузка файлов...",
+      "emptyTab": "В этой вкладке ещё нет файлов.",
+      "dropHint": "Перетащите сюда файлы из проводника или используйте «Добавить».",
+      "update": "Обновить",
+      "splitResizeAria": "Перетащите, чтобы изменить ширину списка и консоли",
+      "splitResizeTitle": "Тяните, чтобы сделать список шире или уже",
+      "currentOutput": "Текущий вывод",
+      "clearOnlyLive": "Очистка только для текущего вывода",
+      "consoleResizeHint": "Между списком и консолью можно тянуть разделитель — ширина сохраняется. Лог хранится между перезапусками; перед новым запуском вывод уходит в «Архив».",
+      "noVersionsForGame": "Нет версий для выбранной игры"
+    },
+    "externalImport": {
+      "title": "Импорт из другого лаунчера",
+      "hint": "Укажите корень PrismLauncher/MultiMC (не папку instances), но вставка instances тоже поддерживается.",
+      "copying": "Копирование файлов…",
+      "importing": "Импорт…",
+      "launcher": "Лаунчер",
+      "auto": "Auto",
+      "path": "Путь",
+      "pathPlaceholder": "Например: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher",
+      "scanning": "Сканирование…",
+      "scan": "Сканировать",
+      "sort": "Сортировка",
+      "sortName": "Имя",
+      "sortDate": "Дата",
+      "sortSize": "Размер"
+    },
+    "contextMenu": {
+      "settings": "Настройки",
+      "pinToSidebar": "Закрепить в сайдбаре",
+      "unpinFromSidebar": "Открепить от сайдбара",
+      "deleteProfile": "Удалить сборку",
+      "renameProfile": "Редактировать название",
+      "editProfile": "Редактировать сборку"
+    },
+    "deleteConfirm": {
+      "title": "Подтверждение удаления",
+      "prompt": "Удалить сборку «{{name}}»? Это действие нельзя отменить."
+    },
+    "profileSettingsModal": {
+      "title": "Настройки сборки",
+      "general": "Общие",
+      "hint": "Эти параметры применяются только к выбранной сборке и используются при запуске игры.",
+      "closeLauncherOnStart": "Закрывать лаунчер при запуске игры:",
+      "checkGameProcesses": "Проверять запущенные процессы игры:",
+      "memoryRam": "Оперативная память:"
+    },
+    "exportModal": {
+      "title": "Экспорт сборки",
+      "format": "Формат",
+      "ignorePatterns": "Исключения",
+      "ignoreHint": "Поддерживаются: *, **, ! (отмена исключения).",
+      "buildFiles": "Файлы сборки",
+      "selectAll": "Выбрать всё",
+      "clearAll": "Снять всё",
+      "scanning": "Сканирование...",
+      "noData": "Нет данных.",
+      "emptyFolder": "Папка сборки пуста.",
+      "preview": "Предпросмотр",
+      "export": "Экспортировать",
+      "exporting": "Экспорт…",
+      "finalContents": "Итоговое содержимое",
+      "size": "Размер:",
+      "nothingIncluded": "Ничего не попадёт в архив.",
+      "done": "Готово",
+      "openFolder": "Открыть папку"
+    }
+  },
+  "friends": {
+    "subtitleSignedIn": "Управляйте друзьями по nickname.",
+    "subtitleSignedOut": "Войдите в Supabase во вкладке «Аккаунты», чтобы пользоваться друзьями.",
+    "friendNicknamePlaceholder": "Никнейм друга",
+    "add": "Добавить",
+    "refresh": "Обновить",
+    "requests": "Заявки",
+    "incomingTitle": "Входящие заявки",
+    "signInFirst": "Сначала войдите во вкладке «Аккаунты».",
+    "noIncoming": "Нет входящих заявок.",
+    "accept": "Принять",
+    "reject": "Отклонить",
+    "yourFriends": "Ваши друзья",
+    "noFriends": "Пока никого нет. Отправьте заявку по nickname.",
+    "toast": {
+      "requestAccepted": "Заявка принята",
+      "requestRejected": "Заявка отклонена",
+      "signInFirst": "Сначала войдите во вкладке «Аккаунты»",
+      "cannotAddSelf": "Нельзя отправить заявку самому себе",
+      "requestExists": "Заявка уже существует или вы уже друзья.",
+      "requestSent": "Заявка отправлена"
+    }
+  },
+  "supabase": {
+    "accountTitle": "16launcher аккаунт",
+    "accountManagement": "Управление аккаунтом",
+    "signIn": "Войти",
+    "signUp": "Регистрация",
+    "emailLabel": "Email",
+    "emailOrNicknameLabel": "Email / Nickname",
+    "nicknameLabel": "Никнейм",
+    "passwordLabel": "Пароль",
+    "passwordPlaceholder": "Пароль",
+    "showPassword": "Показать пароль",
+    "hidePassword": "Скрыть пароль",
+    "createAccount": "Создать аккаунт",
+    "launcherNickname": "Ник лаунчера",
+    "inGameNickname": "Игровой ник",
+    "newNicknamePlaceholder": "Новый никнейм",
+    "changeNickname": "Сменить ник",
+    "logout": "Выйти",
+    "linked": "Привязан",
+    "linking": "Привязка…",
+    "link": "Привязать",
+    "enterEmail": "Введите email",
+    "enterNicknameOrEmail": "Введите никнейм или почту",
+    "enterNickname": "Введите никнейм",
+    "linkMicrosoftTitle": "Нажмите для входа через Microsoft и повторите привязку",
+    "linkElyTitle": "Нажмите для входа через Ely.by и повторите привязку",
+    "toast": {
+      "accountCreated": "Аккаунт создан",
+      "signedIn": "Вход выполнен",
+      "loggedOut": "Вы вышли из аккаунта",
+      "signInFirst": "Сначала войдите в аккаунт.",
+      "enterNewNickname": "Введите новый никнейм.",
+      "nicknameTooShort": "Никнейм должен быть не короче 3 символов.",
+      "nicknameAlreadySet": "Этот никнейм уже установлен.",
+      "nicknameUpdated": "Никнейм обновлен.",
+      "sessionExpired": "Сессия 16launcher истекла. Войдите в аккаунт снова.",
+      "sessionExpiredWithMsg": "Сессия 16launcher истекла: {{msg}}",
+      "signInMicrosoftThenLink": "Выполните вход Microsoft, затем снова нажмите «Привязать».",
+      "signInElyThenLink": "Выполните вход Ely.by, затем снова нажмите «Привязать».",
+      "minecraftLinked": "Minecraft привязан к аккаунту",
+      "elyLinked": "Ely.by привязан к аккаунту",
+      "enterEmailSignup": "Для регистрации укажите email.",
+      "enterSignupNickname": "Введите никнейм для регистрации.",
+      "enterPassword": "Введите пароль",
+      "passwordTooShort": "Пароль должен содержать минимум 6 символов.",
+      "envNotConfigured": "Не настроены VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY в .env",
+      "noAccessToken": "Нет Supabase access_token — войдите в аккаунт.",
+      "noRefreshToken": "Не удалось получить refresh_token из ответа Supabase.",
+      "noAccessTokenResponse": "Не удалось получить access_token из ответа Supabase.",
+      "refreshNoToken": "Supabase refresh не вернул access_token.",
+      "nicknameLoginUnsupported": "Сервер Supabase пока не поддерживает вход по nickname (нет users_resolve_login).",
+      "nicknameEmailNotFound": "По этому nickname не найден email для входа.",
+      "resolveLoginFailed": "Не удалось обратиться к функции users_resolve_login (вход по никнейму). Обычно это CORS/OPTIONS в Edge Function. Временно войдите по email, затем проверьте CORS в users_resolve_login."
+    },
+    "errors": {
+      "connectionFailed": "Не удается подключиться к Supabase. Проверьте VITE_SUPABASE_PROJECT_URL (должен быть https://<project>.supabase.co), интернет и доступность сервиса.",
+      "invalidCredentials": "Неверный логин или пароль.",
+      "invalidPassword": "Неверный пароль.",
+      "passwordTooShort": "Пароль слишком короткий. Минимум 6 символов.",
+      "weakPassword": "Слишком слабый пароль.",
+      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16launcher. Отвяжите его в том аккаунте или используйте другой аккаунт {{provider}}.",
+      "linkConnectionFailed": "Не удалось привязать {{provider}}: нет соединения с Supabase. Проверьте интернет и настройки проекта."
     }
   },
   "app": {
@@ -727,6 +958,25 @@
       "mods": "Выбирает мод",
       "modpacks": "Выбирает профиль",
       "accounts": "Управляет аккаунтом"
+    },
+    "pinnedProfiles": {
+      "pinLimit": "Можно закрепить не более 3 сборок.",
+      "fabricNotInstalled": "Fabric-профиль не установлен для этой версии.",
+      "quiltNotInstalled": "Quilt-профиль не установлен для этой версии."
+    },
+    "versionBadge": {
+      "latest": "У вас последняя версия",
+      "outdatedWithVersion": "Доступна новая версия: {{version}}",
+      "outdated": "Доступна новая версия",
+      "unknown": "Статус обновления станет известен после проверки"
+    },
+    "gameConsole": {
+      "defaultProfileName": "игра",
+      "windowTitle": "Консоль \"{{name}}\""
+    },
+    "install": {
+      "noFabricLoader": "Нет подходящего Fabric Loader для этой версии",
+      "unknownVersionType": "Неизвестный тип версии"
     }
   },
   "onboarding": {
@@ -746,7 +996,8 @@
       "comingSoon": "Скоро",
       "ruDesc": "Русский интерфейс лаунчера",
       "enDesc": "English launcher interface",
-      "deDesc": "Немецкий язык появится в одном из обновлений"
+      "deDesc": "Немецкий интерфейс лаунчера",
+      "esDesc": "Испанский интерфейс лаунчера"
     },
     "account": {
       "title": "Вход в аккаунт",

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useT, t } from "../i18n";
+import { useT, t, type Language } from "../i18n";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
 
 type ModrinthContentType = "mod" | "resourcepack" | "shader" | "modpack";
-type Language = "ru" | "en";
 
 type ModrinthProjectType = "mod" | "modpack" | "resourcepack" | "shader";
 

@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import type { Language } from "../i18n";
-import { useT } from "../i18n";
+import {
+  formatByteSize,
+  formatPlaytimeDetailed,
+  localeTag,
+  useT,
+  type Language,
+} from "../i18n";
 import { ProfileInstanceIcon } from "./profile_instance_icon";
 
 export type ProfileInfoData = {
@@ -29,49 +34,10 @@ const LOADER_LABELS: Record<string, string> = {
   neoforge: "NeoForge",
 };
 
-function formatBytes(bytes: number | undefined, language: Language): string {
-  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) {
-    return language === "ru" ? "0 Б" : "0 B";
-  }
-  const units = language === "ru" ? ["Б", "КБ", "МБ", "ГБ"] : ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let value = bytes;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i += 1;
-  }
-  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-function formatPlaytimeDetailed(seconds: number | null, language: Language): string {
-  const s =
-    seconds != null && Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-
-  if (language === "ru") {
-    const parts: string[] = [];
-    if (d > 0) parts.push(`${d} дн.`);
-    if (h > 0) parts.push(`${h} ч.`);
-    if (m > 0 || (d === 0 && h === 0)) parts.push(`${m} мин.`);
-    if (s < 3600) parts.push(`${sec} сек.`);
-    return parts.length > 0 ? parts.join(" ") : "0 сек.";
-  }
-
-  const parts: string[] = [];
-  if (d > 0) parts.push(`${d}d`);
-  if (h > 0) parts.push(`${h}h`);
-  if (m > 0 || (d === 0 && h === 0)) parts.push(`${m}m`);
-  if (s < 3600) parts.push(`${sec}s`);
-  return parts.length > 0 ? parts.join(" ") : "0s";
-}
-
 function formatTimestamp(ts: number | null | undefined, language: Language): string {
   if (ts == null || !Number.isFinite(ts) || ts <= 0) return "—";
   try {
-    return new Date(ts * 1000).toLocaleString(language === "ru" ? "ru-RU" : "en-US", {
+    return new Date(ts * 1000).toLocaleString(localeTag(language), {
       dateStyle: "long",
       timeStyle: "short",
     });
@@ -134,24 +100,16 @@ export function ProfileInfoModal({ language, profile, onClose }: ProfileInfoModa
   const loaderFull = formatLoaderFull(profile.loader, profile.loader_version);
   const contentParts: string[] = [];
   if (profile.mods_count != null) {
-    contentParts.push(
-      language === "ru"
-        ? `${profile.mods_count} мод.`
-        : `${profile.mods_count} mod(s)`,
-    );
+    contentParts.push(tt("modpacks.profileInfo.contentMods", { count: profile.mods_count }));
   }
   if (profile.resourcepacks_count != null) {
     contentParts.push(
-      language === "ru"
-        ? `${profile.resourcepacks_count} ресурспак.`
-        : `${profile.resourcepacks_count} pack(s)`,
+      tt("modpacks.profileInfo.contentResourcepacks", { count: profile.resourcepacks_count }),
     );
   }
   if (profile.shaderpacks_count != null) {
     contentParts.push(
-      language === "ru"
-        ? `${profile.shaderpacks_count} шейдер.`
-        : `${profile.shaderpacks_count} shader(s)`,
+      tt("modpacks.profileInfo.contentShaders", { count: profile.shaderpacks_count }),
     );
   }
 
@@ -192,7 +150,7 @@ export function ProfileInfoModal({ language, profile, onClose }: ProfileInfoModa
           />
           <InfoRow
             label={tt("modpacks.profileInfo.playtime")}
-            value={formatPlaytimeDetailed(profile.play_time_seconds, language)}
+            value={formatPlaytimeDetailed(language, profile.play_time_seconds)}
           />
           <InfoRow
             label={tt("modpacks.profileInfo.lastPlayedAt")}
@@ -205,7 +163,7 @@ export function ProfileInfoModal({ language, profile, onClose }: ProfileInfoModa
           {profile.total_size_bytes != null ? (
             <InfoRow
               label={tt("modpacks.profileInfo.size")}
-              value={formatBytes(profile.total_size_bytes, language)}
+              value={formatByteSize(language, profile.total_size_bytes, { zeroAt: "bytes" })}
             />
           ) : null}
           {contentParts.length > 0 ? (

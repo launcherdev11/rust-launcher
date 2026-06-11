@@ -5,7 +5,25 @@
     "change": "Change",
     "save": "Save",
     "loading": "Loading…",
-    "search": "Search…"
+    "search": "Search…",
+    "yes": "Yes",
+    "no": "No",
+    "close": "Close",
+    "add": "Add",
+    "rename": "Rename",
+    "browse": "Browse",
+    "format": {
+      "modsCount": "Mods: {{count}}",
+      "playtimeHoursMinutes": "{{h}}h {{m}}m",
+      "playtimeMinutes": "{{m}}m",
+      "playtimeDays": "{{d}}d",
+      "playtimeHours": "{{h}}h",
+      "playtimeMinutesLong": "{{m}}m",
+      "playtimeSeconds": "{{s}}s",
+      "playtimeZero": "0s",
+      "archiveLabel": "Archive: {{date}}",
+      "modsMeta": "{{count}} mods"
+    }
   },
   "mods": {
     "provider": {
@@ -205,7 +223,9 @@
       "interfaceLanguage": {
         "label": "Interface language:",
         "ru": "Russian",
-        "en": "English"
+        "en": "English",
+        "de": "German",
+        "es": "Spanish"
       },
       "accentColor": {
         "label": "Launcher accent color:",
@@ -465,7 +485,10 @@
       "content": "Content",
       "folder": "Folder",
       "profileId": "Profile ID",
-      "close": "Close"
+      "close": "Close",
+      "contentMods": "{{count}} mod(s)",
+      "contentResourcepacks": "{{count}} pack(s)",
+      "contentShaders": "{{count}} shader(s)"
     },
     "list": {
       "searchPlaceholder": "Search...",
@@ -545,11 +568,6 @@
       "deleteConfirm": "Delete preset “{{name}}”?",
       "loaderInfo": "{{loader}} · {{version}}"
     },
-    "manage": {
-      "enableItem": "Enable",
-      "disableItem": "Disable",
-      "toggleFailed": "Failed to change item state."
-    },
     "contentUpdates": {
       "check": "Check for updates",
       "checking": "Checking for updates…",
@@ -601,7 +619,220 @@
       "dropzone": {
         "title": "Drag & drop a .mrpack file here",
         "hint": "A new profile will be created with the pack name and game version from the .mrpack. Mods and resources will be downloaded automatically."
-      }
+      },
+      "started": "Import started…",
+      "finishedWithVersion": "Import finished. Profile created with pack's game version.",
+      "failed": "Failed to import .mrpack: {{msg}}",
+      "cancelledKeyword": "cancelled"
+    },
+    "header": {
+      "profiles": "Profiles",
+      "importMrpack": "Import .mrpack",
+      "totalProfiles": "Total profiles: {{count}}"
+    },
+    "contentTabs": {
+      "mods": "Mods",
+      "resourcepacks": "Resource packs",
+      "shaderpacks": "Shaders"
+    },
+    "toast": {
+      "selectLoaderBeforePreset": "Select a loader version before saving the preset.",
+      "loadProfilesFailed": "Failed to load profiles.",
+      "loadFilesFailed": "Failed to load profile files.",
+      "filesAdded": "Files added to profile.",
+      "addFilesFailed": "Failed to add files.",
+      "deleteFileFailed": "Failed to delete file.",
+      "openFolderFailed": "Failed to open profile folder.",
+      "noMatchingFiles": "No matching files for this tab (check file extensions).",
+      "enterProfileName": "Enter profile name.",
+      "selectLoaderVersion": "Select a loader version.",
+      "manifestUrlFailed": "Failed to resolve manifest URL for version {{version}}.",
+      "versionNotInstalled": "Version {{version}} is not installed. Starting download…",
+      "versionInstalled": "Version {{version}} installed.",
+      "installingFabric": "Installing Fabric {{version}}…",
+      "installingQuilt": "Installing Quilt {{version}}…",
+      "installingForge": "Installing Forge {{version}}…",
+      "installingNeoForge": "Installing NeoForge {{version}}…",
+      "profileCreatedInstallFailed": "Profile created, but failed to install version: {{msg}}",
+      "profileCreated": "Profile created.",
+      "createProfileFailed": "Failed to create profile: {{msg}}",
+      "profileUnselected": "Profile “{{name}}” unselected.",
+      "profileSelected": "Profile “{{name}}” selected.",
+      "selectProfileFailed": "Failed to select profile.",
+      "profileDeleted": "Profile deleted.",
+      "deleteProfileFailed": "Failed to delete profile.",
+      "deleteProfileFailedWithMsg": "Failed to delete profile: {{msg}}",
+      "loadLoaderVersionsFailed": "Failed to load loader versions: {{msg}}",
+      "profileImported": "Profile imported.",
+      "importProfileFailed": "Import failed: {{msg}}",
+      "noProfilesFound": "No profiles found. Try the launcher's root (not instances) — but instances is supported too."
+    },
+    "manage": {
+      "enableItem": "Enable",
+      "disableItem": "Disable",
+      "toggleFailed": "Failed to change item state.",
+      "backToList": "Back to list",
+      "openFolder": "Open folder",
+      "exportBuild": "Export build",
+      "profileSettings": "Profile settings",
+      "selectProfile": "Select profile",
+      "searchFiles": "Search files...",
+      "rescan": "Rescan",
+      "downloadFromCatalog": "Download from catalog",
+      "chooseFileFromPc": "Choose file from PC",
+      "loadingFiles": "Loading files...",
+      "emptyTab": "No files on this tab yet.",
+      "dropHint": "Drag files from Explorer here or use “Add”.",
+      "update": "Update",
+      "splitResizeAria": "Drag to resize the list and console",
+      "splitResizeTitle": "Drag to widen or narrow the list",
+      "currentOutput": "Current output",
+      "clearOnlyLive": "Clear only applies to current output",
+      "consoleResizeHint": "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived.",
+      "noVersionsForGame": "No versions for the selected game"
+    },
+    "externalImport": {
+      "title": "Import from another launcher",
+      "hint": "Prefer PrismLauncher/MultiMC root (not instances), but instances input is supported too.",
+      "copying": "Copying files…",
+      "importing": "Import…",
+      "launcher": "Launcher",
+      "auto": "Auto",
+      "path": "Path",
+      "pathPlaceholder": "Example: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher",
+      "scanning": "Scanning…",
+      "scan": "Scan",
+      "sort": "Sort",
+      "sortName": "Name",
+      "sortDate": "Date",
+      "sortSize": "Size"
+    },
+    "contextMenu": {
+      "settings": "Settings",
+      "pinToSidebar": "Pin to sidebar",
+      "unpinFromSidebar": "Unpin from sidebar",
+      "deleteProfile": "Delete profile",
+      "renameProfile": "Rename profile",
+      "editProfile": "Edit profile"
+    },
+    "deleteConfirm": {
+      "title": "Delete confirmation",
+      "prompt": "Delete profile “{{name}}”? This action cannot be undone."
+    },
+    "profileSettingsModal": {
+      "title": "Profile settings",
+      "general": "General",
+      "hint": "These settings apply only to the selected profile and are used when launching the game.",
+      "closeLauncherOnStart": "Close launcher when game starts:",
+      "checkGameProcesses": "Check running game processes:",
+      "memoryRam": "Memory (RAM):"
+    },
+    "exportModal": {
+      "title": "Export build",
+      "format": "Format",
+      "ignorePatterns": "Ignore patterns",
+      "ignoreHint": "Supported: *, **, ! (negation).",
+      "buildFiles": "Build files",
+      "selectAll": "Select all",
+      "clearAll": "Clear",
+      "scanning": "Scanning...",
+      "noData": "No data.",
+      "emptyFolder": "Build folder is empty.",
+      "preview": "Preview",
+      "export": "Export",
+      "exporting": "Exporting…",
+      "finalContents": "Final contents",
+      "size": "Size:",
+      "nothingIncluded": "Nothing will be included.",
+      "done": "Done",
+      "openFolder": "Open folder"
+    }
+  },
+  "friends": {
+    "subtitleSignedIn": "Manage friends by nickname.",
+    "subtitleSignedOut": "Sign in to Supabase in the Accounts tab to use friends.",
+    "friendNicknamePlaceholder": "Friend's nickname",
+    "add": "Add",
+    "refresh": "Refresh",
+    "requests": "Requests",
+    "incomingTitle": "Incoming requests",
+    "signInFirst": "Sign in first in the Accounts tab.",
+    "noIncoming": "No incoming requests.",
+    "accept": "Accept",
+    "reject": "Reject",
+    "yourFriends": "Your friends",
+    "noFriends": "No friends yet. Send a request by nickname.",
+    "toast": {
+      "requestAccepted": "Request accepted",
+      "requestRejected": "Request rejected",
+      "signInFirst": "Sign in first in the Accounts tab",
+      "cannotAddSelf": "You cannot send a request to yourself",
+      "requestExists": "Request already exists or you are already friends.",
+      "requestSent": "Request sent"
+    }
+  },
+  "supabase": {
+    "accountTitle": "16launcher account",
+    "accountManagement": "Account management",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "emailLabel": "Email",
+    "emailOrNicknameLabel": "Email / Nickname",
+    "nicknameLabel": "Nickname",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "createAccount": "Create account",
+    "launcherNickname": "Launcher nickname",
+    "inGameNickname": "In-game nickname",
+    "newNicknamePlaceholder": "New nickname",
+    "changeNickname": "Change nickname",
+    "logout": "Log out",
+    "linked": "Linked",
+    "linking": "Linking…",
+    "link": "Link",
+    "enterEmail": "Enter email",
+    "enterNicknameOrEmail": "Enter nickname or email",
+    "enterNickname": "Enter nickname",
+    "linkMicrosoftTitle": "Sign in with Microsoft, then click Link again",
+    "linkElyTitle": "Sign in with Ely.by, then click Link again",
+    "toast": {
+      "accountCreated": "Account created",
+      "signedIn": "Signed in",
+      "loggedOut": "You have logged out",
+      "signInFirst": "Sign in first.",
+      "enterNewNickname": "Enter a new nickname.",
+      "nicknameTooShort": "Nickname must be at least 3 characters.",
+      "nicknameAlreadySet": "This nickname is already set.",
+      "nicknameUpdated": "Nickname updated.",
+      "sessionExpired": "16launcher session expired. Sign in again.",
+      "sessionExpiredWithMsg": "16launcher session expired: {{msg}}",
+      "signInMicrosoftThenLink": "Sign in with Microsoft, then click Link again.",
+      "signInElyThenLink": "Sign in with Ely.by, then click Link again.",
+      "minecraftLinked": "Minecraft linked to account",
+      "elyLinked": "Ely.by linked to account",
+      "enterEmailSignup": "Enter email for registration.",
+      "enterSignupNickname": "Enter a nickname for registration.",
+      "enterPassword": "Enter password",
+      "passwordTooShort": "Password must be at least 6 characters.",
+      "envNotConfigured": "VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY are not configured in .env",
+      "noAccessToken": "No Supabase access_token — sign in first.",
+      "noRefreshToken": "Failed to get refresh_token from Supabase response.",
+      "noAccessTokenResponse": "Failed to get access_token from Supabase response.",
+      "refreshNoToken": "Supabase refresh did not return access_token.",
+      "nicknameLoginUnsupported": "Supabase server does not support nickname login yet (users_resolve_login missing).",
+      "nicknameEmailNotFound": "No email found for this nickname.",
+      "resolveLoginFailed": "Failed to call users_resolve_login (nickname login). Usually CORS/OPTIONS in Edge Function. Sign in with email for now, then check CORS in users_resolve_login."
+    },
+    "errors": {
+      "connectionFailed": "Cannot connect to Supabase. Check VITE_SUPABASE_PROJECT_URL (must be https://<project>.supabase.co), internet, and service availability.",
+      "invalidCredentials": "Invalid login or password.",
+      "invalidPassword": "Invalid password.",
+      "passwordTooShort": "Password is too short. Minimum 6 characters.",
+      "weakPassword": "Password is too weak.",
+      "identityAlreadyLinked": "{{provider}} is already linked to another 16launcher account. Unlink it there or use a different {{provider}} account.",
+      "linkConnectionFailed": "Failed to link {{provider}}: no connection to Supabase. Check internet and project settings."
     }
   },
   "app": {
@@ -727,6 +958,25 @@
       "mods": "Selecting a mod",
       "modpacks": "Selecting a profile",
       "accounts": "Managing account"
+    },
+    "pinnedProfiles": {
+      "pinLimit": "You can pin up to 3 profiles.",
+      "fabricNotInstalled": "Fabric profile is not installed for this version.",
+      "quiltNotInstalled": "Quilt profile is not installed for this version."
+    },
+    "versionBadge": {
+      "latest": "You have the latest version",
+      "outdatedWithVersion": "New version available: {{version}}",
+      "outdated": "New version available",
+      "unknown": "Update status will be known after a check"
+    },
+    "gameConsole": {
+      "defaultProfileName": "game",
+      "windowTitle": "Console \"{{name}}\""
+    },
+    "install": {
+      "noFabricLoader": "No suitable Fabric Loader for this version",
+      "unknownVersionType": "Unknown version type"
     }
   },
   "onboarding": {
@@ -746,7 +996,8 @@
       "comingSoon": "Soon",
       "ruDesc": "Russian launcher interface",
       "enDesc": "English launcher interface",
-      "deDesc": "German will be available in a future update"
+      "deDesc": "German launcher interface",
+      "esDesc": "Spanish launcher interface"
     },
     "account": {
       "title": "Sign in",

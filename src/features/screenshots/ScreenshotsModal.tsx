@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { DeleteIcon } from "../../components/delete_icon";
+import { formatByteSize, localeTag, useT } from "../../i18n";
 import type { Language } from "../../i18n";
-import { useT } from "../../i18n";
 import { useScreenshots } from "./useScreenshots";
 
 type ScreenshotsModalProps = {
@@ -16,18 +16,10 @@ type ScreenshotsModalProps = {
   ) => void;
 };
 
-function formatBytes(bytes: number, language: Language): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} ${language === "ru" ? "КБ" : "KB"}`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} ${language === "ru" ? "МБ" : "MB"}`;
-}
-
 function formatDate(ts: number, language: Language): string {
   if (!ts) return "—";
   try {
-    return new Date(ts * 1000).toLocaleString(language === "ru" ? "ru-RU" : "en-US");
+    return new Date(ts * 1000).toLocaleString(localeTag(language));
   } catch {
     return "—";
   }
@@ -228,7 +220,7 @@ export function ScreenshotsModal({
                     </div>
                     <div className="text-[11px] text-white/55">
                       {formatDate(selected.modified_at, language)} ·{" "}
-                      {formatBytes(selected.size_bytes, language)}
+                      {formatByteSize(language, selected.size_bytes, { zeroAt: "bytes" })}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

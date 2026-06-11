@@ -1,0 +1,1065 @@
+{
+  "common": {
+    "cancel": "Stornieren",
+    "delete": "Löschen",
+    "change": "Ändern",
+    "save": "Speichern",
+    "loading": "Laden…",
+    "search": "Suchen…",
+    "yes": "Ja",
+    "no": "NEIN",
+    "close": "Schließen",
+    "add": "Hinzufügen",
+    "rename": "Umbenennen",
+    "browse": "Durchsuchen",
+    "format": {
+      "modsCount": "Mods: {{count}}",
+      "playtimeHoursMinutes": "{{h}}h {{m}}m",
+      "playtimeMinutes": "{{m}}m",
+      "playtimeDays": "{{d}}d",
+      "playtimeHours": "{{h}}h",
+      "playtimeMinutesLong": "{{m}}m",
+      "playtimeSeconds": "{{s}}s",
+      "playtimeZero": "0er",
+      "archiveLabel": "Archiv: {{date}}",
+      "modsMeta": "{{count}} Mods"
+    }
+  },
+  "mods": {
+    "provider": {
+      "modrinth": "Modrinth",
+      "curseforge": "CurseForge"
+    },
+    "unlockConfirm": "Version und Loader werden mit dem ausgewählten Profil synchronisiert. Sie trotzdem ändern?",
+    "searchPlaceholder": "Suchen...",
+    "version": "Version",
+    "syncedHint": "Mit Profil synchronisiert. Klicken Sie zum Entsperren auf „Ändern“.",
+    "loaderAny": "Beliebig",
+    "loaderAll": "Alle",
+    "tab": {
+      "mods": "Mods",
+      "resources": "Ressourcen",
+      "shaders": "Shader",
+      "modpacks": "Modpacks"
+    },
+    "layout": {
+      "list": "Liste",
+      "grid": "Netz"
+    },
+    "loadingPopular": "Beliebte Projekte werden geladen…",
+    "nothingFound": "Für die ausgewählten Filter wurde nichts gefunden.",
+    "nothingFoundModrinth": "Für die ausgewählten Modrinth-Filter wurde nichts gefunden.",
+    "nothingFoundCurseforge": "Für die ausgewählten CurseForge-Filter wurde nichts gefunden.",
+    "pageOf": "Seite {{current}} von {{total}}",
+    "prev": "Vorher",
+    "next": "Nächste",
+    "selectProject": "Wählen Sie links ein Projekt aus, um Versionen anzuzeigen",
+    "versionsLoading": "Versionen werden geladen…",
+    "installed": "installiert",
+    "download": "Herunterladen",
+    "noAvailableVersions": "Für dieses Projekt sind keine Versionen verfügbar.",
+    "modpackImportSuccess": "Modpack „{{name}}“ erfolgreich importiert.",
+    "modpackImport": {
+      "title": "Modpack wird installiert…",
+      "start": "Vorbereiten…",
+      "overrides": "Extrahieren…",
+      "files": "Dateien werden heruntergeladen…",
+      "cancelled": "Modpack-Installation abgebrochen."
+    },
+    "noIcon": "Kein Symbol",
+    "saveSuccessProfile": "Datei {{filename}} im Profil gespeichert.",
+    "saveSuccessWithDeps": "Dateiabhängigkeiten {{filename}} und {{count}} im Profil gespeichert.",
+    "saveSuccessWithDepsSkipped": "{{downloaded}} Datei(en) gespeichert, {{skipped}} übersprungen (bereits im Profil, passend zu SHA1).",
+    "alreadyInstalled": "{{filename}} und alle Abhängigkeiten sind bereits im Profil installiert.",
+    "saveSuccessFolder": "Datei {{filename}} im Ordner {{folder}} gespeichert.",
+    "downloadFailed": "Datei konnte nicht heruntergeladen werden.",
+    "downloadFailedModrinth": "Das Herunterladen der Modrinth-Datei ist fehlgeschlagen.",
+    "downloadFailedCurseforge": "Die CurseForge-Datei konnte nicht heruntergeladen werden.",
+    "curseforgeModpackHint": "CurseForge-Modpack als Archiv gespeichert. Der automatische .mrpack-Import ist nur für Modrinth verfügbar."
+  },
+  "settings": {
+    "common": {
+      "yes": "Ja",
+      "no": "NEIN",
+      "reset": "Zurücksetzen",
+      "imagesFilterName": "Bilder",
+      "toggle": {
+        "on": "An",
+        "off": "Aus"
+      }
+    },
+    "tab": {
+      "directories": "Verzeichnisse",
+      "game": "Spiel",
+      "versions": "Versionen",
+      "launcher": "Launcher",
+      "updates": "Aktualisierungen"
+    },
+    "card": {
+      "directories": "Verzeichnisse",
+      "game": "Spiel",
+      "versions": "Minecraft-Versionen",
+      "launcher": "Launcher",
+      "updates": "Launcher-Updates",
+      "interfaceLanguage": "Schnittstellensprache",
+      "customization": "Anpassung"
+    },
+    "directories": {
+      "comingSoon": "Verzeichniseinstellungen werden später hinzugefügt."
+    },
+    "game": {
+      "subtab": {
+        "general": "Allgemein",
+        "java": "Java"
+      },
+      "showConsoleOnLaunch": {
+        "label": "Konsole beim Spielstart anzeigen:"
+      },
+      "closeLauncherOnStart": {
+        "label": "Schließen Sie den Launcher, wenn das Spiel beginnt:"
+      },
+      "checkGameProcesses": {
+        "label": "Überprüfen Sie laufende Spielprozesse:"
+      },
+      "gameDirectory": {
+        "label": "Spieleverzeichnis:",
+        "choose": "Wählen",
+        "defaultPathHint": "Standard (Launcher-Datenordner)",
+        "hint": "Hier werden Versionen, Bibliotheken, Modpacks, Welten und Mods gespeichert. Wenn Sie den Ordner ändern, werden Ihre Daten automatisch kopiert."
+      },
+      "windowSize": {
+        "label": "Fenstergröße beim Start:",
+        "widthPlaceholder": "Breite",
+        "heightPlaceholder": "Höhe"
+      },
+      "ram": {
+        "label": "Speicher (RAM):",
+        "mbUnit": "MB",
+        "editInMbHint": "Klicken Sie hier, um die Datei in MB zu bearbeiten",
+        "gbValue": "{{gb}}GB"
+      }
+    },
+    "versions": {
+      "showSnapshots": {
+        "label": "Snapshot-Versionen anzeigen:"
+      },
+      "showAlpha": {
+        "label": "Alpha-Versionen anzeigen:"
+      },
+      "loaderFilter": {
+        "label": "Lader:"
+      },
+      "versionFilter": {
+        "label": "Versionsfilter:",
+        "placeholder": "Geben Sie eine Version ein...",
+        "all": "Alle Versionen",
+        "noneFound": "Nichts gefunden."
+      },
+      "loader": {
+        "vanilla": "Vanille",
+        "fabric": "Stoff",
+        "quilt": "Decke",
+        "forge": "Schmiede",
+        "neoforge": "NeoForge"
+      },
+      "forgeIpv6Download": {
+        "label": "Download-Versionen über IPv6-Proxy:"
+      },
+      "forgeProxyFallback": {
+        "label": "Proxy-Fallback verwenden:"
+      },
+      "available": {
+        "label": "Verfügbare Versionen:"
+      },
+      "refresh": "Aktualisieren",
+      "loading": "Versionsliste wird geladen...",
+      "noneFound": "Keine Versionen gefunden. Überprüfen Sie Ihre Internetverbindung.",
+      "installedBadge": "Installiert",
+      "action": {
+        "install": "Installieren",
+        "reinstall": "Neu installieren",
+        "installing": "Installieren...",
+        "delete": "Löschen",
+        "deleting": "Löschen..."
+      },
+      "manage": {
+        "reinstallTitle": "{{version}} neu installieren",
+        "reinstallHint": "Wählen Sie eine Loader-Version. Basis-Minecraft-Version: {{gameVersion}}.",
+        "reinstallConfirm": "Neu installieren",
+        "loaderVersionLabel": "Loader-Version:",
+        "loaderRequired": "Wählen Sie eine Loader-Version aus."
+      },
+      "delete": {
+        "title": "{{version}} löschen?",
+        "simplePrompt": "Minecraft {{version}}-Dateien entfernen? Der Ordner „Freigegebene Bibliotheken“ ist nicht betroffen.",
+        "choicePrompt": "Was sollte für {{version}} entfernt werden?",
+        "gameOnly": "Nur Minecraft {{gameVersion}}",
+        "loaderOnly": "Nur Loader{{loaderSuffix}}",
+        "all": "Alles",
+        "success": "Entfernt: {{target}}.",
+        "failed": "Konnte nicht gelöscht werden: {{msg}}"
+      },
+      "loadFailed": "Die Liste der Minecraft-Versionen konnte nicht geladen werden.",
+      "refreshFailed": "Die Versionsliste konnte nicht aktualisiert werden.",
+      "installSuccess": "Version {{version}} erfolgreich installiert.",
+      "installFailed": "Version {{version}} konnte nicht installiert werden.",
+      "custom": {
+        "importButton": "Benutzerdefinierte Version importieren",
+        "importJarPrompt": "Wählen Sie client.jar für diese Version aus? (Sie können es überspringen – der Launcher lädt es bei der Installation herunter)",
+        "importSuccess": "Benutzerdefinierte Version {{version}} importiert. Klicken Sie auf „Installieren“, um Bibliotheken herunterzuladen.",
+        "importFailed": "Version konnte nicht importiert werden: {{msg}}"
+      },
+      "verify": {
+        "button": "Dateien prüfen",
+        "checking": "Überprüfung...",
+        "ok": "Dateien für Version {{version}} sind intakt.",
+        "failed": "Dateien für Version {{version}} konnten nicht überprüft werden.",
+        "notSupported": "Die Dateiüberprüfung wird für diesen Loader nicht unterstützt.",
+        "promptText": "In Version {{version}} wurden Probleme gefunden: {{missing}} fehlt, {{corrupted}} ist beschädigt (überprüft {{checked}}). Dateien überschreiben, um den ordnungsgemäßen Betrieb wiederherzustellen?",
+        "rewriteButton": "Überschreiben",
+        "rewritten": "Dateien für Version {{version}} wurden überschrieben.",
+        "skipPrompt": "Diese Warnung nicht erneut anzeigen"
+      }
+    },
+    "launcher": {
+      "openOnProfilesTab": {
+        "label": "Standardregisterkarte:",
+        "yes": "Modpacks",
+        "no": "Hauptsächlich"
+      },
+      "uiSounds": {
+        "label": "Interface-Sounds:"
+      },
+      "splitView": {
+        "label": "Dual-Panee-Tab-Modus:"
+      },
+      "notifyNewUpdate": {
+        "label": "Über neue Launcher-Updates benachrichtigen:"
+      },
+      "notifyNewMessage": {
+        "label": "Über neue Nachrichten benachrichtigen:"
+      },
+      "notifySystemMessage": {
+        "label": "Über Systemmeldungen benachrichtigen:"
+      },
+      "interfaceLanguage": {
+        "label": "Schnittstellensprache:",
+        "ru": "Russisch",
+        "en": "Englisch",
+        "de": "Deutsch",
+        "es": "Spanisch"
+      },
+      "accentColor": {
+        "label": "Akzentfarbe des Launchers:",
+        "popupTitle": "Akzentfarbe",
+        "pickColorAria": "Farbe auswählen",
+        "currentLabel": "Aktuell",
+        "svPadLabel": "Sättigung und Helligkeit",
+        "svPadAria": "Sättigung und Helligkeit für den aktuellen Farbton",
+        "helpText": "Ring: Farbton. Quadrat: Sättigung und Helligkeit. Sie können auch HEX eingeben."
+      },
+      "backgroundImage": {
+        "label": "Hintergrundbild:",
+        "choose": "Bild auswählen",
+        "hint": "PNG, JPG, WebP und GIF werden unterstützt (Animationen bleiben erhalten). Die Datei wird in den Launcher-Datenordner kopiert. „Zurücksetzen“ stellt den Standardhintergrund wieder her."
+      },
+      "backgroundBlur": {
+        "label": "Hintergrundunschärfe:"
+      },
+      "cache": {
+        "label": "Launcher-Cache:",
+        "description": "Ely-Avatare und temporäre Downloads.",
+        "loading": "Cachegröße berechnen…",
+        "sizeLabel": "Größe: {{size}}",
+        "sizeUnknown": "Größe unbekannt",
+        "bytes": "{{value}} B",
+        "kb": "{{value}} KB",
+        "mb": "{{value}} MB",
+        "gb": "{{value}} GB",
+        "clearButton": "Cache leeren",
+        "cleared": "Launcher-Cache geleert.",
+        "clearFailed": "Der Launcher-Cache konnte nicht geleert werden."
+      },
+      "sidebarPosition": {
+        "label": "Position der Seitenleiste:",
+        "left": "Links",
+        "right": "Rechts",
+        "top": "Spitze",
+        "bottom": "Unten"
+      },
+      "sidebarOrder": {
+        "label": "Reihenfolge der Seitenleistenschaltflächen:",
+        "moveUp": "Bewegen Sie sich nach oben",
+        "moveDown": "Bewegen Sie sich nach unten"
+      },
+      "resetSettings": {
+        "button": "Setzen Sie die Launcher-Einstellungen auf die Standardeinstellungen zurück",
+        "success": "Die Launcher-Einstellungen wurden auf die Standardwerte zurückgesetzt.",
+        "failed": "Die Launcher-Einstellungen konnten nicht zurückgesetzt werden."
+      },
+      "backup": {
+        "title": "Importieren/Exportieren",
+        "hint": "Beim Exportieren werden die Launcher-Einstellungen in einer Datei gespeichert. Beim Importieren werden die Einstellungen aus einer Datei übernommen und die aktuellen überschrieben.",
+        "exportButton": "Einstellungen exportieren",
+        "importButton": "Einstellungen importieren",
+        "exporting": "Exportieren…",
+        "importing": "Importieren…",
+        "exportSuccess": "Einstellungen exportiert.",
+        "exportFailed": "Die Einstellungen konnten nicht exportiert werden.",
+        "importSuccess": "Einstellungen importiert.",
+        "importFailed": "Einstellungen konnten nicht importiert werden.",
+        "exportDialogTitle": "Launcher-Einstellungen exportieren",
+        "importDialogTitle": "Launcher-Einstellungen importieren"
+      }
+    },
+    "updates": {
+      "checkOnStart": {
+        "label": "Beim Start nach Updates suchen:"
+      },
+      "autoInstall": {
+        "label": "Updates automatisch installieren:"
+      },
+      "checkNow": "Suchen Sie nach Updates",
+      "noneFound": "Du bist auf dem Laufenden. Keine neue Version verfügbar.",
+      "installedRestart": "Update installiert. Bitte starten Sie den Launcher neu.",
+      "availableNextStart": "Eine neue Launcher-Version ist verfügbar: {{version}}. Die Installation wird beim nächsten Start angeboten.",
+      "checkFailed": "Es konnte nicht nach Updates gesucht werden. Möglicherweise verfügen Sie bereits über die neueste Version.",
+      "checking": "Suche nach Updates...",
+      "downloading": "Update wird heruntergeladen... {{percent}}%",
+      "installing": "Update wird installiert...",
+      "available": "Neue Version {{version}} ist verfügbar",
+      "released": "Update {{version}} ist verfügbar",
+      "installNow": "Jetzt installieren",
+      "upToDate": "Launcher ist auf dem neuesten Stand"
+    }
+  },
+  "javaSettings": {
+    "loading": "Java-Einstellungen werden geladen...",
+    "description": "Steuern Sie, welche Java- und JVM-Argumente das Spiel verwendet. Wenn benutzerdefinierte Argumente deaktiviert sind, wendet der Launcher sichere Standardwerte an.",
+    "useCustomArgs": {
+      "label": "Verwenden Sie benutzerdefinierte JVM-Argumente",
+      "hint": "Wenn diese Option deaktiviert ist, werden nur die Standardeinstellungen des Launchers verwendet."
+    },
+    "javaPath": {
+      "label": "Java-Pfad",
+      "hint": "Lassen Sie das Feld leer, um die integrierte Mojang-Laufzeit zu verwenden.",
+      "placeholder": "Beispiel: C:\\Programme\\Java\\bin\\javaw.exe"
+    },
+    "memory": {
+      "title": "JVM-Speicher",
+      "hint": "Es wird empfohlen, 1–2 GB RAM für das System und andere Apps freizuhalten.",
+      "xmsPlaceholder": "z.B. 1G",
+      "xmxPlaceholder": "z.B. 4G",
+      "quickPresets": "Schnellvoreinstellungen:",
+      "currentPair": "Aktuell: {{xms}} / {{xmx}}"
+    },
+    "jvmArgs": {
+      "title": "JVM-Argumente",
+      "hint": "Durch Leerzeichen oder Zeilenumbrüche getrennte Flags.",
+      "placeholder": "-XX:+G1GC verwenden\n-XX:MaxGCPauseMillis=50\n# Placeholders supported: ${classpath}, ${natives}, ${gameDir}, ${assetsDir}, ${version}",
+      "placeholdersLabel": "Platzhalter:",
+      "recommendedPresets": "Empfohlene Voreinstellungen:"
+    },
+    "presets": {
+      "balanced": "Ausgewogen",
+      "performance": "Maximale Leistung",
+      "lowMemory": "Wenig Speicher"
+    },
+    "actions": {
+      "detect": "Erkennen",
+      "browse": "Durchsuchen",
+      "save": "Speichern",
+      "cancel": "Stornieren",
+      "resetRecommended": "Zurücksetzen auf empfohlen",
+      "validate": "Bestätigen"
+    },
+    "dialog": {
+      "javaFilterName": "Java"
+    },
+    "toast": {
+      "loadFailedUsingDefaults": "Die Java-Einstellungen konnten nicht geladen werden. Standardeinstellungen verwenden.",
+      "saved": "Java-Einstellungen gespeichert.",
+      "saveFailed": "Die Java-Einstellungen konnten nicht gespeichert werden.",
+      "chooseJavaFailed": "Fehler beim Auswählen der ausführbaren Java-Datei.",
+      "noSuitableRuntimes": "Keine passenden Java-Runtimes gefunden. Launcher wird weiterhin die Mojang-Laufzeit verwenden.",
+      "detected": "Java erkannt: {{version}}",
+      "detectFailed": "Fehler beim Erkennen der Java-Laufzeit.",
+      "validateOk": "Validierung der Java- und JVM-Argumente bestanden.",
+      "validateErrors": "Beim Validieren von JVM-Argumenten wurden Fehler erkannt.",
+      "validateWarnings": "Validierung mit Warnungen abgeschlossen.",
+      "validateFailed": "Die Validierung der Java-Argumente ist fehlgeschlagen."
+    },
+    "validation": {
+      "invalidFormatXms": "Ungültiges Format. Beispiele: 1024M, 2G.",
+      "invalidFormatXmx": "Ungültiges Format. Beispiele: 2048M, 4G.",
+      "minGreaterThanMax": "MIN (Xms) kann nicht größer als MAX (Xmx) sein.",
+      "maxAboveRecommended": "MAX (Xmx) liegt über dem empfohlenen Grenzwert. Verwenden Sie nicht mehr als {{gb}}GB."
+    },
+    "validationOutput": {
+      "errors": "Fehler:",
+      "warnings": "Warnungen:",
+      "showJavaVersion": "Ausgabe der Java-Version anzeigen"
+    }
+  },
+  "play": {
+    "banner": {
+      "loading": "Launcher-Neuigkeiten werden geladen...",
+      "loadFailedTitle": "Das Launcher-Banner konnte nicht geladen werden.",
+      "loadFailedHint": "Überprüfen Sie Ihre Internetverbindung oder Ihren Zugriff auf GitHub.",
+      "defaultAlt": "Launcher-Banner",
+      "learnMore": "Erfahren Sie mehr",
+      "empty": "Launcher-Neuigkeiten und Spielebanner"
+    },
+    "version": {
+      "label": "Version",
+      "loading": "Laden...",
+      "select": "Version auswählen",
+      "searchPlaceholder": "Typausführung...",
+      "snapshotHint": "Sieht aus wie eine Momentaufnahme. Aktivieren Sie „Snapshot-Versionen anzeigen“ unter Einstellungen → Versionen.",
+      "nothingFound": "Nichts gefunden."
+    },
+    "install": {
+      "resume": "Wieder aufnehmen",
+      "pause": "Pause",
+      "cancel": "Stornieren",
+      "preparing": "Dateien werden vorbereitet..."
+    },
+    "loader": {
+      "label": "Lader"
+    },
+    "gameFolder": {
+      "openTitle": "Spielordner öffnen",
+      "alt": "Spielordner"
+    },
+    "profile": {
+      "selected": "Ausgewähltes Profil: {{name}}"
+    },
+    "console": {
+      "title": "Spielekonsole",
+      "clear": "Klar",
+      "show": "Zeigen",
+      "hide": "Verstecken",
+      "detach": "Abtrennen",
+      "attach": "Befestigen",
+      "empty": "Protokolle werden nach Spielstart angezeigt.",
+      "hint": "Wird durch die Einstellung „Konsole beim Spielstart anzeigen“ im Spielbereich gesteuert."
+    }
+  },
+  "modpacks": {
+    "export": {
+      "readFilesFailed": "Build-Dateien konnten nicht gelesen werden.",
+      "selectAtLeastOnePath": "Wählen Sie mindestens einen Pfad aus.",
+      "previewFailed": "Exportvorschau fehlgeschlagen.",
+      "failed": "Export fehlgeschlagen: {{msg}}",
+      "finished": "Export abgeschlossen.",
+      "errorGeneric": "Exportfehler",
+      "perSecond": "/S"
+    },
+    "profileSettings": {
+      "saved": "Profileinstellungen gespeichert.",
+      "saveFailed": "Profileinstellungen konnten nicht gespeichert werden."
+    },
+    "changeVersion": {
+      "button": "Profilversion ändern",
+      "title": "Profilversion ändern",
+      "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Mods, die für die alte Version erstellt wurden, müssen möglicherweise aktualisiert werden.",
+      "currentVersion": "Aktuelle Version",
+      "gameVersionLabel": "Neue Minecraft-Version",
+      "loaderVersionLabel": "Loader-Version",
+      "allVersions": "Schnappschüsse und Alphas anzeigen",
+      "confirm": "Wandern",
+      "migrating": "Migration…",
+      "success": "Profilversion geändert.",
+      "failed": "Profilversion konnte nicht geändert werden: {{msg}}",
+      "sameVersion": "Wählen Sie eine andere Minecraft- oder Loader-Version.",
+      "selectLoaderVersion": "Wählen Sie eine Loader-Version aus."
+    },
+    "common": {
+      "loading": "Laden...",
+      "backToList": "Zurück zur Liste",
+      "select": "Wählen"
+    },
+    "actions": {
+      "create": "Erstellen",
+      "import": "Import",
+      "refresh": "Aktualisieren",
+      "play": "Spielen",
+      "select": "Wählen",
+      "unselect": "Auswahl aufheben",
+      "createShortcut": "Erstellen Sie eine Desktop-Verknüpfung"
+    },
+    "shortcut": {
+      "created": "Desktop-Verknüpfung erstellt.",
+      "failed": "Verknüpfung konnte nicht erstellt werden: {{msg}}"
+    },
+    "profile": {
+      "renamed": "Profil umbenannt.",
+      "renameFailed": "Profil konnte nicht umbenannt werden."
+    },
+    "profileInfo": {
+      "title": "Profilinformationen",
+      "menuItem": "Profilinformationen",
+      "buttonTitle": "Profilinformationen",
+      "gameVersion": "Minecraft-Version",
+      "loader": "Lader",
+      "loaderVersion": "Loader-Version",
+      "launcherVersion": "Launcher-Version",
+      "playtime": "Spielzeit",
+      "lastPlayedAt": "Zuletzt gespielt",
+      "createdAt": "Erstellt",
+      "size": "Festplattengröße",
+      "content": "Inhalt",
+      "folder": "Ordner",
+      "profileId": "Profil-ID",
+      "close": "Schließen",
+      "contentMods": "{{count}} Mod(s)",
+      "contentResourcepacks": "{{count}} Packung(en)",
+      "contentShaders": "{{count}} Shader(s)"
+    },
+    "list": {
+      "searchPlaceholder": "Suchen...",
+      "activeBadge": "Aktiv",
+      "playSelectedTitle": "Starten Sie das Spiel mit diesem Profil",
+      "playtimeLabel": "Spielzeit",
+      "lastPlayed": "Zuletzt gespielt: {{date}}",
+      "empty": "Noch keine Profile. Klicken Sie auf „Erstellen“, um eines hinzuzufügen.",
+      "layout": {
+        "list": "Liste",
+        "grid": "Netz"
+      },
+      "ungroupedTitle": "Nicht gruppiert",
+      "createGroupMenu": "Neue Profilgruppe",
+      "editGroupMenu": "Gruppe bearbeiten",
+      "deleteGroupMenu": "Gruppe löschen",
+      "dropHint": "Kommen Sie hierher",
+      "selectedCount": "Ausgewählt: {{count}}"
+    },
+    "groups": {
+      "createTitle": "Neue Profilgruppe",
+      "editTitle": "Gruppe bearbeiten",
+      "nameLabel": "Gruppenname",
+      "namePlaceholder": "z.B. Überleben, Technik…",
+      "colorLabel": "Farbe",
+      "profilesLabel": "Profile in der Gruppe",
+      "profilesPlaceholder": "Profile auswählen…",
+      "profilesSelected": "Ausgewählt: {{count}}",
+      "create": "Gruppe erstellen",
+      "save": "Speichern",
+      "cancel": "Stornieren",
+      "created": "Gruppe „{{name}}“ erstellt.",
+      "updated": "Gruppe „{{name}}“ aktualisiert.",
+      "deleted": "Gruppe gelöscht.",
+      "nameRequired": "Geben Sie einen Gruppennamen ein.",
+      "color": {
+        "purple": "Lila",
+        "orange": "Orange",
+        "red": "Rot",
+        "yellow": "Gelb",
+        "green": "Grün"
+      }
+    },
+    "create": {
+      "title": "Profil erstellen",
+      "uploadIcon": "Hochladen\nSymbol",
+      "removeIcon": "Symbol entfernen",
+      "nameLabel": "Name:",
+      "namePlaceholder": "Profilnamen eingeben...",
+      "loaderLabel": "Lader:",
+      "gameVersionLabel": "Spielversion:",
+      "loaderVersionLabel": "Loader-Version:",
+      "loaderChannel": {
+        "stable": "Stabil",
+        "beta": "Beta",
+        "alpha": "Alpha"
+      },
+      "allVersions": "Alle Versionen",
+      "presetLabel": "Build-Voreinstellung:",
+      "noPreset": "Keine Voreinstellung",
+      "saveFormAsPreset": "Aktuelle Optionen als Voreinstellung speichern"
+    },
+    "presets": {
+      "title": "Erstellen Sie Voreinstellungen",
+      "manage": "Voreinstellungen",
+      "empty": "Noch keine Voreinstellungen. Profiloptionen als Voreinstellung speichern.",
+      "apply": "Anwenden",
+      "delete": "Löschen",
+      "saveFromProfile": "Als Voreinstellung speichern",
+      "saveFromForm": "Aus Formular speichern",
+      "namePrompt": "Voreingestellter Name",
+      "saved": "Voreinstellung gespeichert.",
+      "deleted": "Voreinstellung gelöscht.",
+      "applied": "Auf das Erstellungsformular angewendete Voreinstellung.",
+      "saveFailed": "Voreinstellung konnte nicht gespeichert werden.",
+      "deleteFailed": "Voreinstellung konnte nicht gelöscht werden.",
+      "deleteConfirm": "Voreinstellung „{{name}}“ löschen?",
+      "loaderInfo": "{{loader}} · {{version}}"
+    },
+    "contentUpdates": {
+      "check": "Suchen Sie nach Updates",
+      "checking": "Suche nach Updates…",
+      "checkFailed": "Konnte nicht nach Updates suchen: {{msg}}",
+      "noneFound": "Alle Dateien auf dieser Registerkarte sind auf dem neuesten Stand (Modrinth und CurseForge).",
+      "found": "{{count}} Update(s) verfügbar",
+      "modalTitle": "Aktualisierungen",
+      "modalSubtitle": "Für dieses Profil sind neuere Versionen verfügbar.",
+      "currentVersion": "Aktuell",
+      "latestVersion": "Verfügbar",
+      "updateSelected": "Update ausgewählt",
+      "updateAll": "Alles aktualisieren",
+      "updating": "Updates werden heruntergeladen…",
+      "applied": "Aktualisierte {{count}}-Datei(en)",
+      "applyFailed": "Aktualisierung fehlgeschlagen: {{msg}}",
+      "selectAtLeastOne": "Wählen Sie mindestens eine Datei zum Aktualisieren aus.",
+      "notOnModrinth": "Dateien, die nicht auf Modrinth oder CurseForge gefunden werden, werden übersprungen.",
+      "noneFoundForItem": "Keine Updates für diese Datei."
+    },
+    "screenshots": {
+      "title": "Screenshots",
+      "subtitle": "Spiel",
+      "button": "Screenshots",
+      "listTitle": "Galerie",
+      "loading": "Laden…",
+      "empty": "Noch keine Screenshots. Nimm eins im Spiel (F2) und es wird hier angezeigt.",
+      "refresh": "Aktualisieren",
+      "openFolder": "Ordner öffnen",
+      "close": "Schließen",
+      "open": "Offen",
+      "delete": "Löschen",
+      "selectHint": "Wählen Sie einen Screenshot aus der Galerie aus.",
+      "previewFailed": "Vorschau konnte nicht geladen werden.",
+      "deleted": "Screenshot gelöscht.",
+      "deleteConfirm": "Screenshot „{{name}}“ löschen?",
+      "deleteFailed": "Screenshot konnte nicht gelöscht werden: {{msg}}",
+      "openFolderFailed": "Ordner konnte nicht geöffnet werden: {{msg}}",
+      "openFailed": "Screenshot konnte nicht geöffnet werden: {{msg}}"
+    },
+    "import": {
+      "title": "Modrinth-Paket importieren",
+      "chooseFile": "Datei auswählen",
+      "progress": {
+        "preparing": "Vorbereiten…",
+        "extractingOverrides": "Paketüberschreibungen werden extrahiert…",
+        "downloading": "Herunterladen: {{current}} / {{total}}{{msg}}",
+        "importing": "Importieren…"
+      },
+      "dropzone": {
+        "title": "Ziehen Sie eine .mrpack-Datei per Drag & Drop hierher",
+        "hint": "Es wird ein neues Profil mit dem Paketnamen und der Spielversion aus dem .mrpack erstellt. Mods und Ressourcen werden automatisch heruntergeladen."
+      },
+      "started": "Import gestartet…",
+      "finishedWithVersion": "Import abgeschlossen. Profil erstellt mit der Spielversion des Packs.",
+      "failed": "Fehler beim Importieren von .mrpack: {{msg}}",
+      "cancelledKeyword": "abgesagt"
+    },
+    "header": {
+      "profiles": "Profile",
+      "importMrpack": ".mrpack importieren",
+      "totalProfiles": "Gesamtprofile: {{count}}"
+    },
+    "contentTabs": {
+      "mods": "Mods",
+      "resourcepacks": "Ressourcenpakete",
+      "shaderpacks": "Shader"
+    },
+    "toast": {
+      "selectLoaderBeforePreset": "Wählen Sie eine Loader-Version aus, bevor Sie die Voreinstellung speichern.",
+      "loadProfilesFailed": "Profile konnten nicht geladen werden.",
+      "loadFilesFailed": "Profildateien konnten nicht geladen werden.",
+      "filesAdded": "Zum Profil hinzugefügte Dateien.",
+      "addFilesFailed": "Dateien konnten nicht hinzugefügt werden.",
+      "deleteFileFailed": "Datei konnte nicht gelöscht werden.",
+      "openFolderFailed": "Profilordner konnte nicht geöffnet werden.",
+      "noMatchingFiles": "Für diese Registerkarte gibt es keine passenden Dateien (überprüfen Sie die Dateierweiterungen).",
+      "enterProfileName": "Geben Sie den Profilnamen ein.",
+      "selectLoaderVersion": "Wählen Sie eine Loader-Version aus.",
+      "manifestUrlFailed": "Die Manifest-URL für Version {{version}} konnte nicht aufgelöst werden.",
+      "versionNotInstalled": "Version {{version}} ist nicht installiert. Download wird gestartet…",
+      "versionInstalled": "Version {{version}} installiert.",
+      "installingFabric": "Fabric {{version}} wird installiert…",
+      "installingQuilt": "Quilt {{version}} installieren…",
+      "installingForge": "Forge {{version}} wird installiert…",
+      "installingNeoForge": "NeoForge {{version}} wird installiert…",
+      "profileCreatedInstallFailed": "Profil erstellt, aber Version konnte nicht installiert werden: {{msg}}",
+      "profileCreated": "Profil erstellt.",
+      "createProfileFailed": "Profil konnte nicht erstellt werden: {{msg}}",
+      "profileUnselected": "Profil „{{name}}“ nicht ausgewählt.",
+      "profileSelected": "Profil „{{name}}“ ausgewählt.",
+      "selectProfileFailed": "Profil konnte nicht ausgewählt werden.",
+      "profileDeleted": "Profil gelöscht.",
+      "deleteProfileFailed": "Profil konnte nicht gelöscht werden.",
+      "deleteProfileFailedWithMsg": "Profil konnte nicht gelöscht werden: {{msg}}",
+      "loadLoaderVersionsFailed": "Loader-Versionen konnten nicht geladen werden: {{msg}}",
+      "profileImported": "Profil importiert.",
+      "importProfileFailed": "Import fehlgeschlagen: {{msg}}",
+      "noProfilesFound": "Keine Profile gefunden. Versuchen Sie es mit dem Stammverzeichnis des Launchers (nicht mit Instanzen) – Instanzen werden jedoch auch unterstützt."
+    },
+    "manage": {
+      "enableItem": "Aktivieren",
+      "disableItem": "Deaktivieren",
+      "toggleFailed": "Der Elementstatus konnte nicht geändert werden.",
+      "backToList": "Zurück zur Liste",
+      "openFolder": "Ordner öffnen",
+      "exportBuild": "Build exportieren",
+      "profileSettings": "Profileinstellungen",
+      "selectProfile": "Profil auswählen",
+      "searchFiles": "Dateien durchsuchen...",
+      "rescan": "Erneut scannen",
+      "downloadFromCatalog": "Aus Katalog herunterladen",
+      "chooseFileFromPc": "Wählen Sie eine Datei vom PC aus",
+      "loadingFiles": "Dateien werden geladen...",
+      "emptyTab": "Auf dieser Registerkarte befinden sich noch keine Dateien.",
+      "dropHint": "Ziehen Sie Dateien aus dem Explorer hierher oder verwenden Sie „Hinzufügen“.",
+      "update": "Aktualisieren",
+      "splitResizeAria": "Ziehen Sie, um die Größe der Liste und der Konsole zu ändern",
+      "splitResizeTitle": "Ziehen Sie, um die Liste zu erweitern oder zu verengen",
+      "currentOutput": "Aktueller Ausgang",
+      "clearOnlyLive": "Clear gilt nur für den aktuellen Ausgang",
+      "consoleResizeHint": "Ziehen Sie die Leiste zwischen der Liste und der Konsole, um die Größe zu ändern – die Breite wird gespeichert. Protokolle bleiben bestehen; Vor einem erneuten Start wird die Ausgabe archiviert.",
+      "noVersionsForGame": "Keine Versionen für das ausgewählte Spiel"
+    },
+    "externalImport": {
+      "title": "Von einem anderen Launcher importieren",
+      "hint": "Bevorzugen Sie PrismLauncher/MultiMC-Root (keine Instanzen), aber auch die Eingabe von Instanzen wird unterstützt.",
+      "copying": "Dateien kopieren…",
+      "importing": "Import…",
+      "launcher": "Launcher",
+      "auto": "Auto",
+      "path": "Weg",
+      "pathPlaceholder": "Beispiel: C:\\Benutzer\\…\\AppData\\Roaming\\PrismLauncher",
+      "scanning": "Scannen…",
+      "scan": "Scan",
+      "sort": "Sortieren",
+      "sortName": "Name",
+      "sortDate": "Datum",
+      "sortSize": "Größe"
+    },
+    "contextMenu": {
+      "settings": "Einstellungen",
+      "pinToSidebar": "An Seitenleiste anpinnen",
+      "unpinFromSidebar": "Von der Seitenleiste lösen",
+      "deleteProfile": "Profil löschen",
+      "renameProfile": "Profil umbenennen",
+      "editProfile": "Profil bearbeiten"
+    },
+    "deleteConfirm": {
+      "title": "Bestätigung löschen",
+      "prompt": "Profil „{{name}}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+    },
+    "profileSettingsModal": {
+      "title": "Profileinstellungen",
+      "general": "Allgemein",
+      "hint": "Diese Einstellungen gelten nur für das ausgewählte Profil und werden beim Starten des Spiels verwendet.",
+      "closeLauncherOnStart": "Schließen Sie den Launcher, wenn das Spiel beginnt:",
+      "checkGameProcesses": "Überprüfen Sie laufende Spielprozesse:",
+      "memoryRam": "Speicher (RAM):"
+    },
+    "exportModal": {
+      "title": "Build exportieren",
+      "format": "Format",
+      "ignorePatterns": "Muster ignorieren",
+      "ignoreHint": "Unterstützt: *, **, ! (Negation).",
+      "buildFiles": "Dateien erstellen",
+      "selectAll": "Alles auswählen",
+      "clearAll": "Klar",
+      "scanning": "Scannen...",
+      "noData": "Keine Daten.",
+      "emptyFolder": "Der Build-Ordner ist leer.",
+      "preview": "Vorschau",
+      "export": "Export",
+      "exporting": "Exportieren…",
+      "finalContents": "Endgültiger Inhalt",
+      "size": "Größe:",
+      "nothingIncluded": "Es wird nichts enthalten sein.",
+      "done": "Erledigt",
+      "openFolder": "Ordner öffnen"
+    }
+  },
+  "friends": {
+    "subtitleSignedIn": "Verwalten Sie Freunde nach Spitznamen.",
+    "subtitleSignedOut": "Melden Sie sich auf der Registerkarte „Konten“ bei Supabase an, um Freunde zu verwenden.",
+    "friendNicknamePlaceholder": "Spitzname eines Freundes",
+    "add": "Hinzufügen",
+    "refresh": "Aktualisieren",
+    "requests": "Anfragen",
+    "incomingTitle": "Eingehende Anfragen",
+    "signInFirst": "Melden Sie sich zunächst auf der Registerkarte „Konten“ an.",
+    "noIncoming": "Keine eingehenden Anfragen.",
+    "accept": "Akzeptieren",
+    "reject": "Ablehnen",
+    "yourFriends": "Deine Freunde",
+    "noFriends": "Noch keine Freunde. Senden Sie eine Anfrage per Nickname.",
+    "toast": {
+      "requestAccepted": "Anfrage angenommen",
+      "requestRejected": "Anfrage abgelehnt",
+      "signInFirst": "Melden Sie sich zunächst auf der Registerkarte „Konten“ an",
+      "cannotAddSelf": "Sie können keine Anfrage an sich selbst senden",
+      "requestExists": "Die Anfrage existiert bereits oder Sie sind bereits befreundet.",
+      "requestSent": "Anfrage gesendet"
+    }
+  },
+  "supabase": {
+    "accountTitle": "16launcher-Konto",
+    "accountManagement": "Kontoverwaltung",
+    "signIn": "anmelden",
+    "signUp": "Melden Sie sich an",
+    "emailLabel": "E-Mail",
+    "emailOrNicknameLabel": "E-Mail / Spitzname",
+    "nicknameLabel": "Spitzname",
+    "passwordLabel": "Passwort",
+    "passwordPlaceholder": "Passwort",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "createAccount": "Benutzerkonto erstellen",
+    "launcherNickname": "Spitzname des Launchers",
+    "inGameNickname": "Spitzname im Spiel",
+    "newNicknamePlaceholder": "Neuer Spitzname",
+    "changeNickname": "Spitznamen ändern",
+    "logout": "Abmelden",
+    "linked": "Verlinkt",
+    "linking": "Verlinkung…",
+    "link": "Link",
+    "enterEmail": "Geben Sie die E-Mail-Adresse ein",
+    "enterNicknameOrEmail": "Geben Sie einen Spitznamen oder eine E-Mail-Adresse ein",
+    "enterNickname": "Spitznamen eingeben",
+    "linkMicrosoftTitle": "Melden Sie sich bei Microsoft an und klicken Sie dann erneut auf „Verknüpfen“.",
+    "linkElyTitle": "Melden Sie sich bei Ely.by an und klicken Sie dann erneut auf „Verknüpfen“.",
+    "toast": {
+      "accountCreated": "Konto erstellt",
+      "signedIn": "Angemeldet",
+      "loggedOut": "Sie haben sich abgemeldet",
+      "signInFirst": "Melden Sie sich zuerst an.",
+      "enterNewNickname": "Geben Sie einen neuen Spitznamen ein.",
+      "nicknameTooShort": "Der Spitzname muss mindestens 3 Zeichen lang sein.",
+      "nicknameAlreadySet": "Dieser Spitzname ist bereits festgelegt.",
+      "nicknameUpdated": "Spitzname aktualisiert.",
+      "sessionExpired": "16Launcher-Sitzung abgelaufen. Melden Sie sich erneut an.",
+      "sessionExpiredWithMsg": "16Launcher-Sitzung abgelaufen: {{msg}}",
+      "signInMicrosoftThenLink": "Melden Sie sich bei Microsoft an und klicken Sie dann erneut auf „Verknüpfen“.",
+      "signInElyThenLink": "Melden Sie sich bei Ely.by an und klicken Sie dann erneut auf „Verknüpfen“.",
+      "minecraftLinked": "Minecraft mit Konto verknüpft",
+      "elyLinked": "Ely.by mit Konto verknüpft",
+      "enterEmailSignup": "Geben Sie Ihre E-Mail-Adresse für die Registrierung ein.",
+      "enterSignupNickname": "Geben Sie einen Spitznamen für die Registrierung ein.",
+      "enterPassword": "Passwort eingeben",
+      "passwordTooShort": "Das Passwort muss mindestens 6 Zeichen lang sein.",
+      "envNotConfigured": "VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY sind in .env nicht konfiguriert",
+      "noAccessToken": "Kein Supabase access_token – melden Sie sich zuerst an.",
+      "noRefreshToken": "Das Refresh_token konnte nicht aus der Supabase-Antwort abgerufen werden.",
+      "noAccessTokenResponse": "Access_token konnte nicht aus der Supabase-Antwort abgerufen werden.",
+      "refreshNoToken": "Die Supabase-Aktualisierung hat access_token nicht zurückgegeben.",
+      "nicknameLoginUnsupported": "Der Supabase-Server unterstützt die Nickname-Anmeldung noch nicht (users_resolve_login fehlt).",
+      "nicknameEmailNotFound": "Für diesen Spitznamen wurde keine E-Mail-Adresse gefunden.",
+      "resolveLoginFailed": "Aufruf von „users_resolve_login“ (Nickname-Login) fehlgeschlagen. Normalerweise CORS/OPTIONS in der Edge-Funktion. Melden Sie sich vorerst mit Ihrer E-Mail-Adresse an und überprüfen Sie dann CORS in „users_resolve_login“."
+    },
+    "errors": {
+      "connectionFailed": "Es kann keine Verbindung zu Supabase hergestellt werden. Überprüfen Sie VITE_SUPABASE_PROJECT_URL (muss https://<project>.supabase.co sein), Internet und Serviceverfügbarkeit.",
+      "invalidCredentials": "Ungültiger Benutzername oder Passwort.",
+      "invalidPassword": "Ungültiges Passwort.",
+      "passwordTooShort": "Das Passwort ist zu kurz. Mindestens 6 Zeichen.",
+      "weakPassword": "Das Passwort ist zu schwach.",
+      "identityAlreadyLinked": "{{provider}} ist bereits mit einem anderen 16launcher-Konto verknüpft. Heben Sie dort die Verknüpfung auf oder verwenden Sie ein anderes {{provider}}-Konto.",
+      "linkConnectionFailed": "Verknüpfung von {{provider}} fehlgeschlagen: Keine Verbindung zu Supabase. Überprüfen Sie die Internet- und Projekteinstellungen."
+    }
+  },
+  "app": {
+    "sidebar": {
+      "play": "Spielen",
+      "settings": "Einstellungen",
+      "mods": "Mods",
+      "modpacks": "Modpacks",
+      "friends": "Freunde"
+    },
+    "splitView": {
+      "zones": {
+        "left": "Links",
+        "right": "Rechts",
+        "top": "Spitze",
+        "bottom": "Unten",
+        "center": "Vollbild"
+      },
+      "closePane": "Entfernen Sie diesen Bereich"
+    },
+    "launcherVersionTitle": "Launcher-Version {{version}}",
+    "accounts": {
+      "managerTitle": "Account-Manager",
+      "managerSubtitle": "",
+      "currentProfileSection": "Aktives Konto",
+      "newAccountNameBase": "Spieler",
+      "addAccount": "Konto hinzufügen",
+      "sidebarTooltip": "Konten",
+      "switcherTitle": "Konto wechseln",
+      "switcherHeading": "Konten",
+      "manageAll": "Alle Konten und Anmeldung…",
+      "activeBadge": "aktiv",
+      "kindMicrosoft": "Microsoft",
+      "kindEly": "Ely.by",
+      "kindOffline": "Offline",
+      "savedListTitle": "Gespeicherte Konten",
+      "savedListHint": "",
+      "removeTitle": "Aus Launcher entfernen",
+      "removeConfirm": "Dieses Konto aus der Liste entfernen? Die dafür gespeicherten Zugangsdaten werden gelöscht.",
+      "editNickname": "Spitzname bearbeiten",
+      "nicknamePlaceholder": "Spieler",
+      "signedInAsPrefix": "Angemeldet als:",
+      "hint": "Konfigurieren Sie Ihr Profil und Ihr Erscheinungsbild, nachdem Sie sich angemeldet haben.",
+      "microsoftSignIn": "Melden Sie sich bei Microsoft an",
+      "microsoftLogout": "Melden Sie sich bei Microsoft ab",
+      "elyLogout": "Melden Sie sich von Ely.by ab",
+      "elyWaiting": "Warten auf Anmeldung…",
+      "elyDialogTitle": "Wenn die Seite in Ihrem Browser ewig lädt:",
+      "elyDialogTip": "Es ist besser, es in einem neuen Tab desselben Browsers zu öffnen. In einem anderen Browser zeigt Ely.by möglicherweise „Ungültige Anfrage“ an.",
+      "toast": {
+        "nicknameSaved": "Änderungen gespeichert!",
+        "nicknameSaveFailed": "Der Spitzname konnte nicht gespeichert werden.",
+        "elyLoggedOut": "Sie haben sich von Ely.by abgemeldet.",
+        "elyLogoutFailed": "Die Abmeldung von Ely.by ist fehlgeschlagen.",
+        "elyOpenBrowserFailed": "Der Browser konnte für die Ely.by-Anmeldung nicht geöffnet werden.",
+        "msLoggedIn": "Bei Microsoft angemeldet.",
+        "msLoginFailed": "Anmeldung bei Microsoft fehlgeschlagen.",
+        "msOpenBrowserFailed": "Der Browser konnte für die Microsoft-Anmeldung nicht geöffnet werden.",
+        "msLoggedOut": "Sie haben sich bei Microsoft abgemeldet.",
+        "msLogoutFailed": "Die Abmeldung von Microsoft ist fehlgeschlagen.",
+        "switched": "Aktives Konto geändert.",
+        "removed": "Konto aus der Liste entfernt.",
+        "added": "Neues Konto erstellt und ausgewählt."
+      }
+    },
+    "toast": {
+      "settingsSaved": "Einstellungen gespeichert!",
+      "downloadStarted": "Download gestartet!",
+      "downloadFinished": "Download abgeschlossen!",
+      "copy": "Kopie",
+      "copied": "Kopiert!"
+    },
+    "downloads": {
+      "paused": "pausierte",
+      "preparing": "vorbereiten…",
+      "kind": {
+        "version": "Version",
+        "modpack": "Modpack",
+        "mod": "Mod",
+        "file": "Datei"
+      }
+    },
+    "social": {
+      "discord": "Treten Sie unserem Discord bei!\nChatten Sie mit dem Team und teilen Sie Ihre Gefühle!",
+      "telegram": "Folgen Sie unserem Telegramm!\nHolen Sie sich die neuesten Launcher-Updates!",
+      "joinButton": "Verbinden",
+      "subscribeButton": "Abonnieren",
+      "laterButton": "Später"
+    },
+    "dialog": {
+      "imagesFilterName": "Bilder"
+    },
+    "help": {
+      "title": "Über Launcher",
+      "mainInfo": "16Launcher ist ein kostenloser Minecraft-Launcher mit Unterstützung für Fabric, Forge, Quilt und NeoForge.",
+      "icons": "Ikonen aus",
+      "mojangDisclaimer": "KEIN OFFIZIELLES MINECRAFT-PRODUKT. NICHT VON MOJANG ODER MICROSOFT GENEHMIGT ODER IN VERBINDUNG MIT MOJANG ODER MICROSOFT.\n\n16Launcher steht in keiner Verbindung zu Mojang Studios und sollte auch nicht als von Mojang Studios unterstütztes Projekt betrachtet werden.",
+      "apis": "Wir verwenden die APIs Modrinth, CurseForge und Ely.by",
+      "reportBug": "Fehler gefunden?",
+      "close": "Schließen"
+    },
+    "playAction": {
+      "play": "SPIELEN",
+      "launching": "Start...",
+      "install": "Installieren",
+      "stop": "STOPPEN"
+    },
+    "errors": {
+      "openFolderFailed": "Ordner konnte nicht geöffnet werden: {{msg}}",
+      "forgeVersionsLoadFailed": "Forge-Versionen konnten nicht geladen werden. Überprüfen Sie den Zugriff auf files.minecraftforge.net: {{msg}}",
+      "neoforgeVersionsLoadFailed": "NeoForge-Versionen konnten nicht geladen werden: {{msg}}",
+      "versionsLoadFailed": "Versionsliste konnte nicht geladen werden: {{msg}}",
+      "launchError": "Startfehler: {{msg}}",
+      "installError": "Installationsfehler: {{msg}}",
+      "stopError": "Stoppfehler: {{msg}}"
+    },
+    "warnings": {
+      "selectProfileFirst": "Wählen Sie zunächst ein Profil aus und klicken Sie dann auf „Abspielen“."
+    },
+    "discord": {
+      "play": "Im Hauptmenü",
+      "settings": "Konfigurieren des Launchers",
+      "mods": "Einen Mod auswählen",
+      "modpacks": "Auswählen eines Profils",
+      "accounts": "Konto verwalten"
+    },
+    "pinnedProfiles": {
+      "pinLimit": "Sie können bis zu 3 Profile anpinnen.",
+      "fabricNotInstalled": "Das Fabric-Profil ist für diese Version nicht installiert.",
+      "quiltNotInstalled": "Das Quilt-Profil ist für diese Version nicht installiert."
+    },
+    "versionBadge": {
+      "latest": "Sie haben die neueste Version",
+      "outdatedWithVersion": "Neue Version verfügbar: {{version}}",
+      "outdated": "Neue Version verfügbar",
+      "unknown": "Der Update-Status wird nach einer Prüfung bekannt gegeben"
+    },
+    "gameConsole": {
+      "defaultProfileName": "Spiel",
+      "windowTitle": "Konsole „{{name}}“"
+    },
+    "install": {
+      "noFabricLoader": "Für diese Version gibt es keinen passenden Fabric Loader",
+      "unknownVersionType": "Unbekannter Versionstyp"
+    }
+  },
+  "onboarding": {
+    "progress": "Schritt {{current}} von {{total}}",
+    "nav": {
+      "back": "Zurück",
+      "next": "Nächste"
+    },
+    "welcome": {
+      "title": "Willkommen bei 16Launcher!",
+      "subtitle": "Lassen Sie uns alles nach Ihrem Geschmack einrichten",
+      "cta": "Lass uns gehen!"
+    },
+    "language": {
+      "title": "Wählen Sie Ihre Sprache",
+      "subtitle": "Sie können die Sprache später in den Launcher-Einstellungen ändern",
+      "comingSoon": "Bald",
+      "ruDesc": "Russische Launcher-Schnittstelle",
+      "enDesc": "Englische Launcher-Oberfläche",
+      "deDesc": "Deutsche Launcher-Oberfläche",
+      "esDesc": "Spanische Launcher-Oberfläche"
+    },
+    "account": {
+      "title": "anmelden",
+      "subtitle": "Wählen Sie eine Anmeldemethode oder überspringen Sie sie – Sie können sich später anmelden",
+      "elyTitle": "Ely.by",
+      "elyDesc": "Für Ely-Profile und Ely.by-Skins",
+      "microsoftTitle": "Microsoft",
+      "microsoftDesc": "Offizielles Minecraft-/Microsoft-Konto",
+      "skip": "Überspringen · Später anmelden"
+    },
+    "ely": {
+      "title": "Melden Sie sich mit Ely.by an",
+      "subtitle": "Geben Sie Ihre Ely-Anmeldeinformationen ein oder öffnen Sie die Browser-Anmeldung",
+      "loginLabel": "Login",
+      "loginPlaceholder": "Ely.by Benutzername",
+      "passwordLabel": "Passwort",
+      "passwordPlaceholder": "Passwort",
+      "securityHint": "Anmeldeinformationen werden lokal auf Ihrem Gerät gespeichert und nur für die Spielanmeldung verwendet.",
+      "submit": "anmelden",
+      "oauth": "Anmeldung über Browser (OAuth)",
+      "success": "Erfolgreich angemeldet!",
+      "errorGeneric": "Die Anmeldung ist fehlgeschlagen. Überprüfen Sie Ihren Benutzernamen und Ihr Passwort."
+    },
+    "microsoft": {
+      "title": "Melden Sie sich bei Microsoft an",
+      "subtitle": "Verwenden Sie Ihr offizielles Minecraft-Konto. Nach einem Klick auf den Button öffnet sich die Microsoft-Autorisierung.",
+      "externalHint": "Für die sichere Microsoft-Anmeldung wird ein externes Browserfenster geöffnet.",
+      "cta": "Weiter mit Microsoft",
+      "waiting": "Warten auf die Anmeldung…",
+      "success": "Microsoft-Anmeldung abgeschlossen!",
+      "errorGeneric": "Die Microsoft-Anmeldung konnte nicht gestartet werden."
+    },
+    "finish": {
+      "title": "Alles klar!",
+      "subtitle": "Die Einrichtung ist abgeschlossen. Gehen Sie zum Launcher und beginnen Sie zu spielen.",
+      "cta": "Fangen Sie an zu spielen"
+    }
+  }
+}

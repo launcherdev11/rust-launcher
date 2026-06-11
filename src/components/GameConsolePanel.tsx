@@ -1,9 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { useT } from "../i18n";
+import { useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 import type { GameConsoleLine, GameStatus } from "../lib/gameConsoleWindow";
-
-type Language = "ru" | "en";
 
 type GameConsolePanelProps = {
   consoleLines: GameConsoleLine[];
