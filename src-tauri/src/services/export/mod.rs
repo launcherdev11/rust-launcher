@@ -364,6 +364,24 @@ fn png_data_url(png_bytes: &[u8]) -> String {
 }
 
 #[tauri::command]
+pub async fn get_ely_skin(username: String) -> Result<Option<String>, String> {
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let skin_png = match fetch_ely_skin(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[skin] failed to fetch Ely skin for '{}': {}", trimmed, error);
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&skin_png)))
+}
+
+#[tauri::command]
 pub async fn get_ely_avatar(username: String) -> Result<Option<String>, String> {
     let trimmed = username.trim();
     if trimmed.is_empty() {

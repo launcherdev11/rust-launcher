@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  buildAvatarFromSkin,
   buildInitialAvatarDataUrl,
   getAvatarSrc,
   getElyAvatarByUsername,
+  STEVE_SKIN_URL,
   type ProfileAvatarInput,
 } from "../lib/avatar";
 
@@ -38,16 +40,21 @@ export function AccountAvatar({
 
     const load = async () => {
       try {
-        const next = profile
-          ? await getAvatarSrc(profile, placeholder, size)
-          : await getElyAvatarByUsername(trimmed, placeholder, size);
+        let next = placeholder;
+        if (kind === "offline") {
+          next = await buildAvatarFromSkin(STEVE_SKIN_URL, size);
+        } else if (profile) {
+          next = await getAvatarSrc(profile, placeholder, size);
+        } else if (trimmed) {
+          next = await getElyAvatarByUsername(trimmed, placeholder, size);
+        }
         if (!cancelled) setSrc(next);
       } catch {
         if (!cancelled) setSrc(placeholder);
       }
     };
 
-    if (!trimmed && !profile?.ely_username?.trim()) return;
+    if (!trimmed && !profile?.ely_username?.trim() && kind !== "offline") return;
     void load();
     return () => {
       cancelled = true;
@@ -55,6 +62,7 @@ export function AccountAvatar({
   }, [
     trimmed,
     size,
+    kind,
     profile?.nickname,
     profile?.ely_username,
     profile?.ely_uuid,
