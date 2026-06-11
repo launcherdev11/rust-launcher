@@ -32,13 +32,14 @@ import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
 import {
   assignProfilesToGroup,
+  dedupeProfileGroupAssignments,
   loadProfileGroups,
   newProfileGroupId,
   PROFILE_GROUP_COLOR_STYLES,
   PROFILE_GROUP_COLORS,
+  pruneEmptyProfileGroups,
   sanitizeProfileGroups,
   saveProfileGroups,
-  subscribeProfileGroups,
   ungroupProfiles,
   type ProfileGroup,
   type ProfileGroupColor,
@@ -424,7 +425,6 @@ export function ModpackTab({
   const [itemsLoading, setItemsLoading] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const profilesLoadedRef = useRef(false);
-  const profileGroupsHydratedRef = useRef(false);
   const [search, setSearch] = useState("");
   const [createName, setCreateName] = useState("");
   const [createLoader, setCreateLoader] = useState<LoaderId>("fabric");
@@ -1873,6 +1873,11 @@ export function ModpackTab({
     [filteredProfiles, groupedProfileIds],
   );
 
+  const profileIdsSignature = useMemo(
+    () => profiles.map((p) => p.id).sort().join("\0"),
+    [profiles],
+  );
+
   const visibleProfileGroups = useMemo(() => {
     const query = search.trim();
     return profileGroups.map((group) => ({
@@ -1888,37 +1893,19 @@ export function ModpackTab({
     }));
   }, [profileGroups, profilesById, search]);
 
-  useEffect(
-    () =>
-      subscribeProfileGroups(() => {
-        setProfileGroups((prev) => {
-          const stored = loadProfileGroups();
-          return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored;
-        });
-      }),
-    [],
-  );
-
   useEffect(() => {
-    if (!profilesLoadedRef.current) return;
-    const validIds = new Set(profiles.map((p) => p.id));
+    if (!profilesLoadedRef.current || profileIdsSignature.length === 0) return;
+    const validIds = new Set(profileIdsSignature.split("\0"));
     setProfileGroups((prev) => {
-      let base = prev;
-      if (!profileGroupsHydratedRef.current) {
-        profileGroupsHydratedRef.current = true;
-        const stored = loadProfileGroups();
-        if (prev.length === 0 && stored.length > 0) {
-          base = stored;
-        }
-      }
-      const next = sanitizeProfileGroups(base, validIds);
-      if (JSON.stringify(base) !== JSON.stringify(next)) {
+      const sanitized = sanitizeProfileGroups(prev, validIds);
+      const next = dedupeProfileGroupAssignments(sanitized);
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
         saveProfileGroups(next);
         return next;
       }
-      return base;
+      return prev;
     });
-  }, [profiles]);
+  }, [profileIdsSignature]);
 
   useEffect(() => {
     if (!isGroupProfilesDropdownOpen) return;
@@ -2719,19 +2706,38 @@ export function ModpackTab({
       return;
     }
     const profileIds = [...groupFormProfileIds];
-    if (editingGroupId) {
-      setProfileGroups((prev) => {
-        const withoutMoved = ungroupProfiles(prev, profileIds);
-        const next = withoutMoved.map((g) =>
-          g.id === editingGroupId
-            ? { ...g, name, color: groupFormColor, profileIds }
-            : g,
-        );
+    const editingId = editingGroupId;
+    let savedAsEdit = false;
+
+    setProfileGroups((prev) => {
+      const isEditing =
+        editingId != null && prev.some((group) => group.id === editingId);
+
+      if (isEditing && editingId) {
+        savedAsEdit = true;
+        const otherGroups = prev.filter((group) => group.id !== editingId);
+        const cleanedOthers =
+          profileIds.length > 0
+            ? pruneEmptyProfileGroups(ungroupProfiles(otherGroups, profileIds))
+            : pruneEmptyProfileGroups(otherGroups);
+        const existing = prev.find((group) => group.id === editingId)!;
+        const next = dedupeProfileGroupAssignments([
+          ...cleanedOthers,
+          {
+            ...existing,
+            name,
+            color: groupFormColor,
+            profileIds,
+          },
+        ]);
         saveProfileGroups(next);
         return next;
-      });
-      showNotification("success", tt("modpacks.groups.updated", { name }));
-    } else {
+      }
+
+      const cleaned =
+        profileIds.length > 0
+          ? pruneEmptyProfileGroups(ungroupProfiles(prev, profileIds))
+          : prev;
       const newGroup: ProfileGroup = {
         id: newProfileGroupId(),
         name,
@@ -2739,23 +2745,31 @@ export function ModpackTab({
         profileIds,
         collapsed: false,
       };
-      setProfileGroups((prev) => {
-        const cleaned = profileIds.length > 0 ? ungroupProfiles(prev, profileIds) : prev;
-        const next = [...cleaned, newGroup];
-        saveProfileGroups(next);
-        return next;
-      });
-      showNotification("success", tt("modpacks.groups.created", { name }));
-    }
+      const next = dedupeProfileGroupAssignments([...cleaned, newGroup]);
+      saveProfileGroups(next);
+      return next;
+    });
+
+    showNotification(
+      "success",
+      savedAsEdit
+        ? tt("modpacks.groups.updated", { name })
+        : tt("modpacks.groups.created", { name }),
+    );
+    setEditingGroupId(null);
     setIsGroupModalOpen(false);
   }
 
   function handleDeleteGroup(groupId: string) {
     setProfileGroups((prev) => {
-      const next = prev.filter((g) => g.id !== groupId);
+      const next = pruneEmptyProfileGroups(prev.filter((group) => group.id !== groupId));
       saveProfileGroups(next);
       return next;
     });
+    if (editingGroupId === groupId) {
+      setEditingGroupId(null);
+      setIsGroupModalOpen(false);
+    }
     showNotification("info", tt("modpacks.groups.deleted"));
   }
 
@@ -2772,13 +2786,13 @@ export function ModpackTab({
     if (ids.length === 0) return;
     if (groupId === "ungrouped") {
       setProfileGroups((prev) => {
-        const next = ungroupProfiles(prev, ids);
+        const next = pruneEmptyProfileGroups(ungroupProfiles(prev, ids));
         saveProfileGroups(next);
         return next;
       });
     } else {
       setProfileGroups((prev) => {
-        const next = assignProfilesToGroup(prev, groupId, ids);
+        const next = dedupeProfileGroupAssignments(assignProfilesToGroup(prev, groupId, ids));
         saveProfileGroups(next);
         return next;
       });
@@ -4597,7 +4611,10 @@ export function ModpackTab({
       {isGroupModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setIsGroupModalOpen(false)}
+          onClick={() => {
+            setEditingGroupId(null);
+            setIsGroupModalOpen(false);
+          }}
         >
           <div
             className="glass-panel flex w-full max-w-md flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
@@ -4708,7 +4725,10 @@ export function ModpackTab({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setIsGroupModalOpen(false)}
+                onClick={() => {
+                  setEditingGroupId(null);
+                  setIsGroupModalOpen(false);
+                }}
                 className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white/80 hover:bg-white/20"
               >
                 {tt("modpacks.groups.cancel")}
