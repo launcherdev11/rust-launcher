@@ -131,6 +131,84 @@ export function buildElySkinUrl(username: string): string {
   return `https://skinsystem.ely.by/skins/${encodeURIComponent(username)}.png`;
 }
 
+export const STEVE_SKIN_URL = "/launcher-assets/steve.png";
+
+export const DEFAULT_SKIN_URL = STEVE_SKIN_URL;
+
+export function isOfflineProfile(profile: ProfileAvatarInput): boolean {
+  return (
+    !profile.ely_username?.trim() &&
+    !profile.mc_uuid?.trim() &&
+    !profile.ely_uuid?.trim()
+  );
+}
+
+function resolveSkinUsername(profile: ProfileAvatarInput): string | null {
+  return profile.ely_username?.trim() || null;
+}
+
+async function fetchSkinBlobUrl(url: string): Promise<string> {
+  const response = await fetch(url, { cache: "no-cache" });
+  if (!response.ok) {
+    throw new Error(`Skin request failed: ${response.status}`);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+export async function loadViewerSkinSource(
+  profile: ProfileAvatarInput,
+  _username: string = "",
+): Promise<string> {
+  if (isOfflineProfile(profile)) {
+    return STEVE_SKIN_URL;
+  }
+
+  const elyUsername = resolveSkinUsername(profile);
+  if (elyUsername) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const dataUrl = await invoke<string | null>("get_ely_skin", {
+        username: elyUsername,
+      });
+      if (dataUrl) return dataUrl;
+    } catch (error) {
+      console.debug("[skin] Rust Ely skin command unavailable", error);
+    }
+  }
+
+  const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
+  const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
+  const uuid = mcUuid || elyUuid;
+  if (uuid) {
+    return fetchSkinBlobUrl(`https://crafatar.com/skins/${uuid}?default=MHF_Steve`);
+  }
+
+  if (elyUsername) {
+    return fetchSkinBlobUrl(buildElySkinUrl(elyUsername));
+  }
+
+  return STEVE_SKIN_URL;
+}
+
+export function resolveSkinUrl(profile: ProfileAvatarInput, _username: string = ""): string {
+  if (isOfflineProfile(profile)) {
+    return STEVE_SKIN_URL;
+  }
+
+  const elyUsername = profile.ely_username?.trim();
+  if (elyUsername) return buildElySkinUrl(elyUsername);
+
+  const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
+  const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
+  const uuid = mcUuid || elyUuid;
+  if (uuid) {
+    return `https://crafatar.com/skins/${uuid}?default=MHF_Steve`;
+  }
+
+  return STEVE_SKIN_URL;
+}
+
 export async function getElyAvatarByUsername(
   username: string,
   fallbackSrc: string,
@@ -207,6 +285,14 @@ export async function getAvatarSrc(
   fallbackSrc: string,
   size: number = 64,
 ): Promise<string> {
+  if (isOfflineProfile(profile)) {
+    try {
+      return await buildAvatarFromSkin(STEVE_SKIN_URL, size);
+    } catch {
+      return fallbackSrc;
+    }
+  }
+
   const elyKeyRaw = resolveAvatarKey(profile);
   if (elyKeyRaw) {
     const src = await getElyAvatarByUsername(elyKeyRaw, fallbackSrc, size);

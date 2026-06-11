@@ -29,6 +29,7 @@ import { PlayTab } from "./tabs/PlayTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
+import { AccountSkinPreview } from "./components/account_skin_preview";
 import { DeleteIcon } from "./components/delete_icon";
 import {
   ProfileInfoIcon,
@@ -4403,23 +4404,29 @@ function App() {
             </div>
           ) : null}
           {activeItem === "accounts" ? (
-            <div className="flex w-full max-w-xl flex-col items-center gap-6">
-              <div className="w-full text-center">
+            <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-5 overflow-y-auto py-1 lg:gap-6 lg:overflow-hidden">
+              <header className="shrink-0 text-center">
                 <h1 className="text-lg font-bold tracking-tight text-white/95">
                   {tt("app.accounts.managerTitle")}
                 </h1>
-                <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
-              </div>
+                {tt("app.accounts.managerSubtitle") ? (
+                  <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
+                ) : null}
+              </header>
 
-              <div className="w-full rounded-2xl border border-white/10 glass-panel px-4 py-4 shadow-xl backdrop-blur-md bg-black/40">
-                <div className="mb-3 flex items-start justify-between gap-3 px-1">
-                  <div>
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
+                <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
+              <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-4 shadow-xl backdrop-blur-md">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
                       {tt("app.accounts.savedListTitle")}
                     </h2>
-                    <p className="mt-1 text-[11px] leading-snug text-white/45">
-                      {tt("app.accounts.savedListHint")}
-                    </p>
+                    {tt("app.accounts.savedListHint") ? (
+                      <p className="mt-1 text-[11px] leading-snug text-white/45">
+                        {tt("app.accounts.savedListHint")}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -4432,9 +4439,9 @@ function App() {
                   </button>
                 </div>
                 {launcherAccounts.length === 0 ? (
-                  <p className="px-1 py-6 text-center text-sm text-white/45">—</p>
+                  <p className="py-6 text-center text-sm text-white/45">—</p>
                 ) : (
-                  <ul className="flex max-h-[min(360px,42vh)] flex-col gap-2 overflow-y-auto pr-0.5">
+                  <ul className="flex max-h-[min(360px,42vh)] flex-col gap-2 overflow-y-auto">
                     {launcherAccounts.map((acc) => (
                       <li
                         key={acc.id}
@@ -4496,11 +4503,11 @@ function App() {
               </div>
 
               <div className="w-full">
-                <h2 className="mb-3 px-1 text-center text-xs font-bold uppercase tracking-wider text-white/40">
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-white/45">
                   {tt("app.accounts.currentProfileSection")}
                 </h2>
                 <div
-                  className="flex w-full items-center gap-6 rounded-2xl border border-white/10 glass-panel px-6 py-5 shadow-xl backdrop-blur-md bg-black/50"
+                  className="flex w-full items-center gap-5 rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-4 shadow-xl backdrop-blur-md"
                 >
                   <button
                     type="button"
@@ -4542,12 +4549,12 @@ function App() {
                 {!isAuthorized && (
                   <p className="mt-4 text-center text-sm text-white/80">{tt("app.accounts.hint")}</p>
                 )}
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {profile.ms_id_token ? (
                     <button
                       type="button"
                       onClick={handleMicrosoftLogout}
-                      className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
+                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
                     >
                       <MicrosoftIcon />
                       <span>{tt("app.accounts.microsoftLogout")}</span>
@@ -4557,7 +4564,7 @@ function App() {
                       type="button"
                       onClick={handleMicrosoftLogin}
                       disabled={elyLoading || msLoading}
-                      className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
+                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
                     >
                       <MicrosoftIcon />
                       <span>{tt("app.accounts.microsoftSignIn")}</span>
@@ -4567,7 +4574,7 @@ function App() {
                     <button
                       type="button"
                       onClick={handleElyLogout}
-                      className="interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
+                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
                     >
                       <ElyByIcon />
                       <span>{tt("app.accounts.elyLogout")}</span>
@@ -4577,7 +4584,7 @@ function App() {
                       type="button"
                       onClick={handleElyLogin}
                       disabled={elyLoading}
-                      className="interactive-press flex items-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
                     >
                       <ElyByIcon />
                       <span>
@@ -4603,6 +4610,15 @@ function App() {
                     <p className="break-all text-xs text-white/90">{msAuthUrl}</p>
                   </div>
                 )}
+              </div>
+                </div>
+                <div className="flex min-h-[min(360px,40vh)] min-w-0 flex-col lg:min-h-0">
+                  <AccountSkinPreview
+                    key={`${activeAccountFromList?.id ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
+                    profile={profileAvatarInput}
+                    username={displayedNickname}
+                  />
+                </div>
               </div>
             </div>
           ) : effectiveTabSplit ? (
