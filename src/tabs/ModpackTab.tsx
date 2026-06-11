@@ -19,7 +19,14 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ChevronDown, Download, UploadCloud } from "lucide-react";
 import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
-import { useT } from "../i18n";
+import {
+  formatByteSize,
+  formatPlaytimeShort,
+  localeTag,
+  t,
+  useT,
+  type Language,
+} from "../i18n";
 import { DeleteIcon } from "../components/delete_icon";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
@@ -51,7 +58,6 @@ type LoaderVersionOption = {
   version: string;
   channel?: LoaderVersionChannel | null;
 };
-type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
 type Settings = {
   game_directory: string | null;
@@ -324,43 +330,14 @@ function ScreenshotsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/pack_image.png" className={className} />;
 }
 
-function formatBytes(bytes: number, language: Language): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return language === "ru" ? "0 МБ" : "0 MB";
-  const units = language === "ru" ? ["Б", "КБ", "МБ", "ГБ"] : ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let value = bytes;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i += 1;
-  }
-  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
 function countLabel(count: number, language: Language): string {
-  if (language === "ru") {
-    return `Модов: ${count}`;
-  }
-  return `Mods: ${count}`;
-}
-
-function formatPlaytime(seconds: number | null, language: Language): string {
-  const s = seconds != null && Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-
-  if (language === "ru") {
-    if (h > 0) return `${h}ч ${m}м`;
-    return `${m}м`;
-  }
-
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  return t(language, "common.format.modsCount", { count });
 }
 
 function formatLastPlayedAt(ts: number | null | undefined, language: Language): string {
   if (ts == null || !Number.isFinite(ts) || ts <= 0) return "—";
   try {
-    return new Date(ts * 1000).toLocaleString(language === "ru" ? "ru-RU" : "en-US", {
+    return new Date(ts * 1000).toLocaleString(localeTag(language), {
       dateStyle: "short",
       timeStyle: "short",
     });
@@ -369,16 +346,10 @@ function formatLastPlayedAt(ts: number | null | undefined, language: Language): 
   }
 }
 
-const contentTabLabelsRu: Record<ContentTab, string> = {
-  mods: "Моды",
-  resourcepacks: "Ресурспаки",
-  shaderpacks: "Шейдеры",
-};
-
-const contentTabLabelsEn: Record<ContentTab, string> = {
-  mods: "Mods",
-  resourcepacks: "Resource packs",
-  shaderpacks: "Shaders",
+const CONTENT_TAB_KEYS: Record<ContentTab, string> = {
+  mods: "modpacks.contentTabs.mods",
+  resourcepacks: "modpacks.contentTabs.resourcepacks",
+  shaderpacks: "modpacks.contentTabs.shaderpacks",
 };
 
 function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
@@ -794,8 +765,8 @@ export function ModpackTab({
 
   function formatLogSessionOptionLabel(session: GameConsoleSession): string {
     const d = new Date(session.endedAt ?? session.startedAt);
-    const ds = language === "ru" ? d.toLocaleString("ru-RU") : d.toLocaleString("en-GB");
-    return language === "ru" ? `Архив: ${ds}` : `Archive: ${ds}`;
+    const ds = d.toLocaleString(localeTag(language));
+    return t(language, "common.format.archiveLabel", { date: ds });
   }
 
   const selectedProfile = useMemo(
@@ -874,12 +845,7 @@ export function ModpackTab({
     const loaderVersion =
       createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
     if (createLoader !== "vanilla" && !loaderVersion) {
-      showNotification(
-        "warning",
-        language === "ru"
-          ? "Выберите версию загрузчика перед сохранением пресета."
-          : "Select a loader version before saving the preset.",
-      );
+      showNotification("warning", tt("modpacks.toast.selectLoaderBeforePreset"));
       return;
     }
     try {
@@ -1105,7 +1071,7 @@ export function ModpackTab({
             const bps = (db * 1000) / dt;
             if (Number.isFinite(bps)) {
               setExportSpeedLabel(
-                `${formatBytes(bps, language)}${tt("modpacks.export.perSecond")}`,
+                `${formatByteSize(language, bps)}${tt("modpacks.export.perSecond")}`,
               );
             }
           }
@@ -1306,12 +1272,7 @@ export function ModpackTab({
       setMigrateLoaderVersion("");
       const msg =
         e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? `Не удалось загрузить версии загрузчика: ${msg}`
-          : `Failed to load loader versions: ${msg}`,
-      );
+      showNotification("error", t(language, "modpacks.toast.loadLoaderVersionsFailed", { msg }));
     } finally {
       setMigrateLoaderVersionsLoading(false);
     }
@@ -1330,11 +1291,7 @@ export function ModpackTab({
         versionUrl = all.find((v) => v.id === gameVersion)?.url ?? null;
       }
       if (!versionUrl) {
-        throw new Error(
-          language === "ru"
-            ? `Не удалось определить URL манифеста версии ${gameVersion}.`
-            : `Failed to resolve manifest URL for version ${gameVersion}.`,
-        );
+        throw new Error(t(language, "modpacks.toast.manifestUrlFailed", { version: gameVersion }));
       }
 
       try {
@@ -1351,12 +1308,7 @@ export function ModpackTab({
           label: gameVersion,
           kind: "version",
         });
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Версия ${gameVersion} не установлена. Начинаю загрузку…`
-            : `Version ${gameVersion} is not installed. Starting download…`,
-        );
+        showNotification("info", t(language, "modpacks.toast.versionNotInstalled", { version: gameVersion }));
         try {
           await invoke("install_version", {
             versionId: gameVersion,
@@ -1365,32 +1317,17 @@ export function ModpackTab({
         } finally {
           finishDownloadJob?.(versionJobId);
         }
-        showNotification(
-          "success",
-          language === "ru"
-            ? `Версия ${gameVersion} установлена.`
-            : `Version ${gameVersion} installed.`,
-        );
+        showNotification("success", t(language, "modpacks.toast.versionInstalled", { version: gameVersion }));
       }
 
       if (loader === "fabric" && loaderVersion) {
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Устанавливаю Fabric ${loaderVersion}…`
-            : `Installing Fabric ${loaderVersion}…`,
-        );
+        showNotification("info", t(language, "modpacks.toast.installingFabric", { version: loaderVersion }));
         await invoke("install_fabric", {
           gameVersion,
           loaderVersion,
         });
       } else if (loader === "quilt" && loaderVersion) {
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Устанавливаю Quilt ${loaderVersion}…`
-            : `Installing Quilt ${loaderVersion}…`,
-        );
+        showNotification("info", t(language, "modpacks.toast.installingQuilt", { version: loaderVersion }));
         await invoke("install_quilt", {
           gameVersion,
           loaderVersion,
@@ -1404,21 +1341,11 @@ export function ModpackTab({
         const installerUrl =
           match?.installer_url ??
           `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${loaderVersion}/forge-${gameVersion}-${loaderVersion}-installer.jar`;
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Устанавливаю Forge ${loaderVersion}…`
-            : `Installing Forge ${loaderVersion}…`,
-        );
+        showNotification("info", t(language, "modpacks.toast.installingForge", { version: loaderVersion }));
         await invoke("install_forge", { versionId, installerUrl });
       } else if (loader === "neoforge" && loaderVersion) {
         const versionId = `${gameVersion}-neoforge-${loaderVersion}`;
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Устанавливаю NeoForge ${loaderVersion}…`
-            : `Installing NeoForge ${loaderVersion}…`,
-        );
+        showNotification("info", t(language, "modpacks.toast.installingNeoForge", { version: loaderVersion }));
         await invoke("install_neoforge", { versionId });
       }
     },
@@ -1662,7 +1589,7 @@ export function ModpackTab({
       if (payload.phase === "start") {
         showNotification(
           "info",
-          language === "ru" ? "Импорт начат…" : "Import started…",
+          t(language, "modpacks.import.started"),
         );
       }
     });
@@ -1680,7 +1607,7 @@ export function ModpackTab({
     }>("external-import-progress", (event) => {
       setExternalImportProgress(event.payload);
       if (event.payload.phase === "start") {
-        showNotification("info", language === "ru" ? "Импорт начат…" : "Import started…");
+        showNotification("info", t(language, "modpacks.import.started"));
       }
     });
     return () => {
@@ -1704,12 +1631,7 @@ export function ModpackTab({
       }
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось загрузить список сборок."
-          : "Failed to load profiles.",
-      );
+      showNotification("error", t(language, "modpacks.toast.loadProfilesFailed"));
     } finally {
       setLoadingProfiles(false);
     }
@@ -1770,12 +1692,7 @@ export function ModpackTab({
       setItems(files);
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось загрузить файлы сборки."
-          : "Failed to load profile files.",
-      );
+      showNotification("error", t(language, "modpacks.toast.loadFilesFailed"));
     } finally {
       setItemsLoading(false);
     }
@@ -1796,20 +1713,10 @@ export function ModpackTab({
         files: paths,
       });
       await refreshItems(selectedProfile.id, contentTab);
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Файлы добавлены в сборку."
-          : "Files added to profile.",
-      );
+      showNotification("success", t(language, "modpacks.toast.filesAdded"));
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось добавить файлы."
-          : "Failed to add files.",
-      );
+      showNotification("error", t(language, "modpacks.toast.addFilesFailed"));
     }
   }
 
@@ -1913,12 +1820,7 @@ export function ModpackTab({
       setCreateLoaderVersion("");
       const msg =
         e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? `Не удалось загрузить версии загрузчика: ${msg}`
-          : `Failed to load loader versions: ${msg}`,
-      );
+      showNotification("error", t(language, "modpacks.toast.loadLoaderVersionsFailed", { msg }));
     } finally {
       setLoaderVersionsLoading(false);
     }
@@ -2030,27 +1932,27 @@ export function ModpackTab({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [isGroupProfilesDropdownOpen]);
 
-  const totalProfilesLabel =
-    language === "ru"
-      ? `Всего сборок: ${profiles.length}`
-      : `Total profiles: ${profiles.length}`;
+  const totalProfilesLabel = tt("modpacks.header.totalProfiles", { count: profiles.length });
 
-  const manageTabLabels = language === "ru" ? contentTabLabelsRu : contentTabLabelsEn;
+  const manageTabLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.entries(CONTENT_TAB_KEYS) as [ContentTab, string][]).map(([tab, key]) => [
+          tab,
+          tt(key),
+        ]),
+      ) as Record<ContentTab, string>,
+    [tt],
+  );
 
   const headerTitle =
     activeView === "create"
-      ? language === "ru"
-        ? "Создать сборку"
-        : "Create profile"
+      ? tt("modpacks.create.title")
       : activeView === "import"
-        ? language === "ru"
-          ? "Импортировать .mrpack"
-          : "Import .mrpack"
+        ? tt("modpacks.header.importMrpack")
         : activeView === "manage"
           ? selectedProfile?.name ?? ""
-          : language === "ru"
-            ? "Сборки"
-            : "Profiles";
+          : tt("modpacks.header.profiles");
 
   async function handleChooseIcon() {
     try {
@@ -2075,23 +1977,13 @@ export function ModpackTab({
   async function handleCreateProfile() {
     const name = createName.trim().slice(0, 50);
     if (!name) {
-      showNotification(
-        "warning",
-        language === "ru"
-          ? "Введите название сборки."
-          : "Enter profile name.",
-      );
+      showNotification("warning", t(language, "modpacks.toast.enterProfileName"));
       return;
     }
     const loaderVersion =
       createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
     if (createLoader !== "vanilla" && !loaderVersion) {
-      showNotification(
-        "warning",
-        language === "ru"
-          ? "Выберите версию загрузчика."
-          : "Select a loader version.",
-      );
+      showNotification("warning", t(language, "modpacks.toast.selectLoaderVersion"));
       return;
     }
     setCreateBusy(true);
@@ -2110,11 +2002,7 @@ export function ModpackTab({
         }
       }
       if (!versionUrl) {
-        throw new Error(
-          language === "ru"
-            ? `Не удалось определить URL манифеста версии ${createGameVersion}.`
-            : `Failed to resolve manifest URL for version ${createGameVersion}.`,
-        );
+        throw new Error(t(language, "modpacks.toast.manifestUrlFailed", { version: createGameVersion }));
       }
 
       const profile = await invoke<InstanceProfile>("create_profile", {
@@ -2144,12 +2032,7 @@ export function ModpackTab({
             label: createGameVersion,
             kind: "version",
           });
-          showNotification(
-            "info",
-            language === "ru"
-              ? `Версия ${createGameVersion} не установлена. Начинаю загрузку…`
-              : `Version ${createGameVersion} is not installed. Starting download…`,
-          );
+          showNotification("info", t(language, "modpacks.toast.versionNotInstalled", { version: createGameVersion }));
           try {
             await invoke("install_version", {
               versionId: createGameVersion,
@@ -2158,32 +2041,17 @@ export function ModpackTab({
           } finally {
             finishDownloadJob?.(versionJobId);
           }
-          showNotification(
-            "success",
-            language === "ru"
-              ? `Версия ${createGameVersion} установлена.`
-              : `Version ${createGameVersion} installed.`,
-          );
+          showNotification("success", t(language, "modpacks.toast.versionInstalled", { version: createGameVersion }));
         }
 
         if (createLoader === "fabric" && loaderVersion) {
-          showNotification(
-            "info",
-            language === "ru"
-              ? `Устанавливаю Fabric ${loaderVersion}…`
-              : `Installing Fabric ${loaderVersion}…`,
-          );
+          showNotification("info", t(language, "modpacks.toast.installingFabric", { version: loaderVersion }));
           await invoke("install_fabric", {
             gameVersion: createGameVersion,
             loaderVersion,
           });
         } else if (createLoader === "quilt" && loaderVersion) {
-          showNotification(
-            "info",
-            language === "ru"
-              ? `Устанавливаю Quilt ${loaderVersion}…`
-              : `Installing Quilt ${loaderVersion}…`,
-          );
+          showNotification("info", t(language, "modpacks.toast.installingQuilt", { version: loaderVersion }));
           await invoke("install_quilt", {
             gameVersion: createGameVersion,
             loaderVersion,
@@ -2198,33 +2066,18 @@ export function ModpackTab({
           const installerUrl =
             match?.installer_url ??
             `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${createGameVersion}-${loaderVersion}/forge-${createGameVersion}-${loaderVersion}-installer.jar`;
-          showNotification(
-            "info",
-            language === "ru"
-              ? `Устанавливаю Forge ${loaderVersion}…`
-              : `Installing Forge ${loaderVersion}…`,
-          );
+          showNotification("info", t(language, "modpacks.toast.installingForge", { version: loaderVersion }));
           await invoke("install_forge", { versionId, installerUrl });
         } else if (createLoader === "neoforge" && loaderVersion) {
           const versionId = `${createGameVersion}-neoforge-${loaderVersion}`;
-          showNotification(
-            "info",
-            language === "ru"
-              ? `Устанавливаю NeoForge ${loaderVersion}…`
-              : `Installing NeoForge ${loaderVersion}…`,
-          );
+          showNotification("info", t(language, "modpacks.toast.installingNeoForge", { version: loaderVersion }));
           await invoke("install_neoforge", { versionId });
         }
       } catch (e) {
         console.error(e);
         const msg =
           e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
-        showNotification(
-          "warning",
-          language === "ru"
-            ? `Сборка создана, но не удалось установить версию: ${msg}`
-            : `Profile created, but failed to install version: ${msg}`,
-        );
+        showNotification("warning", t(language, "modpacks.toast.profileCreatedInstallFailed", { msg }));
       }
 
       setProfiles((prev) => [...prev, profile]);
@@ -2240,12 +2093,7 @@ export function ModpackTab({
       } catch (e) {
         console.error(e);
       }
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Сборка создана."
-          : "Profile created.",
-      );
+      showNotification("success", t(language, "modpacks.toast.profileCreated"));
     } catch (e) {
       console.error(e);
       const msg =
@@ -2254,12 +2102,7 @@ export function ModpackTab({
           : typeof e === "string"
             ? e
             : JSON.stringify(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? `Не удалось создать сборку: ${msg}`
-          : `Failed to create profile: ${msg}`,
-      );
+      showNotification("error", t(language, "modpacks.toast.createProfileFailed", { msg }));
     } finally {
       setCreateBusy(false);
     }
@@ -2288,30 +2131,15 @@ export function ModpackTab({
       if (isAlreadySelected) {
         await invoke("set_selected_profile", { id: null });
         setSelectedProfileId(null);
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Профиль «${profile.name}» снят с выбора.`
-            : `Profile “${profile.name}” unselected.`,
-        );
+        showNotification("info", t(language, "modpacks.toast.profileUnselected", { name: profile.name }));
       } else {
         await invoke("set_selected_profile", { id: profile.id });
         setSelectedProfileId(profile.id);
-        showNotification(
-          "success",
-          language === "ru"
-            ? `Профиль «${profile.name}» выбран.`
-            : `Profile “${profile.name}” selected.`,
-        );
+        showNotification("success", t(language, "modpacks.toast.profileSelected", { name: profile.name }));
       }
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось выбрать профиль."
-          : "Failed to select profile.",
-      );
+      showNotification("error", t(language, "modpacks.toast.selectProfileFailed"));
     }
   }
 
@@ -2332,18 +2160,10 @@ export function ModpackTab({
         }
       }
 
-      showNotification(
-        "success",
-        language === "ru" ? "Сборка удалена." : "Profile deleted.",
-      );
+      showNotification("success", t(language, "modpacks.toast.profileDeleted"));
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось удалить сборку."
-          : "Failed to delete profile.",
-      );
+      showNotification("error", t(language, "modpacks.toast.deleteProfileFailed"));
     }
   }
 
@@ -2389,12 +2209,7 @@ export function ModpackTab({
       setContentTab("mods");
       setActiveView("manage");
       await refreshItems(newProfile.id, "mods");
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Импорт завершён. Сборка создана с версией игры из пакета."
-          : "Import finished. Profile created with pack's game version.",
-      );
+      showNotification("success", t(language, "modpacks.import.finishedWithVersion"));
     } catch (e) {
       console.error(e);
       setMrpackProgress(null);
@@ -2406,23 +2221,13 @@ export function ModpackTab({
             : JSON.stringify(e);
       const cancelled =
         mrpackImportStopReasonRef.current === "cancel" ||
-        msg.includes("отменена") ||
+        msg.includes(t(language, "modpacks.import.cancelledKeyword")) ||
         msg.toLowerCase().includes("cancelled") ||
         msg.toLowerCase().includes("canceled");
       if (cancelled) {
-        showNotification(
-          "info",
-          language === "ru"
-            ? "Установка сборки отменена."
-            : "Modpack installation cancelled.",
-        );
+        showNotification("info", t(language, "mods.modpackImport.cancelled"));
       } else {
-        showNotification(
-          "error",
-          language === "ru"
-            ? `Не удалось импортировать .mrpack: ${msg}`
-            : `Failed to import .mrpack: ${msg}`,
-        );
+        showNotification("error", t(language, "modpacks.import.failed", { msg }));
       }
     } finally {
       mrpackImportStopReasonRef.current = null;
@@ -2468,11 +2273,7 @@ export function ModpackTab({
       });
       setExternalImportInstances(list ?? []);
       if (!list || list.length === 0) {
-        setExternalImportScanError(
-          language === "ru"
-            ? "Профили не найдены. Попробуйте указать корень лаунчера (не папку instances) — но instances тоже поддерживается."
-            : "No profiles found. Try the launcher's root (not instances) — but instances is supported too.",
-        );
+        setExternalImportScanError(t(language, "modpacks.toast.noProfilesFound"));
       }
     } catch (e) {
       console.error(e);
@@ -2505,18 +2306,12 @@ export function ModpackTab({
         setContentTab("mods");
         setActiveView("manage");
         await refreshItems(newProfile.id, "mods");
-        showNotification(
-          "success",
-          language === "ru" ? "Профиль импортирован." : "Profile imported.",
-        );
+        showNotification("success", t(language, "modpacks.toast.profileImported"));
       } catch (e) {
         console.error(e);
         const msg =
           e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
-        showNotification(
-          "error",
-          language === "ru" ? `Не удалось импортировать профиль: ${msg}` : `Import failed: ${msg}`,
-        );
+        showNotification("error", t(language, "modpacks.toast.importProfileFailed", { msg }));
       } finally {
         setExternalImportBusy(false);
         setExternalImportProgress(null);
@@ -2593,12 +2388,7 @@ export function ModpackTab({
           if (!inside || !p.paths?.length) return;
           const filtered = filterPathsForContentTab(contentTab, p.paths);
           if (filtered.length === 0) {
-            showNotification(
-              "warning",
-              language === "ru"
-                ? "Нет подходящих файлов для этой вкладки (проверьте расширение)."
-                : "No matching files for this tab (check file extensions).",
-            );
+            showNotification("warning", t(language, "modpacks.toast.noMatchingFiles"));
             return;
           }
           await addProfileFilesFromPaths(filtered);
@@ -2643,12 +2433,7 @@ export function ModpackTab({
       await addProfileFilesFromPaths(arr);
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось добавить файлы."
-          : "Failed to add files.",
-      );
+      showNotification("error", t(language, "modpacks.toast.addFilesFailed"));
     }
   }
 
@@ -2669,12 +2454,7 @@ export function ModpackTab({
       setItems((prev) => prev.filter((f) => f.name !== item.name));
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось удалить файл."
-          : "Failed to delete file.",
-      );
+      showNotification("error", t(language, "modpacks.toast.deleteFileFailed"));
     }
   }
 
@@ -2883,12 +2663,7 @@ export function ModpackTab({
       await revealItemInDir(selectedProfile.directory);
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось открыть папку сборки."
-          : "Failed to open profile folder.",
-      );
+      showNotification("error", t(language, "modpacks.toast.openFolderFailed"));
     }
   }
 
@@ -3116,7 +2891,7 @@ export function ModpackTab({
                       img.style.display = "none";
                     }}
                   />
-                  <span>{formatPlaytime(p.play_time_seconds, language)}</span>
+                  <span>{formatPlaytimeShort(language, p.play_time_seconds)}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <ModsIcon className="h-3 w-3" />
@@ -3126,7 +2901,7 @@ export function ModpackTab({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1">
                   <WeightIcon className="h-3 w-3" />
-                  <span>{formatBytes(p.total_size_bytes, language)}</span>
+                  <span>{formatByteSize(language, p.total_size_bytes)}</span>
                 </span>
                 <span className="text-white/55">
                   {tt("modpacks.list.lastPlayed", {
@@ -3699,9 +3474,7 @@ export function ModpackTab({
                     <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
                       {loaderVersionOptions.length === 0 && !loaderVersionsLoading && (
                         <div className="px-3 py-2 text-white/60">
-                          {language === "ru"
-                            ? "Нет версий для выбранной игры"
-                            : "No versions for this game"}
+                          {tt("modpacks.manage.noVersionsForGame")}
                         </div>
                       )}
                       {loaderVersionOptions.map((opt, idx) => {
@@ -3873,12 +3646,10 @@ export function ModpackTab({
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-white">
-                {language === "ru" ? "Импорт из другого лаунчера" : "Import from another launcher"}
+                {tt("modpacks.externalImport.title")}
               </h3>
               <p className="mt-1 text-xs text-white/60">
-                {language === "ru"
-                  ? "Укажите корень PrismLauncher/MultiMC (не папку instances), но вставка instances тоже поддерживается."
-                  : "Prefer PrismLauncher/MultiMC root (not instances), but instances input is supported too."}
+                {tt("modpacks.externalImport.hint")}
               </p>
             </div>
           </div>
@@ -3887,12 +3658,8 @@ export function ModpackTab({
             <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
               <p className="text-xs font-medium text-white">
                 {externalImportProgress?.phase === "copy"
-                  ? language === "ru"
-                    ? "Копирование файлов…"
-                    : "Copying files…"
-                  : language === "ru"
-                    ? "Импорт…"
-                    : "Import…"}
+                  ? tt("modpacks.externalImport.copying")
+                  : tt("modpacks.externalImport.importing")}
               </p>
               <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
                 <div className="h-full w-1/2 rounded-full bg-emerald-500/90" />
@@ -3903,7 +3670,7 @@ export function ModpackTab({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="sm:col-span-1">
               <label className="mb-1 block text-[11px] font-semibold text-white/70">
-                {language === "ru" ? "Лаунчер" : "Launcher"}
+                {tt("modpacks.externalImport.launcher")}
               </label>
               <select
                 value={externalImportLauncher}
@@ -3918,7 +3685,7 @@ export function ModpackTab({
                 }}
                 className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
               >
-                <option value="auto">{language === "ru" ? "Auto" : "Auto"}</option>
+                <option value="auto">{tt("modpacks.externalImport.auto")}</option>
                 <option value="multimc">MultiMC</option>
                 <option value="prism_launcher">PrismLauncher</option>
                 <option value="atlauncher">ATLauncher</option>
@@ -3929,7 +3696,7 @@ export function ModpackTab({
 
             <div className="sm:col-span-2">
               <label className="mb-1 block text-[11px] font-semibold text-white/70">
-                {language === "ru" ? "Путь" : "Path"}
+                {tt("modpacks.externalImport.path")}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -3937,9 +3704,7 @@ export function ModpackTab({
                   value={externalImportPath}
                   onChange={(e) => setExternalImportPath(e.target.value)}
                   placeholder={
-                    language === "ru"
-                      ? "Например: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher"
-                      : "Example: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher"
+                    tt("modpacks.externalImport.pathPlaceholder")
                   }
                   className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none"
                 />
@@ -3949,7 +3714,7 @@ export function ModpackTab({
                   onClick={() => void handleBrowseExternalImportPath()}
                   className="interactive-press shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
                 >
-                  {language === "ru" ? "Обзор" : "Browse"}
+                  {tt("common.browse")}
                 </button>
                 <button
                   type="button"
@@ -3958,12 +3723,8 @@ export function ModpackTab({
                   className="interactive-press shrink-0 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
                 >
                   {externalImportScanBusy
-                    ? language === "ru"
-                      ? "Сканирование…"
-                      : "Scanning…"
-                    : language === "ru"
-                      ? "Сканировать"
-                      : "Scan"}
+                    ? tt("modpacks.externalImport.scanning")
+                    : tt("modpacks.externalImport.scan")}
                 </button>
               </div>
               {externalImportScanError && (
@@ -3979,12 +3740,12 @@ export function ModpackTab({
                   type="text"
                   value={externalImportSearch}
                   onChange={(e) => setExternalImportSearch(e.target.value)}
-                  placeholder={language === "ru" ? "Поиск…" : "Search…"}
+                  placeholder={tt("common.search")}
                   className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none sm:w-72"
                 />
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-semibold text-white/60">
-                    {language === "ru" ? "Сортировка" : "Sort"}
+                    {tt("modpacks.externalImport.sort")}
                   </span>
                   <select
                     value={externalImportSort}
@@ -3993,9 +3754,9 @@ export function ModpackTab({
                     }
                     className="rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
                   >
-                    <option value="name">{language === "ru" ? "Имя" : "Name"}</option>
-                    <option value="date">{language === "ru" ? "Дата" : "Date"}</option>
-                    <option value="size">{language === "ru" ? "Размер" : "Size"}</option>
+                    <option value="name">{tt("modpacks.externalImport.sortName")}</option>
+                    <option value="date">{tt("modpacks.externalImport.sortDate")}</option>
+                    <option value="size">{tt("modpacks.externalImport.sortSize")}</option>
                   </select>
                 </div>
               </div>
@@ -4028,11 +3789,9 @@ export function ModpackTab({
                       p.loader ? p.loader : null,
                       p.game_version ? p.game_version : null,
                       p.mods_count != null
-                        ? language === "ru"
-                          ? `${p.mods_count} модов`
-                          : `${p.mods_count} mods`
+                        ? tt("common.format.modsMeta", { count: p.mods_count })
                         : null,
-                      p.approx_size_bytes != null ? formatBytes(p.approx_size_bytes, language) : null,
+                      p.approx_size_bytes != null ? formatByteSize(language, p.approx_size_bytes) : null,
                     ].filter(Boolean) as string[];
 
                     return (
@@ -4063,7 +3822,7 @@ export function ModpackTab({
                             onClick={() => void handleImportExternalInstance(p)}
                             className="interactive-press rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
                           >
-                            {language === "ru" ? "Импорт" : "Import"}
+                            {tt("modpacks.actions.import")}
                           </button>
                         </div>
                       </div>
@@ -4132,7 +3891,7 @@ export function ModpackTab({
                         setIsRenaming(true);
                       }}
                       className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
-                      title={language === "ru" ? "Переименовать" : "Rename"}
+                      title={tt("common.rename")}
                     >
                       <EditIcon className="h-3.5 w-3.5" />
                     </button>
@@ -4177,7 +3936,7 @@ export function ModpackTab({
                       }}
                     />
                     <span>
-                      {formatPlaytime(selectedProfile.play_time_seconds, language)}
+                      {formatPlaytimeShort(language, selectedProfile.play_time_seconds)}
                     </span>
                   </span>
                   <span className="flex items-center gap-1">
@@ -4189,7 +3948,7 @@ export function ModpackTab({
                   <span className="flex items-center gap-1">
                     <WeightIcon className="h-3 w-3" />
                     <span>
-                      {formatBytes(selectedProfile.total_size_bytes, language)}
+                      {formatByteSize(language, selectedProfile.total_size_bytes)}
                     </span>
                   </span>
                   <span className="text-white/55">
@@ -4207,17 +3966,17 @@ export function ModpackTab({
               type="button"
               onClick={() => setActiveView("list")}
               className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "К списку сборок" : "Back to list"}
+              title={tt("modpacks.manage.backToList")}
             >
               <span className="truncate">
-                {language === "ru" ? "К списку сборок" : "Back to list"}
+                {tt("modpacks.manage.backToList")}
               </span>
             </button>
             <button
               type="button"
               onClick={() => void handleOpenFolder()}
               className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "Открыть папку" : "Open folder"}
+              title={tt("modpacks.manage.openFolder")}
             >
               <FolderIcon className="h-3.5 w-3.5" />
             </button>
@@ -4225,7 +3984,7 @@ export function ModpackTab({
               type="button"
               onClick={() => void openExportModal()}
               className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "Экспортировать сборку" : "Export build"}
+              title={tt("modpacks.manage.exportBuild")}
             >
               <ExportIcon className="h-3.5 w-3.5" />
             </button>
@@ -4251,7 +4010,7 @@ export function ModpackTab({
               type="button"
               onClick={() => void openProfileSettings(selectedProfile.id)}
               className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "Настройки сборки" : "Profile settings"}
+              title={tt("modpacks.manage.profileSettings")}
             >
               <SettingsIcon className="h-3.5 w-3.5" />
             </button>
@@ -4259,10 +4018,10 @@ export function ModpackTab({
               type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
               className={`${MANAGE_ACTION_BTN_CLASS} accent-bg shadow-soft hover:opacity-90`}
-              title={language === "ru" ? "Выбрать сборку" : "Select profile"}
+              title={tt("modpacks.manage.selectProfile")}
             >
               <Download className="h-4 w-4 shrink-0" />
-              <span className="truncate">{language === "ru" ? "Выбрать" : "Select"}</span>
+              <span className="truncate">{tt("modpacks.actions.select")}</span>
             </button>
           </div>
         </div>
@@ -4282,7 +4041,7 @@ export function ModpackTab({
               <SearchIcon className="h-4 w-4" />
               <input
                 type="text"
-                placeholder={language === "ru" ? "Поиск файлов..." : "Search files..."}
+                placeholder={tt("modpacks.manage.searchFiles")}
                 value={itemsSearch}
                 onChange={(e) => setItemsSearch(e.target.value)}
                 className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
@@ -4295,7 +4054,7 @@ export function ModpackTab({
                   selectedProfile && void refreshItems(selectedProfile.id, contentTab)
                 }
                 className="interactive-press rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-                title={language === "ru" ? "Пересканировать" : "Rescan"}
+                title={tt("modpacks.manage.rescan")}
               >
                 <RefreshIcon className="h-3.5 w-3.5" />
               </button>
@@ -4317,7 +4076,7 @@ export function ModpackTab({
                   className="interactive-press inline-flex items-center gap-2 rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
-                  <span>{language === "ru" ? "Добавить" : "Add"}</span>
+                  <span>{tt("common.add")}</span>
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 {isAddMenuOpen && (
@@ -4332,9 +4091,7 @@ export function ModpackTab({
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>
-                      {language === "ru"
-                        ? "Скачать из каталога"
-                        : "Download from catalog"}
+                      {tt("modpacks.manage.downloadFromCatalog")}
                     </span>
                   </button>
                   <button
@@ -4347,9 +4104,7 @@ export function ModpackTab({
                   >
                     <FolderIcon className="h-3.5 w-3.5" />
                     <span>
-                      {language === "ru"
-                        ? "Выбрать файл с ПК"
-                        : "Choose file from PC"}
+                      {tt("modpacks.manage.chooseFileFromPc")}
                     </span>
                   </button>
                   </div>
@@ -4404,20 +4159,16 @@ export function ModpackTab({
             >
             {itemsLoading ? (
               <div className="flex h-32 items-center justify-center text-xs text-white/70">
-                {language === "ru" ? "Загрузка файлов..." : "Loading files..."}
+                {tt("modpacks.manage.loadingFiles")}
               </div>
             ) : visibleItems.length === 0 ? (
               <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-black/40 px-4 text-center text-xs text-white/60">
                 <div className="max-w-sm space-y-2">
                   <p>
-                    {language === "ru"
-                      ? "В этой вкладке ещё нет файлов."
-                      : "There are no files in this tab yet."}
+                    {tt("modpacks.manage.emptyTab")}
                   </p>
                   <p className="text-white/45">
-                    {language === "ru"
-                      ? "Перетащите сюда файлы из проводника или используйте «Добавить»."
-                      : "Drag files here from Explorer, or use “Add”."}
+                    {tt("modpacks.manage.dropHint")}
                   </p>
                 </div>
               </div>
@@ -4477,7 +4228,7 @@ export function ModpackTab({
                             contentUpdatesSingleApplyingFilename === item.name
                           }
                           className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
-                          title={language === "ru" ? "Обновить" : "Update"}
+                          title={tt("modpacks.manage.update")}
                         >
                           <img
                             src="/launcher-assets/download.png"
@@ -4491,7 +4242,7 @@ export function ModpackTab({
                         type="button"
                         onClick={() => void handleDeleteItem(item)}
                         className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
-                        title={language === "ru" ? "Удалить" : "Delete"}
+                        title={tt("common.delete")}
                       >
                         <DeleteIcon className="h-3.5 w-3.5" />
                       </button>
@@ -4511,16 +4262,8 @@ export function ModpackTab({
           aria-valuenow={Math.round(manageMainWidthFrac * 100)}
           aria-valuemin={Math.round(MODPACK_MANAGE_SPLIT_MIN * 100)}
           aria-valuemax={Math.round(MODPACK_MANAGE_SPLIT_MAX * 100)}
-          aria-label={
-            language === "ru"
-              ? "Перетащите, чтобы изменить ширину списка и консоли"
-              : "Drag to resize the list and console"
-          }
-          title={
-            language === "ru"
-              ? "Тяните, чтобы сделать список шире или уже"
-              : "Drag to widen or narrow the list"
-          }
+          aria-label={tt("modpacks.manage.splitResizeAria")}
+          title={tt("modpacks.manage.splitResizeTitle")}
           onPointerDown={onManageSplitPointerDown}
           className={`hidden lg:flex lg:w-2 lg:shrink-0 lg:cursor-col-resize lg:select-none lg:touch-none lg:flex-col lg:items-center lg:justify-center lg:self-stretch ${
             isManageSplitDragging ? "lg:bg-white/25" : "lg:bg-transparent lg:hover:bg-white/10"
@@ -4548,7 +4291,7 @@ export function ModpackTab({
                 className="max-w-[min(100%,15rem)] rounded-2xl border border-white/15 bg-black/50 px-2 py-1 text-[11px] text-white/85 focus:outline-none focus:ring-1 focus:ring-white/30"
               >
                 <option value="live">
-                  {language === "ru" ? "Текущий вывод" : "Current output"}
+                  {tt("modpacks.manage.currentOutput")}
                 </option>
                 {consoleHistorySessions.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -4567,9 +4310,7 @@ export function ModpackTab({
                 className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
                 title={
                   selectedLogSessionId !== "live"
-                    ? language === "ru"
-                      ? "Очистка только для текущего вывода"
-                      : "Clear only applies to current output"
+                    ? tt("modpacks.manage.clearOnlyLive")
                     : undefined
                 }
               >
@@ -4624,9 +4365,7 @@ export function ModpackTab({
                 </div>
               )}
               <p className="mt-2 shrink-0 text-[10px] text-white/40">
-                {language === "ru"
-                  ? "Между списком и консолью можно тянуть разделитель — ширина сохраняется. Лог хранится между перезапусками; перед новым запуском вывод уходит в «Архив»."
-                  : "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived."}
+                {tt("modpacks.manage.consoleResizeHint")}
               </p>
             </div>
           )}
@@ -4698,7 +4437,7 @@ export function ModpackTab({
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
               <SettingsIcon className="h-3.5 w-3.5" />
-              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+              <span>{tt("modpacks.contextMenu.settings")}</span>
             </button>
             <button
               type="button"
@@ -4727,8 +4466,9 @@ export function ModpackTab({
               <span>
                 {(() => {
                   const pinned = isPinnedInSidebar?.(contextMenu.profileId) ?? false;
-                  if (language === "ru") return pinned ? "Открепить от сайдбара" : "Закрепить в сайдбаре";
-                  return pinned ? "Unpin from sidebar" : "Pin to sidebar";
+                  return pinned
+                    ? tt("modpacks.contextMenu.unpinFromSidebar")
+                    : tt("modpacks.contextMenu.pinToSidebar");
                 })()}
               </span>
             </button>
@@ -4746,7 +4486,7 @@ export function ModpackTab({
             >
               <DeleteIcon className="h-3.5 w-3.5" />
               <span>
-                {language === "ru" ? "Удалить сборку" : "Delete profile"}
+                {tt("modpacks.contextMenu.deleteProfile")}
               </span>
             </button>
             <button
@@ -4767,9 +4507,7 @@ export function ModpackTab({
             >
               <EditIcon className="h-3.5 w-3.5" />
               <span>
-                {language === "ru"
-                  ? "Редактировать название"
-                  : "Rename profile"}
+                {tt("modpacks.contextMenu.renameProfile")}
               </span>
             </button>
           </div>
@@ -5001,16 +4739,14 @@ export function ModpackTab({
                 !
               </div>
               <h2 className="text-sm font-semibold text-yellow-200">
-                {language === "ru" ? "Подтверждение удаления" : "Delete confirmation"}
+                {tt("modpacks.deleteConfirm.title")}
               </h2>
             </div>
             <p className="mb-4 text-xs text-yellow-50">
               {(() => {
                 const profile = profiles.find((p) => p.id === pendingDeleteProfileId);
                 const name = profile?.name ?? "";
-                return language === "ru"
-                  ? `Удалить сборку «${name}»? Это действие нельзя отменить.`
-                  : `Delete profile “${name}”? This action cannot be undone.`;
+                return tt("modpacks.deleteConfirm.prompt", { name });
               })()}
             </p>
             <div className="flex justify-end gap-2 text-xs">
@@ -5019,7 +4755,7 @@ export function ModpackTab({
                 onClick={() => setPendingDeleteProfileId(null)}
                 className="interactive-press rounded-full bg-white/10 px-4 py-1.5 font-semibold text-white hover:bg-white/20"
               >
-                {language === "ru" ? "Отмена" : "Cancel"}
+                {tt("common.cancel")}
               </button>
               <button
                 type="button"
@@ -5036,7 +4772,7 @@ export function ModpackTab({
                 }}
                 className="interactive-press rounded-full bg-red-600 px-4 py-1.5 font-semibold text-white hover:bg-red-500"
               >
-                {language === "ru" ? "Удалить" : "Delete"}
+                {tt("common.delete")}
               </button>
             </div>
           </div>
@@ -5179,7 +4915,7 @@ export function ModpackTab({
                 disabled={contentUpdatesApplying}
                 onClick={() => setIsContentUpdatesModalOpen(false)}
               >
-                {language === "ru" ? "Закрыть" : "Close"}
+                {tt("common.close")}
               </button>
             </div>
 
@@ -5275,7 +5011,7 @@ export function ModpackTab({
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs uppercase tracking-[0.16em] text-white/50">
-                  {language === "ru" ? "Настройки сборки" : "Profile settings"}
+                  {tt("modpacks.profileSettingsModal.title")}
                 </div>
                 <div className="truncate text-lg font-semibold text-white">
                   {selectedProfile.name}
@@ -5286,7 +5022,7 @@ export function ModpackTab({
                 className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
                 onClick={closeProfileSettingsModal}
               >
-                {language === "ru" ? "Закрыть" : "Close"}
+                {tt("common.close")}
               </button>
             </div>
 
@@ -5300,7 +5036,7 @@ export function ModpackTab({
                     : "text-white/70 hover:text-white"
                 }`}
               >
-                {language === "ru" ? "Общие" : "General"}
+                {tt("modpacks.profileSettingsModal.general")}
               </button>
               <button
                 type="button"
@@ -5319,19 +5055,15 @@ export function ModpackTab({
               <div className="max-h-[420px] overflow-y-auto pr-1">
                 <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                   <div className="mb-3 text-xs text-white/60">
-                    {language === "ru"
-                      ? "Эти параметры применяются только к выбранной сборке и используются при запуске игры."
-                      : "These settings apply only to this profile and are used on launch."}
+                    {tt("modpacks.profileSettingsModal.hint")}
                   </div>
                   <div className="flex flex-col gap-4">
                     <SettingsToggle
                       label={
-                        language === "ru"
-                          ? "Закрывать лаунчер при запуске игры:"
-                          : "Close launcher when game starts:"
+                        tt("modpacks.profileSettingsModal.closeLauncherOnStart")
                       }
-                      yesLabel={language === "ru" ? "Да" : "Yes"}
-                      noLabel={language === "ru" ? "Нет" : "No"}
+                      yesLabel={tt("common.yes")}
+                      noLabel={tt("common.no")}
                       value={profileEffectiveSettings?.close_launcher_on_game_start ?? false}
                       onChange={(value: boolean) =>
                         void patchProfileGameSettings(selectedProfile.id, {
@@ -5341,12 +5073,10 @@ export function ModpackTab({
                     />
                     <SettingsToggle
                       label={
-                        language === "ru"
-                          ? "Проверять запущенные процессы игры:"
-                          : "Check running game processes:"
+                        tt("modpacks.profileSettingsModal.checkGameProcesses")
                       }
-                      yesLabel={language === "ru" ? "Да" : "Yes"}
-                      noLabel={language === "ru" ? "Нет" : "No"}
+                      yesLabel={tt("common.yes")}
+                      noLabel={tt("common.no")}
                       value={profileEffectiveSettings?.check_game_processes ?? true}
                       onChange={(value: boolean) =>
                         void patchProfileGameSettings(selectedProfile.id, {
@@ -5384,7 +5114,7 @@ export function ModpackTab({
 
                 <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                   <SettingsSlider
-                    label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
+                    label={tt("modpacks.profileSettingsModal.memoryRam")}
                     min={1}
                     max={Math.max(64, systemMemoryGb)}
                     value={Math.max(
@@ -5403,11 +5133,12 @@ export function ModpackTab({
                     }
                     right={
                       <span className="text-sm font-semibold text-white/90">
-                        {Math.max(
-                          1,
-                          Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
-                        )}
-                        ГБ
+                        {tt("settings.game.ram.gbValue", {
+                          gb: Math.max(
+                            1,
+                            Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
+                          ),
+                        })}
                       </span>
                     }
                   />
@@ -5577,7 +5308,7 @@ export function ModpackTab({
                 disabled={migrateBusy}
                 className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {language === "ru" ? "Отмена" : "Cancel"}
+                {tt("common.cancel")}
               </button>
               <button
                 type="button"
@@ -5609,7 +5340,7 @@ export function ModpackTab({
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs uppercase tracking-[0.16em] text-white/50">
-                  {language === "ru" ? "Экспорт сборки" : "Export build"}
+                  {tt("modpacks.exportModal.title")}
                 </div>
                 <div className="truncate text-lg font-semibold text-white">
                   {selectedProfile.name}
@@ -5621,14 +5352,14 @@ export function ModpackTab({
                 disabled={exportBusy}
                 onClick={() => setIsExportOpen(false)}
               >
-                {language === "ru" ? "Закрыть" : "Close"}
+                {tt("common.close")}
               </button>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                 <div className="mb-2 text-xs font-semibold text-white/80">
-                  {language === "ru" ? "Формат" : "Format"}
+                  {tt("modpacks.exportModal.format")}
                 </div>
                 <div className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden">
                   <div
@@ -5671,26 +5402,24 @@ export function ModpackTab({
                 </div>
 
                 <div className="mt-4 text-xs font-semibold text-white/80">
-                  {language === "ru" ? "Исключения" : "Ignore patterns"}
+                  {tt("modpacks.exportModal.ignorePatterns")}
                 </div>
                 <textarea
                   value={ignorePatternsText}
                   disabled={exportBusy}
                   onChange={(e) => setIgnorePatternsText(e.target.value)}
-                  placeholder={language === "ru" ? "*.log\ncache/\n!important.log" : "*.log\ncache/\n!important.log"}
+                  placeholder={"*.log\ncache/\n!important.log"}
                   className="custom-scrollbar mt-2 h-32 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
                 />
                 <div className="mt-2 text-[11px] text-white/55">
-                  {language === "ru"
-                    ? "Поддерживаются: *, **, ! (отмена исключения)."
-                    : "Supported: *, **, ! (negation)."}
+                  {tt("modpacks.exportModal.ignoreHint")}
                 </div>
               </div>
 
               <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3 lg:col-span-2">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="text-xs font-semibold text-white/80">
-                    {language === "ru" ? "Файлы сборки" : "Build files"}
+                    {tt("modpacks.exportModal.buildFiles")}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -5699,7 +5428,7 @@ export function ModpackTab({
                       onClick={() => setSelectedExportPaths(new Set(flattenTreePaths(exportTree)))}
                       className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
                     >
-                      {language === "ru" ? "Выбрать всё" : "Select all"}
+                      {tt("modpacks.exportModal.selectAll")}
                     </button>
                     <button
                       type="button"
@@ -5707,7 +5436,7 @@ export function ModpackTab({
                       onClick={() => setSelectedExportPaths(new Set())}
                       className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
                     >
-                      {language === "ru" ? "Снять всё" : "Clear"}
+                      {tt("modpacks.exportModal.clearAll")}
                     </button>
                   </div>
                 </div>
@@ -5715,15 +5444,15 @@ export function ModpackTab({
                 <div className="custom-scrollbar max-h-[360px] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2">
                   {exportTreeLoading ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
-                      {language === "ru" ? "Сканирование..." : "Scanning..."}
+                      {tt("modpacks.exportModal.scanning")}
                     </div>
                   ) : !exportTree ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
-                      {language === "ru" ? "Нет данных." : "No data."}
+                      {tt("modpacks.exportModal.noData")}
                     </div>
                   ) : exportTree.length === 0 ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
-                      {language === "ru" ? "Папка сборки пуста." : "Build folder is empty."}
+                      {tt("modpacks.exportModal.emptyFolder")}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
@@ -5784,7 +5513,7 @@ export function ModpackTab({
                                 </span>
                               </span>
                               <span className="shrink-0 text-[11px] text-white/55">
-                                {formatBytes(n.size, language)}
+                                {formatByteSize(language, n.size)}
                               </span>
                             </label>
                           );
@@ -5807,7 +5536,7 @@ export function ModpackTab({
                     onClick={() => void handlePreviewExport()}
                     className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
                   >
-                    {language === "ru" ? "Предпросмотр" : "Preview"}
+                    {tt("modpacks.exportModal.preview")}
                   </button>
                   <button
                     type="button"
@@ -5816,14 +5545,14 @@ export function ModpackTab({
                     className="interactive-press inline-flex items-center gap-2 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
                   >
                     <ExportIcon className="h-4 w-4" />
-                    <span>{language === "ru" ? "Экспортировать" : "Export"}</span>
+                    <span>{tt("modpacks.exportModal.export")}</span>
                   </button>
 
                   {exportBusy && exportProgress && (
                     <div className="ml-auto flex min-w-[260px] flex-1 flex-col gap-1 rounded-2xl border border-white/12 bg-black/40 px-3 py-2">
                       <div className="flex items-center justify-between gap-3 text-[11px] text-white/70">
                         <span className="truncate">
-                          {exportProgress.current_file || (language === "ru" ? "Экспорт…" : "Exporting…")}
+                          {exportProgress.current_file || tt("modpacks.exportModal.exporting")}
                         </span>
                         <span className="shrink-0">
                           {exportSpeedLabel || ""}
@@ -5847,8 +5576,8 @@ export function ModpackTab({
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-white/55">
                         <span>
-                          {formatBytes(exportProgress.bytes_written, language)} /{" "}
-                          {formatBytes(exportProgress.total_bytes, language)}
+                          {formatByteSize(language, exportProgress.bytes_written)} /{" "}
+                          {formatByteSize(language, exportProgress.total_bytes)}
                         </span>
                         <span>
                           {exportProgress.total_bytes > 0
@@ -5866,19 +5595,19 @@ export function ModpackTab({
                   <div className="mt-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-white/80">
-                        {language === "ru" ? "Итоговое содержимое" : "Final contents"}
+                        {tt("modpacks.exportModal.finalContents")}
                       </div>
                       <div className="text-xs text-white/70">
-                        {language === "ru" ? "Размер:" : "Size:"}{" "}
+                        {tt("modpacks.exportModal.size")}{" "}
                         <span className="font-semibold text-white/90">
-                          {formatBytes(previewResult.total_bytes, language)}
+                          {formatByteSize(language, previewResult.total_bytes)}
                         </span>
                       </div>
                     </div>
                     <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2 text-[11px] text-white/75">
                       {previewResult.files.length === 0 ? (
                         <div className="py-6 text-center text-white/55">
-                          {language === "ru" ? "Ничего не попадёт в архив." : "Nothing will be included."}
+                          {tt("modpacks.exportModal.nothingIncluded")}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
@@ -5886,15 +5615,13 @@ export function ModpackTab({
                             <div key={f.path} className="flex items-center justify-between gap-3 px-2 py-0.5">
                               <span className="min-w-0 truncate">{f.path}</span>
                               <span className="shrink-0 text-white/50">
-                                {formatBytes(f.size, language)}
+                                {formatByteSize(language, f.size)}
                               </span>
                             </div>
                           ))}
                           {previewResult.files.length > 400 && (
                             <div className="px-2 py-1 text-white/50">
-                              {language === "ru"
-                                ? `… и ещё ${previewResult.files.length - 400} файлов`
-                                : `… and ${previewResult.files.length - 400} more files`}
+                              {`… +${previewResult.files.length - 400}`}
                             </div>
                           )}
                         </div>
@@ -5907,23 +5634,21 @@ export function ModpackTab({
                   <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-emerald-200">
-                        {language === "ru" ? "Готово" : "Done"}
+                        {tt("modpacks.exportModal.done")}
                       </div>
                       <button
                         type="button"
                         onClick={() => void revealItemInDir(exportResultPath)}
                         className="interactive-press rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90"
                       >
-                        {language === "ru" ? "Открыть папку" : "Open folder"}
+                        {tt("modpacks.exportModal.openFolder")}
                       </button>
                     </div>
                     <div className="break-all text-[11px] text-emerald-100/90">{exportResultPath}</div>
                     {exportSkippedFiles.length > 0 && (
                       <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-[11px] text-white/70">
                         <div className="mb-1 font-semibold text-white/80">
-                          {language === "ru"
-                            ? `Пропущено файлов: ${exportSkippedFiles.length}`
-                            : `Skipped files: ${exportSkippedFiles.length}`}
+                          ({exportSkippedFiles.length})
                         </div>
                         <div className="custom-scrollbar max-h-20 overflow-y-auto">
                           {exportSkippedFiles.slice(0, 80).map((p) => (
@@ -5931,9 +5656,7 @@ export function ModpackTab({
                           ))}
                           {exportSkippedFiles.length > 80 && (
                             <div className="text-white/50">
-                              {language === "ru"
-                                ? `… и ещё ${exportSkippedFiles.length - 80}`
-                                : `… and ${exportSkippedFiles.length - 80} more`}
+                              {`… +${exportSkippedFiles.length - 80}`}
                             </div>
                           )}
                         </div>

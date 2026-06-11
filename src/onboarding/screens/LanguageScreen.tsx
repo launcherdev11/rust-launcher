@@ -28,7 +28,12 @@ const LANGUAGE_OPTIONS: {
     flag: "🇩🇪",
     nativeName: "Deutsch",
     descriptionKey: "onboarding.language.deDesc",
-    comingSoon: true,
+  },
+  {
+    code: "es",
+    flag: "🇪🇸",
+    nativeName: "Español",
+    descriptionKey: "onboarding.language.esDesc",
   },
 ];
 
@@ -64,7 +69,7 @@ export function LanguageScreen({
       backgroundImageUrl={backgroundImageUrl}
       showBack
       showNext
-      nextDisabled={selected !== "ru" && selected !== "en"}
+      nextDisabled={selected == null}
       onBack={onBack}
       onNext={onNext}
     >

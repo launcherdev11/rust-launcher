@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { useT } from "../i18n";
-
-type Language = "ru" | "en";
+import { useT, type Language } from "../i18n";
 type NotificationKind = "info" | "success" | "error" | "warning";
 
 type JavaSettings = {

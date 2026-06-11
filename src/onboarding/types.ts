@@ -10,7 +10,7 @@ export type OnboardingStep =
 
 export type AccountProvider = "ely" | "microsoft";
 
-export type OnboardingLanguageOption = Language | "de";
+export type OnboardingLanguageOption = Language;
 
 export const ONBOARDING_STEP_ORDER: OnboardingStep[] = [
   "welcome",

@@ -1,5 +1,6 @@
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { t, type Language } from "../i18n";
 
 export const GAME_CONSOLE_WINDOW_LABEL = "game-console";
 
@@ -20,7 +21,7 @@ export type GameConsoleSyncPayload = {
   isVisible: boolean;
   gameStatus: GameStatus;
   profileName: string | null;
-  language: "ru" | "en";
+  language: "ru" | "en" | "de" | "es";
 };
 
 export type GameConsoleAction =
@@ -43,10 +44,11 @@ export function buildGameConsoleWindowUrl(): string {
 
 export function formatGameConsoleWindowTitle(
   profileName: string | null,
-  language: "ru" | "en",
+  language: Language,
 ): string {
-  const name = profileName?.trim() || (language === "ru" ? "игра" : "game");
-  return language === "ru" ? `Консоль "${name}"` : `Console "${name}"`;
+  const name =
+    profileName?.trim() || t(language, "app.gameConsole.defaultProfileName");
+  return t(language, "app.gameConsole.windowTitle", { name });
 }
 
 export async function getGameConsoleWebview(): Promise<WebviewWindow | null> {
@@ -55,7 +57,7 @@ export async function getGameConsoleWebview(): Promise<WebviewWindow | null> {
 
 export async function openGameConsoleWindow(
   profileName: string | null,
-  language: "ru" | "en",
+  language: "ru" | "en" | "de" | "es",
 ): Promise<WebviewWindow | null> {
   const existing = await getGameConsoleWebview();
   if (existing) {

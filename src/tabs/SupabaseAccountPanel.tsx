@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useT } from "../i18n";
-
-type Language = "ru" | "en";
+import { t, useT, type Language } from "../i18n";
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
 
@@ -80,26 +78,40 @@ function normalizeProviderUuid(raw: string): string {
   return raw.trim().toLowerCase().replace(/-/g, "");
 }
 
-function mapAuthErrorMessage(raw: string, mode: "login" | "signup"): string {
+function mapAuthErrorMessage(
+  raw: string,
+  mode: "login" | "signup",
+  lang: Language,
+): string {
   const lower = raw.toLowerCase();
   if (
     lower.includes("failed to fetch") ||
     lower.includes("networkerror when attempting to fetch resource")
   ) {
-    return "Не удается подключиться к Supabase. Проверьте VITE_SUPABASE_PROJECT_URL (должен быть https://<project>.supabase.co), интернет и доступность сервиса.";
+    return t(lang, "supabase.errors.connectionFailed");
   }
   if (mode === "login") {
-    if (lower.includes("invalid login credentials")) return "Неверный логин или пароль.";
-    if (lower.includes("invalid_credentials")) return "Неверный логин или пароль.";
-    if (lower.includes("password")) return "Неверный пароль.";
+    if (lower.includes("invalid login credentials")) {
+      return t(lang, "supabase.errors.invalidCredentials");
+    }
+    if (lower.includes("invalid_credentials")) {
+      return t(lang, "supabase.errors.invalidCredentials");
+    }
+    if (lower.includes("password")) return t(lang, "supabase.errors.invalidPassword");
   } else {
-    if (lower.includes("password should be at least")) return "Пароль слишком короткий. Минимум 6 символов.";
-    if (lower.includes("weak password")) return "Слишком слабый пароль.";
+    if (lower.includes("password should be at least")) {
+      return t(lang, "supabase.errors.passwordTooShort");
+    }
+    if (lower.includes("weak password")) return t(lang, "supabase.errors.weakPassword");
   }
   return raw;
 }
 
-function mapIdentityLinkErrorMessage(raw: string, provider: "ely" | "minecraft"): string {
+function mapIdentityLinkErrorMessage(
+  raw: string,
+  provider: "ely" | "minecraft",
+  lang: Language,
+): string {
   const lower = raw.toLowerCase();
   const providerName = provider === "ely" ? "Ely.by" : "Minecraft";
 
@@ -107,14 +119,14 @@ function mapIdentityLinkErrorMessage(raw: string, provider: "ely" | "minecraft")
     lower.includes("identity already linked to another user") ||
     lower.includes("already linked")
   ) {
-    return `${providerName} уже привязан к другому аккаунту 16launcher. Отвяжите его в том аккаунте или используйте другой аккаунт ${providerName}.`;
+    return t(lang, "supabase.errors.identityAlreadyLinked", { provider: providerName });
   }
 
   if (
     lower.includes("failed to fetch") ||
     lower.includes("networkerror when attempting to fetch resource")
   ) {
-    return `Не удалось привязать ${providerName}: нет соединения с Supabase. Проверьте интернет и настройки проекта.`;
+    return t(lang, "supabase.errors.linkConnectionFailed", { provider: providerName });
   }
 
   return raw;
@@ -220,7 +232,7 @@ export function SupabaseAccountPanel({
 
   const refreshSupabaseSession = async (currentRefreshToken: string) => {
     if (!supabaseProjectUrl || !supabaseAnonKey) {
-      throw new Error("Не настроены VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY в .env");
+      throw new Error(t(language, "supabase.toast.envNotConfigured"));
     }
     const res = await fetch(`${supabaseProjectUrl}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
@@ -235,7 +247,7 @@ export function SupabaseAccountPanel({
     if (!res.ok) throw new Error(jsonErrorFromBody(data));
     const nextAccessToken = data.access_token ?? data.session?.access_token;
     const nextRefreshToken = data.refresh_token ?? currentRefreshToken;
-    if (!nextAccessToken) throw new Error("Supabase refresh не вернул access_token.");
+    if (!nextAccessToken) throw new Error(t(language, "supabase.toast.refreshNoToken"));
     persistSupabaseSession(nextAccessToken, nextRefreshToken);
     return nextAccessToken;
   };
@@ -248,7 +260,7 @@ export function SupabaseAccountPanel({
     void refreshSupabaseSession(refreshToken).catch((e) => {
       if (cancelled) return;
       const rawMessage = e instanceof Error ? e.message : String(e);
-      showNotification("warning", `Сессия 16launcher истекла: ${rawMessage}`);
+      showNotification("warning", t(language, "supabase.toast.sessionExpiredWithMsg", { msg: rawMessage }));
       clearSupabaseSession();
     });
 
@@ -265,7 +277,7 @@ export function SupabaseAccountPanel({
     const timer = window.setTimeout(() => {
       void refreshSupabaseSession(refreshToken).catch((e) => {
         const rawMessage = e instanceof Error ? e.message : String(e);
-        showNotification("warning", `Сессия 16launcher истекла: ${rawMessage}`);
+        showNotification("warning", t(language, "supabase.toast.sessionExpiredWithMsg", { msg: rawMessage }));
         clearSupabaseSession();
       });
     }, timeoutMs);
@@ -326,38 +338,35 @@ export function SupabaseAccountPanel({
     });
     const data = (await res.json().catch(() => ({}))) as ResolveLoginResponse & Record<string, unknown>;
     if (res.status === 404) {
-      throw new Error("Сервер Supabase пока не поддерживает вход по nickname (нет users_resolve_login).");
+      throw new Error(t(language, "supabase.toast.nicknameLoginUnsupported"));
     }
     if (!res.ok) throw new Error(jsonErrorFromBody(data));
 
     const email = typeof data.email === "string" ? data.email.trim() : "";
-    if (!email) throw new Error("По этому nickname не найден email для входа.");
+    if (!email) throw new Error(t(language, "supabase.toast.nicknameEmailNotFound"));
     return email;
   };
 
   const handleAuth = async () => {
     if (!supabaseProjectUrl || !supabaseAnonKey) {
-      showNotification(
-        "error",
-        "Не настроены VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY в .env",
-      );
+      showNotification("error", tt("supabase.toast.envNotConfigured"));
       return;
     }
     if (!authIdentifier.trim()) {
       return showNotification(
         "warning",
-        mode === "signup" ? "Введите email" : "Введите email или nickname",
+        mode === "signup" ? tt("supabase.enterEmail") : tt("supabase.enterNicknameOrEmail"),
       );
     }
     if (mode === "signup" && !authIdentifier.includes("@")) {
-      return showNotification("warning", "Для регистрации укажите email.");
+      return showNotification("warning", tt("supabase.toast.enterEmailSignup"));
     }
     if (mode === "signup" && !signupNickname.trim()) {
-      return showNotification("warning", "Введите никнейм для регистрации.");
+      return showNotification("warning", tt("supabase.toast.enterSignupNickname"));
     }
-    if (!authPassword) return showNotification("warning", "Введите пароль");
+    if (!authPassword) return showNotification("warning", tt("supabase.toast.enterPassword"));
     if (mode === "signup" && authPassword.length < 6) {
-      return showNotification("warning", "Пароль должен содержать минимум 6 символов.");
+      return showNotification("warning", tt("supabase.toast.passwordTooShort"));
     }
 
     setLoading(true);
@@ -385,9 +394,7 @@ export function SupabaseAccountPanel({
             lowerResolve.includes("failed to fetch") ||
             lowerResolve.includes("networkerror when attempting to fetch resource")
           ) {
-            throw new Error(
-              "Не удалось обратиться к функции users_resolve_login (вход по никнейму). Обычно это CORS/OPTIONS в Edge Function. Временно войдите по email, затем проверьте CORS в users_resolve_login.",
-            );
+            throw new Error(tt("supabase.toast.resolveLoginFailed"));
           }
           throw resolveErr;
         }
@@ -404,8 +411,8 @@ export function SupabaseAccountPanel({
 
       const token = data.access_token ?? data.session?.access_token;
       const receivedRefreshToken = data.refresh_token ?? data.session?.refresh_token;
-      if (!token) throw new Error("Не удалось получить access_token из ответа Supabase.");
-      if (!receivedRefreshToken) throw new Error("Не удалось получить refresh_token из ответа Supabase.");
+      if (!token) throw new Error(tt("supabase.toast.noAccessTokenResponse"));
+      if (!receivedRefreshToken) throw new Error(tt("supabase.toast.noRefreshToken"));
 
       const nicknameForEnsure = mode === "signup" ? signupNickname.trim() : undefined;
 
@@ -420,10 +427,13 @@ export function SupabaseAccountPanel({
       }
       setNickname(ensure.user.nickname);
       window.localStorage.setItem(STORAGE_NICKNAME_KEY, ensure.user.nickname);
-      showNotification("success", mode === "signup" ? "Аккаунт создан" : "Вход выполнен");
+      showNotification(
+        "success",
+        mode === "signup" ? tt("supabase.toast.accountCreated") : tt("supabase.toast.signedIn"),
+      );
     } catch (e) {
       const rawMessage = e instanceof Error ? e.message : String(e);
-      showNotification("error", mapAuthErrorMessage(rawMessage, mode));
+      showNotification("error", mapAuthErrorMessage(rawMessage, mode, language));
     } finally {
       setLoading(false);
     }
@@ -431,26 +441,26 @@ export function SupabaseAccountPanel({
 
   const handleLogout = () => {
     clearSupabaseSession();
-    showNotification("info", "Вы вышли из аккаунта");
+    showNotification("info", tt("supabase.toast.loggedOut"));
   };
 
   const handleChangeNickname = async () => {
     if (!accessToken) {
-      showNotification("warning", "Сначала войдите в аккаунт.");
+      showNotification("warning", tt("supabase.toast.signInFirst"));
       return;
     }
 
     const nextNickname = nicknameDraft.trim();
     if (!nextNickname) {
-      showNotification("warning", "Введите новый никнейм.");
+      showNotification("warning", tt("supabase.toast.enterNewNickname"));
       return;
     }
     if (nextNickname.length < 3) {
-      showNotification("warning", "Никнейм должен быть не короче 3 символов.");
+      showNotification("warning", tt("supabase.toast.nicknameTooShort"));
       return;
     }
     if (nextNickname === nickname.trim()) {
-      showNotification("info", "Этот никнейм уже установлен.");
+      showNotification("info", tt("supabase.toast.nicknameAlreadySet"));
       return;
     }
 
@@ -463,12 +473,12 @@ export function SupabaseAccountPanel({
       setNickname(ensure.user.nickname);
       setNicknameDraft(ensure.user.nickname);
       window.localStorage.setItem(STORAGE_NICKNAME_KEY, ensure.user.nickname);
-      showNotification("success", "Никнейм обновлен.");
+      showNotification("success", tt("supabase.toast.nicknameUpdated"));
     } catch (e) {
       const rawMessage = e instanceof Error ? e.message : String(e);
       if (isExpiredSupabaseTokenError(rawMessage)) {
         handleLogout();
-        showNotification("warning", "Сессия 16launcher истекла. Войдите в аккаунт снова.");
+        showNotification("warning", tt("supabase.toast.sessionExpired"));
         return;
       }
       showNotification("error", rawMessage);
@@ -480,7 +490,7 @@ export function SupabaseAccountPanel({
   const callLinkIdentity = async (provider: "ely" | "minecraft", providerUuidRaw: string, providerUsername?: string | null) => {
     if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
     if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
-    if (!accessToken) throw new Error("Нет Supabase access_token — войдите в аккаунт.");
+    if (!accessToken) throw new Error(tt("supabase.toast.noAccessToken"));
 
     const provider_uuid = normalizeProviderUuid(providerUuidRaw);
     if (!provider_uuid) throw new Error("provider_uuid пустой");
@@ -510,7 +520,7 @@ export function SupabaseAccountPanel({
           if (!launcherProfile.mc_uuid) {
             try {
               await onMicrosoftLogin?.();
-              showNotification("info", "Выполните вход Microsoft, затем снова нажмите «Привязать».");
+              showNotification("info", tt("supabase.toast.signInMicrosoftThenLink"));
             } catch (e) {
               showNotification("error", e instanceof Error ? e.message : String(e));
             }
@@ -520,15 +530,15 @@ export function SupabaseAccountPanel({
           try {
             await callLinkIdentity("minecraft", launcherProfile.mc_uuid, null);
             setLinkedProviders((prev) => ({ ...prev, minecraft: true }));
-            showNotification("success", "Minecraft привязан к аккаунту");
+            showNotification("success", tt("supabase.toast.minecraftLinked"));
           } catch (e) {
             const rawMessage = e instanceof Error ? e.message : String(e);
             if (isExpiredSupabaseTokenError(rawMessage)) {
               handleLogout();
-              showNotification("warning", "Сессия 16launcher истекла. Войдите в аккаунт снова.");
+              showNotification("warning", tt("supabase.toast.sessionExpired"));
               return;
             }
-            showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "minecraft"));
+            showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "minecraft", language));
           } finally {
             setLinking(null);
           }
@@ -536,11 +546,17 @@ export function SupabaseAccountPanel({
         className={`interactive-press flex items-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60 ${
           compactMode ? "min-w-[170px] justify-center shadow-lg" : ""
         }`}
-        title={!launcherProfile.mc_uuid ? "Нажмите для входа через Microsoft и повторите привязку" : undefined}
+        title={!launcherProfile.mc_uuid ? tt("supabase.linkMicrosoftTitle") : undefined}
       >
         <span>Microsoft</span>
         <span className="text-white/80">·</span>
-        <span>{linkedProviders.minecraft ? "Привязан" : linking === "minecraft" ? "Привязка…" : "Привязать"}</span>
+        <span>
+          {linkedProviders.minecraft
+            ? tt("supabase.linked")
+            : linking === "minecraft"
+              ? tt("supabase.linking")
+              : tt("supabase.link")}
+        </span>
       </button>
 
       <button
@@ -550,7 +566,7 @@ export function SupabaseAccountPanel({
           if (!launcherProfile.ely_uuid) {
             try {
               await onElyLogin?.();
-              showNotification("info", "Выполните вход Ely.by, затем снова нажмите «Привязать».");
+              showNotification("info", tt("supabase.toast.signInElyThenLink"));
             } catch (e) {
               showNotification("error", e instanceof Error ? e.message : String(e));
             }
@@ -560,15 +576,15 @@ export function SupabaseAccountPanel({
           try {
             await callLinkIdentity("ely", launcherProfile.ely_uuid, launcherProfile.ely_username);
             setLinkedProviders((prev) => ({ ...prev, ely: true }));
-            showNotification("success", "Ely.by привязан к аккаунту");
+            showNotification("success", tt("supabase.toast.elyLinked"));
           } catch (e) {
             const rawMessage = e instanceof Error ? e.message : String(e);
             if (isExpiredSupabaseTokenError(rawMessage)) {
               handleLogout();
-              showNotification("warning", "Сессия 16launcher истекла. Войдите в аккаунт снова.");
+              showNotification("warning", tt("supabase.toast.sessionExpired"));
               return;
             }
-            showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "ely"));
+            showNotification("error", mapIdentityLinkErrorMessage(rawMessage, "ely", language));
           } finally {
             setLinking(null);
           }
@@ -576,11 +592,17 @@ export function SupabaseAccountPanel({
         className={`interactive-press flex items-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60 ${
           compactMode ? "min-w-[170px] justify-center" : ""
         }`}
-        title={!launcherProfile.ely_uuid ? "Нажмите для входа через Ely.by и повторите привязку" : undefined}
+        title={!launcherProfile.ely_uuid ? tt("supabase.linkElyTitle") : undefined}
       >
         <span>Ely.by</span>
         <span className="text-white/80">·</span>
-        <span>{linkedProviders.ely ? "Привязан" : linking === "ely" ? "Привязка…" : "Привязать"}</span>
+        <span>
+          {linkedProviders.ely
+            ? tt("supabase.linked")
+            : linking === "ely"
+              ? tt("supabase.linking")
+              : tt("supabase.link")}
+        </span>
       </button>
     </div>
   );
@@ -590,14 +612,14 @@ export function SupabaseAccountPanel({
       <div className="flex w-full flex-col items-center gap-3">
         <div className="w-full rounded-xl border border-white/10 bg-black/30 p-3">
           <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
-            Управление аккаунтом
+            {tt("supabase.accountManagement")}
           </p>
           <input
             type="text"
             value={nicknameDraft}
             onChange={(e) => setNicknameDraft(e.target.value)}
             className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
-            placeholder={language === "ru" ? "Новый никнейм" : "New nickname"}
+            placeholder={tt("supabase.newNicknamePlaceholder")}
           />
           <div className="mt-2 flex gap-2">
             <button
@@ -606,7 +628,7 @@ export function SupabaseAccountPanel({
               onClick={() => void handleChangeNickname()}
               className="interactive-press flex-1 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
             >
-              Сменить ник
+              {tt("supabase.changeNickname")}
             </button>
             <button
               type="button"
@@ -614,7 +636,7 @@ export function SupabaseAccountPanel({
               onClick={handleLogout}
               className="interactive-press rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
             >
-              Выйти
+              {tt("supabase.logout")}
             </button>
           </div>
         </div>
@@ -627,7 +649,7 @@ export function SupabaseAccountPanel({
     <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-6 shadow-xl backdrop-blur-md bg-black/40">
       <div className="mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
-          16launcher аккаунт
+          {tt("supabase.accountTitle")}
         </h2>
       </div>
 
@@ -644,7 +666,7 @@ export function SupabaseAccountPanel({
                   : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
               }`}
             >
-              Войти
+              {tt("supabase.signIn")}
             </button>
             <button
               type="button"
@@ -656,58 +678,52 @@ export function SupabaseAccountPanel({
                   : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
               }`}
             >
-              Регистрация
+              {tt("supabase.signUp")}
             </button>
           </div>
 
           <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-            {mode === "signup" ? "Email" : "Email / Nickname"}
+            {mode === "signup" ? tt("supabase.emailLabel") : tt("supabase.emailOrNicknameLabel")}
             <input
               type="text"
               value={authIdentifier}
               onChange={(e) => setAuthIdentifier(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
               placeholder={
-                mode === "signup"
-                  ? language === "ru"
-                    ? "Введите email"
-                    : "Enter email"
-                  : language === "ru"
-                    ? "Введите никнейм или почту"
-                    : "Enter nickname or email"
+                mode === "signup" ? tt("supabase.enterEmail") : tt("supabase.enterNicknameOrEmail")
               }
             />
           </label>
 
           {mode === "signup" ? (
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-              Никнейм
+              {tt("supabase.nicknameLabel")}
               <input
                 type="text"
                 value={signupNickname}
                 onChange={(e) => setSignupNickname(e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-                placeholder={language === "ru" ? "Введите никнейм" : "Enter nickname"}
+                placeholder={tt("supabase.enterNickname")}
               />
             </label>
           ) : null}
 
           <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-            Пароль
+            {tt("supabase.passwordLabel")}
             <div className="relative flex items-center">
               <input
                 type={showPassword ? "text" : "password"}
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 pr-11 text-sm text-white outline-none focus:border-emerald-400/30"
-                placeholder="Пароль"
+                placeholder={tt("supabase.passwordPlaceholder")}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="interactive-press absolute inset-y-0 right-2 my-auto flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/10"
-                aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
-                title={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                aria-label={showPassword ? tt("supabase.hidePassword") : tt("supabase.showPassword")}
+                title={showPassword ? tt("supabase.hidePassword") : tt("supabase.showPassword")}
               >
                 <img
                   src={showPassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
@@ -724,7 +740,11 @@ export function SupabaseAccountPanel({
             onClick={() => void handleAuth()}
             className="interactive-press w-full rounded-xl bg-[#2d7d46] px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
           >
-            {loading ? tt("common.loading") : mode === "login" ? "Войти" : "Создать аккаунт"}
+            {loading
+              ? tt("common.loading")
+              : mode === "login"
+                ? tt("supabase.signIn")
+                : tt("supabase.createAccount")}
           </button>
         </div>
       ) : (
@@ -732,12 +752,12 @@ export function SupabaseAccountPanel({
           <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
-                {language === "ru" ? "Ник лаунчера" : "Launcher nickname"}
+                {tt("supabase.launcherNickname")}
               </p>
               <p className="mt-0.5 truncate text-sm font-semibold text-emerald-100/95">{launcherNickname || "—"}</p>
 
               <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/45">
-                {language === "ru" ? "Игровой ник" : "In-game nickname"}
+                {tt("supabase.inGameNickname")}
               </p>
               <p className="mt-0.5 truncate text-sm font-semibold text-white/90">{gameNickname || "—"}</p>
             </div>
@@ -748,7 +768,7 @@ export function SupabaseAccountPanel({
 
           <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
-              Управление аккаунтом
+              {tt("supabase.accountManagement")}
             </p>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <input
@@ -756,7 +776,7 @@ export function SupabaseAccountPanel({
                 value={nicknameDraft}
                 onChange={(e) => setNicknameDraft(e.target.value)}
                 className="h-10 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
-                placeholder={language === "ru" ? "Новый никнейм" : "New nickname"}
+                placeholder={tt("supabase.newNicknamePlaceholder")}
               />
               <button
                 type="button"
@@ -764,7 +784,7 @@ export function SupabaseAccountPanel({
                 onClick={() => void handleChangeNickname()}
                 className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
               >
-                Сменить ник
+                {tt("supabase.changeNickname")}
               </button>
               <button
                 type="button"
@@ -772,7 +792,7 @@ export function SupabaseAccountPanel({
                 onClick={handleLogout}
                 className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
               >
-                Выйти
+                {tt("supabase.logout")}
               </button>
             </div>
           </div>
