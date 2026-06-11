@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
-import { useT } from "../i18n";
+import { useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
-type Language = "ru" | "en";
 
 type VersionSummary = {
   id: string;

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useT } from "../i18n";
+import { useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getElyAvatarByUsername } from "../lib/avatar";
-
-type Language = "ru" | "en";
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
 
@@ -160,7 +158,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(jsonErrorFromBody(data));
-      showNotification("success", "Заявка принята");
+      showNotification("success", tt("friends.toast.requestAccepted"));
       const [reqRes, friendsRes] = await Promise.all([
         loadIncomingRequests(accessToken),
         loadFriends(accessToken),
@@ -192,7 +190,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(jsonErrorFromBody(data));
-      showNotification("info", "Заявка отклонена");
+      showNotification("info", tt("friends.toast.requestRejected"));
       const reqRes = await loadIncomingRequests(accessToken);
       setIncomingRequests(reqRes.incoming_requests ?? []);
     } catch (e) {
@@ -204,13 +202,13 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
 
   const handleSendRequest = async () => {
     if (!accessToken) {
-      showNotification("warning", "Сначала войдите во вкладке «Аккаунты»");
+      showNotification("warning", tt("friends.toast.signInFirst"));
       return;
     }
     const toNick = friendNickToAdd.trim();
     if (!toNick) return;
     if (toNick === profileNickname.trim()) {
-      showNotification("warning", "Нельзя отправить заявку самому себе");
+      showNotification("warning", tt("friends.toast.cannotAddSelf"));
       return;
     }
 
@@ -232,9 +230,9 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       if (!res.ok) throw new Error(jsonErrorFromBody(data));
 
       if (data?.already_exists) {
-        showNotification("info", "Заявка уже существует или вы уже друзья.");
+        showNotification("info", tt("friends.toast.requestExists"));
       } else {
-        showNotification("success", "Заявка отправлена");
+        showNotification("success", tt("friends.toast.requestSent"));
       }
 
       setFriendNickToAdd("");
@@ -320,7 +318,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       <div className="w-full text-center">
         <h1 className="text-lg font-bold tracking-tight text-white/95">{tt("app.sidebar.friends")}</h1>
         <p className="mt-1.5 text-sm text-white/50">
-          {accessToken ? "Управляйте друзьями по nickname." : "Войдите в Supabase во вкладке «Аккаунты», чтобы пользоваться друзьями."}
+          {accessToken ? tt("friends.subtitleSignedIn") : tt("friends.subtitleSignedOut")}
         </p>
       </div>
 
@@ -332,7 +330,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
               value={friendNickToAdd}
               onChange={(e) => setFriendNickToAdd(e.target.value)}
               className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
-              placeholder="Никнейм друга"
+              placeholder={tt("friends.friendNicknamePlaceholder")}
               disabled={!accessToken}
             />
             <button
@@ -341,7 +339,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
               onClick={() => void handleSendRequest()}
               className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
             >
-              Добавить
+              {tt("friends.add")}
             </button>
             <button
               type="button"
@@ -349,7 +347,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
               onClick={() => void handleLoadFriends()}
               className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
             >
-              Обновить
+              {tt("friends.refresh")}
             </button>
             <button
               type="button"
@@ -357,18 +355,18 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
               onClick={() => void handleLoadIncomingRequests()}
               className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
             >
-              Заявки
+              {tt("friends.requests")}
             </button>
           </div>
 
           <div className="h-px w-full bg-white/10" />
 
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-white/45">Входящие заявки</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-white/45">{tt("friends.incomingTitle")}</p>
             {!accessToken ? (
-              <p className="text-sm text-white/60">Сначала войдите во вкладке «Аккаунты».</p>
+              <p className="text-sm text-white/60">{tt("friends.signInFirst")}</p>
             ) : incomingRequests.length === 0 ? (
-              <p className="text-sm text-white/60">Нет входящих заявок.</p>
+              <p className="text-sm text-white/60">{tt("friends.noIncoming")}</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {incomingRequests.map((r) => (
@@ -403,7 +401,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                         onClick={() => void handleAcceptRequest(r.request_id)}
                         className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
                       >
-                        Принять
+                        {tt("friends.accept")}
                       </button>
                       <button
                         type="button"
@@ -411,7 +409,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                         onClick={() => void handleRejectRequest(r.request_id)}
                         className="interactive-press rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
                       >
-                        Отклонить
+                        {tt("friends.reject")}
                       </button>
                     </div>
                   </li>
@@ -423,11 +421,11 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
           <div className="h-px w-full bg-white/10" />
 
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-white/45">Ваши друзья</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-white/45">{tt("friends.yourFriends")}</p>
             {!accessToken ? (
-              <p className="text-sm text-white/60">Сначала войдите во вкладке «Аккаунты».</p>
+              <p className="text-sm text-white/60">{tt("friends.signInFirst")}</p>
             ) : friends.length === 0 ? (
-              <p className="text-sm text-white/60">Пока никого нет. Отправьте заявку по nickname.</p>
+              <p className="text-sm text-white/60">{tt("friends.noFriends")}</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {friends.map((f) => (

@@ -24,7 +24,6 @@ type Profile = {
 
 export type OnboardingFlowProps = {
   language: Language;
-  setLanguage: (lang: Language) => void;
   accentColor?: string;
   backgroundImageUrl?: string;
   backgroundAnimated?: boolean;
@@ -35,7 +34,6 @@ export type OnboardingFlowProps = {
 
 export function OnboardingFlow({
   language,
-  setLanguage,
   accentColor,
   backgroundImageUrl,
   backgroundAnimated = false,
@@ -71,12 +69,10 @@ export function OnboardingFlow({
 
   const applyLanguage = useCallback(
     (code: OnboardingLanguageOption) => {
-      if (code === "de") return;
       setSelectedLanguage(code);
-      setLanguage(code);
       onLanguagePersist(code);
     },
-    [onLanguagePersist, setLanguage],
+    [onLanguagePersist],
   );
 
   const cleanupElyListeners = useCallback(() => {
