@@ -70,7 +70,7 @@ export function loadProfileGroups(): ProfileGroup[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    const groups = parsed
       .filter((g): g is ProfileGroup => {
         return (
           g != null &&
@@ -84,11 +84,25 @@ export function loadProfileGroups(): ProfileGroup[] {
       .map((g) => ({
         ...g,
         collapsed: Boolean(g.collapsed),
-        profileIds: g.profileIds.filter((id) => typeof id === "string"),
+        profileIds: [...new Set(g.profileIds.filter((id) => typeof id === "string"))],
       }));
+    return dedupeProfileGroupAssignments(groups);
   } catch {
     return [];
   }
+}
+
+export function dedupeProfileGroupAssignments(groups: ProfileGroup[]): ProfileGroup[] {
+  const claimed = new Set<string>();
+  return groups.map((group) => {
+    const profileIds: string[] = [];
+    for (const id of group.profileIds) {
+      if (claimed.has(id)) continue;
+      claimed.add(id);
+      profileIds.push(id);
+    }
+    return { ...group, profileIds };
+  });
 }
 
 const profileGroupsListeners = new Set<() => void>();
@@ -138,12 +152,13 @@ export function assignProfilesToGroup(
   profileIds: string[],
 ): ProfileGroup[] {
   const idsSet = new Set(profileIds);
-  return groups.map((g) => {
+  const next = groups.map((g) => {
     if (g.id === groupId) {
       return { ...g, profileIds: [...new Set([...g.profileIds, ...profileIds])] };
     }
     return { ...g, profileIds: g.profileIds.filter((id) => !idsSet.has(id)) };
   });
+  return pruneEmptyProfileGroups(next);
 }
 
 export function ungroupProfiles(groups: ProfileGroup[], profileIds: string[]): ProfileGroup[] {
@@ -152,4 +167,8 @@ export function ungroupProfiles(groups: ProfileGroup[], profileIds: string[]): P
     ...g,
     profileIds: g.profileIds.filter((id) => !idsSet.has(id)),
   }));
+}
+
+export function pruneEmptyProfileGroups(groups: ProfileGroup[]): ProfileGroup[] {
+  return groups.filter((g) => g.profileIds.length > 0);
 }
