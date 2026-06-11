@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useT, t, type Language } from "../i18n";
@@ -257,6 +264,10 @@ export function ModsTab({
     width: number;
   }>({ left: 0, width: 0 });
   const [installedFilenames, setInstalledFilenames] = useState<Set<string>>(new Set());
+  const [installedProjectKeys, setInstalledProjectKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const projectFilenamesCacheRef = useRef<Map<string, Set<string>>>(new Map());
   const [versionLoaderLocked, setVersionLoaderLocked] = useState(!!activeProfileId);
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
 
@@ -283,6 +294,138 @@ export function ModsTab({
       )
       .catch(() => setInstalledFilenames(new Set()));
   }, [activeProfileId, modrinthContentType]);
+
+  const installedFilenamesKey = useMemo(
+    () => [...installedFilenames].sort().join("\0"),
+    [installedFilenames],
+  );
+
+  const catalogProjectKeys = useMemo(
+    () =>
+      contentProvider === "modrinth"
+        ? modrinthProjects.map((p) => p.project_id)
+        : curseforgeProjects.map((p) => String(p.id)),
+    [contentProvider, modrinthProjects, curseforgeProjects],
+  );
+
+  useEffect(() => {
+    if (
+      !activeProfileId ||
+      installedFilenames.size === 0 ||
+      modrinthContentType === "modpack" ||
+      catalogProjectKeys.length === 0
+    ) {
+      setInstalledProjectKeys(new Set());
+      return;
+    }
+
+    const cache = projectFilenamesCacheRef.current;
+    const installedFromCache = new Set<string>();
+    const missingKeys: string[] = [];
+
+    for (const key of catalogProjectKeys) {
+      const filenames = cache.get(key);
+      if (filenames) {
+        for (const name of filenames) {
+          if (installedFilenames.has(name)) {
+            installedFromCache.add(key);
+            break;
+          }
+        }
+      } else {
+        missingKeys.push(key);
+      }
+    }
+
+    setInstalledProjectKeys(installedFromCache);
+
+    if (missingKeys.length === 0) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    (async () => {
+      const installed = new Set(installedFromCache);
+
+      await Promise.all(
+        missingKeys.map(async (key) => {
+          try {
+            let filenames: Set<string>;
+            if (contentProvider === "modrinth") {
+              const res = await fetch(
+                `https://api.modrinth.com/v2/project/${key}/version`,
+                { signal: controller.signal },
+              );
+              if (!res.ok) return;
+              const versions: ModrinthVersion[] = await res.json();
+              filenames = new Set(
+                versions.flatMap((v) => v.files.map((f) => f.filename)),
+              );
+            } else {
+              const data = await invoke<CurseforgeFileHit[]>(
+                "curseforge_get_mod_files",
+                {
+                  modId: Number(key),
+                  gameVersion: modrinthGameVersion ?? "",
+                  loader: modrinthLoader ?? "",
+                },
+              );
+              filenames = new Set(data.map((f) => f.fileName));
+            }
+            cache.set(key, filenames);
+            for (const name of filenames) {
+              if (installedFilenames.has(name)) {
+                installed.add(key);
+                break;
+              }
+            }
+          } catch (e) {
+            if (e instanceof DOMException && e.name === "AbortError") return;
+          }
+        }),
+      );
+
+      if (!cancelled) setInstalledProjectKeys(installed);
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    activeProfileId,
+    catalogProjectKeys,
+    contentProvider,
+    installedFilenames,
+    installedFilenamesKey,
+    modrinthContentType,
+    modrinthGameVersion,
+    modrinthLoader,
+  ]);
+
+  useEffect(() => {
+    if (contentProvider !== "modrinth" || !modrinthSelectedProject) return;
+    const filenames = new Set(
+      modrinthVersions.flatMap((v) => v.files.map((f) => f.filename)),
+    );
+    if (filenames.size > 0) {
+      projectFilenamesCacheRef.current.set(
+        modrinthSelectedProject.project_id,
+        filenames,
+      );
+    }
+  }, [contentProvider, modrinthSelectedProject, modrinthVersions]);
+
+  useEffect(() => {
+    if (contentProvider !== "curseforge" || !curseforgeSelectedProject) return;
+    const filenames = new Set(curseforgeVersions.map((f) => f.fileName));
+    if (filenames.size > 0) {
+      projectFilenamesCacheRef.current.set(
+        String(curseforgeSelectedProject.id),
+        filenames,
+      );
+    }
+  }, [contentProvider, curseforgeSelectedProject, curseforgeVersions]);
 
   useLayoutEffect(() => {
     if (activeProfileGameVersion) {
@@ -1152,6 +1295,10 @@ export function ModsTab({
               >
                 {catalogProjects.map((p) => {
                   const isActive = catalogSelectedKey === p.key;
+                  const isInstalledInProfile =
+                    activeProfileId != null &&
+                    modrinthContentType !== "modpack" &&
+                    installedProjectKeys.has(p.key);
                   return (
                     <button
                       key={p.key}
@@ -1178,9 +1325,13 @@ export function ModsTab({
                           ? "flex flex-col"
                           : "flex items-stretch"
                       } ${
-                        isActive
-                          ? "border-white/60 bg-white/12"
-                          : "border-white/10 bg-black/35 hover:border-white/40 hover:bg-black/55"
+                        isInstalledInProfile
+                          ? isActive
+                            ? "border-emerald-400 bg-white/12"
+                            : "border-emerald-500/80 bg-black/35 hover:border-emerald-400 hover:bg-black/55"
+                          : isActive
+                            ? "border-white/60 bg-white/12"
+                            : "border-white/10 bg-black/35 hover:border-white/40 hover:bg-black/55"
                       }`}
                     >
                       <div className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5">
