@@ -162,9 +162,6 @@
         "forge": "Fragua",
         "neoforge": "neoforja"
       },
-      "forgeIpv6Download": {
-        "label": "Descargue versiones a través del proxy IPv6:"
-      },
       "forgeProxyFallback": {
         "label": "Utilice el respaldo de proxy:"
       },
@@ -232,6 +229,9 @@
       },
       "splitView": {
         "label": "Modo de pestaña de doble panel:"
+      },
+      "disableAnimations": {
+        "label": "Desactivar animaciones:"
       },
       "notifyNewUpdate": {
         "label": "Notificar sobre nuevas actualizaciones del lanzador:"
@@ -494,7 +494,10 @@
     },
     "profile": {
       "renamed": "Perfil renombrado.",
-      "renameFailed": "No se pudo cambiar el nombre del perfil."
+      "renameFailed": "No se pudo cambiar el nombre del perfil.",
+      "changeIconTitle": "Cambiar icono del perfil",
+      "iconChanged": "Icono del perfil actualizado.",
+      "iconChangeFailed": "No se pudo actualizar el icono del perfil."
     },
     "profileInfo": {
       "title": "Información de perfil",

@@ -34,6 +34,7 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  animations_disabled: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
@@ -1839,13 +1840,6 @@ export function SettingsTab({
                 onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
               />
               <SettingsToggle
-                label={tt("settings.versions.forgeIpv6Download.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.forge_ipv6_download ?? false}
-                onChange={(value: boolean) => updateSettings({ forge_ipv6_download: value })}
-              />
-              <SettingsToggle
                 label={tt("settings.versions.forgeProxyFallback.label")}
                 yesLabel={tt("settings.common.yes")}
                 noLabel={tt("settings.common.no")}
@@ -2276,6 +2270,13 @@ export function SettingsTab({
                   noLabel={tt("settings.common.toggle.off")}
                   value={settings?.split_view_enabled ?? false}
                   onChange={(v) => updateSettings({ split_view_enabled: v })}
+                />
+                <SettingsToggle
+                  label={tt("settings.launcher.disableAnimations.label")}
+                  yesLabel={tt("settings.common.yes")}
+                  noLabel={tt("settings.common.no")}
+                  value={settings?.animations_disabled ?? false}
+                  onChange={(v) => updateSettings({ animations_disabled: v })}
                 />
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-white/90">

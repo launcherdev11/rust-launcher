@@ -156,7 +156,6 @@
         "forge": "Forge",
         "neoforge": "NeoForge"
       },
-      "forgeIpv6Download": { "label": "Скачивать версии через IPv6-прокси:" },
       "forgeProxyFallback": { "label": "Использовать Fallback для прокси:" },
       "available": { "label": "Доступные версии:" },
       "refresh": "Обновить",
@@ -217,6 +216,7 @@
       },
       "uiSounds": { "label": "Звук интерфейса:" },
       "splitView": { "label": "Двухпанельный режим вкладок:" },
+      "disableAnimations": { "label": "Убрать анимации:" },
       "notifyNewUpdate": { "label": "Новое обновление:" },
       "notifyNewMessage": { "label": "Новое сообщение:" },
       "notifySystemMessage": { "label": "Системное сообщение:" },
@@ -468,7 +468,10 @@
     },
     "profile": {
       "renamed": "Название сборки изменено.",
-      "renameFailed": "Не удалось переименовать сборку."
+      "renameFailed": "Не удалось переименовать сборку.",
+      "changeIconTitle": "Изменить иконку сборки",
+      "iconChanged": "Иконка сборки обновлена.",
+      "iconChangeFailed": "Не удалось обновить иконку сборки."
     },
     "profileInfo": {
       "title": "Информация о сборке",

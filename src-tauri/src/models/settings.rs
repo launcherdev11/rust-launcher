@@ -32,6 +32,9 @@ pub struct Settings {
     #[serde(default = "default_ui_sounds_enabled")]
     pub ui_sounds_enabled: bool,
 
+    #[serde(default)]
+    pub animations_disabled: bool,
+
     #[serde(default = "default_interface_language")]
     pub interface_language: String,
 
@@ -92,6 +95,7 @@ impl Default for Settings {
             auto_install_updates: false,
             open_launcher_on_profiles_tab: false,
             ui_sounds_enabled: true,
+            animations_disabled: false,
             interface_language: "ru".to_string(),
             background_accent_color: "#0b1530".to_string(),
             background_image_url: None,

@@ -156,7 +156,6 @@
         "forge": "Forge",
         "neoforge": "NeoForge"
       },
-      "forgeIpv6Download": { "label": "Download versions via IPv6 proxy:" },
       "forgeProxyFallback": { "label": "Use proxy fallback:" },
       "available": { "label": "Available versions:" },
       "refresh": "Refresh",
@@ -217,6 +216,7 @@
       },
       "uiSounds": { "label": "Interface sounds:" },
       "splitView": { "label": "Dual-pane tab mode:" },
+      "disableAnimations": { "label": "Disable animations:" },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
       "notifyNewMessage": { "label": "Notify about new messages:" },
       "notifySystemMessage": { "label": "Notify about system messages:" },
@@ -468,7 +468,10 @@
     },
     "profile": {
       "renamed": "Profile renamed.",
-      "renameFailed": "Failed to rename profile."
+      "renameFailed": "Failed to rename profile.",
+      "changeIconTitle": "Change profile icon",
+      "iconChanged": "Profile icon updated.",
+      "iconChangeFailed": "Failed to update profile icon."
     },
     "profileInfo": {
       "title": "Profile information",
