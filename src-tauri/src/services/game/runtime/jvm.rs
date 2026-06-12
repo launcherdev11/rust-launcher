@@ -180,5 +180,10 @@ pub(crate) fn build_java_command(
         }
     }
 
+    if java_settings.prefer_ipv6_network {
+        jvm_args.push("-Djava.net.preferIPv4Stack=false".to_string());
+        jvm_args.push("-Djava.net.preferIPv6Addresses=true".to_string());
+    }
+
     Ok((java_path, jvm_args))
 }

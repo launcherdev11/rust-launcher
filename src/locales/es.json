@@ -340,6 +340,10 @@
       "label": "Utilice argumentos JVM personalizados",
       "hint": "Cuando está desactivado, solo se utilizan los valores predeterminados del iniciador."
     },
+    "preferIpv6": {
+      "label": "Preferir IPv6",
+      "hint": "Java intentará conectarse a los servidores por IPv6 (útil con CGNAT o redes solo IPv6)."
+    },
     "javaPath": {
       "label": "ruta de java",
       "hint": "Déjelo vacío para usar el tiempo de ejecución integrado de Mojang.",

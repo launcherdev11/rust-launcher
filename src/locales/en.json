@@ -314,6 +314,10 @@
       "label": "Use custom JVM arguments",
       "hint": "When off, only launcher defaults are used."
     },
+    "preferIpv6": {
+      "label": "Prefer IPv6",
+      "hint": "Java will try to connect to servers over IPv6 (useful on CGNAT or IPv6-only networks)."
+    },
     "javaPath": {
       "label": "Java path",
       "hint": "Leave empty to use Mojang built‑in runtime.",

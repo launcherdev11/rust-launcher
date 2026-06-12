@@ -11,6 +11,7 @@ type JavaSettings = {
   xmx: string | null;
   jvm_args: string | null;
   preset: string | null;
+  prefer_ipv6_network: boolean;
 };
 
 type JavaRuntimeInfo = {
@@ -82,6 +83,7 @@ export function JavaSettingsTab({
       xmx: null,
       jvm_args: null,
       preset: "balanced",
+      prefer_ipv6_network: false,
     },
     [settings],
   );
@@ -125,6 +127,7 @@ export function JavaSettingsTab({
         xmx: null,
         jvm_args: null,
         preset: "balanced",
+        prefer_ipv6_network: false,
       }),
       [key]: value,
     }));
@@ -221,6 +224,7 @@ export function JavaSettingsTab({
       xmx: null,
       jvm_args: null,
       preset: "balanced",
+      prefer_ipv6_network: false,
     };
     setSettings(next);
     setValidation({ xmsError: null, xmxError: null, generalError: null });
@@ -364,6 +368,35 @@ export function JavaSettingsTab({
                 <span
                   className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
                     effectiveSettings.use_custom_jvm_args ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </label>
+          </div>
+
+          <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
+            <label className="flex items-center justify-between gap-3 text-sm text-white/90">
+              <span className="flex flex-col gap-0.5">
+                <span>{tt("javaSettings.preferIpv6.label")}</span>
+                <span className="text-[11px] text-white/50">
+                  {tt("javaSettings.preferIpv6.hint")}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  updateField("prefer_ipv6_network", !effectiveSettings.prefer_ipv6_network)
+                }
+                className={`interactive-press relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border px-0.5 transition ${
+                  effectiveSettings.prefer_ipv6_network
+                    ? "border-emerald-400 bg-emerald-500/60"
+                    : "border-white/25 bg-white/10"
+                }`}
+                title={tt("javaSettings.preferIpv6.hint")}
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    effectiveSettings.prefer_ipv6_network ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
               </button>
@@ -547,30 +580,8 @@ export function JavaSettingsTab({
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="interactive-press rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
-                  >
-                    {tt("javaSettings.actions.save")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-                  >
-                    {tt("javaSettings.actions.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetToRecommended}
-                    className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-                  >
-                    {tt("javaSettings.actions.resetRecommended")}
-                  </button>
-                  <button
-                    type="button"
                     onClick={handleValidateArgs}
-                    className="interactive-press ml-auto rounded-xl accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
+                    className="interactive-press rounded-xl accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
                   >
                     {tt("javaSettings.actions.validate")}
                   </button>
@@ -618,6 +629,33 @@ export function JavaSettingsTab({
             </div>
             </>
           )}
+
+          <div className="rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="interactive-press rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {tt("javaSettings.actions.save")}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("javaSettings.actions.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleResetToRecommended}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("javaSettings.actions.resetRecommended")}
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>
