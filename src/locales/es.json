@@ -1005,6 +1005,7 @@
     },
     "install": {
       "noFabricLoader": "No hay un cargador de tela adecuado para esta versión",
+      "noNeoForgeLoader": "No hay una compilación NeoForge adecuada para esta versión",
       "unknownVersionType": "Tipo de versión desconocida"
     }
   },

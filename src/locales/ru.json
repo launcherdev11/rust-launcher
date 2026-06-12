@@ -979,6 +979,7 @@
     },
     "install": {
       "noFabricLoader": "Нет подходящего Fabric Loader для этой версии",
+      "noNeoForgeLoader": "Нет подходящей сборки NeoForge для этой версии",
       "unknownVersionType": "Неизвестный тип версии"
     }
   },

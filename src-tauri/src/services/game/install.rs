@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 
 use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
+use crate::infra::process::hide_console;
 use crate::infra::http::{http_client, http_client_for_binary_download};
 use crate::models::events::{DownloadProgressPayload, EVENT_DOWNLOAD_PROGRESS};
 use crate::services::game::core::{
@@ -18,11 +19,12 @@ use crate::services::game::runtime::{
     download_assets, download_file, download_file_checked, download_forge_installer_once,
     ensure_launcher_profiles_json, extract_natives_jar, file_starts_with_pk,
     forge_installer_url_with_official_maven, parse_forge_id, parse_neoforge_id,
-    patch_forge_installer_maven_mirror, select_latest_quilt_loader,
+    select_latest_quilt_loader,
 };
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
-    CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_CONCURRENCY, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_PROFILE, NEOFORGE_MAVEN_BASE,
+    CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_CONCURRENCY, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_PROFILE,
+    FORGE_INSTALLER_MIRROR_URL, FORGE_MAVEN_MIRROR_BASE, NEOFORGE_MAVEN_BASE,
 };
 use crate::services::game::version_types::*;
 use crate::services::game::versions::{
@@ -673,6 +675,7 @@ pub async fn install_forge(
     };
 
     let total_done = Arc::new(AtomicU64::new(0));
+    let mut forge_use_mirror = installer_url.contains(FORGE_MAVEN_MIRROR_BASE);
     if need_download {
         let mut download_error = match download_forge_installer_once(
             &installer_client,
@@ -710,7 +713,7 @@ pub async fn install_forge(
                 )
                 .await
                 {
-                    Ok(_) => {}
+                    Ok(_) => forge_use_mirror = false,
                     Err(fallback_err) => {
                         return Err(format!(
                             "Ошибка скачивания Forge installer. Зеркало: {primary_error}; официальный Maven: {fallback_err}"
@@ -721,15 +724,6 @@ pub async fn install_forge(
                 return Err(primary_error);
             }
         }
-    }
-
-    if let Err(e) = patch_forge_installer_maven_mirror(&installer_path) {
-        let _ = log_to_console(
-            &app,
-            &format!(
-                "[Forge] Не удалось пропатчить install_profile.json под зеркало ({e}). Продолжаем без патча."
-            ),
-        );
     }
 
     let vanilla_client_jar = vers_root.join(&mc_version).join(format!("{mc_version}.jar"));
@@ -777,7 +771,7 @@ pub async fn install_forge(
 
     let mut forge_java_bin =
         crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         if let Some(name) = forge_java_bin.file_name().and_then(|n| n.to_str()) {
             if name.eq_ignore_ascii_case("javaw.exe") {
@@ -791,16 +785,19 @@ pub async fn install_forge(
 
     let app_for_forge_install = app.clone();
     let forge_java_bin_for_thread = forge_java_bin.clone();
+    let forge_use_mirror_for_install = forge_use_mirror;
     let output = tokio::task::spawn_blocking(move || {
         use std::process::{Command, Stdio};
 
-        let help_output = Command::new(&forge_java_bin_for_thread)
+        let mut help_cmd = Command::new(&forge_java_bin_for_thread);
+        help_cmd
             .arg("-jar")
             .arg(&java_installer)
             .arg("--help")
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output();
+            .stderr(Stdio::piped());
+        hide_console(&mut help_cmd);
+        let help_output = help_cmd.output();
 
         let help_text = help_output
             .as_ref()
@@ -814,8 +811,16 @@ pub async fn install_forge(
 
         let has_install_client = help_text.contains("--installClient");
         let has_install_server = help_text.contains("--installServer");
+        let has_mirror_flag = help_text.contains("--mirror");
 
         let game_dir_arg = game_dir.to_string_lossy().into_owned();
+
+        if forge_use_mirror_for_install && has_mirror_flag {
+            let _ = log_to_console(
+                &app_for_forge_install,
+                &format!("[Forge] Installer mirror: {FORGE_INSTALLER_MIRROR_URL}"),
+            );
+        }
 
         let run_installer = |args: &[&str]| {
             let mut cmd = Command::new(&forge_java_bin_for_thread);
@@ -824,7 +829,11 @@ pub async fn install_forge(
             for arg in args {
                 cmd.arg(arg);
             }
+            if forge_use_mirror_for_install && has_mirror_flag {
+                cmd.arg("--mirror").arg(FORGE_INSTALLER_MIRROR_URL);
+            }
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            hide_console(&mut cmd);
             cmd.output()
         };
 
@@ -851,6 +860,7 @@ pub async fn install_forge(
     let output = output.map_err(|e| format!("Ошибка запуска Forge installer: {e}"))?;
 
     if !output.status.success() {
+        let _ = tokio::fs::remove_file(&installer_path).await;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
