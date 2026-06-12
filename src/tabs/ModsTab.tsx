@@ -166,7 +166,7 @@ export function ModsTab({
   activeProfileLoader,
   onOpenModpacksTab,
   onSelectedModTitleChange,
-  fillPane = false,
+  fillPane: _fillPane = false,
   registerDownloadJob,
   updateDownloadJob,
   finishDownloadJob,
@@ -962,9 +962,7 @@ export function ModsTab({
 
   return (
     <div
-      className={`flex h-full w-full flex-col min-h-0 ${
-        fillPane ? "max-w-none" : "max-w-4xl"
-      }`}
+      className="flex h-full w-full min-h-0 max-w-none flex-col self-stretch"
     >
       {showUnlockConfirm && (
         <div
@@ -1289,7 +1287,7 @@ export function ModsTab({
               <div
                 className={
                   modsLayout === "grid"
-                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
                     : "flex flex-col gap-2"
                 }
               >
@@ -1422,7 +1420,7 @@ export function ModsTab({
 
         </div>
 
-        <div className="glass-panel relative z-0 flex w-80 min-h-0 flex-shrink-0 flex-col">
+        <div className="glass-panel relative z-0 flex w-80 min-h-0 flex-shrink-0 flex-col xl:w-96 2xl:w-[26rem]">
           <div className="mb-2 text-xs text-white/60">
             {hasSelectedProject ? `` : tt("mods.selectProject")}
           </div>

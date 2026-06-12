@@ -3184,7 +3184,7 @@ export function ModpackTab({
                       <div
                         className={
                           profilesLayout === "grid"
-                            ? "grid grid-cols-1 gap-2 md:grid-cols-2"
+                            ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
                             : "flex flex-col gap-2"
                         }
                       >
@@ -3217,7 +3217,7 @@ export function ModpackTab({
                     <div
                       className={
                         profilesLayout === "grid"
-                          ? "grid grid-cols-1 gap-2 md:grid-cols-2"
+                          ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
                           : "flex flex-col gap-2"
                       }
                     >
@@ -4394,7 +4394,7 @@ export function ModpackTab({
       className={`flex w-full min-h-0 flex-1 flex-col gap-4 ${
         fillPane || activeView === "manage"
           ? "h-full max-w-none self-stretch px-0 sm:px-1"
-          : "max-w-5xl"
+          : "max-w-none self-stretch"
       }`}
     >
       <div className="flex items-center justify-between">

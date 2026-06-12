@@ -1346,11 +1346,7 @@ export function SettingsTab({
   };
 
   return (
-    <div
-      className={`flex w-full min-h-0 flex-col ${
-        fillPane ? "h-full flex-1" : "flex-1 items-center"
-      }`}
-    >
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       {reinstallDialog && (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -1577,21 +1573,34 @@ export function SettingsTab({
       )}
       <div
         className={`flex min-h-0 w-full flex-1 overflow-hidden ${
-          fillPane ? "px-1 py-1" : "items-center justify-center px-4"
+          fillPane ? "px-1 py-1" : "items-center justify-center px-4 py-4"
         }`}
       >
         <div
           className={[
-            "flex w-full min-h-0 flex-col overflow-hidden",
+            "flex w-full min-h-0 flex-col gap-3",
             fillPane
-              ? "h-full max-h-full max-w-none"
-              : "max-w-[clamp(360px,82vw,1200px)] max-h-[clamp(260px,78vh,860px)]",
+              ? "h-full max-w-none"
+              : "max-h-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl",
           ].join(" ")}
         >
-          <div className="glass-panel min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div
+            className={[
+              "glass-panel w-full overflow-hidden",
+              fillPane ? "flex min-h-0 flex-1 flex-col" : "",
+            ].join(" ")}
+          >
+          <div
+            className={[
+              "custom-scrollbar px-6 py-5",
+              fillPane
+                ? "min-h-0 flex-1 overflow-y-auto"
+                : "max-h-[min(72vh,calc(100vh-11rem))] overflow-y-auto xl:max-h-[min(78vh,calc(100vh-10rem))] 2xl:max-h-[min(84vh,calc(100vh-9rem))]",
+            ].join(" ")}
+          >
           {settingsTab === "game" && (
             <SettingsCard title={tt("settings.card.game")}>
-              <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1 relative overflow-hidden">
+              <div className="mb-4 flex items-center rounded-full bg-white/10 p-1 relative overflow-hidden">
                 <div
                   className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
                   style={{
@@ -2721,14 +2730,9 @@ export function SettingsTab({
           )}
 
           </div>
-        </div>
-      </div>
+          </div>
 
-      <div
-        className={`flex shrink-0 items-center justify-center ${
-          fillPane ? "mt-2 mb-1" : "mt-4 mb-6"
-        }`}
-      >
+          <div className="flex shrink-0 justify-center">
         <div className="relative flex items-center gap-0 rounded-full border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
           <div
             className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
@@ -2772,6 +2776,8 @@ export function SettingsTab({
               </button>
             );
           })}
+        </div>
+          </div>
         </div>
       </div>
     </div>
