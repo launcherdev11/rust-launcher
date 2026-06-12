@@ -162,9 +162,6 @@
         "forge": "Schmiede",
         "neoforge": "NeoForge"
       },
-      "forgeIpv6Download": {
-        "label": "Download-Versionen über IPv6-Proxy:"
-      },
       "forgeProxyFallback": {
         "label": "Proxy-Fallback verwenden:"
       },
@@ -232,6 +229,9 @@
       },
       "splitView": {
         "label": "Dual-Panee-Tab-Modus:"
+      },
+      "disableAnimations": {
+        "label": "Animationen deaktivieren:"
       },
       "notifyNewUpdate": {
         "label": "Über neue Launcher-Updates benachrichtigen:"
@@ -494,7 +494,10 @@
     },
     "profile": {
       "renamed": "Profil umbenannt.",
-      "renameFailed": "Profil konnte nicht umbenannt werden."
+      "renameFailed": "Profil konnte nicht umbenannt werden.",
+      "changeIconTitle": "Profilsymbol ändern",
+      "iconChanged": "Profilsymbol aktualisiert.",
+      "iconChangeFailed": "Profilsymbol konnte nicht aktualisiert werden."
     },
     "profileInfo": {
       "title": "Profilinformationen",

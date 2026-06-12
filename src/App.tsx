@@ -6,7 +6,9 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
+import { MotionConfig } from "framer-motion";
 import { flushSync } from "react-dom";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
@@ -119,6 +121,7 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  animations_disabled: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
@@ -140,6 +143,27 @@ function parseSidebarPosition(value: string | undefined | null): SidebarPosition
 
 function isSidebarHorizontal(position: SidebarPosition): boolean {
   return position === "top" || position === "bottom";
+}
+
+function LauncherAnimationScope({
+  animationsDisabled,
+  children,
+}: {
+  animationsDisabled: boolean;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    document.documentElement.classList.toggle("launcher-no-animations", animationsDisabled);
+    return () => {
+      document.documentElement.classList.remove("launcher-no-animations");
+    };
+  }, [animationsDisabled]);
+
+  return (
+    <MotionConfig reducedMotion={animationsDisabled ? "always" : "user"}>
+      {children}
+    </MotionConfig>
+  );
 }
 
 type InstanceProfileSummary = {
@@ -956,6 +980,7 @@ function App() {
   }, []);
 
   const splitViewEnabled = settings?.split_view_enabled ?? false;
+  const animationsDisabled = settings?.animations_disabled ?? false;
   const effectiveTabSplit =
     splitViewEnabled && tabSplitLayout ? tabSplitLayout : null;
 
@@ -1807,6 +1832,7 @@ function App() {
     auto_install_updates: false,
     open_launcher_on_profiles_tab: false,
     ui_sounds_enabled: true,
+    animations_disabled: false,
     background_accent_color: "#0b1530",
     background_image_url: null,
     background_blur_enabled: true,
@@ -3544,14 +3570,17 @@ function App() {
 
   if (onboardingVisible === null) {
     return (
-      <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#050609] text-white">
-        <p className="text-sm text-white/45">{tt("common.loading")}</p>
-      </div>
+      <LauncherAnimationScope animationsDisabled={animationsDisabled}>
+        <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#050609] text-white">
+          <p className="text-sm text-white/45">{tt("common.loading")}</p>
+        </div>
+      </LauncherAnimationScope>
     );
   }
 
   if (onboardingVisible) {
     return (
+      <LauncherAnimationScope animationsDisabled={animationsDisabled}>
       <OnboardingFlow
         language={language}
         accentColor={settings?.background_accent_color ?? "#0b1530"}
@@ -3569,10 +3598,12 @@ function App() {
           setOnboardingVisible(false);
         }}
       />
+      </LauncherAnimationScope>
     );
   }
 
   return (
+    <LauncherAnimationScope animationsDisabled={animationsDisabled}>
     <div
       className="relative min-h-screen w-full overflow-hidden text-white"
       style={
@@ -4727,6 +4758,7 @@ function App() {
         <ActiveDownloadsPanel jobs={activeDownloadJobs} language={language} />
       </div>
     </div>
+    </LauncherAnimationScope>
   );
 }
 

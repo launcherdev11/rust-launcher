@@ -956,6 +956,30 @@ pub fn create_profile_impl(
 }
 
 #[command]
+pub fn set_profile_icon_from_file(
+    profile_id: String,
+    icon_source_path: String,
+) -> Result<Option<String>, String> {
+    let profile_dir = instance_dir(&profile_id)?;
+    if !profile_dir.is_dir() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+
+    let src_path = PathBuf::from(&icon_source_path);
+    if !src_path.is_file() {
+        return Err("Файл иконки не найден".to_string());
+    }
+
+    let dest = profile_dir.join("icon.png");
+    std::fs::copy(&src_path, &dest)
+        .map_err(|e| format!("Не удалось скопировать иконку сборки: {e}"))?;
+
+    let icon_path = dest.to_str().map(|s| s.to_string());
+    set_profile_icon_path(&profile_id, icon_path.clone())?;
+    Ok(icon_path)
+}
+
+#[command]
 pub fn get_profile_icon_data_uri(profile_id: String) -> Result<Option<String>, String> {
     let profile_dir = instance_dir(&profile_id)?;
     if !profile_dir.is_dir() {

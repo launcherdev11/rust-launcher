@@ -256,6 +256,23 @@ const loaderLabels: Record<LoaderId, string> = {
   neoforge: "NeoForge",
 };
 
+function shortGameVersionLabel(gameVersion: string): string {
+  const parts = gameVersion.split(".");
+  if (parts.length >= 2 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
+    return `${parts[0]}.${parts[1]}`;
+  }
+  return gameVersion;
+}
+
+function defaultProfileName(loader: LoaderId, gameVersion: string): string {
+  return `${loaderLabels[loader]} ${shortGameVersionLabel(gameVersion)}`.slice(0, 50);
+}
+
+function pickDefaultLoaderVersion(options: LoaderVersionOption[]): string {
+  const stable = options.find((o) => o.channel === "stable");
+  return stable?.version ?? options[0]?.version ?? "";
+}
+
 type IconProps = {
   className?: string;
 };
@@ -427,6 +444,7 @@ export function ModpackTab({
   const profilesLoadedRef = useRef(false);
   const [search, setSearch] = useState("");
   const [createName, setCreateName] = useState("");
+  const createNameUserEdited = useRef(false);
   const [createLoader, setCreateLoader] = useState<LoaderId>("fabric");
   const [createGameVersion, setCreateGameVersion] = useState("1.20.1");
   const [createLoaderVersion, setCreateLoaderVersion] = useState("");
@@ -441,6 +459,7 @@ export function ModpackTab({
   const [createSelectedPresetId, setCreateSelectedPresetId] = useState<string | null>(null);
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
   const [presetIconUris, setPresetIconUris] = useState<Record<string, string>>({});
+  const [profileIconRevisions, setProfileIconRevisions] = useState<Record<string, number>>({});
   const [versionOptions, setVersionOptions] = useState<VersionSummary[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
@@ -1264,7 +1283,7 @@ export function ModpackTab({
       setMigrateLoaderVersionOptions(options);
       const versionIds = options.map((o) => o.version);
       setMigrateLoaderVersion((prev) =>
-        prev && versionIds.includes(prev) ? prev : (options[0]?.version ?? ""),
+        prev && versionIds.includes(prev) ? prev : pickDefaultLoaderVersion(options),
       );
     } catch (e) {
       console.error(e);
@@ -1740,6 +1759,7 @@ export function ModpackTab({
   }
 
   const handleOpenCreateView = useCallback(() => {
+    createNameUserEdited.current = false;
     setActiveView("create");
     void ensureVersionsLoaded();
   }, [versionOptions.length, versionsLoading, createAllVersions]);
@@ -1812,7 +1832,7 @@ export function ModpackTab({
       setLoaderVersionOptions(options);
       const versionIds = options.map((o) => o.version);
       setCreateLoaderVersion((prev) =>
-        prev && versionIds.includes(prev) ? prev : (options[0]?.version ?? ""),
+        prev && versionIds.includes(prev) ? prev : pickDefaultLoaderVersion(options),
       );
     } catch (e) {
       console.error(e);
@@ -1845,6 +1865,13 @@ export function ModpackTab({
     }
     void loadCreateLoaderVersions();
   }, [activeView, createLoader, createGameVersion, loadCreateLoaderVersions]);
+
+  useEffect(() => {
+    if (activeView !== "create" || createNameUserEdited.current) {
+      return;
+    }
+    setCreateName(defaultProfileName(createLoader, createGameVersion));
+  }, [activeView, createLoader, createGameVersion]);
 
   const filteredProfiles = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1961,12 +1988,48 @@ export function ModpackTab({
     }
   }
 
-  async function handleCreateProfile() {
-    const name = createName.trim().slice(0, 50);
-    if (!name) {
-      showNotification("warning", t(language, "modpacks.toast.enterProfileName"));
-      return;
+  async function handleChooseProfileIcon() {
+    if (!selectedProfile) return;
+    try {
+      const path = await openFileDialog({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: "Images",
+            extensions: ["png", "jpg", "jpeg", "webp"],
+          },
+        ],
+      });
+      if (typeof path !== "string") return;
+
+      const iconPath = await invoke<string | null>("set_profile_icon_from_file", {
+        profileId: selectedProfile.id,
+        iconSourcePath: path,
+      });
+
+      setProfiles((prev) => {
+        const next = prev.map((p) =>
+          p.id === selectedProfile.id ? { ...p, icon_path: iconPath ?? p.icon_path } : p,
+        );
+        onProfilesChange?.(next);
+        return next;
+      });
+      setProfileIconRevisions((prev) => ({
+        ...prev,
+        [selectedProfile.id]: (prev[selectedProfile.id] ?? 0) + 1,
+      }));
+      showNotification("success", tt("modpacks.profile.iconChanged"));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.profile.iconChangeFailed"));
     }
+  }
+
+  async function handleCreateProfile() {
+    const name = (
+      createName.trim() || defaultProfileName(createLoader, createGameVersion)
+    ).slice(0, 50);
     const loaderVersion =
       createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
     if (createLoader !== "vanilla" && !loaderVersion) {
@@ -2068,6 +2131,7 @@ export function ModpackTab({
       }
 
       setProfiles((prev) => [...prev, profile]);
+      createNameUserEdited.current = false;
       setCreateName("");
       setCreateIconPath(null);
       setCreateLoaderVersion("");
@@ -2871,7 +2935,10 @@ export function ModpackTab({
         }}
       >
         <div className="flex items-center gap-3">
-          <ProfileInstanceIcon profile={p} />
+          <ProfileInstanceIcon
+            profile={p}
+            refreshKey={profileIconRevisions[p.id] ?? 0}
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="truncate text-sm font-semibold text-white">{p.name}</span>
@@ -3339,7 +3406,10 @@ export function ModpackTab({
               <input
                 type="text"
                 value={createName}
-                onChange={(e) => setCreateName(e.target.value.slice(0, 50))}
+                onChange={(e) => {
+                  createNameUserEdited.current = true;
+                  setCreateName(e.target.value.slice(0, 50));
+                }}
                 maxLength={50}
                 placeholder={
                   tt("modpacks.create.namePlaceholder")
@@ -3861,7 +3931,14 @@ export function ModpackTab({
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
         <div className="sticky top-0 z-20 -mx-1 flex w-full shrink-0 flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 w-fit max-w-full items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
-            <ProfileInstanceIcon profile={selectedProfile} imageFit="contain" />
+            <ProfileInstanceIcon
+              profile={selectedProfile}
+              imageFit="contain"
+              refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
+              editable
+              editTitle={tt("modpacks.profile.changeIconTitle")}
+              onEditClick={() => void handleChooseProfileIcon()}
+            />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 {isRenaming ? (

@@ -100,6 +100,27 @@ body {
   }
 }
 
+html.launcher-no-animations *,
+html.launcher-no-animations *::before,
+html.launcher-no-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+html.launcher-no-animations .tab-animate,
+html.launcher-no-animations .animate-notification-slide-in,
+html.launcher-no-animations .animate-notification-slide-out {
+  animation: none;
+}
+
+html.launcher-no-animations .interactive-press:hover,
+html.launcher-no-animations .interactive-press:active {
+  transform: none;
+}
+
 @keyframes notification-slide-down {
   from {
     opacity: 0;
