@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t, useT, type Language } from "../i18n";
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -177,6 +177,7 @@ export function SupabaseAccountPanel({
   const [refreshToken, setRefreshToken] = useState<string>("");
   const [nickname, setNickname] = useState<string>("");
   const [nicknameDraft, setNicknameDraft] = useState<string>("");
+  const nicknameDraftFocusedRef = useRef(false);
   const [authIdentifier, setAuthIdentifier] = useState("");
   const [signupNickname, setSignupNickname] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -305,6 +306,7 @@ export function SupabaseAccountPanel({
   }, []);
 
   useEffect(() => {
+    if (nicknameDraftFocusedRef.current) return;
     setNicknameDraft(nickname);
   }, [nickname]);
 
@@ -618,6 +620,12 @@ export function SupabaseAccountPanel({
             type="text"
             value={nicknameDraft}
             onChange={(e) => setNicknameDraft(e.target.value)}
+            onFocus={() => {
+              nicknameDraftFocusedRef.current = true;
+            }}
+            onBlur={() => {
+              nicknameDraftFocusedRef.current = false;
+            }}
             className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
             placeholder={tt("supabase.newNicknamePlaceholder")}
           />
@@ -775,6 +783,12 @@ export function SupabaseAccountPanel({
                 type="text"
                 value={nicknameDraft}
                 onChange={(e) => setNicknameDraft(e.target.value)}
+                onFocus={() => {
+                  nicknameDraftFocusedRef.current = true;
+                }}
+                onBlur={() => {
+                  nicknameDraftFocusedRef.current = false;
+                }}
                 className="h-10 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
                 placeholder={tt("supabase.newNicknamePlaceholder")}
               />

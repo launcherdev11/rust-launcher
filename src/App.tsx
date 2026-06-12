@@ -875,7 +875,9 @@ function App() {
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
-  const [profileSaving, setProfileSaving] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState("");
+  const nicknameInputFocusedRef = useRef(false);
+  const prevActiveAccountIdRef = useRef<string | null>(null);
   const [installPaused, setInstallPaused] = useState(false);
   const installStopReasonRef = useRef<"pause" | "cancel" | null>(null);
   const versionInstallJobIdRef = useRef<string | null>(null);
@@ -1273,8 +1275,18 @@ function App() {
       ? profile.nickname
       : profile.ely_username ?? "";
   const activeAccountFromList = launcherAccounts.find((a) => a.is_active);
+  const activeAccountId = activeAccountFromList?.id ?? null;
   const activeAccountLabel =
     activeAccountFromList?.label ?? (displayedNickname.trim() || "—");
+
+  useEffect(() => {
+    const accountChanged = prevActiveAccountIdRef.current !== activeAccountId;
+    prevActiveAccountIdRef.current = activeAccountId;
+    if (accountChanged || !nicknameInputFocusedRef.current) {
+      setNicknameDraft(profile.nickname);
+      if (accountChanged) nicknameInputFocusedRef.current = false;
+    }
+  }, [profile.nickname, activeAccountId]);
   const activeAccountKind = activeAccountFromList?.kind ?? "offline";
   const initialPersistedConsoleByProfile = useMemo(
     () => loadPersistedGameConsoleByProfile(),
@@ -2701,24 +2713,18 @@ function App() {
   }, [activeItem, profile.nickname, maybePlayNecoArcSecret]);
 
   useEffect(() => {
+    if (isAuthorized) return;
     const t = setTimeout(() => {
-      const nick = profile.nickname.trim();
-      if (nick) {
-        setProfileSaving(true);
-        invoke("set_profile", { nickname: nick })
-          .then(() => {
-            setProfile((prev) => ({ ...prev, nickname: nick }));
-            maybePlayNecoArcSecret(nick);
-          })
-          .catch(console.error)
-          .finally(() => setProfileSaving(false));
-      }
+      const nick = nicknameDraft.trim();
+      if (!nick) return;
+      void invoke("set_profile", { nickname: nick })
+        .then(() => maybePlayNecoArcSecret(nick))
+        .catch(console.error);
     }, 700);
     return () => clearTimeout(t);
-  }, [profile.nickname, maybePlayNecoArcSecret]);
+  }, [nicknameDraft, isAuthorized, maybePlayNecoArcSecret]);
 
   const handleSaveNickname = async (nickname: string) => {
-    setProfileSaving(true);
     try {
       await invoke("set_profile", { nickname });
       setProfile((prev) => ({ ...prev, nickname }));
@@ -2733,8 +2739,6 @@ function App() {
         "error",
         tt("app.accounts.toast.nicknameSaveFailed"),
       );
-    } finally {
-      setProfileSaving(false);
     }
   };
 
@@ -4562,15 +4566,27 @@ function App() {
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        value={displayedNickname}
-                        onChange={(e) => setProfile((p) => ({ ...p, nickname: e.target.value }))}
+                        value={isAuthorized ? displayedNickname : nicknameDraft}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setNicknameDraft(v);
+                          setProfile((p) => ({ ...p, nickname: v }));
+                        }}
+                        onFocus={() => {
+                          if (!isAuthorized) nicknameInputFocusedRef.current = true;
+                        }}
                         onBlur={(e) => {
+                          nicknameInputFocusedRef.current = false;
+                          if (isAuthorized) return;
                           const v = e.target.value.trim();
-                          if (!isAuthorized && v !== profile.nickname) handleSaveNickname(v);
+                          const prevNick = profile.nickname.trim();
+                          setNicknameDraft(v);
+                          setProfile((p) => ({ ...p, nickname: v }));
+                          if (v !== prevNick) void handleSaveNickname(v);
                         }}
                         placeholder={tt("app.accounts.nicknamePlaceholder")}
                         className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
-                        disabled={profileSaving || isAuthorized}
+                        disabled={isAuthorized}
                       />
                       {!isAuthorized && (
                         <span className="text-white/50" title={tt("app.accounts.editNickname")}>
