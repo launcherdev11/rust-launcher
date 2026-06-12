@@ -2822,6 +2822,8 @@ export function ModpackTab({
     setListContextMenu({ x: e.clientX, y: e.clientY });
   }
 
+  const profilesGridClass = "grid grid-cols-1 gap-2 sm:grid-cols-2 items-start";
+
   function renderProfileCard(p: InstanceProfile) {
     const isSelected = selectedProfileId === p.id;
     const isPinned = isPinnedInSidebar?.(p.id) ?? false;
@@ -3183,9 +3185,7 @@ export function ModpackTab({
                     {showProfiles && (
                       <div
                         className={
-                          profilesLayout === "grid"
-                            ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-                            : "flex flex-col gap-2"
+                          profilesLayout === "grid" ? profilesGridClass : "flex flex-col gap-2"
                         }
                       >
                         {group.profiles.map((p) => renderProfileCard(p))}
@@ -3216,9 +3216,7 @@ export function ModpackTab({
                     )}
                     <div
                       className={
-                        profilesLayout === "grid"
-                          ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-                          : "flex flex-col gap-2"
+                        profilesLayout === "grid" ? profilesGridClass : "flex flex-col gap-2"
                       }
                     >
                       {ungroupedProfiles.map((p) => renderProfileCard(p))}
