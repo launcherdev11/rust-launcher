@@ -512,7 +512,7 @@ type BottomSocialNotification = {
   leaving?: boolean;
 };
 
-function SocialIcon({ kind }: { kind: BottomSocialKind }) {
+function SocialIcon({ kind, className }: { kind: BottomSocialKind; className?: string }) {
   const src = kind === "discord" ? "/launcher-assets/discord.png" : "/launcher-assets/telegram.png";
   const [broken, setBroken] = useState(false);
 
@@ -528,7 +528,7 @@ function SocialIcon({ kind }: { kind: BottomSocialKind }) {
     <img
       src={src}
       alt=""
-      className="h-5 w-5 object-contain"
+      className={className ?? "h-10 w-10 object-contain"}
       draggable={false}
       onError={() => setBroken(true)}
     />
@@ -3726,7 +3726,6 @@ function App() {
         {bottomSocialNotifications.map((n) => {
           const text = n.messageKey ? tt(n.messageKey) : (n.textMsg ?? "");
           const { title, subtitle } = splitTitleAndSubtitle(text);
-          const colorFallback = n.kind === "discord" ? "#5865F2" : "#229ED9";
           const hexForShadow =
             typeof n.colorMsg === "string" && n.colorMsg.trim().startsWith("#")
               ? n.colorMsg.trim()
@@ -3749,10 +3748,7 @@ function App() {
               }}
             >
               <div className="flex items-start gap-3">
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-full"
-                  style={{ backgroundColor: n.colorMsg ?? colorFallback }}
-                >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center">
                   <SocialIcon kind={n.kind} />
                 </div>
 
