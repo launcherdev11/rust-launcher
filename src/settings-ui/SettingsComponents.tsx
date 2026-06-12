@@ -1,4 +1,5 @@
 import type React from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 export type SettingsToggleProps = {
   label: string;
@@ -16,31 +17,75 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
   noLabel,
 }) => {
   const accentVar = "var(--accent-color)";
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const yesRef = useRef<HTMLButtonElement | null>(null);
+  const noRef = useRef<HTMLButtonElement | null>(null);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
+  useLayoutEffect(() => {
+    let raf = 0;
+    let cancelled = false;
+
+    const updateIndicator = () => {
+      if (cancelled) return;
+      const btn = value ? yesRef.current : noRef.current;
+      const container = containerRef.current;
+      if (!btn || !container) return;
+
+      const btnRect = btn.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      setIndicator({
+        left: btnRect.left - containerRect.left,
+        width: btnRect.width,
+      });
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateIndicator);
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [value, yesLabel, noLabel]);
+
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-white/90">{label}</span>
-      <div className="flex rounded-full bg-white/10 p-0.5">
+    <div className="flex items-center justify-between gap-4 sm:gap-6">
+      <span className="min-w-0 flex-1 text-sm text-white/90">{label}</span>
+      <div
+        ref={containerRef}
+        className="relative flex shrink-0 rounded-full bg-white/10 p-0.5 overflow-hidden"
+      >
+        <div
+          className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-full shadow-soft transition-all duration-200 ease-out"
+          style={{
+            left: `${indicator.left}px`,
+            width: `${indicator.width}px`,
+            backgroundColor: accentVar,
+          }}
+        />
         <button
+          ref={yesRef}
           type="button"
           onClick={() => onChange(true)}
-          className={`interactive-press min-w-[64px] rounded-full px-4 py-1.5 text-xs font-semibold ${
-            value
-              ? "text-white shadow-soft"
-              : "text-white/60 hover:text-white"
+          className={`interactive-press relative z-10 min-w-[64px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+            value ? "text-white" : "text-white/60 hover:text-white"
           }`}
-          style={value ? { backgroundColor: accentVar } : undefined}
         >
           {yesLabel ?? "Yes"}
         </button>
         <button
+          ref={noRef}
           type="button"
           onClick={() => onChange(false)}
-          className={`interactive-press min-w-[64px] rounded-full px-4 py-1.5 text-xs font-semibold ${
-            !value
-              ? "text-white shadow-soft"
-              : "text-white/60 hover:text-white"
+          className={`interactive-press relative z-10 min-w-[64px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+            !value ? "text-white" : "text-white/60 hover:text-white"
           }`}
-          style={!value ? { backgroundColor: accentVar } : undefined}
         >
           {noLabel ?? "No"}
         </button>

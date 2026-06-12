@@ -3280,7 +3280,7 @@ function App() {
               className={
                 inSplitPane
                   ? "tab-pane-fill px-2 py-2"
-                  : "flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-center"
+                  : "flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-stretch"
               }
             >
               <ModsTab
@@ -3382,7 +3382,13 @@ function App() {
           );
         case "settings":
           return (
-            <div className={inSplitPane ? "tab-pane-fill" : "flex min-h-0 w-full flex-1 flex-col"}>
+            <div
+              className={
+                inSplitPane
+                  ? "tab-pane-fill"
+                  : "flex h-full min-h-0 w-full flex-1 flex-col"
+              }
+            >
             <SettingsTab
               fillPane={inSplitPane}
               settings={settings}
@@ -4404,7 +4410,7 @@ function App() {
             </div>
           ) : null}
           {activeItem === "accounts" ? (
-            <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-5 overflow-y-auto py-1 lg:gap-6 lg:overflow-hidden">
+            <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-5 overflow-y-auto py-1 lg:gap-6 lg:overflow-hidden">
               <header className="shrink-0 text-center">
                 <h1 className="text-lg font-bold tracking-tight text-white/95">
                   {tt("app.accounts.managerTitle")}
@@ -4708,7 +4714,7 @@ function App() {
           ) : (
             <div
               key={singleMainTab}
-              className="tab-animate flex min-h-0 w-full flex-1 flex-col items-center justify-center"
+              className="tab-animate flex min-h-0 w-full flex-1 flex-col items-stretch justify-start"
             >
               {renderMainTabContent(singleMainTab)}
             </div>
