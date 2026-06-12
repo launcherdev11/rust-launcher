@@ -238,6 +238,15 @@ function isNeoForgeVersion(v: VersionItem): v is NeoForgeVersionSummary {
   return "neoforge_build" in v && "installer_url" in v;
 }
 
+function neoForgeInstallVersionId(v: NeoForgeVersionSummary): string {
+  const fromId = v.id?.trim();
+  if (fromId) return fromId;
+  const mc = v.mc_version?.trim();
+  const build = v.neoforge_build?.trim();
+  if (mc && build) return `${mc}-neoforge-${build}`;
+  throw new Error("invalid NeoForge version");
+}
+
 function versionInstallJobId(versionId: string) {
   return `version:${versionId}`;
 }
@@ -3098,7 +3107,10 @@ function App() {
   const runVersionInstall = async (options?: { resume?: boolean }) => {
     if (!selectedVersion) return;
 
-    const jobId = versionInstallJobId(selectedVersion.id);
+    let installVersionId = isNeoForgeVersion(selectedVersion)
+      ? neoForgeInstallVersionId(selectedVersion)
+      : selectedVersion.id;
+    const jobId = versionInstallJobId(installVersionId);
     versionInstallJobIdRef.current = jobId;
 
     setInstallPaused(false);
@@ -3165,8 +3177,21 @@ function App() {
         });
       } else if (loader === "neoforge" && isNeoForgeVersion(selectedVersion)) {
         await invoke("install_neoforge", {
-          versionId: selectedVersion.id,
+          versionId: installVersionId,
         });
+      } else if (
+        loader === "neoforge" &&
+        !isForgeVersion(selectedVersion) &&
+        !isNeoForgeVersion(selectedVersion)
+      ) {
+        const v = selectedVersion as VersionSummary;
+        const builds = await invoke<{ version: string }[]>("fetch_neoforge_builds_for_game", {
+          gameVersion: v.id,
+        });
+        const loaderVersion = builds[0]?.version;
+        if (!loaderVersion) throw new Error(tt("app.install.noNeoForgeLoader"));
+        installVersionId = `${v.id}-neoforge-${loaderVersion}`;
+        await invoke("install_neoforge", { versionId: installVersionId });
       } else {
         throw new Error(tt("app.install.unknownVersionType"));
       }
@@ -3174,7 +3199,7 @@ function App() {
       showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
       setInstalledIds((prev) => {
         const next = new Set(prev);
-        next.add(selectedVersion.id);
+        next.add(installVersionId);
         return next;
       });
     } catch (error) {

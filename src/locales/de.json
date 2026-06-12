@@ -1005,6 +1005,7 @@
     },
     "install": {
       "noFabricLoader": "Für diese Version gibt es keinen passenden Fabric Loader",
+      "noNeoForgeLoader": "Für diese Version gibt es keine passende NeoForge-Build",
       "unknownVersionType": "Unbekannter Versionstyp"
     }
   },
