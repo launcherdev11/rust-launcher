@@ -340,6 +340,10 @@
       "label": "Verwenden Sie benutzerdefinierte JVM-Argumente",
       "hint": "Wenn diese Option deaktiviert ist, werden nur die Standardeinstellungen des Launchers verwendet."
     },
+    "preferIpv6": {
+      "label": "IPv6 bevorzugen",
+      "hint": "Java versucht, Server über IPv6 zu erreichen (nützlich bei CGNAT oder IPv6-only-Netzwerken)."
+    },
     "javaPath": {
       "label": "Java-Pfad",
       "hint": "Lassen Sie das Feld leer, um die integrierte Mojang-Laufzeit zu verwenden.",
