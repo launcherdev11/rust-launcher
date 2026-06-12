@@ -3428,6 +3428,10 @@ function App() {
                   }
                   void handlePrimaryClick();
                 }}
+                primaryLabel={primaryLabel}
+                primaryColorClasses={primaryColorClasses}
+                isLaunching={isLaunching}
+                isStopping={isStopping}
                 gameStatus={gameStatus}
                 consoleLines={consoleLines}
                 consoleHistorySessions={consoleHistorySessions}
@@ -3564,6 +3568,7 @@ function App() {
       isConsoleVisible,
       isInstalling,
       isLaunching,
+      isStopping,
       isLoaderDropdownOpen,
       isVersionDropdownOpen,
       language,

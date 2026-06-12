@@ -184,6 +184,10 @@ type ModpackTabProps = {
   initialSelectedProfileId?: string | null;
   onOpenModsTab?: () => void;
   onPlaySelectedProfile?: () => void;
+  primaryLabel?: string;
+  primaryColorClasses?: string;
+  isLaunching?: boolean;
+  isStopping?: boolean;
   onProfilesChange?: (profiles: InstanceProfile[]) => void;
   onTogglePinInSidebar?: (profile: InstanceProfile) => void;
   isPinnedInSidebar?: (profileId: string) => boolean;
@@ -403,6 +407,10 @@ export function ModpackTab({
   initialSelectedProfileId,
   onOpenModsTab,
   onPlaySelectedProfile,
+  primaryLabel,
+  primaryColorClasses = "accent-bg hover:opacity-90",
+  isLaunching = false,
+  isStopping = false,
   onProfilesChange,
   onTogglePinInSidebar,
   isPinnedInSidebar,
@@ -4105,12 +4113,29 @@ export function ModpackTab({
             </button>
             <button
               type="button"
+              onClick={() => onPlaySelectedProfile?.()}
+              disabled={isLaunching || isStopping}
+              className={`${MANAGE_ACTION_BTN_CLASS} shadow-soft ${primaryColorClasses} ${
+                isLaunching || isStopping ? "cursor-not-allowed" : "interactive-press"
+              }`}
+              title={tt("modpacks.list.playSelectedTitle")}
+            >
+              <span className="truncate">
+                {primaryLabel ?? tt("modpacks.actions.play")}
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
-              className={`${MANAGE_ACTION_BTN_CLASS} accent-bg shadow-soft hover:opacity-90`}
+              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={tt("modpacks.manage.selectProfile")}
             >
               <Download className="h-4 w-4 shrink-0" />
-              <span className="truncate">{tt("modpacks.actions.select")}</span>
+              <span className="truncate">
+                {selectedProfileId === selectedProfile.id
+                  ? tt("modpacks.actions.unselect")
+                  : tt("modpacks.actions.select")}
+              </span>
             </button>
           </div>
         </div>
