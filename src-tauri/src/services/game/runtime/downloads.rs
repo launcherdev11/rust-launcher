@@ -113,6 +113,15 @@ pub(crate) fn ensure_launcher_profiles_json(game_dir: &Path, mc_version: &str) -
             }),
         );
         found_key = Some(profile_key.clone());
+    } else if let Some(key) = found_key.clone() {
+        if let Some(profile) = profiles_obj.get_mut(&key) {
+            if let Some(obj) = profile.as_object_mut() {
+                obj.insert(
+                    "lastVersionId".to_string(),
+                    serde_json::Value::String(mc_version.to_string()),
+                );
+            }
+        }
     }
 
     let selected_profile = found_key.ok_or_else(|| "Не удалось определить selectedProfile".to_string())?;
