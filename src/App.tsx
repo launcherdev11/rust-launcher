@@ -1319,6 +1319,11 @@ function App() {
     Record<string, ProfileConsoleData>
   >(initialPersistedConsoleByProfile);
   const runningConsoleProfileIdRef = useRef<string | null>(null);
+  const [runningConsoleProfileId, setRunningConsoleProfileId] = useState<string | null>(null);
+  const setRunningConsoleProfile = useCallback((profileId: string | null) => {
+    runningConsoleProfileIdRef.current = profileId;
+    setRunningConsoleProfileId(profileId);
+  }, []);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
 
   const { handleModpackSidebarClick } = useHotkeys({
@@ -1343,11 +1348,13 @@ function App() {
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
 
+  const consoleProfileId =
+    activeInstanceProfile?.id ?? runningConsoleProfileId ?? null;
+
   const consoleLines = useMemo(() => {
-    const profileId = activeInstanceProfile?.id;
-    if (!profileId) return [];
-    return consoleByProfile[profileId]?.lines ?? [];
-  }, [activeInstanceProfile?.id, consoleByProfile]);
+    if (!consoleProfileId) return [];
+    return consoleByProfile[consoleProfileId]?.lines ?? [];
+  }, [consoleProfileId, consoleByProfile]);
 
   const installConsoleLines = useMemo(
     () => consoleByProfile[INSTALL_CONSOLE_PROFILE_ID]?.lines ?? [],
@@ -1355,15 +1362,14 @@ function App() {
   );
 
   const playConsoleLines = useMemo(() => {
-    if (activeInstanceProfile?.id) return consoleLines;
-    return installConsoleLines;
-  }, [activeInstanceProfile?.id, consoleLines, installConsoleLines]);
+    if (!consoleProfileId) return installConsoleLines;
+    return consoleLines;
+  }, [consoleProfileId, consoleLines, installConsoleLines]);
 
   const consoleHistorySessions = useMemo(() => {
-    const profileId = activeInstanceProfile?.id;
-    if (!profileId) return [];
-    return consoleByProfile[profileId]?.sessions ?? [];
-  }, [activeInstanceProfile?.id, consoleByProfile]);
+    if (!consoleProfileId) return [];
+    return consoleByProfile[consoleProfileId]?.sessions ?? [];
+  }, [consoleProfileId, consoleByProfile]);
 
   const [knownProfiles, setKnownProfiles] = useState<InstanceProfileCard[]>([]);
   const [profilesHydrated, setProfilesHydrated] = useState(false);
@@ -1568,7 +1574,7 @@ function App() {
         launchVersionId = `${profile.game_version}-neoforge-${profileLoaderVersion}`;
       }
       const consoleProfileId = profile.id;
-      runningConsoleProfileIdRef.current = consoleProfileId;
+      setRunningConsoleProfile(consoleProfileId);
       archiveCurrentConsoleAndClear(consoleProfileId);
       if (settings?.show_console_on_launch) {
         setIsConsoleVisible(true);
@@ -1585,7 +1591,7 @@ function App() {
         setIsLaunching(false);
       }
     } catch (error) {
-      runningConsoleProfileIdRef.current = null;
+      setRunningConsoleProfile(null);
       const msg = error instanceof Error ? error.message : String(error);
       showNotification("error", tt("app.errors.launchError", { msg }));
     }
@@ -1691,7 +1697,7 @@ function App() {
         } else {
           if (lastRunningRef.current) {
             lastRunningRef.current = false;
-            runningConsoleProfileIdRef.current = null;
+            setRunningConsoleProfile(null);
             setGameStatus((prev) => {
               const lastLine = consoleLines[consoleLines.length - 1]?.line ?? "";
               const lower = lastLine.toLowerCase();
@@ -3045,7 +3051,8 @@ function App() {
 
   const handleClearConsole = () => {
     resetGameConsoleFilter();
-    const profileId = activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
+    const profileId =
+      activeInstanceProfile?.id ?? runningConsoleProfileId ?? INSTALL_CONSOLE_PROFILE_ID;
     setConsoleByProfile((prev) => ({
       ...prev,
       [profileId]: {
@@ -3373,7 +3380,7 @@ function App() {
               : selectedVersion.id;
         const consoleProfileId = await resolveLaunchConsoleProfileId();
         if (consoleProfileId) {
-          runningConsoleProfileIdRef.current = consoleProfileId;
+          setRunningConsoleProfile(consoleProfileId);
           archiveCurrentConsoleAndClear(consoleProfileId);
         }
         if (settings?.show_console_on_launch) {
@@ -3391,7 +3398,7 @@ function App() {
           setIsLaunching(false);
         }
       } catch (error) {
-        runningConsoleProfileIdRef.current = null;
+        setRunningConsoleProfile(null);
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Ошибка запуска игры:", error);
         showNotification(

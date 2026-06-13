@@ -4057,7 +4057,11 @@ export function ModpackTab({
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
         <div className="sticky top-0 z-20 -mx-1 flex w-full shrink-0 flex-wrap items-start justify-between gap-3">
           {isRenaming ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
+            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-4 py-3 backdrop-blur-md">
+              <ProfileInstanceIcon
+                profile={selectedProfile}
+                refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
+              />
               <input
                 autoFocus
                 type="text"
@@ -4088,63 +4092,79 @@ export function ModpackTab({
               </button>
             </div>
           ) : (
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 text-xs text-white/70 backdrop-blur-md">
-            <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
-            <span className="flex items-center gap-1">
-              <img
-                src="/launcher-assets/cllock.png"
-                alt=""
-                title={tt("modpacks.list.playtimeLabel")}
-                className="h-3 w-3 object-contain opacity-80"
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  if (img.dataset.failedOnce !== "1") {
-                    img.dataset.failedOnce = "1";
-                    img.src = "/launcher-assets/clock.png";
-                    return;
-                  }
-                  img.style.display = "none";
-                }}
+            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-4 py-3 backdrop-blur-md">
+              <ProfileInstanceIcon
+                profile={selectedProfile}
+                refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
+                editable
+                editTitle={tt("modpacks.profile.changeIconTitle")}
+                onEditClick={() => void handleChooseProfileIcon(selectedProfile)}
               />
-              <span>
-                {formatPlaytimeShort(language, selectedProfile.play_time_seconds)}
-              </span>
-            </span>
-            <span className="flex items-center gap-1">
-              <ModsIcon className="h-3 w-3" />
-              <span>{countLabel(selectedProfile.mods_count, language)}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <WeightIcon className="h-3 w-3" />
-              <span>
-                {formatByteSize(language, selectedProfile.total_size_bytes)}
-              </span>
-            </span>
-            <span className="text-white/55">
-              {tt("modpacks.list.lastPlayed", {
-                date: formatLastPlayedAt(selectedProfile.last_played_at, language),
-              })}
-            </span>
-            <button
-              type="button"
-              onClick={() => setProfileInfoProfile(selectedProfile)}
-              className="interactive-press rounded-full bg-white/10 p-0.5 text-white/70 hover:bg-white/20"
-              title={tt("modpacks.profileInfo.buttonTitle")}
-            >
-              <ProfileInfoIcon className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRenameValue(selectedProfile.name);
-                setIsRenaming(true);
-              }}
-              className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
-              title={tt("common.rename")}
-            >
-              <EditIcon className="h-3.5 w-3.5" />
-            </button>
-          </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-white">
+                    {selectedProfile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setProfileInfoProfile(selectedProfile)}
+                    className="interactive-press rounded-full bg-white/10 p-0.5 text-white/70 hover:bg-white/20"
+                    title={tt("modpacks.profileInfo.buttonTitle")}
+                  >
+                    <ProfileInfoIcon className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRenameValue(selectedProfile.name);
+                      setIsRenaming(true);
+                    }}
+                    className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
+                    title={tt("common.rename")}
+                  >
+                    <EditIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+                  <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
+                  <span className="flex items-center gap-1">
+                    <img
+                      src="/launcher-assets/cllock.png"
+                      alt=""
+                      title={tt("modpacks.list.playtimeLabel")}
+                      className="h-3 w-3 object-contain opacity-80"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.failedOnce !== "1") {
+                          img.dataset.failedOnce = "1";
+                          img.src = "/launcher-assets/clock.png";
+                          return;
+                        }
+                        img.style.display = "none";
+                      }}
+                    />
+                    <span>
+                      {formatPlaytimeShort(language, selectedProfile.play_time_seconds)}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <ModsIcon className="h-3 w-3" />
+                    <span>{countLabel(selectedProfile.mods_count, language)}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <WeightIcon className="h-3 w-3" />
+                    <span>
+                      {formatByteSize(language, selectedProfile.total_size_bytes)}
+                    </span>
+                  </span>
+                  <span className="text-white/55">
+                    {tt("modpacks.list.lastPlayed", {
+                      date: formatLastPlayedAt(selectedProfile.last_played_at, language),
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
           )}
 
           <div className="ml-auto flex w-fit shrink-0 flex-wrap items-center justify-end gap-2 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">

@@ -10,6 +10,44 @@ use crate::services::game::runtime::downloads::download_file_checked;
 use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES};
 use crate::services::game::version_types::Library;
 
+pub(crate) fn natives_dir_has_files(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_file() {
+            return true;
+        }
+        if p.is_dir()
+            && std::fs::read_dir(&p)
+                .map(|mut it| it.next().is_some())
+                .unwrap_or(false)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+pub(crate) fn resolve_natives_dir_for_launch(
+    versions_root: &Path,
+    version_id: &str,
+    inherits_from: Option<&str>,
+) -> PathBuf {
+    let version_natives = versions_root.join(version_id).join("natives");
+    if natives_dir_has_files(&version_natives) {
+        return version_natives;
+    }
+    if let Some(parent) = inherits_from.filter(|p| !p.is_empty() && *p != version_id) {
+        let parent_natives = versions_root.join(parent).join("natives");
+        if natives_dir_has_files(&parent_natives) {
+            return parent_natives;
+        }
+    }
+    version_natives
+}
+
 pub(crate) fn resolve_client_jar_path(
     game_root: &Path,
     versions_root: &Path,
