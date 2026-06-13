@@ -39,6 +39,7 @@ import {
   type ProfileInfoData,
 } from "./components/profile_info_modal";
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
+import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
@@ -57,8 +58,10 @@ import {
 import type { ProfileAvatarInput } from "./lib/avatar";
 import {
   isGameConsoleLineImportant,
+  isVersionInstallConsoleLine,
   resetGameConsoleFilter,
 } from "./lib/gameConsoleFilter";
+import { INSTALL_CONSOLE_PROFILE_ID } from "./lib/gameConsoleWindow";
 import { useT, t, isLanguage, readStoredLanguage, type Language } from "./i18n";
 import {
   OnboardingFlow,
@@ -384,11 +387,15 @@ type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 
+const MAX_VISIBLE_NOTIFICATIONS = 2;
+const NOTIFICATION_EXIT_MS = 200;
+
 type Notification = {
   id: number;
   kind?: NotificationKind;
   message: string;
   leaving?: boolean;
+  entered?: boolean;
   count?: number;
   colorMsg?: string;
   iconMsg?: string;
@@ -918,6 +925,9 @@ function App() {
   const [requestedModpackView, setRequestedModpackView] = useState<ModpackViewId | null>(
     null,
   );
+  const [requestedProfileSettingsId, setRequestedProfileSettingsId] = useState<string | null>(
+    null,
+  );
   const [updateStatus, setUpdateStatus] = useState<
     "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
   >("idle");
@@ -1022,6 +1032,10 @@ function App() {
 
   const clearRequestedModpackView = useCallback(() => {
     setRequestedModpackView(null);
+  }, []);
+
+  const clearRequestedProfileSettings = useCallback(() => {
+    setRequestedProfileSettingsId(null);
   }, []);
 
   const splitDropZoneLabels = useMemo(
@@ -1335,6 +1349,16 @@ function App() {
     return consoleByProfile[profileId]?.lines ?? [];
   }, [activeInstanceProfile?.id, consoleByProfile]);
 
+  const installConsoleLines = useMemo(
+    () => consoleByProfile[INSTALL_CONSOLE_PROFILE_ID]?.lines ?? [],
+    [consoleByProfile],
+  );
+
+  const playConsoleLines = useMemo(() => {
+    if (activeInstanceProfile?.id) return consoleLines;
+    return installConsoleLines;
+  }, [activeInstanceProfile?.id, consoleLines, installConsoleLines]);
+
   const consoleHistorySessions = useMemo(() => {
     const profileId = activeInstanceProfile?.id;
     if (!profileId) return [];
@@ -1420,6 +1444,22 @@ function App() {
     [],
   );
 
+  const prepareInstallConsole = useCallback(
+    (profileId?: string | null) => {
+      resetGameConsoleFilter();
+      const targetId = profileId ?? activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
+      setConsoleByProfile((prev) => ({
+        ...prev,
+        [targetId]: {
+          lines: [],
+          sessions: prev[targetId]?.sessions ?? [],
+        },
+      }));
+      return targetId;
+    },
+    [activeInstanceProfile?.id],
+  );
+
   const resolveLaunchConsoleProfileId = useCallback(async (): Promise<string | null> => {
     if (activeInstanceProfile?.id) return activeInstanceProfile.id;
     try {
@@ -1459,6 +1499,11 @@ function App() {
     const byId = new Map(knownProfiles.map((p) => [p.id, p]));
     return pinnedProfileIds.map((id) => byId.get(id)).filter((p): p is InstanceProfileCard => !!p).slice(0, 3);
   }, [knownProfiles, pinnedProfileIds]);
+
+  const activeProfileCard = useMemo(() => {
+    if (!activeInstanceProfile) return null;
+    return knownProfiles.find((p) => p.id === activeInstanceProfile.id) ?? null;
+  }, [activeInstanceProfile, knownProfiles]);
 
   useEffect(() => {
     if (!profilesHydrated) return;
@@ -1704,8 +1749,15 @@ function App() {
               : payload.source === "stderr"
                 ? "stderr"
                 : "stdout";
-          const profileId =
-            runningConsoleProfileIdRef.current ?? activeInstanceProfile?.id;
+          const runningId = runningConsoleProfileIdRef.current;
+          let profileId: string | null = runningId;
+          if (!profileId) {
+            if (isVersionInstallConsoleLine(text)) {
+              profileId = activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
+            } else {
+              profileId = activeInstanceProfile?.id ?? null;
+            }
+          }
           if (!profileId) return;
           appendConsoleLine(profileId, text, source);
         });
@@ -1741,6 +1793,18 @@ function App() {
     notificationTimersRef.current.delete(id);
   }, []);
 
+  const scheduleNotificationRemoval = useCallback(
+    (id: number, delayMs = NOTIFICATION_EXIT_MS) => {
+      clearNotificationDismissTimers(id);
+      const remove = window.setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        notificationTimersRef.current.delete(id);
+      }, delayMs);
+      notificationTimersRef.current.set(id, { remove });
+    },
+    [clearNotificationDismissTimers],
+  );
+
   const beginDismissNotification = useCallback(
     (id: number) => {
       clearNotificationDismissTimers(id);
@@ -1753,13 +1817,9 @@ function App() {
       });
       if (!shouldAnimateOut) return;
 
-      const remove = window.setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-        notificationTimersRef.current.delete(id);
-      }, 200);
-      notificationTimersRef.current.set(id, { remove });
+      scheduleNotificationRemoval(id);
     },
-    [clearNotificationDismissTimers],
+    [clearNotificationDismissTimers, scheduleNotificationRemoval],
   );
 
   const scheduleNotificationDismiss = useCallback(
@@ -1786,6 +1846,7 @@ function App() {
     (entry: NotificationIdentity): { merged: boolean } => {
       let targetId = 0;
       let merged = false;
+      const autoDismissIds: number[] = [];
 
       flushSync(() => {
         setNotifications((prev) => {
@@ -1799,16 +1860,30 @@ function App() {
                 : n,
             );
           }
+          let next = [...prev];
+          const active = next.filter((n) => !n.leaving);
+          if (active.length >= MAX_VISIBLE_NOTIFICATIONS) {
+            const oldest = active[0];
+            next = next.map((n) =>
+              n.id === oldest.id ? { ...n, leaving: true } : n,
+            );
+            autoDismissIds.push(oldest.id);
+          }
           targetId = Date.now() + Math.random();
           merged = false;
-          return [...prev, { id: targetId, ...entry, count: 1 }];
+          return [...next, { id: targetId, ...entry, count: 1, entered: false }];
         });
       });
+
+      for (const id of autoDismissIds) {
+        clearNotificationDismissTimers(id);
+        scheduleNotificationRemoval(id);
+      }
 
       scheduleNotificationDismiss(targetId);
       return { merged };
     },
-    [scheduleNotificationDismiss],
+    [scheduleNotificationDismiss, clearNotificationDismissTimers, scheduleNotificationRemoval],
   );
 
   const showNotification = useCallback(
@@ -2969,9 +3044,8 @@ function App() {
   };
 
   const handleClearConsole = () => {
-    const profileId = activeInstanceProfile?.id;
-    if (!profileId) return;
     resetGameConsoleFilter();
+    const profileId = activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
     setConsoleByProfile((prev) => ({
       ...prev,
       [profileId]: {
@@ -2982,10 +3056,11 @@ function App() {
   };
 
   const { isConsoleDetached, toggleConsoleDetached } = useGameConsoleWindow({
-    enabled: settings?.show_console_on_launch ?? false,
+    enabled:
+      (settings?.show_console_on_launch ?? false) || isInstalling || installPaused,
     profileName: activeInstanceProfile?.name ?? null,
     language,
-    consoleLines,
+    consoleLines: playConsoleLines,
     isConsoleVisible,
     gameStatus,
     onClearConsole: handleClearConsole,
@@ -3115,6 +3190,8 @@ function App() {
 
     setInstallPaused(false);
     setIsInstalling(true);
+    prepareInstallConsole();
+    setIsConsoleVisible(true);
     if (!options?.resume) {
       setProgress(null);
       showNotification("info", tt("app.toast.downloadStarted"));
@@ -3203,7 +3280,10 @@ function App() {
         return next;
       });
     } catch (error) {
-      if (installStopReasonRef.current === "pause") {
+      if (
+        installStopReasonRef.current === "pause" ||
+        installStopReasonRef.current === "cancel"
+      ) {
         return;
       }
       const msg = error instanceof Error ? error.message : String(error);
@@ -3223,10 +3303,45 @@ function App() {
         versionInstallJobIdRef.current = null;
         if (stopReason === "cancel") {
           setProgress(null);
+          try {
+            await invoke("reset_download_cancel");
+          } catch (e) {
+            console.error("Не удалось сбросить состояние загрузки:", e);
+          }
         }
         installStopReasonRef.current = null;
       }
     }
+  };
+
+  const handleStopGame = async () => {
+    if (isStopping || gameStatus !== "running") return;
+    setIsStopping(true);
+    try {
+      await invoke("stop_game");
+      lastRunningRef.current = false;
+      setGameStatus("stopped");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Ошибка остановки игры:", error);
+      showNotification("error", tt("app.errors.stopError", { msg }));
+    } finally {
+      setIsStopping(false);
+    }
+  };
+
+  const handleTitleBarProfilePlay = () => {
+    if (!activeInstanceProfile) {
+      showNotification("warning", tt("app.warnings.selectProfileFirst"));
+      return;
+    }
+    void handlePrimaryClick();
+  };
+
+  const handleTitleBarProfileSettings = () => {
+    if (!activeInstanceProfile) return;
+    setActiveItemWithSound("modpacks");
+    setRequestedProfileSettingsId(activeInstanceProfile.id);
   };
 
   const handlePrimaryClick = async () => {
@@ -3234,18 +3349,7 @@ function App() {
 
     if (isInstalled) {
       if (gameStatus === "running") {
-        setIsStopping(true);
-        try {
-          await invoke("stop_game");
-          lastRunningRef.current = false;
-          setGameStatus("stopped");
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          console.error("Ошибка остановки игры:", error);
-          showNotification("error", tt("app.errors.stopError", { msg }));
-        } finally {
-          setIsStopping(false);
-        }
+        await handleStopGame();
         return;
       }
 
@@ -3371,6 +3475,8 @@ function App() {
                 onActiveViewChange={setModpackView}
                 requestedModpackView={requestedModpackView}
                 onRequestedModpackViewApplied={clearRequestedModpackView}
+                requestedProfileSettingsId={requestedProfileSettingsId}
+                onRequestedProfileSettingsApplied={clearRequestedProfileSettings}
                 showNotification={showNotification}
                 registerDownloadJob={startDownloadJob}
                 updateDownloadJob={updateDownloadJobProgress}
@@ -3436,6 +3542,7 @@ function App() {
                 consoleLines={consoleLines}
                 consoleHistorySessions={consoleHistorySessions}
                 onClearConsole={handleClearConsole}
+                prepareInstallConsole={prepareInstallConsole}
               />
             </div>
           );
@@ -3504,7 +3611,7 @@ function App() {
             <PlayTab
               fillPane={inSplitPane}
               gameStatus={gameStatus}
-              consoleLines={consoleLines}
+              playConsoleLines={playConsoleLines}
               isConsoleVisible={isConsoleVisible}
               onRegisterConsoleHotkeys={registerPlayConsoleHotkeys}
               onToggleConsole={handleToggleConsole}
@@ -3534,7 +3641,6 @@ function App() {
               language={language}
               installedVersionIds={installedVersionIdsForDropdown}
               showSnapshots={settings?.show_snapshots ?? false}
-              activeProfileName={activeInstanceProfile?.name ?? null}
               isConsoleDetached={isConsoleDetached}
               onToggleConsoleDetached={toggleConsoleDetached}
             />
@@ -3548,10 +3654,13 @@ function App() {
       checkForUpdate,
       consoleHistorySessions,
       consoleLines,
+      playConsoleLines,
+      installConsoleLines,
       gameStatus,
       handleCancelInstall,
       handleClearConsole,
       handleModpackProfileSelectionChange,
+      prepareInstallConsole,
       registerModpackHotkeys,
       registerPlayConsoleHotkeys,
       handleOpenGameFolder,
@@ -3675,7 +3784,7 @@ function App() {
         />
       </div>
 
-      <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center gap-2 px-4">
+      <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center px-4">
         {notifications.map((n) => {
           const baseClasses =
             "pointer-events-auto group inline-flex w-max max-w-[min(36rem,calc(100vw-2rem))] cursor-pointer items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium leading-snug shadow-soft transition-opacity hover:opacity-90 active:opacity-80 outline-none focus-visible:ring-2 focus-visible:ring-white/35";
@@ -3715,14 +3824,25 @@ function App() {
             if (resolvedIcon) iconSrc = resolvedIcon;
           }
 
+          const wrapperAnimationClass = n.leaving
+            ? "animate-notification-slide-out overflow-hidden"
+            : !n.entered
+              ? "animate-notification-slide-in"
+              : "";
+
           return (
             <div
               key={n.id}
-              className={`flex w-full justify-center ${
-                n.leaving
-                  ? "animate-notification-slide-out"
-                  : "animate-notification-slide-in"
-              }`}
+              className={`mb-2 flex w-full justify-center last:mb-0 ${wrapperAnimationClass}`}
+              onAnimationEnd={(e) => {
+                if (e.currentTarget !== e.target || n.leaving || n.entered) return;
+                if (!e.animationName.includes("notification-slide-down")) return;
+                setNotifications((prev) =>
+                  prev.map((item) =>
+                    item.id === n.id ? { ...item, entered: true } : item,
+                  ),
+                );
+              }}
             >
               <div
                 role="button"
@@ -4099,6 +4219,25 @@ function App() {
             <img src="/launcher-assets/help.png" alt="" className="h-3.5 w-3.5 object-contain" />
           </button>
         </div>
+        {activeInstanceProfile ? (
+          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-28">
+            <SelectedProfileTitleBar
+              profile={{
+                id: activeInstanceProfile.id,
+                name: activeInstanceProfile.name,
+                icon_path: activeProfileCard?.icon_path ?? null,
+              }}
+              language={language}
+              gameStatus={gameStatus}
+              isLaunching={isLaunching}
+              isStopping={isStopping}
+              onPlay={handleTitleBarProfilePlay}
+              onStop={() => void handleStopGame()}
+              onSettings={handleTitleBarProfileSettings}
+              onOpenProfile={() => void handleOpenProfileInModpacks(activeInstanceProfile.id)}
+            />
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <div className="relative mr-1" ref={accountSwitcherRef} data-no-drag>
             <button

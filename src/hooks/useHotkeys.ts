@@ -17,6 +17,7 @@ export type ModpackNavigationActions = {
   getActiveView: () => ModpackViewId;
   goToList: () => void;
   setActiveView: (view: ModpackViewId) => void;
+  openProfileSettings: (profileId: string) => void;
 };
 
 type SidebarTabId = "play" | "settings" | "mods" | "modpacks" | "accounts";

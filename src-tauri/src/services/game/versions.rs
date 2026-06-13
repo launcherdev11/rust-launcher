@@ -270,6 +270,8 @@ fn forge_build_channel(
     channel_from_version_string(build)
 }
 pub(crate) async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
+
     let client = http_client(false);
     let text = download_text_with_retries(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
         .await

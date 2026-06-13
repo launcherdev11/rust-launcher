@@ -4,6 +4,8 @@ import { t, type Language } from "../i18n";
 
 export const GAME_CONSOLE_WINDOW_LABEL = "game-console";
 
+export const INSTALL_CONSOLE_PROFILE_ID = "__version_install__";
+
 export const GAME_CONSOLE_SYNC_EVENT = "game-console-sync";
 export const GAME_CONSOLE_ACTION_EVENT = "game-console-action";
 export const GAME_CONSOLE_REQUEST_SYNC_EVENT = "game-console-request-sync";

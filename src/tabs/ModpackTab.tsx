@@ -195,6 +195,7 @@ type ModpackTabProps = {
   consoleLines?: GameConsoleLine[];
   consoleHistorySessions?: GameConsoleSession[];
   onClearConsole?: () => void;
+  prepareInstallConsole?: (profileId?: string | null) => void;
   openedMrpackPath?: string | null;
   onOpenedMrpackPathConsumed?: () => void;
   fillPane?: boolean;
@@ -212,6 +213,8 @@ type ModpackTabProps = {
   onRegisterModpackNavigation?: (actions: ModpackNavigationActions | null) => void;
   requestedModpackView?: ViewId | null;
   onRequestedModpackViewApplied?: () => void;
+  requestedProfileSettingsId?: string | null;
+  onRequestedProfileSettingsApplied?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -220,6 +223,13 @@ type ContentTab = "mods" | "resourcepacks" | "shaderpacks";
 type ProfileItemEntry = {
   name: string;
   enabled: boolean;
+};
+
+type ProfileItemMetadata = {
+  filename: string;
+  title?: string | null;
+  iconUrl?: string | null;
+  iconDataUri?: string | null;
 };
 
 type ProfileContentUpdate = {
@@ -328,6 +338,47 @@ function ModsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/mods.png" className={className} />;
 }
 
+function ProfileItemIcon({
+  contentTab,
+  metadata,
+}: {
+  contentTab: ContentTab;
+  metadata?: ProfileItemMetadata | null;
+}) {
+  const [broken, setBroken] = useState(false);
+  const src =
+    !broken && (metadata?.iconUrl?.trim() || metadata?.iconDataUri?.trim())
+      ? (metadata?.iconUrl?.trim() || metadata?.iconDataUri?.trim() || null)
+      : null;
+
+  useEffect(() => {
+    setBroken(false);
+  }, [metadata?.iconUrl, metadata?.iconDataUri]);
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className="h-7 w-7 shrink-0 rounded-lg bg-white/10 object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px]">
+      {contentTab === "mods" ? (
+        <ModsIcon className="h-5 w-5" />
+      ) : contentTab === "resourcepacks" ? (
+        "R"
+      ) : (
+        "S"
+      )}
+    </span>
+  );
+}
+
 function SettingsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/settings.png" className={className} />;
 }
@@ -407,10 +458,10 @@ export function ModpackTab({
   initialSelectedProfileId,
   onOpenModsTab,
   onPlaySelectedProfile,
-  primaryLabel,
-  primaryColorClasses = "accent-bg hover:opacity-90",
-  isLaunching = false,
-  isStopping = false,
+  primaryLabel: _primaryLabel,
+  primaryColorClasses: _primaryColorClasses = "accent-bg hover:opacity-90",
+  isLaunching: _isLaunching = false,
+  isStopping: _isStopping = false,
   onProfilesChange,
   onTogglePinInSidebar,
   isPinnedInSidebar,
@@ -418,6 +469,7 @@ export function ModpackTab({
   consoleLines = [],
   consoleHistorySessions = [],
   onClearConsole,
+  prepareInstallConsole,
   openedMrpackPath = null,
   onOpenedMrpackPathConsumed,
   fillPane = false,
@@ -430,6 +482,8 @@ export function ModpackTab({
   onRegisterModpackNavigation,
   requestedModpackView,
   onRequestedModpackViewApplied,
+  requestedProfileSettingsId,
+  onRequestedProfileSettingsApplied,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -448,6 +502,9 @@ export function ModpackTab({
   const [contentTab, setContentTab] = useState<ContentTab>("mods");
   const [items, setItems] = useState<ProfileItemEntry[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemMetadataByFilename, setItemMetadataByFilename] = useState<
+    Record<string, ProfileItemMetadata>
+  >({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const profilesLoadedRef = useRef(false);
   const [search, setSearch] = useState("");
@@ -1327,6 +1384,10 @@ export function ModpackTab({
         console.error(e);
       }
 
+      prepareInstallConsole?.(selectedProfileId);
+      setSelectedLogSessionId("live");
+      setManageConsoleExpanded(true);
+
       const installed = await invoke<string[]>("list_installed_versions");
       if (!installed.includes(gameVersion)) {
         const versionJobId = `version:${gameVersion}`;
@@ -1376,7 +1437,7 @@ export function ModpackTab({
         await invoke("install_neoforge", { versionId });
       }
     },
-    [language, showNotification, registerDownloadJob, finishDownloadJob],
+    [language, showNotification, registerDownloadJob, finishDownloadJob, prepareInstallConsole, selectedProfileId],
   );
 
   function openChangeVersionModal() {
@@ -1493,6 +1554,51 @@ export function ModpackTab({
       void refreshItems(selectedProfileId, contentTab);
     }
   }, [selectedProfileId, contentTab, activeView]);
+
+  const profileItemsKey = useMemo(
+    () => items.map((item) => item.name).sort().join("\0"),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!selectedProfileId || activeView !== "manage" || items.length === 0) {
+      setItemMetadataByFilename({});
+      return;
+    }
+
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const metadata = await invoke<ProfileItemMetadata[]>(
+          "resolve_profile_item_metadata",
+          {
+            profileId: selectedProfileId,
+            category,
+          },
+        );
+        if (cancelled) return;
+        const next: Record<string, ProfileItemMetadata> = {};
+        for (const entry of metadata) {
+          next[entry.filename] = entry;
+        }
+        setItemMetadataByFilename(next);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setItemMetadataByFilename({});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProfileId, contentTab, activeView, profileItemsKey]);
 
   useEffect(() => {
     if (!isExportOpen) return;
@@ -1799,6 +1905,9 @@ export function ModpackTab({
       getActiveView: () => activeView,
       goToList: goToModpackList,
       setActiveView,
+      openProfileSettings: (profileId: string) => {
+        void openProfileSettings(profileId);
+      },
     });
     return () => onRegisterModpackNavigation(null);
   }, [activeView, goToModpackList, onRegisterModpackNavigation]);
@@ -1810,6 +1919,12 @@ export function ModpackTab({
     }
     onRequestedModpackViewApplied?.();
   }, [requestedModpackView, onRequestedModpackViewApplied]);
+
+  useEffect(() => {
+    if (!requestedProfileSettingsId) return;
+    void openProfileSettings(requestedProfileSettingsId);
+    onRequestedProfileSettingsApplied?.();
+  }, [requestedProfileSettingsId, onRequestedProfileSettingsApplied]);
 
   const loadCreateLoaderVersions = useCallback(async () => {
     if (createLoader === "vanilla") {
@@ -1996,8 +2111,9 @@ export function ModpackTab({
     }
   }
 
-  async function handleChooseProfileIcon() {
-    if (!selectedProfile) return;
+  async function handleChooseProfileIcon(profileOverride?: InstanceProfile) {
+    const profile = profileOverride ?? selectedProfile;
+    if (!profile) return;
     try {
       const path = await openFileDialog({
         multiple: false,
@@ -2012,20 +2128,20 @@ export function ModpackTab({
       if (typeof path !== "string") return;
 
       const iconPath = await invoke<string | null>("set_profile_icon_from_file", {
-        profileId: selectedProfile.id,
+        profileId: profile.id,
         iconSourcePath: path,
       });
 
       setProfiles((prev) => {
         const next = prev.map((p) =>
-          p.id === selectedProfile.id ? { ...p, icon_path: iconPath ?? p.icon_path } : p,
+          p.id === profile.id ? { ...p, icon_path: iconPath ?? p.icon_path } : p,
         );
         onProfilesChange?.(next);
         return next;
       });
       setProfileIconRevisions((prev) => ({
         ...prev,
-        [selectedProfile.id]: (prev[selectedProfile.id] ?? 0) + 1,
+        [profile.id]: (prev[profile.id] ?? 0) + 1,
       }));
       showNotification("success", tt("modpacks.profile.iconChanged"));
     } catch (e) {
@@ -2080,6 +2196,8 @@ export function ModpackTab({
         } catch (e) {
           console.error(e);
         }
+
+        prepareInstallConsole?.(profile.id);
 
         const installed = await invoke<string[]>("list_installed_versions");
         const isInstalled = installed.includes(createGameVersion);
@@ -3938,125 +4056,96 @@ export function ModpackTab({
     return (
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
         <div className="sticky top-0 z-20 -mx-1 flex w-full shrink-0 flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 w-fit max-w-full items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
-            <ProfileInstanceIcon
-              profile={selectedProfile}
-              imageFit="contain"
-              refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
-              editable
-              editTitle={tt("modpacks.profile.changeIconTitle")}
-              onEditClick={() => void handleChooseProfileIcon()}
-            />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                {isRenaming ? (
-                  <>
-                    <input
-                      autoFocus
-                      type="text"
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          void handleRenameConfirm();
-                        } else if (e.key === "Escape") {
-                          setIsRenaming(false);
-                        }
-                      }}
-                      className="w-60 rounded-xl border border-white/30 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none"
-                    />
-                  </>
-                ) : (
-                  <h2 className="truncate text-lg font-semibold text-white">
-                    {selectedProfile.name}
-                  </h2>
-                )}
-                {!isRenaming && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setProfileInfoProfile(selectedProfile)}
-                      className="interactive-press rounded-full bg-white/10 p-0.5 text-white/70 hover:bg-white/20"
-                      title={tt("modpacks.profileInfo.buttonTitle")}
-                    >
-                      <ProfileInfoIcon className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRenameValue(selectedProfile.name);
-                        setIsRenaming(true);
-                      }}
-                      className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
-                      title={tt("common.rename")}
-                    >
-                      <EditIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
-                {isRenaming && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void handleRenameConfirm()}
-                      className="interactive-press rounded-full accent-bg p-1 text-white hover:opacity-90"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsRenaming(false)}
-                      className="interactive-press rounded-full bg-white/10 p-1 text-white hover:bg-white/20"
-                    >
-                      ✕
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="mt-0.5 flex flex-col gap-1 text-xs text-white/70">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
-                  <span className="flex items-center gap-1">
-                    <img
-                      src="/launcher-assets/cllock.png"
-                      alt=""
-                      title={tt("modpacks.list.playtimeLabel")}
-                      className="h-3 w-3 object-contain opacity-80"
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        if (img.dataset.failedOnce !== "1") {
-                          img.dataset.failedOnce = "1";
-                          img.src = "/launcher-assets/clock.png";
-                          return;
-                        }
-                        img.style.display = "none";
-                      }}
-                    />
-                    <span>
-                      {formatPlaytimeShort(language, selectedProfile.play_time_seconds)}
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <ModsIcon className="h-3 w-3" />
-                    <span>{countLabel(selectedProfile.mods_count, language)}</span>
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="flex items-center gap-1">
-                    <WeightIcon className="h-3 w-3" />
-                    <span>
-                      {formatByteSize(language, selectedProfile.total_size_bytes)}
-                    </span>
-                  </span>
-                  <span className="text-white/55">
-                    {tt("modpacks.list.lastPlayed", {
-                      date: formatLastPlayedAt(selectedProfile.last_played_at, language),
-                    })}
-                  </span>
-                </div>
-              </div>
+          {isRenaming ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
+              <input
+                autoFocus
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void handleRenameConfirm();
+                  } else if (e.key === "Escape") {
+                    setIsRenaming(false);
+                  }
+                }}
+                className="min-w-0 flex-1 rounded-xl border border-white/30 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void handleRenameConfirm()}
+                className="interactive-press rounded-full accent-bg p-1 text-white hover:opacity-90"
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRenaming(false)}
+                className="interactive-press rounded-full bg-white/10 p-1 text-white hover:bg-white/20"
+              >
+                ✕
+              </button>
             </div>
+          ) : (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 text-xs text-white/70 backdrop-blur-md">
+            <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
+            <span className="flex items-center gap-1">
+              <img
+                src="/launcher-assets/cllock.png"
+                alt=""
+                title={tt("modpacks.list.playtimeLabel")}
+                className="h-3 w-3 object-contain opacity-80"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (img.dataset.failedOnce !== "1") {
+                    img.dataset.failedOnce = "1";
+                    img.src = "/launcher-assets/clock.png";
+                    return;
+                  }
+                  img.style.display = "none";
+                }}
+              />
+              <span>
+                {formatPlaytimeShort(language, selectedProfile.play_time_seconds)}
+              </span>
+            </span>
+            <span className="flex items-center gap-1">
+              <ModsIcon className="h-3 w-3" />
+              <span>{countLabel(selectedProfile.mods_count, language)}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <WeightIcon className="h-3 w-3" />
+              <span>
+                {formatByteSize(language, selectedProfile.total_size_bytes)}
+              </span>
+            </span>
+            <span className="text-white/55">
+              {tt("modpacks.list.lastPlayed", {
+                date: formatLastPlayedAt(selectedProfile.last_played_at, language),
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setProfileInfoProfile(selectedProfile)}
+              className="interactive-press rounded-full bg-white/10 p-0.5 text-white/70 hover:bg-white/20"
+              title={tt("modpacks.profileInfo.buttonTitle")}
+            >
+              <ProfileInfoIcon className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRenameValue(selectedProfile.name);
+                setIsRenaming(true);
+              }}
+              className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
+              title={tt("common.rename")}
+            >
+              <EditIcon className="h-3.5 w-3.5" />
+            </button>
           </div>
+          )}
 
           <div className="ml-auto flex w-fit shrink-0 flex-wrap items-center justify-end gap-2 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
             <button
@@ -4103,27 +4192,6 @@ export function ModpackTab({
                 <span className="truncate">{tt("modpacks.presets.saveFromProfile")}</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => void openProfileSettings(selectedProfile.id)}
-              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={tt("modpacks.manage.profileSettings")}
-            >
-              <SettingsIcon className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onPlaySelectedProfile?.()}
-              disabled={isLaunching || isStopping}
-              className={`${MANAGE_ACTION_BTN_CLASS} shadow-soft ${primaryColorClasses} ${
-                isLaunching || isStopping ? "cursor-not-allowed" : "interactive-press"
-              }`}
-              title={tt("modpacks.list.playSelectedTitle")}
-            >
-              <span className="truncate">
-                {primaryLabel ?? tt("modpacks.actions.play")}
-              </span>
-            </button>
             <button
               type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
@@ -4296,18 +4364,29 @@ export function ModpackTab({
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px]">
-                        {contentTab === "mods" ? (
-                          <ModsIcon className="h-5 w-5" />
-                        ) : contentTab === "resourcepacks" ? (
-                          "R"
-                        ) : (
-                          "S"
-                        )}
-                      </span>
-                      <span className="max-w-[200px] truncate md:max-w-[280px]">
-                        {item.name}
-                      </span>
+                      <ProfileItemIcon
+                        contentTab={contentTab}
+                        metadata={itemMetadataByFilename[item.name]}
+                      />
+                      <div className="min-w-0">
+                        <span
+                          className="block max-w-[200px] truncate md:max-w-[280px]"
+                          title={
+                            itemMetadataByFilename[item.name]?.title?.trim() || item.name
+                          }
+                        >
+                          {itemMetadataByFilename[item.name]?.title?.trim() || item.name}
+                        </span>
+                        {itemMetadataByFilename[item.name]?.title?.trim() &&
+                          itemMetadataByFilename[item.name]?.title?.trim() !== item.name && (
+                            <span
+                              className="block max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[280px]"
+                              title={item.name}
+                            >
+                              {item.name}
+                            </span>
+                          )}
+                      </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <button
@@ -4552,6 +4631,19 @@ export function ModpackTab({
             >
               <SettingsIcon className="h-3.5 w-3.5" />
               <span>{tt("modpacks.contextMenu.settings")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void handleChooseProfileIcon(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <img src="/launcher-assets/edit.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{tt("modpacks.profile.changeIconTitle")}</span>
             </button>
             <button
               type="button"

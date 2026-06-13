@@ -52,6 +52,7 @@ use services::curseforge::{
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
     download_modrinth_with_dependencies, resolve_modrinth_required_dependencies,
+    resolve_profile_item_metadata,
 };
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 use commands::{export_build, get_ely_avatar, get_ely_skin, list_build_files, preview_export};
@@ -202,6 +203,7 @@ pub fn run() {
             resolve_modrinth_required_dependencies,
             check_profile_content_updates,
             apply_profile_content_updates,
+            resolve_profile_item_metadata,
             download_modrinth_modpack_and_import,
             curseforge_search_mods,
             curseforge_get_mod,
