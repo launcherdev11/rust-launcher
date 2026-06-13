@@ -1,32 +1,34 @@
 <p align="center">
-    <a href="README.ru.md">Русская версия README</a>
-  <a href="https://16luncher.ru"><img src="assets/readme.png" alt="16Launcher"></a>
+  <a href="https://16-launcher.ru"><img src="public/launcher-assets/readme.png" alt="16Launcher"></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
-  <em>Is an optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings.</em>
+  <em>Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.</em>
 </p>
 
 <p align="center">
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20MacOS-lightgrey.svg" alt="Platform">
-  <img src="https://img.shields.io/badge/Downloads-30K+-brightgreen.svg" alt="Downloads">
+  <img src="https://img.shields.io/badge/react-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
+  <img src="https://img.shields.io/badge/typescript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/Rust-CE422B?style=for-the-badge&logo=rust&logoColor=white" />
+  <img src="https://img.shields.io/badge/Tauri-FFC131?style=for-the-badge&logo=tauri&logoColor=white" />
 </p>
 
 ---
-
-**RU Readme**: [RU](README.ru.md)
 
 **Source Code**: [https://github.com/launcherdev11/rust-launcher](https://github.com/launcherdev11/rust-launcher)
 
-**Website**: [https://16luncher.ru](https://16luncher.ru)
+**Website**: [https://16-launcher.ru](https://16-launcher.ru)
+
+---
+
+![readme_screen.png](public/launcher-assets/about.png)
 
 ---
     
-**16Launcher** - is an optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings.
+**16Launcher** - Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.
 
 ## Installation
 
-1. Download the latest installer from [Official website](https://16luncher.ru)
+1. Download the latest installer from [Official website](https://16-launcher.ru)
 2. Run the installer and follow the setup instructions
 3. Launch 16Launcher and start playing!
 
@@ -44,10 +46,18 @@
 3. **Select** your preferred Minecraft version
 4. **Click Play** and enjoy!
 
+# Screenshots
+
+![readme_screen.png](public/launcher-assets/readme_screen.png)
+![readme_screen2.png](public/launcher-assets/readme_screen2.png)
+![readme_screen3.png](public/launcher-assets/readme_screen3.png)
+![readme_screen4.png](public/launcher-assets/readme_screen4.png)
+![readme_screen5.png](public/launcher-assets/readme_screen5.png)
+
 ## Support
 
 - Email: 16launcher@gmail.com
-- Website: [https://16luncher.ru](https://16luncher.ru)
+- Website: [https://16-launcher.ru](https://16-launcher.ru)
 - Issues: [GitHub Issues](https://github.com/launcherdev11/rust-launcher/issues)
 
 ## License

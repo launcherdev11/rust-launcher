@@ -28,6 +28,10 @@
       "type": ["string", "null"],
       "enum": ["balanced", "performance", "low_memory", null],
       "description": "Имя пресета настроек памяти и JVM-флагов."
+    },
+    "prefer_ipv6_network": {
+      "type": "boolean",
+      "description": "Предпочитать IPv6 при сетевых подключениях Java (добавляет -Djava.net.preferIPv4Stack=false и -Djava.net.preferIPv6Addresses=true)."
     }
   },
   "required": ["use_custom_jvm_args"]

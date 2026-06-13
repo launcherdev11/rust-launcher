@@ -1,7 +1,7 @@
 {
   "name": "16Launcher",
   "private": true,
-  "version": "2.0.23",
+  "version": "2.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,8 @@
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.577.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

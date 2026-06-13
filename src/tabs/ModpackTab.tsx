@@ -12,17 +12,53 @@ import {
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ChevronDown, Download, UploadCloud } from "lucide-react";
 import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
-import { useT } from "../i18n";
+import {
+  formatByteSize,
+  formatPlaytimeShort,
+  localeTag,
+  t,
+  useT,
+  type Language,
+} from "../i18n";
+import { DeleteIcon } from "../components/delete_icon";
+import { ProfileInstanceIcon } from "../components/profile_instance_icon";
+import { resolveIconSrc } from "../lib/profile-icon";
+import {
+  assignProfilesToGroup,
+  dedupeProfileGroupAssignments,
+  loadProfileGroups,
+  newProfileGroupId,
+  PROFILE_GROUP_COLOR_STYLES,
+  PROFILE_GROUP_COLORS,
+  pruneEmptyProfileGroups,
+  sanitizeProfileGroups,
+  saveProfileGroups,
+  ungroupProfiles,
+  type ProfileGroup,
+  type ProfileGroupColor,
+} from "../lib/profile-groups";
+import type { DownloadJobKind } from "../hooks/useDownloadJobs";
+import type { ModpackHotkeyActions, ModpackNavigationActions } from "../hooks/useHotkeys";
+import { ScreenshotsModal } from "../features/screenshots";
+import {
+  ProfileInfoIcon,
+  ProfileInfoModal,
+  type ProfileInfoData,
+} from "../components/profile_info_modal";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
-type Language = "ru" | "en";
+type LoaderVersionChannel = "stable" | "beta" | "alpha";
+type LoaderVersionOption = {
+  version: string;
+  channel?: LoaderVersionChannel | null;
+};
 type NotificationKind = "info" | "success" | "error" | "warning";
 type Settings = {
   game_directory: string | null;
@@ -49,8 +85,10 @@ type InstanceProfile = {
   icon_path: string | null;
   game_version: string;
   loader: string;
+  loader_version?: string | null;
   created_at: number;
   play_time_seconds: number | null;
+  last_played_at?: number | null;
   mods_count: number;
   resourcepacks_count: number;
   shaderpacks_count: number;
@@ -58,11 +96,70 @@ type InstanceProfile = {
   directory: string;
 };
 
+type ExternalLauncherType =
+  | "auto"
+  | "multimc"
+  | "prism_launcher"
+  | "atlauncher"
+  | "gdlauncher"
+  | "curseforge"
+  | "unknown";
+
+type ImportableExternalInstance = {
+  id: string;
+  launcher_type: ExternalLauncherType;
+  path: string;
+  display_name: string;
+  loader: string | null;
+  game_version: string | null;
+  icon_path: string | null;
+  icon_data_uri: string | null;
+  approx_size_bytes: number | null;
+  mods_count: number | null;
+  last_modified: number | null;
+};
+
+type BuildPresetSettings = {
+  ram_mb?: number | null;
+  jvm_args?: string | null;
+  java_settings?: {
+    use_custom_jvm_args: boolean;
+    java_path: string | null;
+    xms: string | null;
+    xmx: string | null;
+    jvm_args: string | null;
+    preset: string | null;
+  } | null;
+  resolution_width?: number | null;
+  resolution_height?: number | null;
+  show_console_on_launch?: boolean | null;
+  close_launcher_on_game_start?: boolean | null;
+  check_game_processes?: boolean | null;
+};
+
+type BuildPreset = {
+  id: string;
+  name: string;
+  game_version: string;
+  loader: string;
+  loader_version?: string | null;
+  settings?: BuildPresetSettings | null;
+  created_at: number;
+  icon_path?: string | null;
+};
+
 type VersionSummary = {
   id: string;
   version_type: string;
   url: string;
   release_time: string;
+};
+
+type ForgeVersionSummary = {
+  id: string;
+  mc_version: string;
+  forge_build: string;
+  installer_url: string;
 };
 
 type GameConsoleLine = {
@@ -87,6 +184,10 @@ type ModpackTabProps = {
   initialSelectedProfileId?: string | null;
   onOpenModsTab?: () => void;
   onPlaySelectedProfile?: () => void;
+  primaryLabel?: string;
+  primaryColorClasses?: string;
+  isLaunching?: boolean;
+  isStopping?: boolean;
   onProfilesChange?: (profiles: InstanceProfile[]) => void;
   onTogglePinInSidebar?: (profile: InstanceProfile) => void;
   isPinnedInSidebar?: (profileId: string) => boolean;
@@ -94,10 +195,56 @@ type ModpackTabProps = {
   consoleLines?: GameConsoleLine[];
   consoleHistorySessions?: GameConsoleSession[];
   onClearConsole?: () => void;
+  prepareInstallConsole?: (profileId?: string | null) => void;
+  openedMrpackPath?: string | null;
+  onOpenedMrpackPathConsumed?: () => void;
+  fillPane?: boolean;
+  registerDownloadJob?: (params: {
+    id: string;
+    label: string;
+    kind: DownloadJobKind;
+    percent?: number | null;
+  }) => void;
+  updateDownloadJob?: (id: string, percent: number | null) => void;
+  finishDownloadJob?: (id: string) => void;
+  makeDownloadJobId?: (prefix: string) => string;
+  onRegisterModpackHotkeys?: (actions: ModpackHotkeyActions | null) => void;
+  onActiveViewChange?: (view: ViewId) => void;
+  onRegisterModpackNavigation?: (actions: ModpackNavigationActions | null) => void;
+  requestedModpackView?: ViewId | null;
+  onRequestedModpackViewApplied?: () => void;
+  requestedProfileSettingsId?: string | null;
+  onRequestedProfileSettingsApplied?: () => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
 type ContentTab = "mods" | "resourcepacks" | "shaderpacks";
+
+type ProfileItemEntry = {
+  name: string;
+  enabled: boolean;
+};
+
+type ProfileItemMetadata = {
+  filename: string;
+  title?: string | null;
+  iconUrl?: string | null;
+  iconDataUri?: string | null;
+};
+
+type ProfileContentUpdate = {
+  filename: string;
+  enabled: boolean;
+  projectId: string;
+  title: string;
+  currentVersionId: string;
+  currentVersionNumber: string;
+  latestVersionId: string;
+  latestVersionNumber: string;
+  latestUrl: string;
+  latestFilename: string;
+  latestSha1?: string | null;
+};
 
 type FileNode = {
   path: string;
@@ -113,6 +260,7 @@ type ExportProgressPayload = { bytes_written: number; total_bytes: number; curre
 type ExportFinishedPayload = { path: string; skipped_files: string[] };
 type ExportErrorPayload = { message: string };
 type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
+type LastPlayedUpdatedPayload = { profile_id: string; last_played_at: number };
 
 const loaderLabels: Record<LoaderId, string> = {
   vanilla: "Vanilla",
@@ -121,6 +269,23 @@ const loaderLabels: Record<LoaderId, string> = {
   quilt: "Quilt",
   neoforge: "NeoForge",
 };
+
+function shortGameVersionLabel(gameVersion: string): string {
+  const parts = gameVersion.split(".");
+  if (parts.length >= 2 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
+    return `${parts[0]}.${parts[1]}`;
+  }
+  return gameVersion;
+}
+
+function defaultProfileName(loader: LoaderId, gameVersion: string): string {
+  return `${loaderLabels[loader]} ${shortGameVersionLabel(gameVersion)}`.slice(0, 50);
+}
+
+function pickDefaultLoaderVersion(options: LoaderVersionOption[]): string {
+  const stable = options.find((o) => o.channel === "stable");
+  return stable?.version ?? options[0]?.version ?? "";
+}
 
 type IconProps = {
   className?: string;
@@ -157,10 +322,6 @@ function EditIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/edit.png" className={className} />;
 }
 
-function DeleteIcon({ className }: IconProps) {
-  return <ImageIcon src="/launcher-assets/delete.png" className={className} />;
-}
-
 function ExportIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/export.png" className={className} />;
 }
@@ -175,6 +336,47 @@ function RefreshIcon({ className }: IconProps) {
 
 function ModsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/mods.png" className={className} />;
+}
+
+function ProfileItemIcon({
+  contentTab,
+  metadata,
+}: {
+  contentTab: ContentTab;
+  metadata?: ProfileItemMetadata | null;
+}) {
+  const [broken, setBroken] = useState(false);
+  const src =
+    !broken && (metadata?.iconUrl?.trim() || metadata?.iconDataUri?.trim())
+      ? (metadata?.iconUrl?.trim() || metadata?.iconDataUri?.trim() || null)
+      : null;
+
+  useEffect(() => {
+    setBroken(false);
+  }, [metadata?.iconUrl, metadata?.iconDataUri]);
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className="h-7 w-7 shrink-0 rounded-lg bg-white/10 object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px]">
+      {contentTab === "mods" ? (
+        <ModsIcon className="h-5 w-5" />
+      ) : contentTab === "resourcepacks" ? (
+        "R"
+      ) : (
+        "S"
+      )}
+    </span>
+  );
 }
 
 function SettingsIcon({ className }: IconProps) {
@@ -197,74 +399,30 @@ function ListViewIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/list.png" className={className} />;
 }
 
-function formatBytes(bytes: number, language: Language): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return language === "ru" ? "0 МБ" : "0 MB";
-  const units = language === "ru" ? ["Б", "КБ", "МБ", "ГБ"] : ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let value = bytes;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i += 1;
-  }
-  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+function ScreenshotsIcon({ className }: IconProps) {
+  return <ImageIcon src="/launcher-assets/pack_image.png" className={className} />;
 }
 
 function countLabel(count: number, language: Language): string {
-  if (language === "ru") {
-    return `Модов: ${count}`;
-  }
-  return `Mods: ${count}`;
+  return t(language, "common.format.modsCount", { count });
 }
 
-function resolveIconSrc(iconPath: string): string {
-  if (iconPath.startsWith("http://") || iconPath.startsWith("https://") || iconPath.startsWith("data:")) {
-    return iconPath;
+function formatLastPlayedAt(ts: number | null | undefined, language: Language): string {
+  if (ts == null || !Number.isFinite(ts) || ts <= 0) return "—";
+  try {
+    return new Date(ts * 1000).toLocaleString(localeTag(language), {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return "—";
   }
-
-  let localPath = iconPath;
-  if (localPath.startsWith("file://")) {
-    localPath = localPath.replace(/^file:\/\//, "");
-  }
-
-  const normalized = localPath.replace(/\\/g, "/");
-  const driveMatch = normalized.match(/^\/([a-zA-Z]:\/.*)$/);
-  if (driveMatch) {
-    localPath = driveMatch[1];
-  }
-
-  return convertFileSrc(localPath);
 }
 
-function formatPlaytime(seconds: number | null, language: Language): string {
-  const s = seconds != null && Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-
-  if (language === "ru") {
-    if (h > 0) return `${h}ч ${m}м`;
-    return `${m}м`;
-  }
-
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function getProfileIconPath(profile: InstanceProfile): string {
-  const baseDir = profile.directory.replace(/\\/g, "/").replace(/\/$/, "");
-  if (profile.icon_path) return profile.icon_path;
-  return `${baseDir}/icon.png`;
-}
-
-const contentTabLabelsRu: Record<ContentTab, string> = {
-  mods: "Моды",
-  resourcepacks: "Ресурспаки",
-  shaderpacks: "Шейдеры",
-};
-
-const contentTabLabelsEn: Record<ContentTab, string> = {
-  mods: "Mods",
-  resourcepacks: "Resource packs",
-  shaderpacks: "Shaders",
+const CONTENT_TAB_KEYS: Record<ContentTab, string> = {
+  mods: "modpacks.contentTabs.mods",
+  resourcepacks: "modpacks.contentTabs.resourcepacks",
+  shaderpacks: "modpacks.contentTabs.shaderpacks",
 };
 
 function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
@@ -283,10 +441,15 @@ function filterPathsForContentTab(tab: ContentTab, paths: string[]): string[] {
 const MANAGE_ACTION_BTN_CLASS =
   "interactive-press inline-flex h-9 min-w-0 max-w-full items-center justify-center gap-1.5 overflow-hidden rounded-2xl px-2.5 py-2 text-xs font-semibold text-white sm:min-w-[8.75rem] sm:px-3";
 
+const MANAGE_ICON_BTN_CLASS =
+  "interactive-press inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white";
+
 const MODPACK_MANAGE_SPLIT_STORAGE_KEY = "modpack_manage_main_width_frac";
 const MODPACK_MANAGE_SPLIT_MIN = 0.22;
 const MODPACK_MANAGE_SPLIT_MAX = 0.9;
 const MODPACK_MANAGE_SPLIT_DEFAULT = 0.68;
+
+const BUILD_PRESETS_UI_ENABLED = false;
 
 export function ModpackTab({
   language,
@@ -295,6 +458,10 @@ export function ModpackTab({
   initialSelectedProfileId,
   onOpenModsTab,
   onPlaySelectedProfile,
+  primaryLabel: _primaryLabel,
+  primaryColorClasses: _primaryColorClasses = "accent-bg hover:opacity-90",
+  isLaunching: _isLaunching = false,
+  isStopping: _isStopping = false,
   onProfilesChange,
   onTogglePinInSidebar,
   isPinnedInSidebar,
@@ -302,6 +469,21 @@ export function ModpackTab({
   consoleLines = [],
   consoleHistorySessions = [],
   onClearConsole,
+  prepareInstallConsole,
+  openedMrpackPath = null,
+  onOpenedMrpackPathConsumed,
+  fillPane = false,
+  registerDownloadJob,
+  updateDownloadJob,
+  finishDownloadJob,
+  makeDownloadJobId,
+  onRegisterModpackHotkeys,
+  onActiveViewChange,
+  onRegisterModpackNavigation,
+  requestedModpackView,
+  onRequestedModpackViewApplied,
+  requestedProfileSettingsId,
+  onRequestedProfileSettingsApplied,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -318,16 +500,31 @@ export function ModpackTab({
   });
   const [activeView, setActiveView] = useState<ViewId>("list");
   const [contentTab, setContentTab] = useState<ContentTab>("mods");
-  const [items, setItems] = useState<string[]>([]);
+  const [items, setItems] = useState<ProfileItemEntry[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemMetadataByFilename, setItemMetadataByFilename] = useState<
+    Record<string, ProfileItemMetadata>
+  >({});
   const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const profilesLoadedRef = useRef(false);
   const [search, setSearch] = useState("");
   const [createName, setCreateName] = useState("");
+  const createNameUserEdited = useRef(false);
   const [createLoader, setCreateLoader] = useState<LoaderId>("fabric");
   const [createGameVersion, setCreateGameVersion] = useState("1.20.1");
+  const [createLoaderVersion, setCreateLoaderVersion] = useState("");
+  const [loaderVersionOptions, setLoaderVersionOptions] = useState<LoaderVersionOption[]>([]);
+  const [loaderVersionsLoading, setLoaderVersionsLoading] = useState(false);
+  const [isLoaderVersionDropdownOpen, setIsLoaderVersionDropdownOpen] = useState(false);
   const [createAllVersions, setCreateAllVersions] = useState(false);
   const [createIconPath, setCreateIconPath] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
+  const [buildPresets, setBuildPresets] = useState<BuildPreset[]>([]);
+  const [buildPresetsLoading, setBuildPresetsLoading] = useState(false);
+  const [createSelectedPresetId, setCreateSelectedPresetId] = useState<string | null>(null);
+  const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
+  const [presetIconUris, setPresetIconUris] = useState<Record<string, string>>({});
+  const [profileIconRevisions, setProfileIconRevisions] = useState<Record<string, number>>({});
   const [versionOptions, setVersionOptions] = useState<VersionSummary[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
@@ -338,8 +535,40 @@ export function ModpackTab({
     total?: number;
     message?: string;
   } | null>(null);
+
+  const [externalImportLauncher, setExternalImportLauncher] =
+    useState<ExternalLauncherType>("auto");
+  const [externalImportPath, setExternalImportPath] = useState("");
+  const [externalImportBusy, setExternalImportBusy] = useState(false);
+  const [externalImportProgress, setExternalImportProgress] = useState<{
+    phase: string;
+    current?: number;
+    total?: number;
+    message?: string;
+  } | null>(null);
+  const [externalImportScanBusy, setExternalImportScanBusy] = useState(false);
+  const [externalImportScanError, setExternalImportScanError] = useState<string | null>(null);
+  const [externalImportInstances, setExternalImportInstances] = useState<
+    ImportableExternalInstance[]
+  >([]);
+  const [externalImportSearch, setExternalImportSearch] = useState("");
+  const [externalImportSort, setExternalImportSort] = useState<"name" | "date" | "size">("name");
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [itemsSearch, setItemsSearch] = useState("");
+  const [contentUpdates, setContentUpdates] = useState<ProfileContentUpdate[]>([]);
+  const [contentUpdatesChecking, setContentUpdatesChecking] = useState(false);
+  const [contentUpdatesApplying, setContentUpdatesApplying] = useState(false);
+  const [contentUpdatesAvailableFilenames, setContentUpdatesAvailableFilenames] = useState<
+    Set<string>
+  >(new Set());
+  const [contentUpdatesAvailabilityLoading, setContentUpdatesAvailabilityLoading] =
+    useState(false);
+  const [contentUpdatesSingleApplyingFilename, setContentUpdatesSingleApplyingFilename] =
+    useState<string | null>(null);
+  const [isContentUpdatesModalOpen, setIsContentUpdatesModalOpen] = useState(false);
+  const [selectedContentUpdateFilenames, setSelectedContentUpdateFilenames] = useState<
+    Set<string>
+  >(new Set());
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [profilesLayout, setProfilesLayout] = useState<"list" | "grid">(() => {
@@ -356,17 +585,47 @@ export function ModpackTab({
     x: number;
     y: number;
   } | null>(null);
+  const [listContextMenu, setListContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [groupContextMenu, setGroupContextMenu] = useState<{
+    groupId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [profileGroups, setProfileGroups] = useState<ProfileGroup[]>(() => loadProfileGroups());
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [groupFormName, setGroupFormName] = useState("");
+  const [groupFormColor, setGroupFormColor] = useState<ProfileGroupColor>("purple");
+  const [groupFormProfileIds, setGroupFormProfileIds] = useState<Set<string>>(new Set());
+  const [isGroupProfilesDropdownOpen, setIsGroupProfilesDropdownOpen] = useState(false);
+  const [multiSelectedProfileIds, setMultiSelectedProfileIds] = useState<Set<string>>(new Set());
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+  const profileDragIdsRef = useRef<string[]>([]);
+  const groupProfilesDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
     null,
   );
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
   const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
+  const [isChangeVersionOpen, setIsChangeVersionOpen] = useState(false);
+  const [migrateGameVersion, setMigrateGameVersion] = useState("");
+  const [migrateLoaderVersion, setMigrateLoaderVersion] = useState("");
+  const [migrateLoaderVersionOptions, setMigrateLoaderVersionOptions] = useState<LoaderVersionOption[]>([]);
+  const [migrateLoaderVersionsLoading, setMigrateLoaderVersionsLoading] = useState(false);
+  const [migrateBusy, setMigrateBusy] = useState(false);
+  const [isMigrateVersionDropdownOpen, setIsMigrateVersionDropdownOpen] = useState(false);
+  const [isMigrateLoaderVersionDropdownOpen, setIsMigrateLoaderVersionDropdownOpen] = useState(false);
+  const [migrateAllVersions, setMigrateAllVersions] = useState(false);
+  const [migrateVersionOptions, setMigrateVersionOptions] = useState<VersionSummary[]>([]);
+  const [migrateVersionsLoading, setMigrateVersionsLoading] = useState(false);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const profileRamSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRamPendingRef = useRef<{ profileId: string; mb: number } | null>(null);
 
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isScreenshotsOpen, setIsScreenshotsOpen] = useState(false);
+  const [profileInfoProfile, setProfileInfoProfile] = useState<ProfileInfoData | null>(null);
   const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
   const [exportTree, setExportTree] = useState<FileNode[] | null>(null);
   const [exportTreeLoading, setExportTreeLoading] = useState(false);
@@ -530,6 +789,10 @@ export function ModpackTab({
   }, [manageConsoleExpanded]);
 
   useEffect(() => {
+    setSelectedLogSessionId("live");
+  }, [selectedProfileId]);
+
+  useEffect(() => {
     if (selectedLogSessionId === "live") return;
     const exists = consoleHistorySessions.some((s) => s.id === selectedLogSessionId);
     if (!exists) setSelectedLogSessionId("live");
@@ -586,14 +849,146 @@ export function ModpackTab({
 
   function formatLogSessionOptionLabel(session: GameConsoleSession): string {
     const d = new Date(session.endedAt ?? session.startedAt);
-    const ds = language === "ru" ? d.toLocaleString("ru-RU") : d.toLocaleString("en-GB");
-    return language === "ru" ? `Архив: ${ds}` : `Archive: ${ds}`;
+    const ds = d.toLocaleString(localeTag(language));
+    return t(language, "common.format.archiveLabel", { date: ds });
   }
 
   const selectedProfile = useMemo(
     () => profiles.find((p) => p.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+
+  const selectedCreatePreset = useMemo(
+    () => buildPresets.find((p) => p.id === createSelectedPresetId) ?? null,
+    [buildPresets, createSelectedPresetId],
+  );
+
+  const refreshBuildPresets = useCallback(async () => {
+    setBuildPresetsLoading(true);
+    try {
+      const list = await invoke<BuildPreset[]>("list_build_presets");
+      setBuildPresets(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBuildPresetsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!BUILD_PRESETS_UI_ENABLED) return;
+    void refreshBuildPresets();
+  }, [refreshBuildPresets]);
+
+  useEffect(() => {
+    if (!BUILD_PRESETS_UI_ENABLED) return;
+    let cancelled = false;
+    (async () => {
+      for (const preset of buildPresets) {
+        try {
+          const uri = await invoke<string | null>("get_build_preset_icon_data_uri", {
+            presetId: preset.id,
+          });
+          if (cancelled || !uri) continue;
+          setPresetIconUris((prev) =>
+            prev[preset.id] ? prev : { ...prev, [preset.id]: uri },
+          );
+        } catch {
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [buildPresets]);
+
+  function applyBuildPresetToCreateForm(preset: BuildPreset) {
+    const loader = preset.loader as LoaderId;
+    if (
+      loader === "vanilla" ||
+      loader === "fabric" ||
+      loader === "forge" ||
+      loader === "quilt" ||
+      loader === "neoforge"
+    ) {
+      setCreateLoader(loader);
+    }
+    setCreateGameVersion(preset.game_version);
+    setCreateLoaderVersion(preset.loader_version ?? "");
+    setLoaderVersionOptions([]);
+    setCreateSelectedPresetId(preset.id);
+  }
+
+  function clearCreatePresetSelection() {
+    setCreateSelectedPresetId(null);
+  }
+
+  async function handleSaveBuildPresetFromForm() {
+    const presetName = window.prompt(tt("modpacks.presets.namePrompt"), createName.trim() || "");
+    if (!presetName?.trim()) return;
+    const loaderVersion =
+      createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
+    if (createLoader !== "vanilla" && !loaderVersion) {
+      showNotification("warning", tt("modpacks.toast.selectLoaderBeforePreset"));
+      return;
+    }
+    try {
+      const preset = await invoke<BuildPreset>("save_build_preset", {
+        id: null,
+        name: presetName.trim(),
+        gameVersion: createGameVersion,
+        loader: createLoader,
+        loaderVersion,
+        settings: selectedCreatePreset?.settings ?? null,
+        iconSourcePath: createIconPath,
+      });
+      await refreshBuildPresets();
+      setCreateSelectedPresetId(preset.id);
+      showNotification("success", tt("modpacks.presets.saved"));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.presets.saveFailed"));
+    }
+  }
+
+  async function handleSaveBuildPresetFromProfile(profile: InstanceProfile) {
+    const presetName = window.prompt(tt("modpacks.presets.namePrompt"), profile.name);
+    if (!presetName?.trim()) return;
+    try {
+      await invoke<BuildPreset>("create_build_preset_from_profile", {
+        profileId: profile.id,
+        name: presetName.trim(),
+      });
+      await refreshBuildPresets();
+      showNotification("success", tt("modpacks.presets.saved"));
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      showNotification("error", `${tt("modpacks.presets.saveFailed")} ${msg}`);
+    }
+  }
+
+  async function handleDeleteBuildPreset(preset: BuildPreset) {
+    const ok = window.confirm(tt("modpacks.presets.deleteConfirm", { name: preset.name }));
+    if (!ok) return;
+    try {
+      await invoke("delete_build_preset", { presetId: preset.id });
+      if (createSelectedPresetId === preset.id) {
+        clearCreatePresetSelection();
+      }
+      setPresetIconUris((prev) => {
+        const next = { ...prev };
+        delete next[preset.id];
+        return next;
+      });
+      await refreshBuildPresets();
+      showNotification("success", tt("modpacks.presets.deleted"));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.presets.deleteFailed"));
+    }
+  }
 
   function parseIgnorePatterns(text: string): string[] {
     return text
@@ -668,8 +1063,8 @@ export function ModpackTab({
     try {
       const res = await invoke<PreviewResult>("preview_export", {
         buildId: selectedProfile.id,
-        selectedPaths: selected,
-        ignorePatterns: parseIgnorePatterns(ignorePatternsText),
+        selected,
+        ignores: parseIgnorePatterns(ignorePatternsText),
       });
       setPreviewResult(res);
     } catch (e) {
@@ -724,8 +1119,8 @@ export function ModpackTab({
     try {
       await invoke("export_build", {
         buildId: selectedProfile.id,
-        selectedPaths: selected,
-        ignorePatterns: parseIgnorePatterns(ignorePatternsText),
+        selected,
+        ignores: parseIgnorePatterns(ignorePatternsText),
         format: exportFormat,
         outPath,
       });
@@ -760,7 +1155,7 @@ export function ModpackTab({
             const bps = (db * 1000) / dt;
             if (Number.isFinite(bps)) {
               setExportSpeedLabel(
-                `${formatBytes(bps, language)}${tt("modpacks.export.perSecond")}`,
+                `${formatByteSize(language, bps)}${tt("modpacks.export.perSecond")}`,
               );
             }
           }
@@ -906,6 +1301,226 @@ export function ModpackTab({
     setIsProfileSettingsOpen(false);
   }
 
+  async function ensureMigrateVersionsLoaded() {
+    if (migrateVersionOptions.length > 0 || migrateVersionsLoading) return;
+    setMigrateVersionsLoading(true);
+    try {
+      const all = await invoke<VersionSummary[]>("fetch_all_versions");
+      const filtered = all.filter((v) =>
+        migrateAllVersions ? true : v.version_type === "release",
+      );
+      setMigrateVersionOptions(filtered);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setMigrateVersionsLoading(false);
+    }
+  }
+
+  const loadMigrateLoaderVersions = useCallback(async () => {
+    if (!selectedProfile) return;
+    const loader = selectedProfile.loader as LoaderId;
+    if (loader === "vanilla") {
+      setMigrateLoaderVersionOptions([]);
+      setMigrateLoaderVersion("");
+      return;
+    }
+    setMigrateLoaderVersionsLoading(true);
+    try {
+      let options: LoaderVersionOption[] = [];
+      if (loader === "fabric") {
+        options = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+          gameVersion: migrateGameVersion,
+        });
+      } else if (loader === "quilt") {
+        options = await invoke<LoaderVersionOption[]>("fetch_quilt_loaders", {
+          gameVersion: migrateGameVersion,
+        });
+      } else if (loader === "forge") {
+        options = await invoke<LoaderVersionOption[]>("fetch_forge_builds_for_game", {
+          gameVersion: migrateGameVersion,
+        });
+      } else if (loader === "neoforge") {
+        options = await invoke<LoaderVersionOption[]>("fetch_neoforge_builds_for_game", {
+          gameVersion: migrateGameVersion,
+        });
+      }
+      setMigrateLoaderVersionOptions(options);
+      const versionIds = options.map((o) => o.version);
+      setMigrateLoaderVersion((prev) =>
+        prev && versionIds.includes(prev) ? prev : pickDefaultLoaderVersion(options),
+      );
+    } catch (e) {
+      console.error(e);
+      setMigrateLoaderVersionOptions([]);
+      setMigrateLoaderVersion("");
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", t(language, "modpacks.toast.loadLoaderVersionsFailed", { msg }));
+    } finally {
+      setMigrateLoaderVersionsLoading(false);
+    }
+  }, [selectedProfile, migrateGameVersion, language, showNotification]);
+
+  const installGameAndLoader = useCallback(
+    async (
+      gameVersion: string,
+      loader: LoaderId,
+      loaderVersion: string | null,
+      versions: VersionSummary[],
+    ) => {
+      let versionUrl: string | null = versions.find((v) => v.id === gameVersion)?.url ?? null;
+      if (!versionUrl) {
+        const all = await invoke<VersionSummary[]>("fetch_all_versions");
+        versionUrl = all.find((v) => v.id === gameVersion)?.url ?? null;
+      }
+      if (!versionUrl) {
+        throw new Error(t(language, "modpacks.toast.manifestUrlFailed", { version: gameVersion }));
+      }
+
+      try {
+        await invoke("reset_download_cancel");
+      } catch (e) {
+        console.error(e);
+      }
+
+      prepareInstallConsole?.(selectedProfileId);
+      setSelectedLogSessionId("live");
+      setManageConsoleExpanded(true);
+
+      const installed = await invoke<string[]>("list_installed_versions");
+      if (!installed.includes(gameVersion)) {
+        const versionJobId = `version:${gameVersion}`;
+        registerDownloadJob?.({
+          id: versionJobId,
+          label: gameVersion,
+          kind: "version",
+        });
+        showNotification("info", t(language, "modpacks.toast.versionNotInstalled", { version: gameVersion }));
+        try {
+          await invoke("install_version", {
+            versionId: gameVersion,
+            versionUrl,
+          });
+        } finally {
+          finishDownloadJob?.(versionJobId);
+        }
+        showNotification("success", t(language, "modpacks.toast.versionInstalled", { version: gameVersion }));
+      }
+
+      if (loader === "fabric" && loaderVersion) {
+        showNotification("info", t(language, "modpacks.toast.installingFabric", { version: loaderVersion }));
+        await invoke("install_fabric", {
+          gameVersion,
+          loaderVersion,
+        });
+      } else if (loader === "quilt" && loaderVersion) {
+        showNotification("info", t(language, "modpacks.toast.installingQuilt", { version: loaderVersion }));
+        await invoke("install_quilt", {
+          gameVersion,
+          loaderVersion,
+        });
+      } else if (loader === "forge" && loaderVersion) {
+        const forgeList = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+        const match = forgeList.find(
+          (v) => v.mc_version === gameVersion && v.forge_build === loaderVersion,
+        );
+        const versionId = match?.id ?? `${gameVersion}-forge-${loaderVersion}`;
+        const installerUrl =
+          match?.installer_url ??
+          `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${loaderVersion}/forge-${gameVersion}-${loaderVersion}-installer.jar`;
+        showNotification("info", t(language, "modpacks.toast.installingForge", { version: loaderVersion }));
+        await invoke("install_forge", { versionId, installerUrl });
+      } else if (loader === "neoforge" && loaderVersion) {
+        const versionId = `${gameVersion}-neoforge-${loaderVersion}`;
+        showNotification("info", t(language, "modpacks.toast.installingNeoForge", { version: loaderVersion }));
+        await invoke("install_neoforge", { versionId });
+      }
+    },
+    [language, showNotification, registerDownloadJob, finishDownloadJob, prepareInstallConsole, selectedProfileId],
+  );
+
+  function openChangeVersionModal() {
+    if (!selectedProfile) return;
+    setMigrateGameVersion(selectedProfile.game_version);
+    setMigrateLoaderVersion(selectedProfile.loader_version ?? "");
+    setMigrateLoaderVersionOptions([]);
+    setMigrateVersionOptions([]);
+    setMigrateAllVersions(false);
+    setIsMigrateVersionDropdownOpen(false);
+    setIsMigrateLoaderVersionDropdownOpen(false);
+    setIsChangeVersionOpen(true);
+    void ensureMigrateVersionsLoaded();
+  }
+
+  function closeChangeVersionModal() {
+    if (migrateBusy) return;
+    setIsChangeVersionOpen(false);
+    setIsMigrateVersionDropdownOpen(false);
+    setIsMigrateLoaderVersionDropdownOpen(false);
+  }
+
+  async function handleChangeProfileVersion() {
+    if (!selectedProfile || migrateBusy) return;
+    const loader = selectedProfile.loader as LoaderId;
+    const loaderVersion =
+      loader === "vanilla" ? null : migrateLoaderVersion.trim() || null;
+    if (loader !== "vanilla" && !loaderVersion) {
+      showNotification("warning", tt("modpacks.changeVersion.selectLoaderVersion"));
+      return;
+    }
+    const sameGame = migrateGameVersion === selectedProfile.game_version;
+    const sameLoader =
+      (selectedProfile.loader_version ?? null) === loaderVersion;
+    if (sameGame && sameLoader) {
+      showNotification("warning", tt("modpacks.changeVersion.sameVersion"));
+      return;
+    }
+
+    setMigrateBusy(true);
+    try {
+      await installGameAndLoader(
+        migrateGameVersion,
+        loader,
+        loaderVersion,
+        migrateVersionOptions,
+      );
+      const updated = await invoke<InstanceProfile>("change_profile_version", {
+        id: selectedProfile.id,
+        gameVersion: migrateGameVersion,
+        loaderVersion,
+      });
+      setProfiles((prev) => {
+        const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+        onProfilesChange?.(next);
+        return next;
+      });
+      onProfileSelectionChange?.(updated);
+      await refreshItems(selectedProfile.id, contentTab);
+      setIsChangeVersionOpen(false);
+      showNotification("success", tt("modpacks.changeVersion.success"));
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.changeVersion.failed", { msg }));
+    } finally {
+      setMigrateBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isChangeVersionOpen || !selectedProfile) return;
+    if (selectedProfile.loader === "vanilla") return;
+    void loadMigrateLoaderVersions();
+  }, [isChangeVersionOpen, selectedProfile, migrateGameVersion, loadMigrateLoaderVersions]);
+
+  useEffect(() => {
+    if (!isChangeVersionOpen) return;
+    setMigrateVersionOptions([]);
+    void ensureMigrateVersionsLoaded();
+  }, [migrateAllVersions]);
+
   useEffect(() => () => clearProfileRamSaveDebounce(), []);
 
   useEffect(() => {
@@ -939,6 +1554,51 @@ export function ModpackTab({
       void refreshItems(selectedProfileId, contentTab);
     }
   }, [selectedProfileId, contentTab, activeView]);
+
+  const profileItemsKey = useMemo(
+    () => items.map((item) => item.name).sort().join("\0"),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!selectedProfileId || activeView !== "manage" || items.length === 0) {
+      setItemMetadataByFilename({});
+      return;
+    }
+
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const metadata = await invoke<ProfileItemMetadata[]>(
+          "resolve_profile_item_metadata",
+          {
+            profileId: selectedProfileId,
+            category,
+          },
+        );
+        if (cancelled) return;
+        const next: Record<string, ProfileItemMetadata> = {};
+        for (const entry of metadata) {
+          next[entry.filename] = entry;
+        }
+        setItemMetadataByFilename(next);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setItemMetadataByFilename({});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProfileId, contentTab, activeView, profileItemsKey]);
 
   useEffect(() => {
     if (!isExportOpen) return;
@@ -1021,6 +1681,24 @@ export function ModpackTab({
     onProfileSelectionChange(profile);
   }, [onProfileSelectionChange, profiles, selectedProfileId]);
 
+  const mrpackDownloadJobIdRef = useRef<string | null>(null);
+  const mrpackImportStopReasonRef = useRef<"cancel" | null>(null);
+
+  const handleCancelMrpackImport = useCallback(async () => {
+    if (!mrpackBusy) return;
+    mrpackImportStopReasonRef.current = "cancel";
+    const jobId = mrpackDownloadJobIdRef.current;
+    if (jobId) {
+      finishDownloadJob?.(jobId);
+      mrpackDownloadJobIdRef.current = null;
+    }
+    try {
+      await invoke("cancel_download");
+    } catch (e) {
+      console.error("Не удалось отменить импорт сборки:", e);
+    }
+  }, [mrpackBusy, finishDownloadJob]);
+
   useEffect(() => {
     const unlistenPromise = listen<{
       phase: string;
@@ -1030,11 +1708,39 @@ export function ModpackTab({
     }>("mrpack-import-progress", (event) => {
       const payload = event.payload;
       setMrpackProgress(payload);
+      const jobId = mrpackDownloadJobIdRef.current;
+      if (
+        jobId &&
+        updateDownloadJob &&
+        payload.phase === "files" &&
+        payload.current != null &&
+        payload.total != null &&
+        payload.total > 0
+      ) {
+        updateDownloadJob(jobId, (payload.current / payload.total) * 100);
+      }
       if (payload.phase === "start") {
         showNotification(
           "info",
-          language === "ru" ? "Импорт начат…" : "Import started…",
+          t(language, "modpacks.import.started"),
         );
+      }
+    });
+    return () => {
+      unlistenPromise.then((fn) => fn());
+    };
+  }, [language, showNotification, updateDownloadJob]);
+
+  useEffect(() => {
+    const unlistenPromise = listen<{
+      phase: string;
+      current?: number;
+      total?: number;
+      message?: string;
+    }>("external-import-progress", (event) => {
+      setExternalImportProgress(event.payload);
+      if (event.payload.phase === "start") {
+        showNotification("info", t(language, "modpacks.import.started"));
       }
     });
     return () => {
@@ -1046,6 +1752,7 @@ export function ModpackTab({
     setLoadingProfiles(true);
     try {
       const list = await invoke<InstanceProfile[]>("get_profiles");
+      profilesLoadedRef.current = true;
       setProfiles(list);
       onProfilesChange?.(list);
       try {
@@ -1057,19 +1764,14 @@ export function ModpackTab({
       }
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось загрузить список сборок."
-          : "Failed to load profiles.",
-      );
+      showNotification("error", t(language, "modpacks.toast.loadProfilesFailed"));
     } finally {
       setLoadingProfiles(false);
     }
   }
 
   useEffect(() => {
-    const unlistenPromise = listen<PlaytimeUpdatedPayload>(
+    const unlistenPlaytime = listen<PlaytimeUpdatedPayload>(
       "playtime-updated",
       (event) => {
         const { profile_id } = event.payload;
@@ -1090,8 +1792,20 @@ export function ModpackTab({
         })();
       },
     );
+    const unlistenLastPlayed = listen<LastPlayedUpdatedPayload>(
+      "last-played-updated",
+      (event) => {
+        const { profile_id, last_played_at } = event.payload;
+        setProfiles((prev) =>
+          prev.map((p) =>
+            p.id === profile_id ? { ...p, last_played_at } : p,
+          ),
+        );
+      },
+    );
     return () => {
-      unlistenPromise.then((fn) => fn());
+      unlistenPlaytime.then((fn) => fn());
+      unlistenLastPlayed.then((fn) => fn());
     };
   }, []);
 
@@ -1104,19 +1818,14 @@ export function ModpackTab({
           : tab === "resourcepacks"
             ? "resourcepacks"
             : "shaderpacks";
-      const files = await invoke<string[]>("list_profile_items", {
+      const files = await invoke<ProfileItemEntry[]>("list_profile_items", {
         id,
         category,
       });
       setItems(files);
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось загрузить файлы сборки."
-          : "Failed to load profile files.",
-      );
+      showNotification("error", t(language, "modpacks.toast.loadFilesFailed"));
     } finally {
       setItemsLoading(false);
     }
@@ -1137,20 +1846,10 @@ export function ModpackTab({
         files: paths,
       });
       await refreshItems(selectedProfile.id, contentTab);
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Файлы добавлены в сборку."
-          : "Files added to profile.",
-      );
+      showNotification("success", t(language, "modpacks.toast.filesAdded"));
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось добавить файлы."
-          : "Failed to add files.",
-      );
+      showNotification("error", t(language, "modpacks.toast.addFilesFailed"));
     }
   }
 
@@ -1173,6 +1872,130 @@ export function ModpackTab({
     }
   }
 
+  const handleOpenCreateView = useCallback(() => {
+    createNameUserEdited.current = false;
+    setActiveView("create");
+    void ensureVersionsLoaded();
+  }, [versionOptions.length, versionsLoading, createAllVersions]);
+
+  const handleOpenImportView = useCallback(() => {
+    setActiveView("import");
+  }, []);
+
+  useEffect(() => {
+    if (!onRegisterModpackHotkeys) return;
+    onRegisterModpackHotkeys({
+      openCreate: handleOpenCreateView,
+      openImport: handleOpenImportView,
+    });
+    return () => onRegisterModpackHotkeys(null);
+  }, [handleOpenCreateView, handleOpenImportView, onRegisterModpackHotkeys]);
+
+  useEffect(() => {
+    onActiveViewChange?.(activeView);
+  }, [activeView, onActiveViewChange]);
+
+  const goToModpackList = useCallback(() => {
+    setActiveView("list");
+  }, []);
+
+  useEffect(() => {
+    if (!onRegisterModpackNavigation) return;
+    onRegisterModpackNavigation({
+      getActiveView: () => activeView,
+      goToList: goToModpackList,
+      setActiveView,
+      openProfileSettings: (profileId: string) => {
+        void openProfileSettings(profileId);
+      },
+    });
+    return () => onRegisterModpackNavigation(null);
+  }, [activeView, goToModpackList, onRegisterModpackNavigation]);
+
+  useEffect(() => {
+    if (!requestedModpackView) return;
+    if (requestedModpackView !== activeView) {
+      setActiveView(requestedModpackView);
+    }
+    onRequestedModpackViewApplied?.();
+  }, [requestedModpackView, onRequestedModpackViewApplied]);
+
+  useEffect(() => {
+    if (!requestedProfileSettingsId) return;
+    void openProfileSettings(requestedProfileSettingsId);
+    onRequestedProfileSettingsApplied?.();
+  }, [requestedProfileSettingsId, onRequestedProfileSettingsApplied]);
+
+  const loadCreateLoaderVersions = useCallback(async () => {
+    if (createLoader === "vanilla") {
+      setLoaderVersionOptions([]);
+      setCreateLoaderVersion("");
+      return;
+    }
+    setLoaderVersionsLoading(true);
+    try {
+      let options: LoaderVersionOption[] = [];
+      if (createLoader === "fabric") {
+        options = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+          gameVersion: createGameVersion,
+        });
+      } else if (createLoader === "quilt") {
+        options = await invoke<LoaderVersionOption[]>("fetch_quilt_loaders", {
+          gameVersion: createGameVersion,
+        });
+      } else if (createLoader === "forge") {
+        options = await invoke<LoaderVersionOption[]>("fetch_forge_builds_for_game", {
+          gameVersion: createGameVersion,
+        });
+      } else if (createLoader === "neoforge") {
+        options = await invoke<LoaderVersionOption[]>("fetch_neoforge_builds_for_game", {
+          gameVersion: createGameVersion,
+        });
+      }
+      setLoaderVersionOptions(options);
+      const versionIds = options.map((o) => o.version);
+      setCreateLoaderVersion((prev) =>
+        prev && versionIds.includes(prev) ? prev : pickDefaultLoaderVersion(options),
+      );
+    } catch (e) {
+      console.error(e);
+      setLoaderVersionOptions([]);
+      setCreateLoaderVersion("");
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", t(language, "modpacks.toast.loadLoaderVersionsFailed", { msg }));
+    } finally {
+      setLoaderVersionsLoading(false);
+    }
+  }, [createLoader, createGameVersion, language, showNotification]);
+
+  const selectedLoaderVersionOption = useMemo(
+    () => loaderVersionOptions.find((o) => o.version === createLoaderVersion) ?? null,
+    [loaderVersionOptions, createLoaderVersion],
+  );
+
+  const loaderChannelLabel = useCallback(
+    (channel: LoaderVersionChannel | null | undefined) => {
+      if (!channel) return null;
+      return tt(`modpacks.create.loaderChannel.${channel}`);
+    },
+    [tt],
+  );
+
+  useEffect(() => {
+    if (activeView !== "create" || createLoader === "vanilla") {
+      return;
+    }
+    void loadCreateLoaderVersions();
+  }, [activeView, createLoader, createGameVersion, loadCreateLoaderVersions]);
+
+  useEffect(() => {
+    if (activeView !== "create" || createNameUserEdited.current) {
+      return;
+    }
+    setCreateName(defaultProfileName(createLoader, createGameVersion));
+  }, [activeView, createLoader, createGameVersion]);
+
   const filteredProfiles = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return profiles;
@@ -1182,27 +2005,91 @@ export function ModpackTab({
     );
   }, [profiles, search]);
 
-  const totalProfilesLabel =
-    language === "ru"
-      ? `Всего сборок: ${profiles.length}`
-      : `Total profiles: ${profiles.length}`;
+  const profilesById = useMemo(
+    () => new Map(profiles.map((p) => [p.id, p])),
+    [profiles],
+  );
 
-  const manageTabLabels = language === "ru" ? contentTabLabelsRu : contentTabLabelsEn;
+  const groupedProfileIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const group of profileGroups) {
+      for (const id of group.profileIds) ids.add(id);
+    }
+    return ids;
+  }, [profileGroups]);
+
+  const ungroupedProfiles = useMemo(
+    () => filteredProfiles.filter((p) => !groupedProfileIds.has(p.id)),
+    [filteredProfiles, groupedProfileIds],
+  );
+
+  const profileIdsSignature = useMemo(
+    () => profiles.map((p) => p.id).sort().join("\0"),
+    [profiles],
+  );
+
+  const visibleProfileGroups = useMemo(() => {
+    const query = search.trim();
+    return profileGroups.map((group) => ({
+      ...group,
+      profiles: group.profileIds
+        .map((id) => profilesById.get(id))
+        .filter((p): p is InstanceProfile => !!p)
+        .filter((p) =>
+          !query ||
+          p.name.toLowerCase().includes(query.toLowerCase()) ||
+          p.game_version.toLowerCase().includes(query.toLowerCase()),
+        ),
+    }));
+  }, [profileGroups, profilesById, search]);
+
+  useEffect(() => {
+    if (!profilesLoadedRef.current || profileIdsSignature.length === 0) return;
+    const validIds = new Set(profileIdsSignature.split("\0"));
+    setProfileGroups((prev) => {
+      const sanitized = sanitizeProfileGroups(prev, validIds);
+      const next = dedupeProfileGroupAssignments(sanitized);
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        saveProfileGroups(next);
+        return next;
+      }
+      return prev;
+    });
+  }, [profileIdsSignature]);
+
+  useEffect(() => {
+    if (!isGroupProfilesDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = groupProfilesDropdownRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setIsGroupProfilesDropdownOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [isGroupProfilesDropdownOpen]);
+
+  const totalProfilesLabel = tt("modpacks.header.totalProfiles", { count: profiles.length });
+
+  const manageTabLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.entries(CONTENT_TAB_KEYS) as [ContentTab, string][]).map(([tab, key]) => [
+          tab,
+          tt(key),
+        ]),
+      ) as Record<ContentTab, string>,
+    [tt],
+  );
 
   const headerTitle =
     activeView === "create"
-      ? language === "ru"
-        ? "Создать сборку"
-        : "Create profile"
+      ? tt("modpacks.create.title")
       : activeView === "import"
-        ? language === "ru"
-          ? "Импортировать .mrpack"
-          : "Import .mrpack"
+        ? tt("modpacks.header.importMrpack")
         : activeView === "manage"
           ? selectedProfile?.name ?? ""
-          : language === "ru"
-            ? "Сборки"
-            : "Profiles";
+          : tt("modpacks.header.profiles");
 
   async function handleChooseIcon() {
     try {
@@ -1224,15 +2111,53 @@ export function ModpackTab({
     }
   }
 
+  async function handleChooseProfileIcon(profileOverride?: InstanceProfile) {
+    const profile = profileOverride ?? selectedProfile;
+    if (!profile) return;
+    try {
+      const path = await openFileDialog({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: "Images",
+            extensions: ["png", "jpg", "jpeg", "webp"],
+          },
+        ],
+      });
+      if (typeof path !== "string") return;
+
+      const iconPath = await invoke<string | null>("set_profile_icon_from_file", {
+        profileId: profile.id,
+        iconSourcePath: path,
+      });
+
+      setProfiles((prev) => {
+        const next = prev.map((p) =>
+          p.id === profile.id ? { ...p, icon_path: iconPath ?? p.icon_path } : p,
+        );
+        onProfilesChange?.(next);
+        return next;
+      });
+      setProfileIconRevisions((prev) => ({
+        ...prev,
+        [profile.id]: (prev[profile.id] ?? 0) + 1,
+      }));
+      showNotification("success", tt("modpacks.profile.iconChanged"));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.profile.iconChangeFailed"));
+    }
+  }
+
   async function handleCreateProfile() {
-    const name = createName.trim().slice(0, 50);
-    if (!name) {
-      showNotification(
-        "warning",
-        language === "ru"
-          ? "Введите название сборки."
-          : "Enter profile name.",
-      );
+    const name = (
+      createName.trim() || defaultProfileName(createLoader, createGameVersion)
+    ).slice(0, 50);
+    const loaderVersion =
+      createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
+    if (createLoader !== "vanilla" && !loaderVersion) {
+      showNotification("warning", t(language, "modpacks.toast.selectLoaderVersion"));
       return;
     }
     setCreateBusy(true);
@@ -1251,61 +2176,93 @@ export function ModpackTab({
         }
       }
       if (!versionUrl) {
-        throw new Error(
-          language === "ru"
-            ? `Не удалось определить URL манифеста версии ${createGameVersion}.`
-            : `Failed to resolve manifest URL for version ${createGameVersion}.`,
-        );
+        throw new Error(t(language, "modpacks.toast.manifestUrlFailed", { version: createGameVersion }));
       }
 
       const profile = await invoke<InstanceProfile>("create_profile", {
         name,
         gameVersion: createGameVersion,
         loader: createLoader,
+        loaderVersion,
         iconSourcePath: createIconPath,
+        initialSettings: BUILD_PRESETS_UI_ENABLED
+          ? (selectedCreatePreset?.settings ?? null)
+          : null,
       });
 
       try {
+        try {
+          await invoke("reset_download_cancel");
+        } catch (e) {
+          console.error(e);
+        }
+
+        prepareInstallConsole?.(profile.id);
+
         const installed = await invoke<string[]>("list_installed_versions");
         const isInstalled = installed.includes(createGameVersion);
         if (!isInstalled) {
-          showNotification(
-            "info",
-            language === "ru"
-              ? `Версия ${createGameVersion} не установлена. Начинаю загрузку…`
-              : `Version ${createGameVersion} is not installed. Starting download…`,
-          );
-          try {
-            await invoke("reset_download_cancel");
-          } catch (e) {
-            console.error(e);
-          }
-          await invoke("install_version", {
-            versionId: createGameVersion,
-            versionUrl,
+          const versionJobId = `version:${createGameVersion}`;
+          registerDownloadJob?.({
+            id: versionJobId,
+            label: createGameVersion,
+            kind: "version",
           });
-          showNotification(
-            "success",
-            language === "ru"
-              ? `Версия ${createGameVersion} установлена.`
-              : `Version ${createGameVersion} installed.`,
+          showNotification("info", t(language, "modpacks.toast.versionNotInstalled", { version: createGameVersion }));
+          try {
+            await invoke("install_version", {
+              versionId: createGameVersion,
+              versionUrl,
+            });
+          } finally {
+            finishDownloadJob?.(versionJobId);
+          }
+          showNotification("success", t(language, "modpacks.toast.versionInstalled", { version: createGameVersion }));
+        }
+
+        if (createLoader === "fabric" && loaderVersion) {
+          showNotification("info", t(language, "modpacks.toast.installingFabric", { version: loaderVersion }));
+          await invoke("install_fabric", {
+            gameVersion: createGameVersion,
+            loaderVersion,
+          });
+        } else if (createLoader === "quilt" && loaderVersion) {
+          showNotification("info", t(language, "modpacks.toast.installingQuilt", { version: loaderVersion }));
+          await invoke("install_quilt", {
+            gameVersion: createGameVersion,
+            loaderVersion,
+          });
+        } else if (createLoader === "forge" && loaderVersion) {
+          const forgeList = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+          const match = forgeList.find(
+            (v) => v.mc_version === createGameVersion && v.forge_build === loaderVersion,
           );
+          const versionId =
+            match?.id ?? `${createGameVersion}-forge-${loaderVersion}`;
+          const installerUrl =
+            match?.installer_url ??
+            `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${createGameVersion}-${loaderVersion}/forge-${createGameVersion}-${loaderVersion}-installer.jar`;
+          showNotification("info", t(language, "modpacks.toast.installingForge", { version: loaderVersion }));
+          await invoke("install_forge", { versionId, installerUrl });
+        } else if (createLoader === "neoforge" && loaderVersion) {
+          const versionId = `${createGameVersion}-neoforge-${loaderVersion}`;
+          showNotification("info", t(language, "modpacks.toast.installingNeoForge", { version: loaderVersion }));
+          await invoke("install_neoforge", { versionId });
         }
       } catch (e) {
         console.error(e);
         const msg =
           e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
-        showNotification(
-          "warning",
-          language === "ru"
-            ? `Сборка создана, но не удалось проверить/установить версию игры: ${msg}`
-            : `Profile created, but failed to check/install game version: ${msg}`,
-        );
+        showNotification("warning", t(language, "modpacks.toast.profileCreatedInstallFailed", { msg }));
       }
 
       setProfiles((prev) => [...prev, profile]);
+      createNameUserEdited.current = false;
       setCreateName("");
       setCreateIconPath(null);
+      setCreateLoaderVersion("");
+      setLoaderVersionOptions([]);
+      clearCreatePresetSelection();
       setActiveView("manage");
       setSelectedProfileId(profile.id);
       try {
@@ -1313,12 +2270,7 @@ export function ModpackTab({
       } catch (e) {
         console.error(e);
       }
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Сборка создана."
-          : "Profile created.",
-      );
+      showNotification("success", t(language, "modpacks.toast.profileCreated"));
     } catch (e) {
       console.error(e);
       const msg =
@@ -1327,14 +2279,26 @@ export function ModpackTab({
           : typeof e === "string"
             ? e
             : JSON.stringify(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? `Не удалось создать сборку: ${msg}`
-          : `Failed to create profile: ${msg}`,
-      );
+      showNotification("error", t(language, "modpacks.toast.createProfileFailed", { msg }));
     } finally {
       setCreateBusy(false);
+    }
+  }
+
+  async function handleCreateDesktopShortcut(profile: InstanceProfile) {
+    try {
+      const path = await invoke<string>("create_profile_desktop_shortcut", {
+        profileId: profile.id,
+      });
+      showNotification(
+        "success",
+        path
+          ? `${tt("modpacks.shortcut.created")} (${path})`
+          : tt("modpacks.shortcut.created"),
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showNotification("error", tt("modpacks.shortcut.failed", { msg }));
     }
   }
 
@@ -1344,30 +2308,15 @@ export function ModpackTab({
       if (isAlreadySelected) {
         await invoke("set_selected_profile", { id: null });
         setSelectedProfileId(null);
-        showNotification(
-          "info",
-          language === "ru"
-            ? `Профиль «${profile.name}» снят с выбора.`
-            : `Profile “${profile.name}” unselected.`,
-        );
+        showNotification("info", t(language, "modpacks.toast.profileUnselected", { name: profile.name }));
       } else {
         await invoke("set_selected_profile", { id: profile.id });
         setSelectedProfileId(profile.id);
-        showNotification(
-          "success",
-          language === "ru"
-            ? `Профиль «${profile.name}» выбран.`
-            : `Profile “${profile.name}” selected.`,
-        );
+        showNotification("success", t(language, "modpacks.toast.profileSelected", { name: profile.name }));
       }
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось выбрать профиль."
-          : "Failed to select profile.",
-      );
+      showNotification("error", t(language, "modpacks.toast.selectProfileFailed"));
     }
   }
 
@@ -1388,18 +2337,10 @@ export function ModpackTab({
         }
       }
 
-      showNotification(
-        "success",
-        language === "ru" ? "Сборка удалена." : "Profile deleted.",
-      );
+      showNotification("success", t(language, "modpacks.toast.profileDeleted"));
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось удалить сборку."
-          : "Failed to delete profile.",
-      );
+      showNotification("error", t(language, "modpacks.toast.deleteProfileFailed"));
     }
   }
 
@@ -1421,6 +2362,17 @@ export function ModpackTab({
     }
     if (!chosen) return;
 
+    const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
+    const jobLabel =
+      chosen.split(/[/\\]/).pop()?.replace(/\.mrpack$/i, "") ?? "Modpack";
+    mrpackImportStopReasonRef.current = null;
+    try {
+      await invoke("reset_download_cancel");
+    } catch (e) {
+      console.error(e);
+    }
+    mrpackDownloadJobIdRef.current = jobId;
+    registerDownloadJob?.({ id: jobId, label: jobLabel, kind: "modpack" });
     setMrpackBusy(true);
     setMrpackProgress(null);
     try {
@@ -1434,12 +2386,7 @@ export function ModpackTab({
       setContentTab("mods");
       setActiveView("manage");
       await refreshItems(newProfile.id, "mods");
-      showNotification(
-        "success",
-        language === "ru"
-          ? "Импорт завершён. Сборка создана с версией игры из пакета."
-          : "Import finished. Profile created with pack's game version.",
-      );
+      showNotification("success", t(language, "modpacks.import.finishedWithVersion"));
     } catch (e) {
       console.error(e);
       setMrpackProgress(null);
@@ -1449,16 +2396,125 @@ export function ModpackTab({
           : typeof e === "string"
             ? e
             : JSON.stringify(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? `Не удалось импортировать .mrpack: ${msg}`
-          : `Failed to import .mrpack: ${msg}`,
-      );
+      const cancelled =
+        mrpackImportStopReasonRef.current === "cancel" ||
+        msg.includes(t(language, "modpacks.import.cancelledKeyword")) ||
+        msg.toLowerCase().includes("cancelled") ||
+        msg.toLowerCase().includes("canceled");
+      if (cancelled) {
+        showNotification("info", t(language, "mods.modpackImport.cancelled"));
+      } else {
+        showNotification("error", t(language, "modpacks.import.failed", { msg }));
+      }
     } finally {
+      mrpackImportStopReasonRef.current = null;
+      mrpackDownloadJobIdRef.current = null;
+      finishDownloadJob?.(jobId);
       setMrpackBusy(false);
     }
   }
+
+  const ensureExternalImportPathDefault = useCallback(async () => {
+    if (externalImportPath.trim().length > 0) return;
+    if (externalImportLauncher === "unknown") return;
+    if (externalImportLauncher === "auto") return;
+    try {
+      const p = await invoke<string | null>("default_external_launcher_path", {
+        launcherType: externalImportLauncher,
+      });
+      if (p) setExternalImportPath(p);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [externalImportLauncher, externalImportPath]);
+
+  const handleBrowseExternalImportPath = useCallback(async () => {
+    try {
+      const p = await openFileDialog({ directory: true, multiple: false });
+      if (typeof p === "string") {
+        setExternalImportPath(p);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const handleScanExternalInstances = useCallback(async () => {
+    setExternalImportScanBusy(true);
+    setExternalImportScanError(null);
+    setExternalImportInstances([]);
+    try {
+      const list = await invoke<ImportableExternalInstance[]>("list_importable_instances", {
+        launcherType: externalImportLauncher,
+        basePath: externalImportPath.trim().length ? externalImportPath.trim() : null,
+      });
+      setExternalImportInstances(list ?? []);
+      if (!list || list.length === 0) {
+        setExternalImportScanError(t(language, "modpacks.toast.noProfilesFound"));
+      }
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      setExternalImportScanError(msg);
+    } finally {
+      setExternalImportScanBusy(false);
+    }
+  }, [externalImportLauncher, externalImportPath, language]);
+
+  const handleImportExternalInstance = useCallback(
+    async (inst: ImportableExternalInstance) => {
+      if (externalImportBusy) return;
+      setExternalImportBusy(true);
+      setExternalImportProgress(null);
+      try {
+        const newProfile = await invoke<InstanceProfile>("import_selected_external_instance", {
+          launcherType: externalImportLauncher,
+          basePath: externalImportPath.trim().length ? externalImportPath.trim() : null,
+          instancePath: inst.path,
+          displayName: inst.display_name,
+          loader: inst.loader,
+          gameVersion: inst.game_version,
+          iconPath: inst.icon_path,
+        });
+        await invoke("set_selected_profile", { id: newProfile.id });
+        await refreshProfiles();
+        setSelectedProfileId(newProfile.id);
+        setContentTab("mods");
+        setActiveView("manage");
+        await refreshItems(newProfile.id, "mods");
+        showNotification("success", t(language, "modpacks.toast.profileImported"));
+      } catch (e) {
+        console.error(e);
+        const msg =
+          e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+        showNotification("error", t(language, "modpacks.toast.importProfileFailed", { msg }));
+      } finally {
+        setExternalImportBusy(false);
+        setExternalImportProgress(null);
+      }
+    },
+    [
+      externalImportBusy,
+      externalImportLauncher,
+      externalImportPath,
+      language,
+      showNotification,
+    ],
+  );
+
+  useEffect(() => {
+    if (!openedMrpackPath) return;
+    const path = openedMrpackPath;
+    onOpenedMrpackPathConsumed?.();
+    void handleImportMrpack(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- реакция только на путь из ОС
+  }, [openedMrpackPath, onOpenedMrpackPathConsumed]);
+
+  useEffect(() => {
+    if (activeView !== "import") return;
+    void ensureExternalImportPathDefault();
+  }, [activeView, ensureExternalImportPathDefault]);
 
   useEffect(() => {
     if (activeView !== "import") return;
@@ -1509,12 +2565,7 @@ export function ModpackTab({
           if (!inside || !p.paths?.length) return;
           const filtered = filterPathsForContentTab(contentTab, p.paths);
           if (filtered.length === 0) {
-            showNotification(
-              "warning",
-              language === "ru"
-                ? "Нет подходящих файлов для этой вкладки (проверьте расширение)."
-                : "No matching files for this tab (check file extensions).",
-            );
+            showNotification("warning", t(language, "modpacks.toast.noMatchingFiles"));
             return;
           }
           await addProfileFilesFromPaths(filtered);
@@ -1559,16 +2610,11 @@ export function ModpackTab({
       await addProfileFilesFromPaths(arr);
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось добавить файлы."
-          : "Failed to add files.",
-      );
+      showNotification("error", t(language, "modpacks.toast.addFilesFailed"));
     }
   }
 
-  async function handleDeleteItem(filename: string) {
+  async function handleDeleteItem(item: ProfileItemEntry) {
     if (!selectedProfile) return;
     try {
       const category =
@@ -1580,19 +2626,213 @@ export function ModpackTab({
       await invoke("delete_item", {
         id: selectedProfile.id,
         category,
-        filename,
+        filename: item.name,
       });
-      setItems((prev) => prev.filter((f) => f !== filename));
+      setItems((prev) => prev.filter((f) => f.name !== item.name));
+    } catch (e) {
+      console.error(e);
+      showNotification("error", t(language, "modpacks.toast.deleteFileFailed"));
+    }
+  }
+
+  async function handleToggleItemEnabled(item: ProfileItemEntry) {
+    if (!selectedProfile) return;
+    const nextEnabled = !item.enabled;
+    try {
+      const category =
+        contentTab === "mods"
+          ? "mods"
+          : contentTab === "resourcepacks"
+            ? "resourcepacks"
+            : "shaderpacks";
+      await invoke("set_profile_item_enabled", {
+        id: selectedProfile.id,
+        category,
+        filename: item.name,
+        enabled: nextEnabled,
+      });
+      setItems((prev) =>
+        prev.map((entry) =>
+          entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
+        ),
+      );
     } catch (e) {
       console.error(e);
       showNotification(
         "error",
-        language === "ru"
-          ? "Не удалось удалить файл."
-          : "Failed to delete file.",
+        tt("modpacks.manage.toggleFailed"),
       );
     }
   }
+
+  async function handleCheckContentUpdates() {
+    if (!selectedProfile) return;
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+    setContentUpdatesChecking(true);
+    try {
+      const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+      });
+      setContentUpdates(updates);
+      if (category === "mods") {
+        setContentUpdatesAvailableFilenames(new Set(updates.map((u) => u.filename)));
+      }
+      if (updates.length === 0) {
+        showNotification("info", tt("modpacks.contentUpdates.noneFound"));
+        return;
+      }
+      setSelectedContentUpdateFilenames(new Set(updates.map((u) => u.filename)));
+      setIsContentUpdatesModalOpen(true);
+      showNotification(
+        "info",
+        tt("modpacks.contentUpdates.found", { count: updates.length }),
+      );
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.checkFailed", { msg }));
+    } finally {
+      setContentUpdatesChecking(false);
+    }
+  }
+
+  async function handleApplyContentUpdates(updateAll: boolean) {
+    if (!selectedProfile) return;
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+    const selected = updateAll
+      ? contentUpdates
+      : contentUpdates.filter((u) => selectedContentUpdateFilenames.has(u.filename));
+    if (selected.length === 0) {
+      showNotification("warning", tt("modpacks.contentUpdates.selectAtLeastOne"));
+      return;
+    }
+    setContentUpdatesApplying(true);
+    try {
+      const payload = selected.map((u) => ({
+        filename: u.filename,
+        enabled: u.enabled,
+        latestUrl: u.latestUrl,
+        latestFilename: u.latestFilename,
+        latestSha1: u.latestSha1 ?? null,
+      }));
+      const applied = await invoke<number>("apply_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+        updates: payload,
+      });
+      showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
+      setIsContentUpdatesModalOpen(false);
+      setContentUpdates([]);
+      setSelectedContentUpdateFilenames(new Set());
+      await refreshItems(selectedProfile.id, contentTab);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.applyFailed", { msg }));
+    } finally {
+      setContentUpdatesApplying(false);
+    }
+  }
+
+  async function handleUpdateSingleItem(item: ProfileItemEntry) {
+    if (!selectedProfile) return;
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+
+    setContentUpdatesSingleApplyingFilename(item.name);
+    try {
+      const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+      });
+      const update = updates.find((u) => u.filename === item.name);
+      if (!update) {
+        setContentUpdatesAvailableFilenames((prev) => {
+          if (!prev.has(item.name)) return prev;
+          const next = new Set(prev);
+          next.delete(item.name);
+          return next;
+        });
+        showNotification("info", tt("modpacks.contentUpdates.noneFoundForItem"));
+        return;
+      }
+
+      const applied = await invoke<number>("apply_profile_content_updates", {
+        profileId: selectedProfile.id,
+        category,
+        updates: [
+          {
+            filename: update.filename,
+            enabled: update.enabled,
+            latestUrl: update.latestUrl,
+            latestFilename: update.latestFilename,
+            latestSha1: update.latestSha1 ?? null,
+          },
+        ],
+      });
+
+      showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
+      await refreshItems(selectedProfile.id, contentTab);
+      setContentUpdatesAvailableFilenames((prev) => {
+        if (!prev.has(item.name)) return prev;
+        const next = new Set(prev);
+        next.delete(item.name);
+        return next;
+      });
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.applyFailed", { msg }));
+    } finally {
+      setContentUpdatesSingleApplyingFilename(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedProfile) {
+      setContentUpdatesAvailableFilenames(new Set());
+      setContentUpdatesAvailabilityLoading(false);
+      return;
+    }
+    if (contentTab !== "mods") return;
+
+    let cancelled = false;
+    setContentUpdatesAvailabilityLoading(true);
+    (async () => {
+      try {
+        const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+          profileId: selectedProfile.id,
+          category: "mods",
+        });
+        if (cancelled) return;
+        setContentUpdatesAvailableFilenames(new Set(updates.map((u) => u.filename)));
+      } catch {
+        if (cancelled) return;
+        setContentUpdatesAvailableFilenames(new Set());
+      } finally {
+        if (!cancelled) setContentUpdatesAvailabilityLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProfile?.id, contentTab]);
 
   async function handleOpenFolder() {
     if (!selectedProfile) return;
@@ -1600,12 +2840,7 @@ export function ModpackTab({
       await revealItemInDir(selectedProfile.directory);
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        language === "ru"
-          ? "Не удалось открыть папку сборки."
-          : "Failed to open profile folder.",
-      );
+      showNotification("error", t(language, "modpacks.toast.openFolderFailed"));
     }
   }
 
@@ -1636,9 +2871,331 @@ export function ModpackTab({
     }
   }
 
+  function openCreateGroupModal() {
+    setEditingGroupId(null);
+    setGroupFormName("");
+    setGroupFormColor("purple");
+    setGroupFormProfileIds(new Set());
+    setIsGroupProfilesDropdownOpen(false);
+    setIsGroupModalOpen(true);
+  }
+
+  function openEditGroupModal(group: ProfileGroup) {
+    setEditingGroupId(group.id);
+    setGroupFormName(group.name);
+    setGroupFormColor(group.color);
+    setGroupFormProfileIds(new Set(group.profileIds));
+    setIsGroupProfilesDropdownOpen(false);
+    setIsGroupModalOpen(true);
+  }
+
+  function handleSaveGroup() {
+    const name = groupFormName.trim();
+    if (!name) {
+      showNotification("warning", tt("modpacks.groups.nameRequired"));
+      return;
+    }
+    const profileIds = [...groupFormProfileIds];
+    const editingId = editingGroupId;
+    let savedAsEdit = false;
+
+    setProfileGroups((prev) => {
+      const isEditing =
+        editingId != null && prev.some((group) => group.id === editingId);
+
+      if (isEditing && editingId) {
+        savedAsEdit = true;
+        const otherGroups = prev.filter((group) => group.id !== editingId);
+        const cleanedOthers =
+          profileIds.length > 0
+            ? pruneEmptyProfileGroups(ungroupProfiles(otherGroups, profileIds))
+            : pruneEmptyProfileGroups(otherGroups);
+        const existing = prev.find((group) => group.id === editingId)!;
+        const next = dedupeProfileGroupAssignments([
+          ...cleanedOthers,
+          {
+            ...existing,
+            name,
+            color: groupFormColor,
+            profileIds,
+          },
+        ]);
+        saveProfileGroups(next);
+        return next;
+      }
+
+      const cleaned =
+        profileIds.length > 0
+          ? pruneEmptyProfileGroups(ungroupProfiles(prev, profileIds))
+          : prev;
+      const newGroup: ProfileGroup = {
+        id: newProfileGroupId(),
+        name,
+        color: groupFormColor,
+        profileIds,
+        collapsed: false,
+      };
+      const next = dedupeProfileGroupAssignments([...cleaned, newGroup]);
+      saveProfileGroups(next);
+      return next;
+    });
+
+    showNotification(
+      "success",
+      savedAsEdit
+        ? tt("modpacks.groups.updated", { name })
+        : tt("modpacks.groups.created", { name }),
+    );
+    setEditingGroupId(null);
+    setIsGroupModalOpen(false);
+  }
+
+  function handleDeleteGroup(groupId: string) {
+    setProfileGroups((prev) => {
+      const next = pruneEmptyProfileGroups(prev.filter((group) => group.id !== groupId));
+      saveProfileGroups(next);
+      return next;
+    });
+    if (editingGroupId === groupId) {
+      setEditingGroupId(null);
+      setIsGroupModalOpen(false);
+    }
+    showNotification("info", tt("modpacks.groups.deleted"));
+  }
+
+  function toggleGroupCollapsed(groupId: string) {
+    setProfileGroups((prev) => {
+      const next = prev.map((g) => (g.id === groupId ? { ...g, collapsed: !g.collapsed } : g));
+      saveProfileGroups(next);
+      return next;
+    });
+  }
+
+  function handleDropProfilesOnGroup(groupId: string | "ungrouped") {
+    const ids = profileDragIdsRef.current;
+    if (ids.length === 0) return;
+    if (groupId === "ungrouped") {
+      setProfileGroups((prev) => {
+        const next = pruneEmptyProfileGroups(ungroupProfiles(prev, ids));
+        saveProfileGroups(next);
+        return next;
+      });
+    } else {
+      setProfileGroups((prev) => {
+        const next = dedupeProfileGroupAssignments(assignProfilesToGroup(prev, groupId, ids));
+        saveProfileGroups(next);
+        return next;
+      });
+    }
+    setDragOverGroupId(null);
+    setMultiSelectedProfileIds(new Set());
+    profileDragIdsRef.current = [];
+  }
+
+  function handleProfileDragStart(profileId: string, e: React.DragEvent) {
+    const dragIds =
+      multiSelectedProfileIds.has(profileId) && multiSelectedProfileIds.size > 0
+        ? [...multiSelectedProfileIds]
+        : [profileId];
+    profileDragIdsRef.current = dragIds;
+    e.dataTransfer.setData("text/plain", dragIds.join(","));
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleListAreaContextMenuCapture(e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-profile-card]")) return;
+    if (target.closest("[data-group-header]")) return;
+    if (target.closest("button, input, textarea, select, a, label")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setListContextMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  const profilesGridClass = "grid grid-cols-1 gap-2 sm:grid-cols-2 items-start";
+
+  function renderProfileCard(p: InstanceProfile) {
+    const isSelected = selectedProfileId === p.id;
+    const isPinned = isPinnedInSidebar?.(p.id) ?? false;
+    const isMultiSelected = multiSelectedProfileIds.has(p.id);
+    return (
+      <div
+        key={p.id}
+        data-profile-card
+        draggable
+        onDragStart={(e) => handleProfileDragStart(p.id, e)}
+        onDragEnd={() => {
+          setDragOverGroupId(null);
+          profileDragIdsRef.current = [];
+        }}
+        className={`relative flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
+          isMultiSelected
+            ? "border-sky-400/80 bg-sky-500/10 ring-1 ring-sky-400/40"
+            : isSelected
+              ? "border-emerald-400/80 bg-white/15"
+              : "border-white/10 bg-black/40 hover:border-white/40 hover:bg-black/60"
+        }`}
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey) {
+            e.stopPropagation();
+            setMultiSelectedProfileIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(p.id)) next.delete(p.id);
+              else next.add(p.id);
+              return next;
+            });
+            return;
+          }
+          setSelectedProfileId(p.id);
+          setActiveView("manage");
+          void invoke("set_selected_profile", { id: p.id });
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenu({
+            profileId: p.id,
+            x: e.clientX,
+            y: e.clientY,
+          });
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <ProfileInstanceIcon
+            profile={p}
+            refreshKey={profileIconRevisions[p.id] ?? 0}
+          />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-white">{p.name}</span>
+              {isPinned && (
+                <img
+                  src="/launcher-assets/favorite.png"
+                  alt=""
+                  className="h-3.5 w-3.5 object-contain opacity-90"
+                />
+              )}
+              {isSelected && (
+                <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+                  {tt("modpacks.list.activeBadge")}
+                </span>
+              )}
+            </div>
+            <div className="mt-0.5 flex flex-col gap-1 text-[11px] text-white/70">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>{`${p.game_version} • ${p.loader}`}</span>
+                <span className="flex items-center gap-1">
+                  <img
+                    src="/launcher-assets/cllock.png"
+                    alt=""
+                    title={tt("modpacks.list.playtimeLabel")}
+                    className="h-3 w-3 object-contain opacity-80"
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      if (img.dataset.failedOnce !== "1") {
+                        img.dataset.failedOnce = "1";
+                        img.src = "/launcher-assets/clock.png";
+                        return;
+                      }
+                      img.style.display = "none";
+                    }}
+                  />
+                  <span>{formatPlaytimeShort(language, p.play_time_seconds)}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <ModsIcon className="h-3 w-3" />
+                  <span>{countLabel(p.mods_count, language)}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1">
+                  <WeightIcon className="h-3 w-3" />
+                  <span>{formatByteSize(language, p.total_size_bytes)}</span>
+                </span>
+                <span className="text-white/55">
+                  {tt("modpacks.list.lastPlayed", {
+                    date: formatLastPlayedAt(p.last_played_at, language),
+                  })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isSelected && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlaySelectedProfile?.();
+              }}
+              className="interactive-press rounded-xl accent-bg px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-soft hover:opacity-90"
+              title={tt("modpacks.list.playSelectedTitle")}
+            >
+              {tt("modpacks.actions.play")}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSelectProfile(p);
+            }}
+            className={`interactive-press inline-flex shrink-0 items-center justify-center rounded-xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap ${
+              isSelected
+                ? "min-w-[96px] bg-white/10 text-white/80 hover:bg-white/20"
+                : "accent-bg text-white hover:opacity-90"
+            }`}
+          >
+            {isSelected ? tt("modpacks.actions.unselect") : tt("modpacks.actions.select")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderGroupDropZone(
+    groupId: string | "ungrouped",
+    children: ReactNode,
+    className?: string,
+  ) {
+    const isOver = dragOverGroupId === groupId;
+    return (
+      <div
+        className={className}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDragOverGroupId(groupId);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setDragOverGroupId((prev) => (prev === groupId ? null : prev));
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          handleDropProfilesOnGroup(groupId);
+        }}
+      >
+        {isOver && (
+          <div className="pointer-events-none mb-2 rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-2 text-center text-[11px] text-white/60">
+            {tt("modpacks.list.dropHint")}
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
+
   function renderListView() {
     return (
-      <div className="flex w-full flex-1 flex-col gap-4">
+      <div
+        className={`flex w-full min-h-0 flex-1 flex-col gap-3 ${
+          fillPane ? "h-full" : ""
+        }`}
+        onContextMenuCapture={handleListAreaContextMenuCapture}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
             <SearchIcon className="h-4 w-4" />
@@ -1651,12 +3208,21 @@ export function ModpackTab({
             />
           </div>
           <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
+            {BUILD_PRESETS_UI_ENABLED && (
+              <button
+                type="button"
+                onClick={() => {
+                  void refreshBuildPresets();
+                  setIsPresetsModalOpen(true);
+                }}
+                className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-white/20"
+              >
+                <span>{tt("modpacks.presets.manage")}</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => {
-                setActiveView("create");
-                void ensureVersionsLoaded();
-              }}
+              onClick={handleOpenCreateView}
               className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90"
             >
               <PlusIcon className="h-4 w-4" />
@@ -1664,7 +3230,7 @@ export function ModpackTab({
             </button>
             <button
               type="button"
-              onClick={() => setActiveView("import")}
+              onClick={handleOpenImportView}
               className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-white/20"
             >
               <UploadCloud className="h-4 w-4" />
@@ -1739,165 +3305,125 @@ export function ModpackTab({
           </div>
         </div>
 
-        <div className="glass-panel relative flex-1 overflow-hidden">
-          <div className="mb-1 flex items-center justify-between pl-3 text-xs text-white/60">
-            <span>{totalProfilesLabel}</span>
-            {loadingProfiles && (
-              <span>
-                {tt("modpacks.common.loading")}
-              </span>
-            )}
+        <div className="glass-panel relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="mb-1 flex shrink-0 items-center justify-between pl-3 text-xs text-white/60">
+            <div className="flex items-center gap-3">
+              <span>{totalProfilesLabel}</span>
+              {multiSelectedProfileIds.size > 0 && (
+                <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-medium text-sky-200">
+                  {tt("modpacks.list.selectedCount", { count: multiSelectedProfileIds.size })}
+                </span>
+              )}
+            </div>
+            {loadingProfiles && <span>{tt("modpacks.common.loading")}</span>}
           </div>
-          <div className="custom-scrollbar -mr-2 h-full overflow-y-auto px-4 pr-3">
-            <div
-              className={
-                profilesLayout === "grid"
-                  ? "grid grid-cols-1 gap-2 md:grid-cols-2"
-                  : "flex flex-col gap-2"
-              }
-            >
-              {filteredProfiles.map((p) => {
-                const isSelected = selectedProfileId === p.id;
-                const isPinned = isPinnedInSidebar?.(p.id) ?? false;
+          <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto px-4 pr-3">
+            <div className="flex flex-col gap-4">
+              {visibleProfileGroups.map((group) => {
+                const styles = PROFILE_GROUP_COLOR_STYLES[group.color];
+                const showProfiles = !group.collapsed;
+                if (search.trim() && group.profileIds.length > 0 && group.profiles.length === 0) {
+                  return null;
+                }
                 return (
                   <div
-                    key={p.id}
-                    className={`relative flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
-                      isSelected
-                        ? "border-emerald-400/80 bg-white/15"
-                        : "border-white/10 bg-black/40 hover:border-white/40 hover:bg-black/60"
+                    key={group.id}
+                    className={`rounded-2xl border p-2 transition ${styles.border} ${
+                      dragOverGroupId === group.id ? `ring-2 ${styles.ring}` : ""
                     }`}
-                    onClick={() => {
-                      setSelectedProfileId(p.id);
-                      setActiveView("manage");
-                      void invoke("set_selected_profile", { id: p.id });
-                    }}
-                    onContextMenu={(e) => {
+                    onDragOver={(e) => {
                       e.preventDefault();
-                      e.stopPropagation();
-                      setContextMenu({
-                        profileId: p.id,
-                        x: e.clientX,
-                        y: e.clientY,
-                      });
+                      e.dataTransfer.dropEffect = "move";
+                      setDragOverGroupId(group.id);
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverGroupId((prev) => (prev === group.id ? null : prev));
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDropProfilesOnGroup(group.id);
                     }}
                   >
-                    <div className="flex items-center gap-3">
-                    <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-                      <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
-                        <ModsIcon className="h-6 w-6" />
-                      </div>
-                      <img
-                        src={resolveIconSrc(getProfileIconPath(p))}
-                        alt="icon"
-                        className="absolute inset-0 h-full w-full object-cover"
-                        style={{ display: "none" }}
-                        onLoad={(e) => {
-                          const img = e.currentTarget;
-                          const fallback = img.parentElement?.querySelector(
-                            '[data-icon-fallback="1"]',
-                          ) as HTMLElement | null;
-                          if (fallback) fallback.style.display = "none";
-                          img.style.display = "block";
-                        }}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          const fallback = img.parentElement?.querySelector(
-                            '[data-icon-fallback="1"]',
-                          ) as HTMLElement | null;
-                          if (fallback) fallback.style.display = "flex";
-                          img.style.display = "none";
-                        }}
-                      />
-                    </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-white">
-                            {p.name}
-                          </span>
-                          {isPinned && (
-                            <img
-                              src="/launcher-assets/favorite.png"
-                              alt=""
-                              className="h-3.5 w-3.5 object-contain opacity-90"
-                            />
-                          )}
-                          {isSelected && (
-                            <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-                              {tt("modpacks.list.activeBadge")}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
-                          <span>{`${p.game_version} • ${p.loader}`}</span>
-                          <span className="flex items-center gap-1">
-                            <img
-                              src="/launcher-assets/cllock.png"
-                              alt=""
-                              title={tt("modpacks.list.playtimeLabel")}
-                              className="h-3 w-3 object-contain opacity-80"
-                              onError={(e) => {
-                                const img = e.currentTarget;
-                                if (img.dataset.failedOnce !== "1") {
-                                  img.dataset.failedOnce = "1";
-                                  img.src = "/launcher-assets/clock.png";
-                                  return;
-                                }
-                                img.style.display = "none";
-                              }}
-                            />
-                            <span>{formatPlaytime(p.play_time_seconds, language)}</span>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <ModsIcon className="h-3 w-3" />
-                            <span>{countLabel(p.mods_count, language)}</span>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <WeightIcon className="h-3 w-3" />
-                            <span>{formatBytes(p.total_size_bytes, language)}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                    {isSelected && (
+                    <div
+                      data-group-header
+                      className={`mb-2 flex items-center gap-2 rounded-xl px-3 py-2 ${styles.headerBg}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setGroupContextMenu({
+                          groupId: group.id,
+                          x: e.clientX,
+                          y: e.clientY,
+                        });
+                      }}
+                    >
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPlaySelectedProfile?.();
-                        }}
-                      className="interactive-press rounded-xl accent-bg px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-soft hover:opacity-90"
-                        title={tt("modpacks.list.playSelectedTitle")}
+                        onClick={() => toggleGroupCollapsed(group.id)}
+                        className="interactive-press rounded-lg p-1 text-white/70 hover:bg-white/10"
+                        aria-label={group.collapsed ? "Expand" : "Collapse"}
                       >
-                        {tt("modpacks.actions.play")}
+                        <ChevronDown
+                          className={`h-4 w-4 transition ${group.collapsed ? "-rotate-90" : ""}`}
+                        />
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleSelectProfile(p);
-                      }}
-                      className={`interactive-press inline-flex shrink-0 items-center justify-center rounded-xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap ${
-                        isSelected
-                          ? "min-w-[96px] bg-white/10 text-white/80 hover:bg-white/20"
-                          : "accent-bg text-white hover:opacity-90"
-                      }`}
-                    >
-                        {isSelected ? tt("modpacks.actions.unselect") : tt("modpacks.actions.select")}
-                      </button>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`} />
+                      <span className={`truncate text-sm font-semibold ${styles.accent}`}>
+                        {group.name}
+                      </span>
+                      <span className="text-[11px] text-white/45">{group.profileIds.length}</span>
                     </div>
+                    {showProfiles && (
+                      <div
+                        className={
+                          profilesLayout === "grid" ? profilesGridClass : "flex flex-col gap-2"
+                        }
+                      >
+                        {group.profiles.map((p) => renderProfileCard(p))}
+                        {group.profiles.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-white/15 px-3 py-4 text-center text-[11px] text-white/45">
+                            {tt("modpacks.list.dropHint")}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!showProfiles && dragOverGroupId === group.id && (
+                      <div className="rounded-xl border border-dashed border-white/20 bg-white/5 px-3 py-2 text-center text-[11px] text-white/55">
+                        {tt("modpacks.list.dropHint")}
+                      </div>
+                    )}
                   </div>
                 );
               })}
-            </div>
 
-            {!loadingProfiles && filteredProfiles.length === 0 && (
-              <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-black/40 px-4 py-6 text-center text-sm text-white/70">
-                {tt("modpacks.list.empty")}
-              </div>
-            )}
+              {(ungroupedProfiles.length > 0 || profileGroups.length === 0) &&
+                renderGroupDropZone(
+                  "ungrouped",
+                  <div>
+                    {(profileGroups.length > 0 || ungroupedProfiles.length > 0) && (
+                      <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                        {tt("modpacks.list.ungroupedTitle")}
+                      </div>
+                    )}
+                    <div
+                      className={
+                        profilesLayout === "grid" ? profilesGridClass : "flex flex-col gap-2"
+                      }
+                    >
+                      {ungroupedProfiles.map((p) => renderProfileCard(p))}
+                    </div>
+                  </div>,
+                  dragOverGroupId === "ungrouped" ? "rounded-2xl ring-2 ring-white/25" : "",
+                )}
+
+              {!loadingProfiles && filteredProfiles.length === 0 && (
+                <div className="mt-4 rounded-2xl border border-dashed border-white/20 bg-black/40 px-4 py-6 text-center text-sm text-white/70">
+                  {tt("modpacks.list.empty")}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1928,7 +3454,7 @@ export function ModpackTab({
               className="interactive-press flex h-28 w-24 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 text-xs text-white/70 hover:bg-black/60"
             >
               {createIconPath ? (
-                // eslint-disable-next-line jsx-a11y/img-redundant-alt
+                //eslint-disable-next-line jsx-a11y/img-redundant-alt
                 <img
                   src={resolveIconSrc(createIconPath)}
                   alt="icon"
@@ -1956,6 +3482,49 @@ export function ModpackTab({
           </div>
 
           <div className="flex flex-1 flex-col gap-3 min-w-0">
+            {BUILD_PRESETS_UI_ENABLED && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-white/70">
+                  {tt("modpacks.create.presetLabel")}
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={createSelectedPresetId ?? ""}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) {
+                        clearCreatePresetSelection();
+                        return;
+                      }
+                      const preset = buildPresets.find((p) => p.id === id);
+                      if (preset) {
+                        applyBuildPresetToCreateForm(preset);
+                        showNotification("info", tt("modpacks.presets.applied"));
+                      }
+                    }}
+                    className="min-w-[12rem] flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-white/40 focus:outline-none"
+                  >
+                    <option value="">{tt("modpacks.create.noPreset")}</option>
+                    {buildPresets.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void refreshBuildPresets();
+                      setIsPresetsModalOpen(true);
+                    }}
+                    className="interactive-press rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/20"
+                  >
+                    {tt("modpacks.presets.manage")}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="mb-1 block text-xs font-medium text-white/70">
                 {tt("modpacks.create.nameLabel")}
@@ -1963,7 +3532,10 @@ export function ModpackTab({
               <input
                 type="text"
                 value={createName}
-                onChange={(e) => setCreateName(e.target.value.slice(0, 50))}
+                onChange={(e) => {
+                  createNameUserEdited.current = true;
+                  setCreateName(e.target.value.slice(0, 50));
+                }}
                 maxLength={50}
                 placeholder={
                   tt("modpacks.create.namePlaceholder")
@@ -1985,7 +3557,10 @@ export function ModpackTab({
                     <button
                       key={id}
                       type="button"
-                      onClick={() => setCreateLoader(id)}
+                      onClick={() => {
+                        setCreateLoader(id);
+                        setIsLoaderVersionDropdownOpen(false);
+                      }}
                       className={`interactive-press rounded-full px-3 py-1.5 text-xs font-semibold ${
                         createLoader === id
                           ? "bg-white text-black shadow-soft"
@@ -2063,10 +3638,116 @@ export function ModpackTab({
                 </span>
               </label>
             </div>
+
+            {createLoader !== "vanilla" && (
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-white/70">
+                  {tt("modpacks.create.loaderVersionLabel")}
+                </label>
+                <div className="relative inline-flex w-72 items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (loaderVersionOptions.length === 0) {
+                        void loadCreateLoaderVersions();
+                      }
+                      setIsLoaderVersionDropdownOpen((v) => !v);
+                    }}
+                    disabled={loaderVersionsLoading}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                  >
+                    <span className="flex min-w-0 items-center gap-2 truncate">
+                      <span className="truncate">
+                        {loaderVersionsLoading
+                          ? tt("modpacks.common.loading")
+                          : createLoaderVersion || tt("modpacks.common.select")}
+                      </span>
+                      {selectedLoaderVersionOption?.channel && (
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            selectedLoaderVersionOption.channel === "stable"
+                              ? "bg-emerald-500/20 text-emerald-200"
+                              : selectedLoaderVersionOption.channel === "alpha"
+                                ? "bg-violet-500/20 text-violet-200"
+                                : "bg-amber-500/20 text-amber-200"
+                          }`}
+                        >
+                          {loaderChannelLabel(selectedLoaderVersionOption.channel)}
+                        </span>
+                      )}
+                    </span>
+                    <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+                  </button>
+                  {isLoaderVersionDropdownOpen && (
+                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                      {loaderVersionOptions.length === 0 && !loaderVersionsLoading && (
+                        <div className="px-3 py-2 text-white/60">
+                          {tt("modpacks.manage.noVersionsForGame")}
+                        </div>
+                      )}
+                      {loaderVersionOptions.map((opt, idx) => {
+                        const channelLabel = loaderChannelLabel(opt.channel ?? null);
+                        const selected = createLoaderVersion === opt.version;
+                        return (
+                          <button
+                            key={`${createLoader}-${opt.version}-${idx}`}
+                            type="button"
+                            onClick={() => {
+                              setCreateLoaderVersion(opt.version);
+                              setIsLoaderVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              selected
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span className="truncate">{opt.version}</span>
+                            {channelLabel && (
+                              <span
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                  selected
+                                    ? opt.channel === "stable"
+                                      ? "bg-emerald-600/25 text-emerald-900"
+                                      : opt.channel === "alpha"
+                                        ? "bg-violet-600/25 text-violet-900"
+                                        : "bg-amber-600/25 text-amber-900"
+                                    : opt.channel === "stable"
+                                      ? "bg-emerald-500/20 text-emerald-200"
+                                      : opt.channel === "alpha"
+                                        ? "bg-violet-500/20 text-violet-200"
+                                        : "bg-amber-500/20 text-amber-200"
+                                }`}
+                              >
+                                {channelLabel}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="mt-2 flex justify-end">
+        <div
+          className={`mt-2 flex flex-wrap items-center gap-2 ${
+            BUILD_PRESETS_UI_ENABLED ? "justify-between" : "justify-end"
+          }`}
+        >
+          {BUILD_PRESETS_UI_ENABLED && (
+            <button
+              type="button"
+              disabled={createBusy}
+              onClick={() => void handleSaveBuildPresetFromForm()}
+              className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+            >
+              {tt("modpacks.create.saveFormAsPreset")}
+            </button>
+          )}
           <button
             type="button"
             disabled={createBusy}
@@ -2097,22 +3778,33 @@ export function ModpackTab({
           </button>
         </div>
 
-        {mrpackBusy && mrpackProgress && (
+        {mrpackBusy && (
           <div className="flex flex-col gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3">
-            <p className="text-sm font-medium text-white">
-              {mrpackProgress.phase === "start"
-                ? tt("modpacks.import.progress.preparing")
-                : mrpackProgress.phase === "overrides"
-                  ? tt("modpacks.import.progress.extractingOverrides")
-                  : mrpackProgress.phase === "files" && mrpackProgress.total != null && mrpackProgress.total > 0
-                    ? tt("modpacks.import.progress.downloading", {
-                        current: mrpackProgress.current ?? 0,
-                        total: mrpackProgress.total,
-                        msg: mrpackProgress.message ? ` — ${mrpackProgress.message}` : "",
-                      })
-                    : tt("modpacks.import.progress.importing")}
-            </p>
-            {mrpackProgress.total != null &&
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-white">
+                {mrpackProgress?.phase === "start"
+                  ? tt("modpacks.import.progress.preparing")
+                  : mrpackProgress?.phase === "overrides"
+                    ? tt("modpacks.import.progress.extractingOverrides")
+                    : mrpackProgress?.phase === "files" &&
+                        mrpackProgress.total != null &&
+                        mrpackProgress.total > 0
+                      ? tt("modpacks.import.progress.downloading", {
+                          current: mrpackProgress.current ?? 0,
+                          total: mrpackProgress.total,
+                          msg: mrpackProgress.message ? ` — ${mrpackProgress.message}` : "",
+                        })
+                      : tt("modpacks.import.progress.importing")}
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleCancelMrpackImport()}
+                className="interactive-press shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/80 hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+            </div>
+            {mrpackProgress?.total != null &&
               mrpackProgress.total > 0 &&
               mrpackProgress.current != null && (
                 <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
@@ -2157,6 +3849,197 @@ export function ModpackTab({
             </button>
           </div>
         </div>
+
+        <div className="rounded-3xl border border-white/15 bg-black/45 px-5 py-4 backdrop-blur-xl">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-white">
+                {tt("modpacks.externalImport.title")}
+              </h3>
+              <p className="mt-1 text-xs text-white/60">
+                {tt("modpacks.externalImport.hint")}
+              </p>
+            </div>
+          </div>
+
+          {externalImportBusy && (
+            <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
+              <p className="text-xs font-medium text-white">
+                {externalImportProgress?.phase === "copy"
+                  ? tt("modpacks.externalImport.copying")
+                  : tt("modpacks.externalImport.importing")}
+              </p>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                <div className="h-full w-1/2 rounded-full bg-emerald-500/90" />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="sm:col-span-1">
+              <label className="mb-1 block text-[11px] font-semibold text-white/70">
+                {tt("modpacks.externalImport.launcher")}
+              </label>
+              <select
+                value={externalImportLauncher}
+                onChange={(e) => {
+                  const v = e.target.value as ExternalLauncherType;
+                  setExternalImportLauncher(v);
+                  setExternalImportInstances([]);
+                  setExternalImportScanError(null);
+                  setExternalImportSearch("");
+                  setExternalImportSort("name");
+                  setTimeout(() => void ensureExternalImportPathDefault(), 0);
+                }}
+                className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
+              >
+                <option value="auto">{tt("modpacks.externalImport.auto")}</option>
+                <option value="multimc">MultiMC</option>
+                <option value="prism_launcher">PrismLauncher</option>
+                <option value="atlauncher">ATLauncher</option>
+                <option value="gdlauncher">GDLauncher</option>
+                <option value="curseforge">CurseForge</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-[11px] font-semibold text-white/70">
+                {tt("modpacks.externalImport.path")}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={externalImportPath}
+                  onChange={(e) => setExternalImportPath(e.target.value)}
+                  placeholder={
+                    tt("modpacks.externalImport.pathPlaceholder")
+                  }
+                  className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={externalImportScanBusy || externalImportBusy}
+                  onClick={() => void handleBrowseExternalImportPath()}
+                  className="interactive-press shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+                >
+                  {tt("common.browse")}
+                </button>
+                <button
+                  type="button"
+                  disabled={externalImportScanBusy || externalImportBusy}
+                  onClick={() => void handleScanExternalInstances()}
+                  className="interactive-press shrink-0 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
+                >
+                  {externalImportScanBusy
+                    ? tt("modpacks.externalImport.scanning")
+                    : tt("modpacks.externalImport.scan")}
+                </button>
+              </div>
+              {externalImportScanError && (
+                <p className="mt-2 text-xs text-amber-200/90">{externalImportScanError}</p>
+              )}
+            </div>
+          </div>
+
+          {externalImportInstances.length > 0 && (
+            <div className="mt-4 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <input
+                  type="text"
+                  value={externalImportSearch}
+                  onChange={(e) => setExternalImportSearch(e.target.value)}
+                  placeholder={tt("common.search")}
+                  className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none sm:w-72"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-white/60">
+                    {tt("modpacks.externalImport.sort")}
+                  </span>
+                  <select
+                    value={externalImportSort}
+                    onChange={(e) =>
+                      setExternalImportSort(e.target.value as "name" | "date" | "size")
+                    }
+                    className="rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
+                  >
+                    <option value="name">{tt("modpacks.externalImport.sortName")}</option>
+                    <option value="date">{tt("modpacks.externalImport.sortDate")}</option>
+                    <option value="size">{tt("modpacks.externalImport.sortSize")}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {externalImportInstances
+                  .filter((p) => {
+                    const q = externalImportSearch.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      p.display_name.toLowerCase().includes(q) ||
+                      p.path.toLowerCase().includes(q) ||
+                      (p.loader ?? "").toLowerCase().includes(q) ||
+                      (p.game_version ?? "").toLowerCase().includes(q)
+                    );
+                  })
+                  .slice()
+                  .sort((a, b) => {
+                    if (externalImportSort === "size") {
+                      return (b.approx_size_bytes ?? 0) - (a.approx_size_bytes ?? 0);
+                    }
+                    if (externalImportSort === "date") {
+                      return (b.last_modified ?? 0) - (a.last_modified ?? 0);
+                    }
+                    return a.display_name.toLowerCase().localeCompare(b.display_name.toLowerCase());
+                  })
+                  .map((p) => {
+                    const iconSrc = p.icon_data_uri || p.icon_path || "/launcher-assets/modpack_icon.png";
+                    const meta = [
+                      p.loader ? p.loader : null,
+                      p.game_version ? p.game_version : null,
+                      p.mods_count != null
+                        ? tt("common.format.modsMeta", { count: p.mods_count })
+                        : null,
+                      p.approx_size_bytes != null ? formatByteSize(language, p.approx_size_bytes) : null,
+                    ].filter(Boolean) as string[];
+
+                    return (
+                      <div
+                        key={`${p.launcher_type}:${p.id}:${p.path}`}
+                        className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <img
+                            src={iconSrc}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-xl bg-black/40 object-contain ring-1 ring-white/10"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-white">
+                              {p.display_name}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/60">
+                              {meta.length > 0 && <span>{meta.join(" • ")}</span>}
+                              <span className="truncate">{p.path}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={externalImportBusy}
+                            onClick={() => void handleImportExternalInstance(p)}
+                            className="interactive-press rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
+                          >
+                            {tt("modpacks.actions.import")}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -2168,192 +4051,159 @@ export function ModpackTab({
     const visibleItems =
       searchValue.length === 0
         ? items
-        : items.filter((name) => name.toLowerCase().includes(searchValue));
+        : items.filter((item) => item.name.toLowerCase().includes(searchValue));
 
     return (
       <div className="custom-scrollbar flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
-        <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
-          <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3">
-            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/5">
-              <div data-icon-fallback="1" className="flex h-full w-full items-center justify-center">
-                <ModsIcon className="h-6 w-6" />
-              </div>
-              <img
-                src={resolveIconSrc(getProfileIconPath(selectedProfile))}
-                alt="icon"
-                className="absolute inset-0 h-full w-full object-contain"
-                style={{ display: "none" }}
-                onLoad={(e) => {
-                  const img = e.currentTarget;
-                  const fallback = img.parentElement?.querySelector(
-                    '[data-icon-fallback="1"]',
-                  ) as HTMLElement | null;
-                  if (fallback) fallback.style.display = "none";
-                  img.style.display = "block";
+        <div className="sticky top-0 z-20 -mx-1 flex w-full shrink-0 flex-wrap items-start justify-between gap-3">
+          {isRenaming ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
+              <input
+                autoFocus
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void handleRenameConfirm();
+                  } else if (e.key === "Escape") {
+                    setIsRenaming(false);
+                  }
                 }}
+                className="min-w-0 flex-1 rounded-xl border border-white/30 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void handleRenameConfirm()}
+                className="interactive-press rounded-full accent-bg p-1 text-white hover:opacity-90"
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRenaming(false)}
+                className="interactive-press rounded-full bg-white/10 p-1 text-white hover:bg-white/20"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 text-xs text-white/70 backdrop-blur-md">
+            <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
+            <span className="flex items-center gap-1">
+              <img
+                src="/launcher-assets/cllock.png"
+                alt=""
+                title={tt("modpacks.list.playtimeLabel")}
+                className="h-3 w-3 object-contain opacity-80"
                 onError={(e) => {
                   const img = e.currentTarget;
-                  const fallback = img.parentElement?.querySelector(
-                    '[data-icon-fallback="1"]',
-                  ) as HTMLElement | null;
-                  if (fallback) fallback.style.display = "flex";
+                  if (img.dataset.failedOnce !== "1") {
+                    img.dataset.failedOnce = "1";
+                    img.src = "/launcher-assets/clock.png";
+                    return;
+                  }
                   img.style.display = "none";
                 }}
               />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                {isRenaming ? (
-                  <>
-                    <input
-                      autoFocus
-                      type="text"
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          void handleRenameConfirm();
-                        } else if (e.key === "Escape") {
-                          setIsRenaming(false);
-                        }
-                      }}
-                      className="w-60 rounded-xl border border-white/30 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none"
-                    />
-                  </>
-                ) : (
-                  <h2 className="truncate text-lg font-semibold text-white">
-                    {selectedProfile.name}
-                  </h2>
-                )}
-                {!isRenaming && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRenameValue(selectedProfile.name);
-                      setIsRenaming(true);
-                    }}
-                    className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
-                    title={language === "ru" ? "Переименовать" : "Rename"}
-                  >
-                    <EditIcon className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {isRenaming && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void handleRenameConfirm()}
-                      className="interactive-press rounded-full accent-bg p-1 text-white hover:opacity-90"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsRenaming(false)}
-                      className="interactive-press rounded-full bg-white/10 p-1 text-white hover:bg-white/20"
-                    >
-                      ✕
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-white/70">
-                <span>{`${selectedProfile.game_version} • ${selectedProfile.loader}`}</span>
-                <span className="flex items-center gap-1">
-                  <img
-                    src="/launcher-assets/cllock.png"
-                    alt=""
-                    title={tt("modpacks.list.playtimeLabel")}
-                    className="h-3 w-3 object-contain opacity-80"
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      if (img.dataset.failedOnce !== "1") {
-                        img.dataset.failedOnce = "1";
-                        img.src = "/launcher-assets/clock.png";
-                        return;
-                      }
-                      img.style.display = "none";
-                    }}
-                  />
-                  <span>
-                    {formatPlaytime(selectedProfile.play_time_seconds, language)}
-                  </span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <ModsIcon className="h-3 w-3" />
-                  <span>{countLabel(selectedProfile.mods_count, language)}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <WeightIcon className="h-3 w-3" />
-                  <span>
-                    {formatBytes(selectedProfile.total_size_bytes, language)}
-                  </span>
-                </span>
-              </div>
-            </div>
+              <span>
+                {formatPlaytimeShort(language, selectedProfile.play_time_seconds)}
+              </span>
+            </span>
+            <span className="flex items-center gap-1">
+              <ModsIcon className="h-3 w-3" />
+              <span>{countLabel(selectedProfile.mods_count, language)}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <WeightIcon className="h-3 w-3" />
+              <span>
+                {formatByteSize(language, selectedProfile.total_size_bytes)}
+              </span>
+            </span>
+            <span className="text-white/55">
+              {tt("modpacks.list.lastPlayed", {
+                date: formatLastPlayedAt(selectedProfile.last_played_at, language),
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setProfileInfoProfile(selectedProfile)}
+              className="interactive-press rounded-full bg-white/10 p-0.5 text-white/70 hover:bg-white/20"
+              title={tt("modpacks.profileInfo.buttonTitle")}
+            >
+              <ProfileInfoIcon className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRenameValue(selectedProfile.name);
+                setIsRenaming(true);
+              }}
+              className="interactive-press rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
+              title={tt("common.rename")}
+            >
+              <EditIcon className="h-3.5 w-3.5" />
+            </button>
           </div>
+          )}
 
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <div className="ml-auto flex w-fit shrink-0 flex-wrap items-center justify-end gap-2 rounded-2xl border border-white/10 bg-black/55 px-2 py-2 backdrop-blur-md">
             <button
               type="button"
               onClick={() => setActiveView("list")}
               className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "К списку сборок" : "Back to list"}
+              title={tt("modpacks.manage.backToList")}
             >
               <span className="truncate">
-                {language === "ru" ? "К списку сборок" : "Back to list"}
+                {tt("modpacks.manage.backToList")}
               </span>
             </button>
             <button
               type="button"
               onClick={() => void handleOpenFolder()}
-              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "Открыть папку" : "Open folder"}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={tt("modpacks.manage.openFolder")}
             >
-              <FolderIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {language === "ru" ? "Открыть папку" : "Open folder"}
-              </span>
+              <FolderIcon className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={() => void openExportModal()}
-              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "Экспортировать сборку" : "Export build"}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={tt("modpacks.manage.exportBuild")}
             >
-              <ExportIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {language === "ru" ? "Экспорт" : "Export"}
-              </span>
+              <ExportIcon className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
-              onClick={() => void openProfileSettings(selectedProfile.id)}
-              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
-              title={language === "ru" ? "Настройки сборки" : "Profile settings"}
+              onClick={() => setIsScreenshotsOpen(true)}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={tt("modpacks.screenshots.title")}
             >
-              <img
-                src="/launcher-assets/setttings.png"
-                alt=""
-                className="h-4 w-4 shrink-0 object-contain"
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  img.style.display = "none";
-                }}
-              />
-              <SettingsIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {language === "ru" ? "Настройки" : "Settings"}
-              </span>
+              <ScreenshotsIcon className="h-3.5 w-3.5" />
             </button>
+            {BUILD_PRESETS_UI_ENABLED && (
+              <button
+                type="button"
+                onClick={() => void handleSaveBuildPresetFromProfile(selectedProfile)}
+                className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+                title={tt("modpacks.presets.saveFromProfile")}
+              >
+                <span className="truncate">{tt("modpacks.presets.saveFromProfile")}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void handleSelectProfile(selectedProfile)}
-              className={`${MANAGE_ACTION_BTN_CLASS} accent-bg shadow-soft hover:opacity-90`}
-              title={language === "ru" ? "Выбрать сборку" : "Select profile"}
+              className={`${MANAGE_ACTION_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={tt("modpacks.manage.selectProfile")}
             >
               <Download className="h-4 w-4 shrink-0" />
-              <span className="truncate">{language === "ru" ? "Выбрать" : "Select"}</span>
+              <span className="truncate">
+                {selectedProfileId === selectedProfile.id
+                  ? tt("modpacks.actions.unselect")
+                  : tt("modpacks.actions.select")}
+              </span>
             </button>
           </div>
         </div>
@@ -2373,7 +4223,7 @@ export function ModpackTab({
               <SearchIcon className="h-4 w-4" />
               <input
                 type="text"
-                placeholder={language === "ru" ? "Поиск файлов..." : "Search files..."}
+                placeholder={tt("modpacks.manage.searchFiles")}
                 value={itemsSearch}
                 onChange={(e) => setItemsSearch(e.target.value)}
                 className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
@@ -2386,9 +4236,20 @@ export function ModpackTab({
                   selectedProfile && void refreshItems(selectedProfile.id, contentTab)
                 }
                 className="interactive-press rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-                title={language === "ru" ? "Пересканировать" : "Rescan"}
+                title={tt("modpacks.manage.rescan")}
               >
                 <RefreshIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCheckContentUpdates()}
+                disabled={contentUpdatesChecking || !selectedProfile}
+                className="interactive-press rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                title={tt("modpacks.contentUpdates.check")}
+              >
+                {contentUpdatesChecking
+                  ? tt("modpacks.contentUpdates.checking")
+                  : tt("modpacks.contentUpdates.check")}
               </button>
               <div className="relative">
                 <button
@@ -2397,7 +4258,7 @@ export function ModpackTab({
                   className="interactive-press inline-flex items-center gap-2 rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
-                  <span>{language === "ru" ? "Добавить" : "Add"}</span>
+                  <span>{tt("common.add")}</span>
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 {isAddMenuOpen && (
@@ -2412,9 +4273,7 @@ export function ModpackTab({
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>
-                      {language === "ru"
-                        ? "Скачать из каталога"
-                        : "Download from catalog"}
+                      {tt("modpacks.manage.downloadFromCatalog")}
                     </span>
                   </button>
                   <button
@@ -2427,9 +4286,7 @@ export function ModpackTab({
                   >
                     <FolderIcon className="h-3.5 w-3.5" />
                     <span>
-                      {language === "ru"
-                        ? "Выбрать файл с ПК"
-                        : "Choose file from PC"}
+                      {tt("modpacks.manage.chooseFileFromPc")}
                     </span>
                   </button>
                   </div>
@@ -2484,52 +4341,105 @@ export function ModpackTab({
             >
             {itemsLoading ? (
               <div className="flex h-32 items-center justify-center text-xs text-white/70">
-                {language === "ru" ? "Загрузка файлов..." : "Loading files..."}
+                {tt("modpacks.manage.loadingFiles")}
               </div>
             ) : visibleItems.length === 0 ? (
               <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-black/40 px-4 text-center text-xs text-white/60">
                 <div className="max-w-sm space-y-2">
                   <p>
-                    {language === "ru"
-                      ? "В этой вкладке ещё нет файлов."
-                      : "There are no files in this tab yet."}
+                    {tt("modpacks.manage.emptyTab")}
                   </p>
                   <p className="text-white/45">
-                    {language === "ru"
-                      ? "Перетащите сюда файлы из проводника или используйте «Добавить»."
-                      : "Drag files here from Explorer, or use “Add”."}
+                    {tt("modpacks.manage.dropHint")}
                   </p>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-                {visibleItems.map((name) => (
+                {visibleItems.map((item) => (
                   <div
-                    key={name}
-                    className="flex items-center justify-between rounded-2xl bg-black/45 px-3 py-3 text-xs text-white/85"
+                    key={item.name}
+                    className={`flex items-center justify-between gap-2 rounded-2xl bg-black/45 px-3 py-3 text-xs transition-opacity ${
+                      item.enabled ? "text-white/85" : "text-white/45 opacity-75"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[11px]">
-                        {contentTab === "mods" ? (
-                          <ModsIcon className="h-5 w-5" />
-                        ) : contentTab === "resourcepacks" ? (
-                          "R"
-                        ) : (
-                          "S"
-                        )}
-                      </span>
-                      <span className="max-w-[260px] truncate md:max-w-[360px]">
-                        {name}
-                      </span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <ProfileItemIcon
+                        contentTab={contentTab}
+                        metadata={itemMetadataByFilename[item.name]}
+                      />
+                      <div className="min-w-0">
+                        <span
+                          className="block max-w-[200px] truncate md:max-w-[280px]"
+                          title={
+                            itemMetadataByFilename[item.name]?.title?.trim() || item.name
+                          }
+                        >
+                          {itemMetadataByFilename[item.name]?.title?.trim() || item.name}
+                        </span>
+                        {itemMetadataByFilename[item.name]?.title?.trim() &&
+                          itemMetadataByFilename[item.name]?.title?.trim() !== item.name && (
+                            <span
+                              className="block max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[280px]"
+                              title={item.name}
+                            >
+                              {item.name}
+                            </span>
+                          )}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteItem(name)}
-                      className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
-                      title={language === "ru" ? "Удалить" : "Delete"}
-                    >
-                      <DeleteIcon className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={item.enabled}
+                        onClick={() => void handleToggleItemEnabled(item)}
+                        className={`interactive-press relative h-6 w-10 rounded-full transition-colors ${
+                          item.enabled ? "bg-emerald-500/90" : "bg-white/20"
+                        }`}
+                        title={
+                          item.enabled
+                            ? tt("modpacks.manage.disableItem")
+                            : tt("modpacks.manage.enableItem")
+                        }
+                      >
+                        <span
+                          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${
+                            item.enabled ? "left-[1.125rem]" : "left-0.5"
+                          }`}
+                        />
+                      </button>
+                      {contentTab === "mods" &&
+                        !contentUpdatesAvailabilityLoading &&
+                        contentUpdatesAvailableFilenames.has(item.name) && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateSingleItem(item)}
+                          disabled={
+                            contentUpdatesApplying ||
+                            contentUpdatesChecking ||
+                            contentUpdatesSingleApplyingFilename === item.name
+                          }
+                          className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          title={tt("modpacks.manage.update")}
+                        >
+                          <img
+                            src="/launcher-assets/download.png"
+                            alt=""
+                            className="h-3.5 w-3.5 object-contain"
+                            aria-hidden="true"
+                          />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteItem(item)}
+                        className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
+                        title={tt("common.delete")}
+                      >
+                        <DeleteIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2545,16 +4455,8 @@ export function ModpackTab({
           aria-valuenow={Math.round(manageMainWidthFrac * 100)}
           aria-valuemin={Math.round(MODPACK_MANAGE_SPLIT_MIN * 100)}
           aria-valuemax={Math.round(MODPACK_MANAGE_SPLIT_MAX * 100)}
-          aria-label={
-            language === "ru"
-              ? "Перетащите, чтобы изменить ширину списка и консоли"
-              : "Drag to resize the list and console"
-          }
-          title={
-            language === "ru"
-              ? "Тяните, чтобы сделать список шире или уже"
-              : "Drag to widen or narrow the list"
-          }
+          aria-label={tt("modpacks.manage.splitResizeAria")}
+          title={tt("modpacks.manage.splitResizeTitle")}
           onPointerDown={onManageSplitPointerDown}
           className={`hidden lg:flex lg:w-2 lg:shrink-0 lg:cursor-col-resize lg:select-none lg:touch-none lg:flex-col lg:items-center lg:justify-center lg:self-stretch ${
             isManageSplitDragging ? "lg:bg-white/25" : "lg:bg-transparent lg:hover:bg-white/10"
@@ -2582,7 +4484,7 @@ export function ModpackTab({
                 className="max-w-[min(100%,15rem)] rounded-2xl border border-white/15 bg-black/50 px-2 py-1 text-[11px] text-white/85 focus:outline-none focus:ring-1 focus:ring-white/30"
               >
                 <option value="live">
-                  {language === "ru" ? "Текущий вывод" : "Current output"}
+                  {tt("modpacks.manage.currentOutput")}
                 </option>
                 {consoleHistorySessions.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -2601,9 +4503,7 @@ export function ModpackTab({
                 className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
                 title={
                   selectedLogSessionId !== "live"
-                    ? language === "ru"
-                      ? "Очистка только для текущего вывода"
-                      : "Clear only applies to current output"
+                    ? tt("modpacks.manage.clearOnlyLive")
                     : undefined
                 }
               >
@@ -2658,9 +4558,7 @@ export function ModpackTab({
                 </div>
               )}
               <p className="mt-2 shrink-0 text-[10px] text-white/40">
-                {language === "ru"
-                  ? "Между списком и консолью можно тянуть разделитель — ширина сохраняется. Лог хранится между перезапусками; перед новым запуском вывод уходит в «Архив»."
-                  : "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived."}
+                {tt("modpacks.manage.consoleResizeHint")}
               </p>
             </div>
           )}
@@ -2672,8 +4570,10 @@ export function ModpackTab({
 
   return (
     <div
-      className={`flex w-full flex-1 flex-col gap-4 ${
-        activeView === "manage" ? "max-w-none min-h-0 self-stretch px-0 sm:px-1" : "max-w-5xl"
+      className={`flex w-full min-h-0 flex-1 flex-col gap-4 ${
+        fillPane || activeView === "manage"
+          ? "h-full max-w-none self-stretch px-0 sm:px-1"
+          : "max-w-none self-stretch"
       }`}
     >
       <div className="flex items-center justify-between">
@@ -2712,12 +4612,51 @@ export function ModpackTab({
                 const profile = profiles.find((p) => p.id === contextMenu.profileId);
                 setContextMenu(null);
                 if (!profile) return;
-                void openProfileSettings(profile.id);
+                setProfileInfoProfile(profile);
               }}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
             >
+              <ProfileInfoIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.profileInfo.menuItem")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void openProfileSettings(profile.id);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
               <SettingsIcon className="h-3.5 w-3.5" />
-              <span>{language === "ru" ? "Настройки" : "Settings"}</span>
+              <span>{tt("modpacks.contextMenu.settings")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void handleChooseProfileIcon(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <img src="/launcher-assets/edit.png" alt="" className="h-3.5 w-3.5 object-contain" />
+              <span>{tt("modpacks.profile.changeIconTitle")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                setContextMenu(null);
+                if (!profile) return;
+                void handleCreateDesktopShortcut(profile);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <ExportIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.actions.createShortcut")}</span>
             </button>
             <button
               type="button"
@@ -2733,8 +4672,9 @@ export function ModpackTab({
               <span>
                 {(() => {
                   const pinned = isPinnedInSidebar?.(contextMenu.profileId) ?? false;
-                  if (language === "ru") return pinned ? "Открепить от сайдбара" : "Закрепить в сайдбаре";
-                  return pinned ? "Unpin from sidebar" : "Pin to sidebar";
+                  return pinned
+                    ? tt("modpacks.contextMenu.unpinFromSidebar")
+                    : tt("modpacks.contextMenu.pinToSidebar");
                 })()}
               </span>
             </button>
@@ -2752,7 +4692,7 @@ export function ModpackTab({
             >
               <DeleteIcon className="h-3.5 w-3.5" />
               <span>
-                {language === "ru" ? "Удалить сборку" : "Delete profile"}
+                {tt("modpacks.contextMenu.deleteProfile")}
               </span>
             </button>
             <button
@@ -2773,11 +4713,226 @@ export function ModpackTab({
             >
               <EditIcon className="h-3.5 w-3.5" />
               <span>
-                {language === "ru"
-                  ? "Редактировать название"
-                  : "Rename profile"}
+                {tt("modpacks.contextMenu.renameProfile")}
               </span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {listContextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setListContextMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setListContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            style={{ top: listContextMenu.y, left: listContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setListContextMenu(null);
+                openCreateGroupModal();
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.list.createGroupMenu")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {groupContextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setGroupContextMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setGroupContextMenu(null);
+          }}
+        >
+          <div
+            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            style={{ top: groupContextMenu.y, left: groupContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const group = profileGroups.find((g) => g.id === groupContextMenu.groupId);
+                setGroupContextMenu(null);
+                if (!group) return;
+                openEditGroupModal(group);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <EditIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.list.editGroupMenu")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const groupId = groupContextMenu.groupId;
+                setGroupContextMenu(null);
+                handleDeleteGroup(groupId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
+            >
+              <DeleteIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.list.deleteGroupMenu")}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isGroupModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            setEditingGroupId(null);
+            setIsGroupModalOpen(false);
+          }}
+        >
+          <div
+            className="glass-panel flex w-full max-w-md flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-4 text-lg font-semibold text-white">
+              {editingGroupId ? tt("modpacks.groups.editTitle") : tt("modpacks.groups.createTitle")}
+            </h3>
+
+            <label className="mb-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-white/60">
+                {tt("modpacks.groups.nameLabel")}
+              </span>
+              <input
+                type="text"
+                value={groupFormName}
+                onChange={(e) => setGroupFormName(e.target.value)}
+                placeholder={tt("modpacks.groups.namePlaceholder")}
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-white/30"
+                autoFocus
+              />
+            </label>
+
+            <div className="mb-3">
+              <span className="mb-1.5 block text-xs font-medium text-white/60">
+                {tt("modpacks.groups.colorLabel")}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {PROFILE_GROUP_COLORS.map((color) => {
+                  const styles = PROFILE_GROUP_COLOR_STYLES[color];
+                  const selected = groupFormColor === color;
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setGroupFormColor(color)}
+                      className={`interactive-press flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs ${
+                        selected
+                          ? `${styles.border} ${styles.headerBg} ${styles.accent}`
+                          : "border-white/10 bg-black/30 text-white/60 hover:bg-white/10"
+                      }`}
+                    >
+                      <span className={`h-3 w-3 rounded-full ${styles.dot}`} />
+                      {tt(`modpacks.groups.color.${color}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-4" ref={groupProfilesDropdownRef}>
+              <span className="mb-1.5 block text-xs font-medium text-white/60">
+                {tt("modpacks.groups.profilesLabel")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsGroupProfilesDropdownOpen((v) => !v)}
+                className="interactive-press flex w-full items-center justify-between gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-left text-sm text-white/85 hover:bg-black/55"
+              >
+                <span className="truncate">
+                  {groupFormProfileIds.size > 0
+                    ? tt("modpacks.groups.profilesSelected", {
+                        count: groupFormProfileIds.size,
+                      })
+                    : tt("modpacks.groups.profilesPlaceholder")}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-white/50 transition ${
+                    isGroupProfilesDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {isGroupProfilesDropdownOpen && (
+                <div className="custom-scrollbar mt-1 max-h-48 overflow-y-auto rounded-xl border border-white/15 bg-black/80 p-1 shadow-soft">
+                  {profiles.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-white/50">{tt("modpacks.list.empty")}</div>
+                  ) : (
+                    profiles.map((p) => {
+                      const checked = groupFormProfileIds.has(p.id);
+                      return (
+                        <label
+                          key={p.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-white/85 hover:bg-white/10"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setGroupFormProfileIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(p.id)) next.delete(p.id);
+                                else next.add(p.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded border-white/30 bg-black/40"
+                          />
+                          <ProfileInstanceIcon profile={p} className="h-6 w-6 shrink-0 rounded-lg" />
+                          <span className="min-w-0 truncate">{p.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingGroupId(null);
+                  setIsGroupModalOpen(false);
+                }}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white/80 hover:bg-white/20"
+              >
+                {tt("modpacks.groups.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveGroup}
+                className="interactive-press rounded-xl accent-bg px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+              >
+                {editingGroupId ? tt("modpacks.groups.save") : tt("modpacks.groups.create")}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2796,16 +4951,14 @@ export function ModpackTab({
                 !
               </div>
               <h2 className="text-sm font-semibold text-yellow-200">
-                {language === "ru" ? "Подтверждение удаления" : "Delete confirmation"}
+                {tt("modpacks.deleteConfirm.title")}
               </h2>
             </div>
             <p className="mb-4 text-xs text-yellow-50">
               {(() => {
                 const profile = profiles.find((p) => p.id === pendingDeleteProfileId);
                 const name = profile?.name ?? "";
-                return language === "ru"
-                  ? `Удалить сборку «${name}»? Это действие нельзя отменить.`
-                  : `Delete profile “${name}”? This action cannot be undone.`;
+                return tt("modpacks.deleteConfirm.prompt", { name });
               })()}
             </p>
             <div className="flex justify-end gap-2 text-xs">
@@ -2814,7 +4967,7 @@ export function ModpackTab({
                 onClick={() => setPendingDeleteProfileId(null)}
                 className="interactive-press rounded-full bg-white/10 px-4 py-1.5 font-semibold text-white hover:bg-white/20"
               >
-                {language === "ru" ? "Отмена" : "Cancel"}
+                {tt("common.cancel")}
               </button>
               <button
                 type="button"
@@ -2831,12 +4984,232 @@ export function ModpackTab({
                 }}
                 className="interactive-press rounded-full bg-red-600 px-4 py-1.5 font-semibold text-white hover:bg-red-500"
               >
-                {language === "ru" ? "Удалить" : "Delete"}
+                {tt("common.delete")}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {BUILD_PRESETS_UI_ENABLED && isPresetsModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setIsPresetsModalOpen(false)}
+        >
+          <div
+            className="glass-panel flex max-h-[80vh] w-full max-w-lg flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-white">
+                {tt("modpacks.presets.title")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsPresetsModalOpen(false)}
+                className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
+              >
+                {tt("modpacks.common.backToList")}
+              </button>
+            </div>
+
+            {buildPresetsLoading && (
+              <p className="text-sm text-white/60">{tt("modpacks.common.loading")}</p>
+            )}
+
+            {!buildPresetsLoading && buildPresets.length === 0 && (
+              <p className="text-sm text-white/70">{tt("modpacks.presets.empty")}</p>
+            )}
+
+            <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
+              {buildPresets.map((preset) => {
+                const iconUri = presetIconUris[preset.id];
+                const loaderVersionLabel =
+                  preset.loader === "vanilla"
+                    ? preset.game_version
+                    : `${preset.game_version}${preset.loader_version ? ` · ${preset.loader_version}` : ""}`;
+                return (
+                  <div
+                    key={preset.id}
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/40 px-3 py-2.5"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5">
+                      {iconUri ? (
+                        <img
+                          src={iconUri}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[10px] uppercase text-white/40">
+                          {preset.loader.slice(0, 2)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-white">
+                        {preset.name}
+                      </div>
+                      <div className="truncate text-[11px] text-white/55">
+                        {tt("modpacks.presets.loaderInfo", {
+                          loader: loaderLabels[preset.loader as LoaderId] ?? preset.loader,
+                          version: loaderVersionLabel,
+                        })}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          applyBuildPresetToCreateForm(preset);
+                          setActiveView("create");
+                          void ensureVersionsLoaded();
+                          setIsPresetsModalOpen(false);
+                          showNotification("info", tt("modpacks.presets.applied"));
+                        }}
+                        className="interactive-press rounded-xl accent-bg px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90"
+                      >
+                        {tt("modpacks.presets.apply")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteBuildPreset(preset)}
+                        className="interactive-press rounded-xl bg-red-600/80 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-500"
+                      >
+                        {tt("modpacks.presets.delete")}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {activeView === "create" && (
+              <button
+                type="button"
+                onClick={() => void handleSaveBuildPresetFromForm()}
+                className="interactive-press mt-4 w-full rounded-2xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                {tt("modpacks.presets.saveFromForm")}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isContentUpdatesModalOpen && selectedProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            if (contentUpdatesApplying) return;
+            setIsContentUpdatesModalOpen(false);
+          }}
+        >
+          <div
+            className="glass-panel w-full max-w-4xl rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.16em] text-white/50">
+                  {tt("modpacks.contentUpdates.modalTitle")}
+                </div>
+                <div className="truncate text-lg font-semibold text-white">
+                  {selectedProfile.name}
+                </div>
+                <div className="text-xs text-white/65">
+                  {tt("modpacks.contentUpdates.modalSubtitle")}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
+                disabled={contentUpdatesApplying}
+                onClick={() => setIsContentUpdatesModalOpen(false)}
+              >
+                {tt("common.close")}
+              </button>
+            </div>
+
+            <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+              {contentUpdates.map((update) => {
+                const checked = selectedContentUpdateFilenames.has(update.filename);
+                return (
+                  <label
+                    key={update.filename}
+                    className={`flex cursor-pointer select-none items-center gap-3 rounded-2xl border px-3 py-2 text-sm ${
+                      checked
+                        ? "border-emerald-400/35 bg-emerald-500/10 text-white/95"
+                        : "border-white/10 bg-black/35 text-white/90"
+                    }`}
+                    onClick={() => {
+                      if (contentUpdatesApplying) return;
+                      setSelectedContentUpdateFilenames((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(update.filename)) next.delete(update.filename);
+                        else next.add(update.filename);
+                        return next;
+                      });
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      readOnly
+                      className="accent-checkbox pointer-events-none"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{update.title}</div>
+                      <div className="truncate text-xs text-white/70">{update.filename}</div>
+                    </div>
+                    <div className="text-right text-xs text-white/70">
+                      <div>
+                        {tt("modpacks.contentUpdates.currentVersion")}: {update.currentVersionNumber}
+                      </div>
+                      <div>
+                        {tt("modpacks.contentUpdates.latestVersion")}: {update.latestVersionNumber}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 text-xs text-white/55">
+              {tt("modpacks.contentUpdates.notOnModrinth")}
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void handleApplyContentUpdates(false)}
+                disabled={contentUpdatesApplying}
+                className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {contentUpdatesApplying
+                  ? tt("modpacks.contentUpdates.updating")
+                  : tt("modpacks.contentUpdates.updateSelected")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleApplyContentUpdates(true)}
+                disabled={contentUpdatesApplying}
+                className="interactive-press rounded-2xl accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {contentUpdatesApplying
+                  ? tt("modpacks.contentUpdates.updating")
+                  : tt("modpacks.contentUpdates.updateAll")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ProfileInfoModal
+        language={language}
+        profile={profileInfoProfile}
+        onClose={() => setProfileInfoProfile(null)}
+      />
 
       {isProfileSettingsOpen && selectedProfile && (
         <div
@@ -2850,7 +5223,7 @@ export function ModpackTab({
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs uppercase tracking-[0.16em] text-white/50">
-                  {language === "ru" ? "Настройки сборки" : "Profile settings"}
+                  {tt("modpacks.profileSettingsModal.title")}
                 </div>
                 <div className="truncate text-lg font-semibold text-white">
                   {selectedProfile.name}
@@ -2861,7 +5234,7 @@ export function ModpackTab({
                 className="interactive-press rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
                 onClick={closeProfileSettingsModal}
               >
-                {language === "ru" ? "Закрыть" : "Close"}
+                {tt("common.close")}
               </button>
             </div>
 
@@ -2875,7 +5248,7 @@ export function ModpackTab({
                     : "text-white/70 hover:text-white"
                 }`}
               >
-                {language === "ru" ? "Общие" : "General"}
+                {tt("modpacks.profileSettingsModal.general")}
               </button>
               <button
                 type="button"
@@ -2894,19 +5267,15 @@ export function ModpackTab({
               <div className="max-h-[420px] overflow-y-auto pr-1">
                 <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                   <div className="mb-3 text-xs text-white/60">
-                    {language === "ru"
-                      ? "Эти параметры применяются только к выбранной сборке и используются при запуске игры."
-                      : "These settings apply only to this profile and are used on launch."}
+                    {tt("modpacks.profileSettingsModal.hint")}
                   </div>
                   <div className="flex flex-col gap-4">
                     <SettingsToggle
                       label={
-                        language === "ru"
-                          ? "Закрывать лаунчер при запуске игры:"
-                          : "Close launcher when game starts:"
+                        tt("modpacks.profileSettingsModal.closeLauncherOnStart")
                       }
-                      yesLabel={language === "ru" ? "Да" : "Yes"}
-                      noLabel={language === "ru" ? "Нет" : "No"}
+                      yesLabel={tt("common.yes")}
+                      noLabel={tt("common.no")}
                       value={profileEffectiveSettings?.close_launcher_on_game_start ?? false}
                       onChange={(value: boolean) =>
                         void patchProfileGameSettings(selectedProfile.id, {
@@ -2916,12 +5285,10 @@ export function ModpackTab({
                     />
                     <SettingsToggle
                       label={
-                        language === "ru"
-                          ? "Проверять запущенные процессы игры:"
-                          : "Check running game processes:"
+                        tt("modpacks.profileSettingsModal.checkGameProcesses")
                       }
-                      yesLabel={language === "ru" ? "Да" : "Yes"}
-                      noLabel={language === "ru" ? "Нет" : "No"}
+                      yesLabel={tt("common.yes")}
+                      noLabel={tt("common.no")}
                       value={profileEffectiveSettings?.check_game_processes ?? true}
                       onChange={(value: boolean) =>
                         void patchProfileGameSettings(selectedProfile.id, {
@@ -2933,8 +5300,33 @@ export function ModpackTab({
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                  <div className="mb-2 text-xs font-medium text-white/70">
+                    {tt("modpacks.changeVersion.currentVersion")}
+                  </div>
+                  <div className="mb-3 text-sm text-white/90">
+                    {selectedProfile.game_version}
+                    {selectedProfile.loader !== "vanilla" && (
+                      <span className="text-white/60">
+                        {" "}
+                        · {loaderLabels[selectedProfile.loader as LoaderId] ?? selectedProfile.loader}
+                        {selectedProfile.loader_version
+                          ? ` ${selectedProfile.loader_version}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openChangeVersionModal}
+                    className="interactive-press w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+                  >
+                    {tt("modpacks.changeVersion.button")}
+                  </button>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                   <SettingsSlider
-                    label={language === "ru" ? "Оперативная память:" : "Memory (RAM):"}
+                    label={tt("modpacks.profileSettingsModal.memoryRam")}
                     min={1}
                     max={Math.max(64, systemMemoryGb)}
                     value={Math.max(
@@ -2953,11 +5345,12 @@ export function ModpackTab({
                     }
                     right={
                       <span className="text-sm font-semibold text-white/90">
-                        {Math.max(
-                          1,
-                          Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
-                        )}
-                        ГБ
+                        {tt("settings.game.ram.gbValue", {
+                          gb: Math.max(
+                            1,
+                            Math.round((profileEffectiveSettings?.ram_mb ?? 4096) / 1024),
+                          ),
+                        })}
                       </span>
                     }
                   />
@@ -2971,6 +5364,175 @@ export function ModpackTab({
                 profileId={selectedProfile.id}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {isChangeVersionOpen && selectedProfile && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={closeChangeVersionModal}
+        >
+          <div
+            className="glass-panel w-full max-w-lg rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-white/50">
+                {tt("modpacks.changeVersion.title")}
+              </div>
+              <div className="mt-1 text-sm text-white/70">
+                {tt("modpacks.changeVersion.description")}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-white/70">
+                  {tt("modpacks.changeVersion.gameVersionLabel")}
+                </label>
+                <div className="relative inline-flex w-full items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void ensureMigrateVersionsLoaded();
+                      setIsMigrateVersionDropdownOpen((v) => !v);
+                    }}
+                    disabled={migrateBusy}
+                    className="flex flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                  >
+                    <span className="truncate">
+                      {migrateVersionsLoading
+                        ? tt("modpacks.common.loading")
+                        : migrateGameVersion || tt("modpacks.common.select")}
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-white/60" />
+                  </button>
+                  {isMigrateVersionDropdownOpen && (
+                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                      {migrateVersionsLoading && (
+                        <div className="px-3 py-2 text-white/60">
+                          {tt("modpacks.common.loading")}
+                        </div>
+                      )}
+                      {!migrateVersionsLoading &&
+                        migrateVersionOptions.map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => {
+                              setMigrateGameVersion(v.id);
+                              setIsMigrateVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              migrateGameVersion === v.id
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span>{v.id}</span>
+                            <span className="ml-2 text-[10px] uppercase text-gray-400">
+                              {v.version_type}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={migrateAllVersions}
+                    onChange={(e) => setMigrateAllVersions(e.target.checked)}
+                    disabled={migrateBusy}
+                    className="accent-checkbox"
+                  />
+                  <span>{tt("modpacks.changeVersion.allVersions")}</span>
+                </label>
+              </div>
+
+              {selectedProfile.loader !== "vanilla" && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-white/70">
+                    {tt("modpacks.changeVersion.loaderVersionLabel")} (
+                    {loaderLabels[selectedProfile.loader as LoaderId] ?? selectedProfile.loader})
+                  </label>
+                  <div className="relative inline-flex w-full items-center justify-between rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/90">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (migrateLoaderVersionOptions.length === 0) {
+                          void loadMigrateLoaderVersions();
+                        }
+                        setIsMigrateLoaderVersionDropdownOpen((v) => !v);
+                      }}
+                      disabled={migrateBusy || migrateLoaderVersionsLoading}
+                      className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:opacity-60"
+                    >
+                      <span className="truncate">
+                        {migrateLoaderVersionsLoading
+                          ? tt("modpacks.common.loading")
+                          : migrateLoaderVersion || tt("modpacks.common.select")}
+                      </span>
+                      <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+                    </button>
+                    {isMigrateLoaderVersionDropdownOpen && (
+                      <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                        {migrateLoaderVersionOptions.length === 0 &&
+                          !migrateLoaderVersionsLoading && (
+                            <div className="px-3 py-2 text-white/60">
+                              {tt("modpacks.common.select")}
+                            </div>
+                          )}
+                        {migrateLoaderVersionOptions.map((o) => (
+                          <button
+                            key={o.version}
+                            type="button"
+                            onClick={() => {
+                              setMigrateLoaderVersion(o.version);
+                              setIsMigrateLoaderVersionDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                              migrateLoaderVersion === o.version
+                                ? "bg-white/90 text-black"
+                                : "text-white/80 hover:bg-white/10"
+                            }`}
+                          >
+                            <span>{o.version}</span>
+                            {o.channel && (
+                              <span className="ml-2 text-[10px] uppercase text-gray-400">
+                                {loaderChannelLabel(o.channel)}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeChangeVersionModal}
+                disabled={migrateBusy}
+                className="interactive-press rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleChangeProfileVersion()}
+                disabled={migrateBusy || !migrateGameVersion}
+                className="interactive-press rounded-2xl accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {migrateBusy
+                  ? tt("modpacks.changeVersion.migrating")
+                  : tt("modpacks.changeVersion.confirm")}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2990,7 +5552,7 @@ export function ModpackTab({
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs uppercase tracking-[0.16em] text-white/50">
-                  {language === "ru" ? "Экспорт сборки" : "Export build"}
+                  {tt("modpacks.exportModal.title")}
                 </div>
                 <div className="truncate text-lg font-semibold text-white">
                   {selectedProfile.name}
@@ -3002,14 +5564,14 @@ export function ModpackTab({
                 disabled={exportBusy}
                 onClick={() => setIsExportOpen(false)}
               >
-                {language === "ru" ? "Закрыть" : "Close"}
+                {tt("common.close")}
               </button>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                 <div className="mb-2 text-xs font-semibold text-white/80">
-                  {language === "ru" ? "Формат" : "Format"}
+                  {tt("modpacks.exportModal.format")}
                 </div>
                 <div className="relative inline-flex gap-1 rounded-full bg-white/10 p-1 overflow-hidden">
                   <div
@@ -3052,26 +5614,24 @@ export function ModpackTab({
                 </div>
 
                 <div className="mt-4 text-xs font-semibold text-white/80">
-                  {language === "ru" ? "Исключения" : "Ignore patterns"}
+                  {tt("modpacks.exportModal.ignorePatterns")}
                 </div>
                 <textarea
                   value={ignorePatternsText}
                   disabled={exportBusy}
                   onChange={(e) => setIgnorePatternsText(e.target.value)}
-                  placeholder={language === "ru" ? "*.log\ncache/\n!important.log" : "*.log\ncache/\n!important.log"}
+                  placeholder={"*.log\ncache/\n!important.log"}
                   className="custom-scrollbar mt-2 h-32 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
                 />
                 <div className="mt-2 text-[11px] text-white/55">
-                  {language === "ru"
-                    ? "Поддерживаются: *, **, ! (отмена исключения)."
-                    : "Supported: *, **, ! (negation)."}
+                  {tt("modpacks.exportModal.ignoreHint")}
                 </div>
               </div>
 
               <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3 lg:col-span-2">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="text-xs font-semibold text-white/80">
-                    {language === "ru" ? "Файлы сборки" : "Build files"}
+                    {tt("modpacks.exportModal.buildFiles")}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -3080,7 +5640,7 @@ export function ModpackTab({
                       onClick={() => setSelectedExportPaths(new Set(flattenTreePaths(exportTree)))}
                       className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
                     >
-                      {language === "ru" ? "Выбрать всё" : "Select all"}
+                      {tt("modpacks.exportModal.selectAll")}
                     </button>
                     <button
                       type="button"
@@ -3088,7 +5648,7 @@ export function ModpackTab({
                       onClick={() => setSelectedExportPaths(new Set())}
                       className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
                     >
-                      {language === "ru" ? "Снять всё" : "Clear"}
+                      {tt("modpacks.exportModal.clearAll")}
                     </button>
                   </div>
                 </div>
@@ -3096,15 +5656,15 @@ export function ModpackTab({
                 <div className="custom-scrollbar max-h-[360px] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2">
                   {exportTreeLoading ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
-                      {language === "ru" ? "Сканирование..." : "Scanning..."}
+                      {tt("modpacks.exportModal.scanning")}
                     </div>
                   ) : !exportTree ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
-                      {language === "ru" ? "Нет данных." : "No data."}
+                      {tt("modpacks.exportModal.noData")}
                     </div>
                   ) : exportTree.length === 0 ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
-                      {language === "ru" ? "Папка сборки пуста." : "Build folder is empty."}
+                      {tt("modpacks.exportModal.emptyFolder")}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
@@ -3165,7 +5725,7 @@ export function ModpackTab({
                                 </span>
                               </span>
                               <span className="shrink-0 text-[11px] text-white/55">
-                                {formatBytes(n.size, language)}
+                                {formatByteSize(language, n.size)}
                               </span>
                             </label>
                           );
@@ -3188,7 +5748,7 @@ export function ModpackTab({
                     onClick={() => void handlePreviewExport()}
                     className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
                   >
-                    {language === "ru" ? "Предпросмотр" : "Preview"}
+                    {tt("modpacks.exportModal.preview")}
                   </button>
                   <button
                     type="button"
@@ -3197,14 +5757,14 @@ export function ModpackTab({
                     className="interactive-press inline-flex items-center gap-2 rounded-2xl accent-bg px-4 py-2 text-xs font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-60"
                   >
                     <ExportIcon className="h-4 w-4" />
-                    <span>{language === "ru" ? "Экспортировать" : "Export"}</span>
+                    <span>{tt("modpacks.exportModal.export")}</span>
                   </button>
 
                   {exportBusy && exportProgress && (
                     <div className="ml-auto flex min-w-[260px] flex-1 flex-col gap-1 rounded-2xl border border-white/12 bg-black/40 px-3 py-2">
                       <div className="flex items-center justify-between gap-3 text-[11px] text-white/70">
                         <span className="truncate">
-                          {exportProgress.current_file || (language === "ru" ? "Экспорт…" : "Exporting…")}
+                          {exportProgress.current_file || tt("modpacks.exportModal.exporting")}
                         </span>
                         <span className="shrink-0">
                           {exportSpeedLabel || ""}
@@ -3228,8 +5788,8 @@ export function ModpackTab({
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-white/55">
                         <span>
-                          {formatBytes(exportProgress.bytes_written, language)} /{" "}
-                          {formatBytes(exportProgress.total_bytes, language)}
+                          {formatByteSize(language, exportProgress.bytes_written)} /{" "}
+                          {formatByteSize(language, exportProgress.total_bytes)}
                         </span>
                         <span>
                           {exportProgress.total_bytes > 0
@@ -3247,19 +5807,19 @@ export function ModpackTab({
                   <div className="mt-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-white/80">
-                        {language === "ru" ? "Итоговое содержимое" : "Final contents"}
+                        {tt("modpacks.exportModal.finalContents")}
                       </div>
                       <div className="text-xs text-white/70">
-                        {language === "ru" ? "Размер:" : "Size:"}{" "}
+                        {tt("modpacks.exportModal.size")}{" "}
                         <span className="font-semibold text-white/90">
-                          {formatBytes(previewResult.total_bytes, language)}
+                          {formatByteSize(language, previewResult.total_bytes)}
                         </span>
                       </div>
                     </div>
                     <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2 text-[11px] text-white/75">
                       {previewResult.files.length === 0 ? (
                         <div className="py-6 text-center text-white/55">
-                          {language === "ru" ? "Ничего не попадёт в архив." : "Nothing will be included."}
+                          {tt("modpacks.exportModal.nothingIncluded")}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
@@ -3267,15 +5827,13 @@ export function ModpackTab({
                             <div key={f.path} className="flex items-center justify-between gap-3 px-2 py-0.5">
                               <span className="min-w-0 truncate">{f.path}</span>
                               <span className="shrink-0 text-white/50">
-                                {formatBytes(f.size, language)}
+                                {formatByteSize(language, f.size)}
                               </span>
                             </div>
                           ))}
                           {previewResult.files.length > 400 && (
                             <div className="px-2 py-1 text-white/50">
-                              {language === "ru"
-                                ? `… и ещё ${previewResult.files.length - 400} файлов`
-                                : `… and ${previewResult.files.length - 400} more files`}
+                              {`… +${previewResult.files.length - 400}`}
                             </div>
                           )}
                         </div>
@@ -3288,23 +5846,21 @@ export function ModpackTab({
                   <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-emerald-200">
-                        {language === "ru" ? "Готово" : "Done"}
+                        {tt("modpacks.exportModal.done")}
                       </div>
                       <button
                         type="button"
                         onClick={() => void revealItemInDir(exportResultPath)}
                         className="interactive-press rounded-full accent-bg px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90"
                       >
-                        {language === "ru" ? "Открыть папку" : "Open folder"}
+                        {tt("modpacks.exportModal.openFolder")}
                       </button>
                     </div>
                     <div className="break-all text-[11px] text-emerald-100/90">{exportResultPath}</div>
                     {exportSkippedFiles.length > 0 && (
                       <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-[11px] text-white/70">
                         <div className="mb-1 font-semibold text-white/80">
-                          {language === "ru"
-                            ? `Пропущено файлов: ${exportSkippedFiles.length}`
-                            : `Skipped files: ${exportSkippedFiles.length}`}
+                          ({exportSkippedFiles.length})
                         </div>
                         <div className="custom-scrollbar max-h-20 overflow-y-auto">
                           {exportSkippedFiles.slice(0, 80).map((p) => (
@@ -3312,9 +5868,7 @@ export function ModpackTab({
                           ))}
                           {exportSkippedFiles.length > 80 && (
                             <div className="text-white/50">
-                              {language === "ru"
-                                ? `… и ещё ${exportSkippedFiles.length - 80}`
-                                : `… and ${exportSkippedFiles.length - 80} more`}
+                              {`… +${exportSkippedFiles.length - 80}`}
                             </div>
                           )}
                         </div>
@@ -3327,10 +5881,16 @@ export function ModpackTab({
           </div>
         </div>
       )}
+
+      <ScreenshotsModal
+        language={language}
+        profileId={selectedProfileId}
+        open={isScreenshotsOpen}
+        onClose={() => setIsScreenshotsOpen(false)}
+        showNotification={showNotification}
+      />
     </div>
   );
 }
 
 export default ModpackTab;
-
-

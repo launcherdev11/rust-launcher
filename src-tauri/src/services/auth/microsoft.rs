@@ -1,3 +1,5 @@
+#![allow(dead_code, non_snake_case)]
+
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Mutex;
@@ -9,7 +11,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-use crate::game_provider::{get_profile, save_full_profile};
+use crate::services::game::accounts::{get_profile, save_full_profile};
 
 fn http_client() -> Client {
     Client::builder()
