@@ -94,10 +94,49 @@ body {
   will-change: transform, opacity;
 }
 
+@keyframes mods-detail-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.mods-detail-panel-animate {
+  animation: mods-detail-panel-in 260ms ease-out both;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .tab-animate {
+  .tab-animate,
+  .mods-detail-panel-animate {
     animation: none;
   }
+}
+
+html.launcher-no-animations *,
+html.launcher-no-animations *::before,
+html.launcher-no-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+html.launcher-no-animations .tab-animate,
+html.launcher-no-animations .mods-detail-panel-animate,
+html.launcher-no-animations .animate-notification-slide-in,
+html.launcher-no-animations .animate-notification-slide-out {
+  animation: none;
+}
+
+html.launcher-no-animations .interactive-press:hover,
+html.launcher-no-animations .interactive-press:active {
+  transform: none;
 }
 
 @keyframes notification-slide-down {
@@ -114,20 +153,22 @@ body {
 @keyframes notification-slide-up {
   from {
     opacity: 1;
-    transform: translateY(0);
+    max-height: 5rem;
+    margin-bottom: 0.5rem;
   }
   to {
     opacity: 0;
-    transform: translateY(-12px);
+    max-height: 0;
+    margin-bottom: 0;
   }
 }
 
 .animate-notification-slide-in {
-  animation: notification-slide-down 0.18s ease-out forwards;
+  animation: notification-slide-down 0.18s ease-out both;
 }
 
 .animate-notification-slide-out {
-  animation: notification-slide-up 0.18s ease-in forwards;
+  animation: notification-slide-up 0.18s ease-in both;
 }
 
 * {
@@ -156,5 +197,17 @@ body {
 
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
 }
 
