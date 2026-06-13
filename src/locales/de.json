@@ -175,6 +175,7 @@
       "loading": "Versionsliste wird geladen...",
       "noneFound": "Keine Versionen gefunden. Überprüfen Sie Ihre Internetverbindung.",
       "installedBadge": "Installiert",
+      "installLog": "Installationsprotokoll {{version}}",
       "action": {
         "install": "Installieren",
         "reinstall": "Neu installieren",
@@ -429,7 +430,9 @@
       "resume": "Wieder aufnehmen",
       "pause": "Pause",
       "cancel": "Stornieren",
-      "preparing": "Dateien werden vorbereitet..."
+      "preparing": "Dateien werden vorbereitet...",
+      "logTitle": "Installationsprotokoll",
+      "logWaiting": "Warte auf Nachrichten..."
     },
     "loader": {
       "label": "Lader"

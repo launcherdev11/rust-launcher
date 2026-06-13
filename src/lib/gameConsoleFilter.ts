@@ -1,5 +1,7 @@
 const LAUNCHER_PREFIX = /^\[(Launch|ElyAuth|Java|Forge|Fabric|Quilt|Vanilla)\]/;
 
+const VERSION_INSTALL_PREFIX = /^\[(Vanilla|Fabric|Quilt|Forge)\]/;
+
 const LAUNCHER_VERBOSE = [
   /^\[Launch\] LWJGL в classpath:/,
   /^\[Launch\] LWJGL natives dir:/,
@@ -52,6 +54,10 @@ function bumpContext(line: string): void {
 
 export function resetGameConsoleFilter(): void {
   contextLinesRemaining = 0;
+}
+
+export function isVersionInstallConsoleLine(line: string): boolean {
+  return VERSION_INSTALL_PREFIX.test(line.trimEnd());
 }
 
 export function isGameConsoleLineImportant(

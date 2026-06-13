@@ -8,6 +8,7 @@ import { JavaSettingsTab } from "./JavaSettings";
 import { clearLauncherAvatarCache } from "../lib/avatar";
 import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
+import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
 
 const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
 
@@ -321,6 +322,11 @@ export function SettingsTab({
     version: VersionListItem;
     details: VersionInstallDetails;
   } | null>(null);
+  const [simpleDeleteDialog, setSimpleDeleteDialog] = useState<{
+    version: VersionListItem;
+    scope: VersionDeleteScope;
+    targetLabel: string;
+  } | null>(null);
   const [reinstallLoaderOptions, setReinstallLoaderOptions] = useState<LoaderVersionOption[]>([]);
   const [reinstallLoaderLoading, setReinstallLoaderLoading] = useState(false);
   const [isReinstallLoaderDropdownOpen, setIsReinstallLoaderDropdownOpen] = useState(false);
@@ -336,6 +342,10 @@ export function SettingsTab({
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgressPayload>>(
     {},
   );
+  const [installLogLines, setInstallLogLines] = useState<
+    { line: string; source: "stdout" | "stderr" }[]
+  >([]);
+  const installLogEndRef = useRef<HTMLDivElement | null>(null);
   const settingsTabRefs = useRef<
     Partial<Record<SettingsTabId, HTMLButtonElement | null>>
   >({});
@@ -783,6 +793,53 @@ export function SettingsTab({
     };
   }, []);
 
+  useEffect(() => {
+    if (!installingVersionId) {
+      setInstallLogLines([]);
+      return;
+    }
+
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      try {
+        unlisten = await listen<{ line: string; source?: string }>("game-console-line", (event) => {
+          const payload = event.payload;
+          const text =
+            typeof payload === "string"
+              ? payload
+              : typeof payload.line === "string"
+                ? payload.line
+                : "";
+          if (!text || !isVersionInstallConsoleLine(text)) return;
+          const source: "stdout" | "stderr" =
+            typeof payload === "string"
+              ? "stdout"
+              : payload.source === "stderr"
+                ? "stderr"
+                : "stdout";
+          setInstallLogLines((prev) => [...prev.slice(-199), { line: text, source }]);
+        });
+      } catch (e) {
+        console.error("Failed to subscribe to install console:", e);
+      }
+    })();
+
+    return () => {
+      if (unlisten) {
+        try {
+          unlisten();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [installingVersionId]);
+
+  useEffect(() => {
+    if (!installingVersionId) return;
+    installLogEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [installLogLines, installingVersionId]);
+
   const handleImportCustomVersion = async () => {
     try {
       const jsonPath = await openFile({
@@ -867,6 +924,7 @@ export function SettingsTab({
   ) => {
     try {
       setInstallingVersionId(version.id);
+      setInstallLogLines([]);
       const pickedLoader = options?.loaderVersion?.trim() || null;
       if (version.loader === "forge") {
         const gameVersion = gameVersionFromListItem(version);
@@ -1092,15 +1150,7 @@ export function SettingsTab({
           : details.hasLoader
             ? "all"
             : "game";
-        const target = version.id;
-        if (
-          !window.confirm(
-            tt("settings.versions.delete.simplePrompt", { version: version.id }),
-          )
-        ) {
-          return;
-        }
-        await performDelete(version, scope, target);
+        setSimpleDeleteDialog({ version, scope, targetLabel: version.id });
         return;
       }
       setDeleteDialog({ version, details });
@@ -1423,6 +1473,50 @@ export function SettingsTab({
                 className="interactive-press rounded-xl bg-white/90 px-4 py-1.5 text-xs font-semibold text-black hover:bg-white"
               >
                 {tt("settings.versions.manage.reinstallConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {simpleDeleteDialog && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setSimpleDeleteDialog(null)}
+        >
+          <div
+            className="glass-panel w-[min(90vw,24rem)] rounded-[22px] border border-white/15 bg-[#14141c]/95 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="version-delete-simple-title"
+          >
+            <p
+              id="version-delete-simple-title"
+              className="mb-5 text-sm leading-relaxed text-white/90"
+            >
+              {tt("settings.versions.delete.simplePrompt", {
+                version: simpleDeleteDialog.version.id,
+              })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSimpleDeleteDialog(null)}
+                className="interactive-press rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/18"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={deletingVersionId === simpleDeleteDialog.version.id}
+                onClick={() => {
+                  const { version, scope, targetLabel } = simpleDeleteDialog;
+                  setSimpleDeleteDialog(null);
+                  void performDelete(version, scope, targetLabel);
+                }}
+                className="interactive-press rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-amber-400 disabled:opacity-50"
+              >
+                {tt("common.delete")}
               </button>
             </div>
           </div>
@@ -2165,6 +2259,30 @@ export function SettingsTab({
                   </div>
                 )}
               </div>
+              {installingVersionId && (
+                <div className="mt-3 space-y-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                    {tt("settings.versions.installLog", { version: installingVersionId })}
+                  </div>
+                  <div className="custom-scrollbar max-h-36 min-h-[5rem] overflow-y-auto rounded-xl border border-white/10 bg-black/80 px-3 py-2 font-mono text-[10px] text-emerald-200/90">
+                    {installLogLines.length > 0 ? (
+                      installLogLines.map((entry, idx) => (
+                        <div
+                          key={`${idx}-${entry.line.slice(0, 24)}`}
+                          className={`whitespace-pre break-all ${
+                            entry.source === "stderr" ? "text-red-300" : ""
+                          }`}
+                        >
+                          {entry.line}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-white/45">{tt("play.install.logWaiting")}</div>
+                    )}
+                    <div ref={installLogEndRef} />
+                  </div>
+                </div>
+              )}
               </div>
             </SettingsCard>
           )}

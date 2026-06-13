@@ -120,7 +120,7 @@ fn migrate_profile_content_for_version_change(
     clear_loader_version_caches(profile_dir, loader)
 }
 
-fn profile_content_subdir(category: &str) -> Result<&'static str, String> {
+pub(crate) fn profile_content_subdir(category: &str) -> Result<&'static str, String> {
     match category {
         "mod" | "mods" => Ok("mods"),
         "resourcepack" | "resourcepacks" => Ok("resourcepacks"),

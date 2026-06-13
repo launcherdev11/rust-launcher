@@ -70,7 +70,7 @@ import type { PlayConsoleHotkeyActions } from "../hooks/useHotkeys";
 
 type PlayTabProps = {
   gameStatus: GameStatus;
-  consoleLines: { id: number; line: string; source: "stdout" | "stderr" }[];
+  playConsoleLines: { id: number; line: string; source: "stdout" | "stderr" }[];
   isConsoleVisible: boolean;
   onToggleConsole: () => void;
   onClearConsole: () => void;
@@ -100,7 +100,6 @@ type PlayTabProps = {
   setIsLoaderDropdownOpen: (v: boolean) => void;
   handleOpenGameFolder: () => void;
   language: Language;
-  activeProfileName: string | null;
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
   fillPane?: boolean;
@@ -116,7 +115,7 @@ const loaderLabels: Record<LoaderId, string> = {
 
 export function PlayTab({
   gameStatus,
-  consoleLines,
+  playConsoleLines,
   isConsoleVisible,
   onToggleConsole,
   onClearConsole,
@@ -146,7 +145,6 @@ export function PlayTab({
   setIsLoaderDropdownOpen,
   handleOpenGameFolder,
   language,
-  activeProfileName,
   installedVersionIds,
   showSnapshots,
   fillPane = false,
@@ -158,8 +156,8 @@ export function PlayTab({
   const [bannerError, setBannerError] = useState(false);
 
   const consoleText = useMemo(
-    () => consoleLines.map((e) => e.line).join("\n"),
-    [consoleLines],
+    () => playConsoleLines.map((e) => e.line).join("\n"),
+    [playConsoleLines],
   );
 
   const handleCopyConsole = useCallback(async () => {
@@ -628,21 +626,13 @@ export function PlayTab({
         </div>
       </div>
 
-      {activeProfileName && (
-        <div className="mt-2 flex w-full max-w-[95vw] justify-center px-2">
-          <div className="rounded-full bg-black/60 px-4 py-1.5 text-xs text-white/85 shadow-soft backdrop-blur-md">
-            {tt("play.profile.selected", { name: activeProfileName })}
-          </div>
-        </div>
-      )}
-
-      {showConsoleOnLaunch && !isConsoleDetached && (
+      {(showConsoleOnLaunch || isInstalling || installPaused) && !isConsoleDetached && (
         <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
           <GameConsolePanel
             embedded
             className="glass-panel pointer-events-auto w-full max-w-3xl"
-            consoleLines={consoleLines}
-            isConsoleVisible={isConsoleVisible}
+            consoleLines={playConsoleLines}
+            isConsoleVisible={isConsoleVisible || isInstalling || installPaused}
             gameStatus={gameStatus}
             language={language}
             isDetached={false}

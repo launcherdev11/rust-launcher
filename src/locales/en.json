@@ -165,6 +165,7 @@
       "loading": "Loading versions list...",
       "noneFound": "No versions found. Check your internet connection.",
       "installedBadge": "Installed",
+      "installLog": "Install log for {{version}}",
       "action": {
         "install": "Install",
         "reinstall": "Reinstall",
@@ -403,7 +404,9 @@
       "resume": "Resume",
       "pause": "Pause",
       "cancel": "Cancel",
-      "preparing": "Preparing files..."
+      "preparing": "Preparing files...",
+      "logTitle": "Install log",
+      "logWaiting": "Waiting for messages..."
     },
     "loader": {
       "label": "Loader"

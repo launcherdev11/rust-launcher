@@ -175,6 +175,7 @@
       "loading": "Cargando lista de versiones...",
       "noneFound": "No se encontraron versiones. Verifique su conexión a Internet.",
       "installedBadge": "Instalado",
+      "installLog": "Registro de instalación {{version}}",
       "action": {
         "install": "Instalar",
         "reinstall": "Reinstalar",
@@ -429,7 +430,9 @@
       "resume": "Reanudar",
       "pause": "Pausa",
       "cancel": "Cancelar",
-      "preparing": "Preparando archivos..."
+      "preparing": "Preparando archivos...",
+      "logTitle": "Registro de instalación",
+      "logWaiting": "Esperando mensajes..."
     },
     "loader": {
       "label": "Cargador"
