@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use crate::app::paths::{game_root_dir, versions_dir};
 use crate::infra::http::http_client;
-use crate::services::game::core::download_text_with_retries;
+use crate::services::game::core::{compare_version_like, download_text_with_retries};
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_GAME, FABRIC_META_LOADERS, FORGE_MAVEN_BASE,
@@ -744,6 +744,15 @@ fn fabric_profile_matches_loader_version(profile: &FabricProfile, loader_version
             .is_some_and(|rest| rest.starts_with(loader_version))
 }
 
+fn fabric_loader_version_from_profile_id(profile_id: &str, game_version: &str) -> String {
+    profile_id
+        .strip_prefix("fabric-loader-")
+        .unwrap_or(profile_id)
+        .strip_suffix(&format!("-{game_version}"))
+        .unwrap_or(profile_id)
+        .to_string()
+}
+
 fn quilt_profile_matches_loader_version(profile: &FabricProfile, loader_version: &str) -> bool {
     profile.id.contains(loader_version)
         || profile
@@ -761,6 +770,7 @@ pub fn get_installed_fabric_profile_id(
     if !vers_root.exists() {
         return Ok(None);
     }
+    let mut matches: Vec<(String, String)> = Vec::new();
     for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
         let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
         let path = e.path();
@@ -783,11 +793,16 @@ pub fn get_installed_fabric_profile_id(
             }
             let id = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
             if !id.is_empty() {
-                return Ok(Some(id));
+                let loader_ver = fabric_loader_version_from_profile_id(&id, &game_version);
+                matches.push((id, loader_ver));
             }
         }
     }
-    Ok(None)
+    if matches.is_empty() {
+        return Ok(None);
+    }
+    matches.sort_by(|a, b| compare_version_like(&b.1, &a.1));
+    Ok(Some(matches[0].0.clone()))
 }
 
 

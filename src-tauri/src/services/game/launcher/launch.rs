@@ -2,13 +2,11 @@ use std::io::{BufRead, BufReader, ErrorKind};
 use std::sync::atomic::Ordering;
 use std::time::SystemTime;
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
 use tauri::{AppHandle, Emitter};
 
 use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
+use crate::infra::process::hide_console;
 use crate::models::events::{
     GameConsoleLinePayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload, EVENT_GAME_CONSOLE_LINE,
     EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
@@ -17,7 +15,8 @@ use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_in
 use crate::services::game::accounts::get_profile;
 use crate::services::game::arguments::resolve_arguments;
 use crate::services::game::core::{
-    compare_version_like, current_os_name, download_text_with_retries, fabric_library_path,
+    compare_version_like, current_os_name, download_text_with_retries, ensure_fabric_intermediary_library,
+    fabric_library_path,
     is_probably_native_jar_path, library_applies, os_info, parse_library_coords, resolve_native_artifact,
 };
 use crate::services::game::console::log_to_console;
@@ -28,9 +27,12 @@ use crate::services::game::profiles::{
 use crate::services::game::runtime::{
     build_java_command, ensure_forge_ignore_list_includes_vanilla_client_jar,
     ensure_forge_safe_opens, ensure_lwjgl_fallback_for_modern_versions, ensure_library_artifacts_present_for_launch,
-    ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args, offline_uuid_from_username,
-    remove_add_opens_for_java_under_9, resolve_client_jar_path,
+    ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args,
+    filter_launcher_owned_jvm_args, natives_dir_has_files,
+    offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
+    resolve_natives_dir_for_launch,
 };
+use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID};
 use crate::services::game::version_types::*;
@@ -43,8 +45,6 @@ pub async fn launch_game(
     version_id: String,
     version_url: Option<String>,
 ) -> Result<(), String> {
-    GAME_PROCESS_PID.store(0, Ordering::SeqCst);
-
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
     let vers_root = versions_dir()?;
@@ -110,6 +110,7 @@ pub async fn launch_game(
                     natives: None,
                 });
             }
+            ensure_fabric_intermediary_library(&mut detail.libraries, &profile.inherits_from);
             (detail, true)
         } else {
             return Err("Версия не установлена или не найдена. Сначала установите.".to_string());
@@ -291,24 +292,7 @@ pub async fn launch_game(
             }
         }
     }
-    let mut has_natives_files = false;
-    if let Ok(entries) = std::fs::read_dir(&natives_dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let p = entry.path();
-                if p.is_file() {
-                    has_natives_files = true;
-                    break;
-                }
-                if p.is_dir() {
-                    if std::fs::read_dir(&p).map(|mut it| it.next().is_some()).unwrap_or(false) {
-                        has_natives_files = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    let mut has_natives_files = natives_dir_has_files(&natives_dir);
     if !has_natives_files {
         let client = http_client(false);
         for lib in &detail.libraries {
@@ -359,7 +343,13 @@ pub async fn launch_game(
                 let _ = extract_natives_jar(&path, &natives_dir);
             }
         }
+        has_natives_files = natives_dir_has_files(&natives_dir);
     }
+    let natives_dir = if has_natives_files {
+        natives_dir
+    } else {
+        resolve_natives_dir_for_launch(&vers_root, &version_id, detail.inherits_from.as_deref())
+    };
     let natives_str = natives_dir.to_str().unwrap_or("");
     let assets_root = root.join("assets");
     let assets_str = assets_root.to_str().unwrap_or("");
@@ -594,11 +584,12 @@ pub async fn launch_game(
                 "-cp".to_string(),
                 classpath_str.clone(),
             ];
-            base.extend(
+            base.extend(filter_launcher_owned_jvm_args(
                 resolve_arguments(&detail.arguments.jvm, &features, &os_info)
                     .into_iter()
-                    .map(|s| replace(&s)),
-            );
+                    .map(|s| replace(&s))
+                    .collect(),
+            ));
             base
         } else {
             resolve_arguments(&detail.arguments.jvm, &features, &os_info)
@@ -794,6 +785,19 @@ pub async fn launch_game(
         return Err(format!("Папка игры недоступна: {} — {e}", game_dir_str));
     }
 
+    if is_our_game_process_alive() {
+        return Err(
+            "Игра уже запущена из этого лаунчера. Сначала остановите её.".to_string(),
+        );
+    }
+    GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+
+    if is_external_minecraft_running() {
+        return Err(
+            "Minecraft уже запущен (другой лаунчер или другой экземпляр). Закройте игру и попробуйте снова.".to_string(),
+        );
+    }
+
     let mut cmd = std::process::Command::new(&java_path);
     cmd.args(&jvm_args)
         .arg(&detail.main_class)
@@ -803,11 +807,7 @@ pub async fn launch_game(
         .stderr(std::process::Stdio::piped());
     #[cfg(target_os = "linux")]
     crate::services::game::runtime::apply_linux_display_env(&mut cmd);
-    #[cfg(windows)]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    hide_console(&mut cmd);
 
     let play_start_time = SystemTime::now();
 
@@ -823,7 +823,9 @@ pub async fn launch_game(
             format!("Не удалось запустить игру (установите Java): {e}")
         }
     })?;
-    GAME_PROCESS_PID.store(child.id() as u64, Ordering::SeqCst);
+    let spawned_pid = child.id();
+    GAME_PROCESS_PID.store(spawned_pid as u64, Ordering::SeqCst);
+    eprintln!("[Launch] PID: {spawned_pid}");
 
     if let Some(ref profile_id) = playtime_profile_id {
         if let Ok(last_played_at) = record_profile_last_played(profile_id) {
@@ -875,12 +877,14 @@ pub async fn launch_game(
         });
     }
 
-    if let Some(profile_id) = playtime_profile_id {
-        let started_at = play_start_time;
-        let mut child_for_wait = child;
-        let app_clone_for_playtime = app.clone();
-        std::thread::spawn(move || {
-            let _ = child_for_wait.wait();
+    let profile_id_for_playtime = playtime_profile_id;
+    let started_at = play_start_time;
+    let app_clone_for_playtime = app.clone();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+
+        if let Some(profile_id) = profile_id_for_playtime {
             let delta_secs = started_at
                 .elapsed()
                 .map(|d| d.as_secs())
@@ -897,8 +901,8 @@ pub async fn launch_game(
                     );
                 }
             }
-        });
-    }
+        }
+    });
 
     if settings.close_launcher_on_game_start {
         app.exit(0);

@@ -221,3 +221,26 @@ pub(crate) fn remove_add_opens_for_java_under_9(args: Vec<String>) -> Vec<String
     }
     filtered
 }
+
+pub(crate) fn filter_launcher_owned_jvm_args(args: Vec<String>) -> Vec<String> {
+    let mut filtered = Vec::with_capacity(args.len());
+    let mut i = 0usize;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "-cp" || arg == "-classpath" {
+            i += 2;
+            continue;
+        }
+        if arg == "-Djava.library.path" {
+            i += 2;
+            continue;
+        }
+        if arg.starts_with("-Djava.library.path=") {
+            i += 1;
+            continue;
+        }
+        filtered.push(arg.clone());
+        i += 1;
+    }
+    filtered
+}

@@ -11,7 +11,8 @@ use crate::infra::process::hide_console;
 use crate::infra::http::{http_client, http_client_for_binary_download};
 use crate::models::events::{DownloadProgressPayload, EVENT_DOWNLOAD_PROGRESS};
 use crate::services::game::core::{
-    current_os_name, download_text_with_retries, fabric_library_path,
+    current_os_name, download_text_with_retries, ensure_fabric_intermediary_library, fabric_library_path,
+    is_probably_native_jar_path,
     library_applies, resolve_native_artifact, try_fetch_remote_sha1,
 };
 use crate::services::game::console::log_to_console;
@@ -30,6 +31,25 @@ use crate::services::game::version_types::*;
 use crate::services::game::versions::{
     get_mojang_version_url, neoforge_minecraft_version_for_install, resolve_mojang_version,
 };
+
+async fn ensure_base_version_json(
+    vers_root: &std::path::Path,
+    inherits_from: &str,
+    version_json: &str,
+) -> Result<(), String> {
+    let base_version_dir = vers_root.join(inherits_from);
+    tokio::fs::create_dir_all(&base_version_dir)
+        .await
+        .map_err(|e| format!("Не удалось создать папку базовой версии: {e}"))?;
+    let base_json_path = base_version_dir.join(format!("{inherits_from}.json"));
+    if base_json_path.is_file() {
+        return Ok(());
+    }
+    tokio::fs::write(&base_json_path, version_json)
+        .await
+        .map_err(|e| format!("Ошибка записи version.json: {e}"))?;
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn install_fabric(
@@ -55,10 +75,23 @@ pub async fn install_fabric(
         .map_err(|e| format!("Ошибка загрузки профиля Fabric: {e}"))?;
     let status = resp.status();
     log_to_console(&app, &format!("[Fabric] Ответ профиля: HTTP {status}"));
-    let profile: FabricProfile = resp
+    let mut profile: FabricProfile = resp
         .json()
         .await
         .map_err(|e| format!("Ошибка разбора профиля Fabric: {e}"))?;
+
+    let intermediary_name = format!("net.fabricmc:intermediary:{}", profile.inherits_from);
+    if !profile
+        .libraries
+        .iter()
+        .any(|l| l.name == intermediary_name)
+    {
+        profile.libraries.push(FabricProfileLibrary {
+            name: intermediary_name,
+            url: Some("https://maven.fabricmc.net/".to_string()),
+            size: 0,
+        });
+    }
 
     let mojang_url = get_mojang_version_url(&profile.inherits_from).await?;
     log_to_console(
@@ -68,13 +101,8 @@ pub async fn install_fabric(
             profile.inherits_from
         ),
     );
-    let mojang_detail: VersionDetail = client
-        .get(&mojang_url)
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка загрузки версии Mojang: {e}"))?
-        .json()
-        .await
+    let mojang_text = download_text_with_retries(&client, &mojang_url, DEFAULT_DOWNLOAD_RETRIES).await?;
+    let mojang_detail: VersionDetail = serde_json::from_str(&mojang_text)
         .map_err(|e| format!("Ошибка разбора версии Mojang: {e}"))?;
 
     let root = game_root_dir()?;
@@ -192,22 +220,25 @@ pub async fn install_fabric(
                         },
                     );
                 }
-                continue;
+            } else {
+                if let Some(parent) = path.parent() {
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+                }
+                let _ = download_file(
+                    &client,
+                    &artifact.url,
+                    &path,
+                    &app,
+                    &profile_id,
+                    total_size,
+                    total_downloaded,
+                )
+                .await?;
+                total_downloaded = total_downloaded.saturating_add(artifact.size);
             }
-            if let Some(parent) = path.parent() {
-                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+            if is_probably_native_jar_path(&artifact.path) && path.is_file() {
+                let _ = extract_natives_jar(&path, &natives_dir);
             }
-            let _ = download_file(
-                &client,
-                &artifact.url,
-                &path,
-                &app,
-                &profile_id,
-                total_size,
-                total_downloaded,
-            )
-            .await?;
-            total_downloaded = total_downloaded.saturating_add(artifact.size);
         }
         if let Some(ref classifiers) = lib.downloads.classifiers {
             if let Some(nat) = classifiers.get(native_classifier) {
@@ -303,6 +334,8 @@ pub async fn install_fabric(
         .await?;
     }
 
+    ensure_base_version_json(&vers_root, &profile.inherits_from, &mojang_text).await?;
+
     let profile_dir = vers_root.join(&profile_id);
     tokio::fs::create_dir_all(&profile_dir).await.map_err(|e| format!("{e}"))?;
     let profile_path = profile_dir.join("profile.json");
@@ -364,13 +397,8 @@ pub async fn install_quilt(
             profile.inherits_from
         ),
     );
-    let mojang_detail: VersionDetail = client
-        .get(&mojang_url)
-        .send()
-        .await
-        .map_err(|e| format!("Ошибка загрузки версии Mojang: {e}"))?
-        .json()
-        .await
+    let mojang_text = download_text_with_retries(&client, &mojang_url, DEFAULT_DOWNLOAD_RETRIES).await?;
+    let mojang_detail: VersionDetail = serde_json::from_str(&mojang_text)
         .map_err(|e| format!("Ошибка разбора версии Mojang: {e}"))?;
 
     let root = game_root_dir()?;
@@ -494,22 +522,25 @@ pub async fn install_quilt(
                         },
                     );
                 }
-                continue;
+            } else {
+                if let Some(parent) = path.parent() {
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+                }
+                let _ = download_file(
+                    &client,
+                    &artifact.url,
+                    &path,
+                    &app,
+                    &profile_id,
+                    total_size,
+                    total_downloaded,
+                )
+                .await?;
+                total_downloaded = total_downloaded.saturating_add(artifact.size);
             }
-            if let Some(parent) = path.parent() {
-                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
+            if is_probably_native_jar_path(&artifact.path) && path.is_file() {
+                let _ = extract_natives_jar(&path, &natives_dir);
             }
-            let _ = download_file(
-                &client,
-                &artifact.url,
-                &path,
-                &app,
-                &profile_id,
-                total_size,
-                total_downloaded,
-            )
-            .await?;
-            total_downloaded = total_downloaded.saturating_add(artifact.size);
         }
         if let Some(ref classifiers) = lib.downloads.classifiers {
             if let Some(nat) = classifiers.get(native_classifier) {
@@ -604,6 +635,8 @@ pub async fn install_quilt(
         )
         .await?;
     }
+
+    ensure_base_version_json(&vers_root, &profile.inherits_from, &mojang_text).await?;
 
     let profile_dir = vers_root.join(&profile_id);
     tokio::fs::create_dir_all(&profile_dir).await.map_err(|e| format!("{e}"))?;
