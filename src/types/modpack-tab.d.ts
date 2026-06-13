@@ -2,7 +2,7 @@ declare module "./tabs/ModpackTab" {
   import * as React from "react";
 
   export interface ModpackTabProps {
-    language: "ru" | "en";
+    language: "ru" | "en" | "de" | "es";
     showNotification: (kind: string, message: string, options?: { sound?: boolean }) => void;
     onProfileSelectionChange?: (profile: {
       id: string;

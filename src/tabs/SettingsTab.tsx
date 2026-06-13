@@ -3,18 +3,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
 import type { CSSProperties } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
-import { useT } from "../i18n";
+import { clearLauncherAvatarCache } from "../lib/avatar";
+import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
+import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
 
 const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
 
 type SettingsTabId = "game" | "versions" | "launcher";
 
-type Language = "ru" | "en";
-
-type SidebarItemId = "play" | "settings" | "mods" | "modpacks";
+type SidebarItemId = "play" | "settings" | "friends" | "mods" | "modpacks";
 
 type Settings = {
   game_directory: string | null;
@@ -35,11 +35,24 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  animations_disabled: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
   background_blur_enabled: boolean;
+  split_view_enabled: boolean;
+  sidebar_position?: string;
 };
+
+const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
+type SidebarPosition = (typeof SIDEBAR_POSITIONS)[number];
+
+function parseSidebarPosition(value: string | undefined | null): SidebarPosition {
+  if (value && SIDEBAR_POSITIONS.includes(value as SidebarPosition)) {
+    return value as SidebarPosition;
+  }
+  return "left";
+}
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 
@@ -71,6 +84,7 @@ type SettingsTabProps = {
   updateDownloadPercent?: number | null;
   onCheckUpdate?: () => void;
   onInstallUpdate?: () => void;
+  fillPane?: boolean;
 };
 
 type VersionSummary = {
@@ -118,6 +132,36 @@ type VersionIntegrityCheckResult = {
   missing_files: number;
   corrupted_files: number;
 };
+
+type LoaderVersionChannel = "stable" | "beta" | "alpha";
+
+type LoaderVersionOption = {
+  version: string;
+  channel?: LoaderVersionChannel | null;
+};
+
+type VersionInstallDetails = {
+  gameVersion: string;
+  hasGameFiles: boolean;
+  hasLoader: boolean;
+  loaderVersions: string[];
+  profileIds: string[];
+  loaderVersionId: string | null;
+};
+
+type VersionDeleteScope = "game" | "loader" | "all";
+
+function gameVersionFromListItem(version: VersionListItem): string {
+  if (version.loader === "forge") {
+    const m = /^(.+)-forge-/.exec(version.id);
+    return m?.[1] ?? version.id;
+  }
+  if (version.loader === "neoforge") {
+    const m = /^(.+)-neoforge-/.exec(version.id);
+    return m?.[1] ?? version.id;
+  }
+  return version.id;
+}
 
 type LauncherSettingsBackupV1 = {
   format_version: number;
@@ -245,6 +289,7 @@ export function SettingsTab({
   updateDownloadPercent = null,
   onCheckUpdate,
   onInstallUpdate,
+  fillPane = false,
 }: SettingsTabProps) {
   const tt = useT(language);
   const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
@@ -268,6 +313,24 @@ export function SettingsTab({
     version: VersionListItem;
     result: VersionIntegrityCheckResult;
   } | null>(null);
+  const [reinstallDialog, setReinstallDialog] = useState<{
+    version: VersionListItem;
+    gameVersion: string;
+    selectedLoaderVersion: string;
+  } | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    version: VersionListItem;
+    details: VersionInstallDetails;
+  } | null>(null);
+  const [simpleDeleteDialog, setSimpleDeleteDialog] = useState<{
+    version: VersionListItem;
+    scope: VersionDeleteScope;
+    targetLabel: string;
+  } | null>(null);
+  const [reinstallLoaderOptions, setReinstallLoaderOptions] = useState<LoaderVersionOption[]>([]);
+  const [reinstallLoaderLoading, setReinstallLoaderLoading] = useState(false);
+  const [isReinstallLoaderDropdownOpen, setIsReinstallLoaderDropdownOpen] = useState(false);
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
   const [skipRepairPrompt, setSkipRepairPrompt] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -279,7 +342,10 @@ export function SettingsTab({
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgressPayload>>(
     {},
   );
-
+  const [installLogLines, setInstallLogLines] = useState<
+    { line: string; source: "stdout" | "stderr" }[]
+  >([]);
+  const installLogEndRef = useRef<HTMLDivElement | null>(null);
   const settingsTabRefs = useRef<
     Partial<Record<SettingsTabId, HTMLButtonElement | null>>
   >({});
@@ -311,8 +377,10 @@ export function SettingsTab({
   const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
   const [isCacheLoading, setIsCacheLoading] = useState(false);
   const [isResettingSettings, setIsResettingSettings] = useState(false);
+  const [isSidebarPositionDropdownOpen, setIsSidebarPositionDropdownOpen] = useState(false);
   const versionsLoaderDropdownRef = useRef<HTMLDivElement | null>(null);
   const versionsFilterDropdownRef = useRef<HTMLDivElement | null>(null);
+  const sidebarPositionDropdownRef = useRef<HTMLDivElement | null>(null);
   const versionFilterInputRef = useRef<HTMLInputElement | null>(null);
   const versionFilterListRef = useRef<HTMLDivElement | null>(null);
   const selectedVersionFilterButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -479,7 +547,6 @@ export function SettingsTab({
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
     } catch {
-      /* ignore */
     }
   };
 
@@ -521,7 +588,6 @@ export function SettingsTab({
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
     } catch {
-      /* ignore */
     }
   };
 
@@ -615,16 +681,10 @@ export function SettingsTab({
       }));
     }
 
-    const all = await invoke<VersionSummary[]>("fetch_all_versions");
-    const showSnapshots = settings?.show_snapshots ?? false;
-    const showAlpha = settings?.show_alpha_versions ?? false;
-    const filtered = all.filter((v) => {
-      if (v.version_type === "release") return true;
-      if (v.version_type === "snapshot") return showSnapshots;
-      if (v.version_type === "old_beta" || v.version_type === "old_alpha" || v.version_type === "alpha") {
-        return showAlpha;
-      }
-      return false;
+    const filtered = await invoke<VersionSummary[]>("fetch_versions_for_loader", {
+      loader,
+      showSnapshots: settings?.show_snapshots ?? false,
+      showAlpha: settings?.show_alpha_versions ?? false,
     });
     return filtered.map((v) => ({ ...v, loader }));
   };
@@ -698,6 +758,12 @@ export function SettingsTab({
       ) {
         setIsVersionFilterDropdownOpen(false);
       }
+      if (
+        sidebarPositionDropdownRef.current &&
+        !sidebarPositionDropdownRef.current.contains(target)
+      ) {
+        setIsSidebarPositionDropdownOpen(false);
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -727,24 +793,174 @@ export function SettingsTab({
     };
   }, []);
 
-  const handleInstallVersion = async (version: VersionListItem, options?: { silentSuccess?: boolean }) => {
+  useEffect(() => {
+    if (!installingVersionId) {
+      setInstallLogLines([]);
+      return;
+    }
+
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      try {
+        unlisten = await listen<{ line: string; source?: string }>("game-console-line", (event) => {
+          const payload = event.payload;
+          const text =
+            typeof payload === "string"
+              ? payload
+              : typeof payload.line === "string"
+                ? payload.line
+                : "";
+          if (!text || !isVersionInstallConsoleLine(text)) return;
+          const source: "stdout" | "stderr" =
+            typeof payload === "string"
+              ? "stdout"
+              : payload.source === "stderr"
+                ? "stderr"
+                : "stdout";
+          setInstallLogLines((prev) => [...prev.slice(-199), { line: text, source }]);
+        });
+      } catch (e) {
+        console.error("Failed to subscribe to install console:", e);
+      }
+    })();
+
+    return () => {
+      if (unlisten) {
+        try {
+          unlisten();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [installingVersionId]);
+
+  useEffect(() => {
+    if (!installingVersionId) return;
+    installLogEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [installLogLines, installingVersionId]);
+
+  const handleImportCustomVersion = async () => {
+    try {
+      const jsonPath = await openFile({
+        multiple: false,
+        filters: [{ name: "Minecraft version JSON", extensions: ["json"] }],
+      });
+      if (!jsonPath || typeof jsonPath !== "string") return;
+
+      const wantJar = window.confirm(tt("settings.versions.custom.importJarPrompt"));
+      let jarPath: string | null = null;
+      if (wantJar) {
+        const picked = await openFile({
+          multiple: false,
+          filters: [{ name: "Minecraft client JAR", extensions: ["jar"] }],
+        });
+        if (picked && typeof picked === "string") {
+          jarPath = picked;
+        }
+      }
+
+      const versionId = await invoke<string>("import_custom_version", {
+        jsonPath,
+        jarPath,
+      });
+      showNotification(
+        "success",
+        tt("settings.versions.custom.importSuccess", { version: versionId }),
+        { sound: true },
+      );
+      const [available] = await Promise.all([
+        loadAvailableByLoader(versionsLoader),
+        loadInstalledVersions(),
+      ]);
+      setAvailableVersions(available);
+    } catch (e) {
+      console.error("Failed to import custom version:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", tt("settings.versions.custom.importFailed", { msg }));
+    }
+  };
+
+  const loadReinstallLoaderOptions = useCallback(
+    async (version: VersionListItem, gameVersion: string) => {
+      if (version.loader === "vanilla") {
+        setReinstallLoaderOptions([]);
+        return;
+      }
+      setReinstallLoaderLoading(true);
+      try {
+        let options: LoaderVersionOption[] = [];
+        if (version.loader === "fabric") {
+          options = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+            gameVersion,
+          });
+        } else if (version.loader === "quilt") {
+          options = await invoke<LoaderVersionOption[]>("fetch_quilt_loaders", {
+            gameVersion,
+          });
+        } else if (version.loader === "forge") {
+          options = await invoke<LoaderVersionOption[]>("fetch_forge_builds_for_game", {
+            gameVersion,
+          });
+        } else if (version.loader === "neoforge") {
+          options = await invoke<LoaderVersionOption[]>("fetch_neoforge_builds_for_game", {
+            gameVersion,
+          });
+        }
+        setReinstallLoaderOptions(options);
+      } catch (e) {
+        console.error("Failed to load loader versions:", e);
+        setReinstallLoaderOptions([]);
+      } finally {
+        setReinstallLoaderLoading(false);
+      }
+    },
+    [],
+  );
+
+  const handleInstallVersion = async (
+    version: VersionListItem,
+    options?: { silentSuccess?: boolean; loaderVersion?: string },
+  ) => {
     try {
       setInstallingVersionId(version.id);
+      setInstallLogLines([]);
+      const pickedLoader = options?.loaderVersion?.trim() || null;
       if (version.loader === "forge") {
-        if (!version.installer_url) throw new Error("Missing Forge installer URL");
+        const gameVersion = gameVersionFromListItem(version);
+        let versionId = version.id;
+        let installerUrl = version.installer_url;
+        if (pickedLoader) {
+          const builds = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+          const match = builds.find(
+            (v) => v.mc_version === gameVersion && v.forge_build === pickedLoader,
+          );
+          versionId = match?.id ?? `${gameVersion}-forge-${pickedLoader}`;
+          installerUrl =
+            match?.installer_url ??
+            `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${pickedLoader}/forge-${gameVersion}-${pickedLoader}-installer.jar`;
+        }
+        if (!installerUrl) throw new Error("Missing Forge installer URL");
         await invoke("install_forge", {
-          versionId: version.id,
-          installerUrl: version.installer_url,
+          versionId,
+          installerUrl,
         });
       } else if (version.loader === "neoforge") {
+        const gameVersion = gameVersionFromListItem(version);
+        const versionId = pickedLoader
+          ? `${gameVersion}-neoforge-${pickedLoader}`
+          : version.id;
         await invoke("install_neoforge", {
-          version_id: version.id,
+          versionId,
         });
       } else if (version.loader === "fabric") {
-        const loaders = await invoke<string[]>("fetch_fabric_loaders", {
-          gameVersion: version.id,
-        });
-        const loaderVersion = loaders[0];
+        let loaderVersion = pickedLoader;
+        if (!loaderVersion) {
+          const loaders = await invoke<LoaderVersionOption[]>("fetch_fabric_loaders", {
+            gameVersion: version.id,
+          });
+          loaderVersion = loaders[0]?.version;
+        }
         if (!loaderVersion) throw new Error("No suitable Fabric loader");
         await invoke("install_fabric", {
           gameVersion: version.id,
@@ -753,7 +969,10 @@ export function SettingsTab({
       } else if (version.loader === "quilt") {
         await invoke("install_quilt", {
           gameVersion: version.id,
+          loaderVersion: pickedLoader,
         });
+      } else if (version.version_type === "custom" || !version.url) {
+        await invoke("install_local_version", { versionId: version.id });
       } else {
         await invoke("install_version", {
           versionId: version.id,
@@ -784,7 +1003,7 @@ export function SettingsTab({
       setCheckingVersionId(version.id);
       const result = await invoke<VersionIntegrityCheckResult>("check_version_files_integrity", {
         versionId: version.id,
-        versionUrl: version.url ?? null,
+        versionUrl: version.url || null,
       });
       if (result.is_ok) {
         showNotification(
@@ -814,6 +1033,131 @@ export function SettingsTab({
       );
     } finally {
       setCheckingVersionId(null);
+    }
+  };
+
+  const openReinstallDialog = async (version: VersionListItem) => {
+    if (version.loader === "vanilla") {
+      void handleInstallVersion(version);
+      return;
+    }
+    const gameVersion = gameVersionFromListItem(version);
+    let selectedLoaderVersion = "";
+    try {
+      const details = await invoke<VersionInstallDetails>("get_version_install_details", {
+        loader: version.loader,
+        itemId: version.id,
+      });
+      selectedLoaderVersion = details.loaderVersions[0] ?? "";
+    } catch {
+      // ignore
+    }
+    setReinstallDialog({ version, gameVersion, selectedLoaderVersion });
+    setIsReinstallLoaderDropdownOpen(false);
+    void loadReinstallLoaderOptions(version, gameVersion);
+  };
+
+  useEffect(() => {
+    if (!reinstallDialog || reinstallLoaderLoading || reinstallLoaderOptions.length === 0) {
+      return;
+    }
+    if (reinstallDialog.selectedLoaderVersion) return;
+    const first = reinstallLoaderOptions[0]?.version;
+    if (!first) return;
+    setReinstallDialog((prev) => (prev ? { ...prev, selectedLoaderVersion: first } : null));
+  }, [reinstallDialog, reinstallLoaderLoading, reinstallLoaderOptions]);
+
+  const confirmReinstall = async () => {
+    if (!reinstallDialog) return;
+    const { version, selectedLoaderVersion } = reinstallDialog;
+    const loaderVersion = selectedLoaderVersion.trim();
+    if (!loaderVersion) {
+      showNotification("error", tt("settings.versions.manage.loaderRequired"));
+      return;
+    }
+    setReinstallDialog(null);
+    try {
+      if (version.loader !== "vanilla") {
+        const details = await invoke<VersionInstallDetails>("get_version_install_details", {
+          loader: version.loader,
+          itemId: version.id,
+        });
+        const changingLoader =
+          details.hasLoader &&
+          details.loaderVersions.length > 0 &&
+          !details.loaderVersions.includes(loaderVersion);
+        if (changingLoader) {
+          await invoke("delete_minecraft_installation", {
+            loader: version.loader,
+            itemId: version.id,
+            scope: "loader" as VersionDeleteScope,
+          });
+        }
+      }
+      await handleInstallVersion(version, { loaderVersion });
+    } catch (e) {
+      console.error("Failed to reinstall version:", e);
+    }
+  };
+
+  const performDelete = async (
+    version: VersionListItem,
+    scope: VersionDeleteScope,
+    targetLabel: string,
+  ) => {
+    try {
+      setDeletingVersionId(version.id);
+      await invoke("delete_minecraft_installation", {
+        loader: version.loader,
+        itemId: version.id,
+        scope,
+      });
+      showNotification(
+        "success",
+        tt("settings.versions.delete.success", { target: targetLabel }),
+        { sound: true },
+      );
+      await loadInstalledVersions();
+      const available = await loadAvailableByLoader(versionsLoader);
+      setAvailableVersions(available);
+    } catch (e) {
+      console.error("Failed to delete version:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", tt("settings.versions.delete.failed", { msg }));
+    } finally {
+      setDeletingVersionId(null);
+    }
+  };
+
+  const openDeleteFlow = async (version: VersionListItem) => {
+    try {
+      const details = await invoke<VersionInstallDetails>("get_version_install_details", {
+        loader: version.loader,
+        itemId: version.id,
+      });
+      if (!details.hasGameFiles && !details.hasLoader) {
+        showNotification(
+          "warning",
+          tt("settings.versions.delete.simplePrompt", { version: version.id }),
+        );
+        return;
+      }
+      const needsChoice =
+        version.loader !== "vanilla" && details.hasGameFiles && details.hasLoader;
+      if (!needsChoice) {
+        const scope: VersionDeleteScope = !details.hasGameFiles
+          ? "loader"
+          : details.hasLoader
+            ? "all"
+            : "game";
+        setSimpleDeleteDialog({ version, scope, targetLabel: version.id });
+        return;
+      }
+      setDeleteDialog({ version, details });
+    } catch (e) {
+      console.error("Failed to prepare delete:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      showNotification("error", tt("settings.versions.delete.failed", { msg }));
     }
   };
 
@@ -913,6 +1257,7 @@ export function SettingsTab({
     setIsCacheLoading(true);
     try {
       await invoke("clear_launcher_cache");
+      clearLauncherAvatarCache();
       const next = await invoke<number>("get_launcher_cache_size").catch(() => null);
       setCacheSizeBytes(next ?? 0);
       showNotification(
@@ -938,7 +1283,7 @@ export function SettingsTab({
       }
       const defaults = await invoke<Settings>("reset_settings_to_default");
       updateSettings(defaults);
-      setSidebarOrder(["play", "settings", "mods", "modpacks"]);
+      setSidebarOrder(["play", "settings", "friends", "mods", "modpacks"]);
       try {
         window.localStorage.removeItem("sidebar_order");
       } catch {
@@ -1002,7 +1347,14 @@ export function SettingsTab({
       const so = backup?.sidebar_order ?? null;
       if (Array.isArray(so) && so.length > 0) {
         const normalized = so
-          .filter((x): x is SidebarItemId => x === "play" || x === "settings" || x === "mods" || x === "modpacks");
+          .filter(
+            (x): x is SidebarItemId =>
+              x === "play" ||
+              x === "settings" ||
+              x === "friends" ||
+              x === "mods" ||
+              x === "modpacks",
+          );
         if (normalized.length > 0) {
           setSidebarOrder(normalized);
           try {
@@ -1045,7 +1397,219 @@ export function SettingsTab({
   };
 
   return (
-    <div className="flex w-full flex-1 min-h-0 flex-col items-center">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      {reinstallDialog && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setReinstallDialog(null)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-sm font-semibold text-white">
+              {tt("settings.versions.manage.reinstallTitle", {
+                version: reinstallDialog.version.id,
+              })}
+            </h3>
+            <p className="mb-4 text-xs text-white/70">
+              {tt("settings.versions.manage.reinstallHint", {
+                gameVersion: reinstallDialog.gameVersion,
+              })}
+            </p>
+            <label className="mb-1 block text-xs text-white/70">
+              {tt("settings.versions.manage.loaderVersionLabel")}
+            </label>
+            <div className="relative mb-4">
+              <button
+                type="button"
+                disabled={reinstallLoaderLoading}
+                onClick={() => setIsReinstallLoaderDropdownOpen((v) => !v)}
+                className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/20 bg-black/30 px-3 text-sm text-white/90"
+              >
+                <span className="truncate">
+                  {reinstallLoaderLoading
+                    ? tt("common.loading")
+                    : reinstallDialog.selectedLoaderVersion || tt("modpacks.common.select")}
+                </span>
+                <span className="text-[10px] text-white/50">▾</span>
+              </button>
+              {isReinstallLoaderDropdownOpen && (
+                <div className="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-1 text-xs shadow-soft">
+                  {reinstallLoaderOptions.map((opt) => (
+                    <button
+                      key={opt.version}
+                      type="button"
+                      onClick={() => {
+                        setReinstallDialog((prev) =>
+                          prev ? { ...prev, selectedLoaderVersion: opt.version } : null,
+                        );
+                        setIsReinstallLoaderDropdownOpen(false);
+                      }}
+                      className={`flex w-full rounded-lg px-3 py-1.5 text-left ${
+                        reinstallDialog.selectedLoaderVersion === opt.version
+                          ? "bg-white/90 text-black"
+                          : "text-white/80 hover:bg-white/10"
+                      }`}
+                    >
+                      {opt.version}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReinstallDialog(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={installingVersionId === reinstallDialog.version.id}
+                onClick={() => void confirmReinstall()}
+                className="interactive-press rounded-xl bg-white/90 px-4 py-1.5 text-xs font-semibold text-black hover:bg-white"
+              >
+                {tt("settings.versions.manage.reinstallConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {simpleDeleteDialog && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setSimpleDeleteDialog(null)}
+        >
+          <div
+            className="glass-panel w-[min(90vw,24rem)] rounded-[22px] border border-white/15 bg-[#14141c]/95 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="version-delete-simple-title"
+          >
+            <p
+              id="version-delete-simple-title"
+              className="mb-5 text-sm leading-relaxed text-white/90"
+            >
+              {tt("settings.versions.delete.simplePrompt", {
+                version: simpleDeleteDialog.version.id,
+              })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSimpleDeleteDialog(null)}
+                className="interactive-press rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/18"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={deletingVersionId === simpleDeleteDialog.version.id}
+                onClick={() => {
+                  const { version, scope, targetLabel } = simpleDeleteDialog;
+                  setSimpleDeleteDialog(null);
+                  void performDelete(version, scope, targetLabel);
+                }}
+                className="interactive-press rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-amber-400 disabled:opacity-50"
+              >
+                {tt("common.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteDialog && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setDeleteDialog(null)}
+        >
+          <div
+            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-sm font-semibold text-white">
+              {tt("settings.versions.delete.title", { version: deleteDialog.version.id })}
+            </h3>
+            <p className="mb-4 text-xs text-white/70">
+              {tt("settings.versions.delete.choicePrompt", {
+                version: deleteDialog.version.id,
+              })}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={deletingVersionId === deleteDialog.version.id}
+                onClick={() => {
+                  const { version, details } = deleteDialog;
+                  setDeleteDialog(null);
+                  void performDelete(
+                    version,
+                    "game",
+                    tt("settings.versions.delete.gameOnly", {
+                      gameVersion: details.gameVersion,
+                    }),
+                  );
+                }}
+                className="interactive-press rounded-xl border border-white/20 px-4 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+              >
+                {tt("settings.versions.delete.gameOnly", {
+                  gameVersion: deleteDialog.details.gameVersion,
+                })}
+              </button>
+              <button
+                type="button"
+                disabled={deletingVersionId === deleteDialog.version.id}
+                onClick={() => {
+                  const { version, details } = deleteDialog;
+                  const suffix =
+                    details.loaderVersions.length > 0
+                      ? ` (${details.loaderVersions.join(", ")})`
+                      : "";
+                  setDeleteDialog(null);
+                  void performDelete(
+                    version,
+                    "loader",
+                    tt("settings.versions.delete.loaderOnly", { loaderSuffix: suffix }),
+                  );
+                }}
+                className="interactive-press rounded-xl border border-white/20 px-4 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+              >
+                {tt("settings.versions.delete.loaderOnly", {
+                  loaderSuffix:
+                    deleteDialog.details.loaderVersions.length > 0
+                      ? ` (${deleteDialog.details.loaderVersions.join(", ")})`
+                      : "",
+                })}
+              </button>
+              <button
+                type="button"
+                disabled={deletingVersionId === deleteDialog.version.id}
+                onClick={() => {
+                  const { version } = deleteDialog;
+                  setDeleteDialog(null);
+                  void performDelete(version, "all", version.id);
+                }}
+                className="interactive-press rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-2 text-left text-xs font-semibold text-rose-100 hover:bg-rose-500/25"
+              >
+                {tt("settings.versions.delete.all")}
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteDialog(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {repairPrompt && (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -1102,18 +1666,36 @@ export function SettingsTab({
           </div>
         </div>
       )}
-      <div className="flex flex-1 min-h-0 w-full items-center justify-center overflow-hidden px-4">
+      <div
+        className={`flex min-h-0 w-full flex-1 overflow-hidden ${
+          fillPane ? "px-1 py-1" : "items-center justify-center px-4 py-4"
+        }`}
+      >
         <div
           className={[
-            "w-full min-h-0 overflow-hidden",
-            "max-w-[clamp(360px,82vw,1200px)]",
-            "max-h-[clamp(260px,78vh,860px)]",
+            "flex w-full min-h-0 flex-col gap-3",
+            fillPane
+              ? "h-full max-w-none"
+              : "max-h-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl",
           ].join(" ")}
         >
-          <div className="glass-panel h-full w-full overflow-y-auto px-6 py-5">
+          <div
+            className={[
+              "glass-panel w-full overflow-hidden",
+              fillPane ? "flex min-h-0 flex-1 flex-col" : "",
+            ].join(" ")}
+          >
+          <div
+            className={[
+              "custom-scrollbar px-6 py-5",
+              fillPane
+                ? "min-h-0 flex-1 overflow-y-auto"
+                : "max-h-[min(72vh,calc(100vh-11rem))] overflow-y-auto xl:max-h-[min(78vh,calc(100vh-10rem))] 2xl:max-h-[min(84vh,calc(100vh-9rem))]",
+            ].join(" ")}
+          >
           {settingsTab === "game" && (
             <SettingsCard title={tt("settings.card.game")}>
-              <div className="mb-4 flex items-center gap-2 rounded-full bg-white/10 p-1 relative overflow-hidden">
+              <div className="mb-4 flex items-center rounded-full bg-white/10 p-1 relative overflow-hidden">
                 <div
                   className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
                   style={{
@@ -1352,13 +1934,6 @@ export function SettingsTab({
                 onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
               />
               <SettingsToggle
-                label={tt("settings.versions.forgeIpv6Download.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.forge_ipv6_download ?? false}
-                onChange={(value: boolean) => updateSettings({ forge_ipv6_download: value })}
-              />
-              <SettingsToggle
                 label={tt("settings.versions.forgeProxyFallback.label")}
                 yesLabel={tt("settings.common.yes")}
                 noLabel={tt("settings.common.no")}
@@ -1515,34 +2090,47 @@ export function SettingsTab({
                   </AnimatePresence>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-white/90">
                   {tt("settings.versions.available.label")}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        setIsLoadingVersions(true);
-                        const [available] = await Promise.all([
-                          loadAvailableByLoader(versionsLoader),
-                          loadInstalledVersions(),
-                        ]);
-                        setAvailableVersions(available);
-                      } catch (e) {
-                        console.error("Failed to refresh versions list:", e);
-                        showNotification(
-                          "error",
-                          tt("settings.versions.refreshFailed"),
-                        );
-                      }
-                    })();
-                  }}
-                  className="interactive-press rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/40 hover:text-white"
-                >
-                  {tt("settings.versions.refresh")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {versionsLoader === "vanilla" && (
+                    <button
+                      type="button"
+                      onClick={() => void handleImportCustomVersion()}
+                      className="interactive-press rounded-full border border-amber-400/40 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:border-amber-300/60 hover:text-amber-50"
+                    >
+                      {tt("settings.versions.custom.importButton")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          setIsLoadingVersions(true);
+                          const [available] = await Promise.all([
+                            loadAvailableByLoader(versionsLoader),
+                            loadInstalledVersions(),
+                          ]);
+                          setAvailableVersions(available);
+                        } catch (e) {
+                          console.error("Failed to refresh versions list:", e);
+                          showNotification(
+                            "error",
+                            tt("settings.versions.refreshFailed"),
+                          );
+                        } finally {
+                          setIsLoadingVersions(false);
+                        }
+                      })();
+                    }}
+                    className="interactive-press rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/40 hover:text-white"
+                  >
+                    {tt("settings.versions.refresh")}
+                  </button>
+                </div>
               </div>
               <div className="h-48 min-h-[12rem] overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-2">
                 {isLoadingVersions && (
@@ -1586,7 +2174,7 @@ export function SettingsTab({
                               <div className="mt-0.5 text-[11px] text-white/60">
                                 {v.release_time
                                   ? new Date(v.release_time).toLocaleString(
-                                      language === "ru" ? "ru-RU" : "en-US",
+                                      localeTag(language),
                                     )
                                   : "—"}
                               </div>
@@ -1607,8 +2195,12 @@ export function SettingsTab({
                               )}
                               <button
                                 type="button"
-                                disabled={installingVersionId === v.id}
-                                onClick={() => void handleInstallVersion(v)}
+                                disabled={
+                                  installingVersionId === v.id || deletingVersionId === v.id
+                                }
+                                onClick={() =>
+                                  void (installed ? openReinstallDialog(v) : handleInstallVersion(v))
+                                }
                                 className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
                                   installingVersionId === v.id
                                     ? "cursor-default bg-white/10 text-white/60"
@@ -1622,20 +2214,42 @@ export function SettingsTab({
                                     : tt("settings.versions.action.install")}
                               </button>
                               {installed && (
-                                <button
-                                  type="button"
-                                  disabled={checkingVersionId === v.id || installingVersionId === v.id}
-                                  onClick={() => void handleCheckVersionFiles(v)}
-                                  className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
-                                    checkingVersionId === v.id
-                                      ? "cursor-default bg-white/10 text-white/60"
-                                      : "border border-white/25 text-white/80 hover:border-white/40 hover:text-white"
-                                  }`}
-                                >
-                                  {checkingVersionId === v.id
-                                    ? tt("settings.versions.verify.checking")
-                                    : tt("settings.versions.verify.button")}
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      checkingVersionId === v.id ||
+                                      installingVersionId === v.id ||
+                                      deletingVersionId === v.id
+                                    }
+                                    onClick={() => void handleCheckVersionFiles(v)}
+                                    className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+                                      checkingVersionId === v.id
+                                        ? "cursor-default bg-white/10 text-white/60"
+                                        : "border border-white/25 text-white/80 hover:border-white/40 hover:text-white"
+                                    }`}
+                                  >
+                                    {checkingVersionId === v.id
+                                      ? tt("settings.versions.verify.checking")
+                                      : tt("settings.versions.verify.button")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      installingVersionId === v.id || deletingVersionId === v.id
+                                    }
+                                    onClick={() => void openDeleteFlow(v)}
+                                    className={`interactive-press rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+                                      deletingVersionId === v.id
+                                        ? "cursor-default bg-white/10 text-white/60"
+                                        : "border border-rose-400/35 text-rose-200 hover:border-rose-300/55 hover:text-rose-100"
+                                    }`}
+                                  >
+                                    {deletingVersionId === v.id
+                                      ? tt("settings.versions.action.deleting")
+                                      : tt("settings.versions.action.delete")}
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -1645,6 +2259,30 @@ export function SettingsTab({
                   </div>
                 )}
               </div>
+              {installingVersionId && (
+                <div className="mt-3 space-y-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                    {tt("settings.versions.installLog", { version: installingVersionId })}
+                  </div>
+                  <div className="custom-scrollbar max-h-36 min-h-[5rem] overflow-y-auto rounded-xl border border-white/10 bg-black/80 px-3 py-2 font-mono text-[10px] text-emerald-200/90">
+                    {installLogLines.length > 0 ? (
+                      installLogLines.map((entry, idx) => (
+                        <div
+                          key={`${idx}-${entry.line.slice(0, 24)}`}
+                          className={`whitespace-pre break-all ${
+                            entry.source === "stderr" ? "text-red-300" : ""
+                          }`}
+                        >
+                          {entry.line}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-white/45">{tt("play.install.logWaiting")}</div>
+                    )}
+                    <div ref={installLogEndRef} />
+                  </div>
+                </div>
+              )}
               </div>
             </SettingsCard>
           )}
@@ -1744,6 +2382,20 @@ export function SettingsTab({
                   value={settings?.ui_sounds_enabled ?? true}
                   onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
                 />
+                <SettingsToggle
+                  label={tt("settings.launcher.splitView.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={settings?.split_view_enabled ?? false}
+                  onChange={(v) => updateSettings({ split_view_enabled: v })}
+                />
+                <SettingsToggle
+                  label={tt("settings.launcher.disableAnimations.label")}
+                  yesLabel={tt("settings.common.yes")}
+                  noLabel={tt("settings.common.no")}
+                  value={settings?.animations_disabled ?? false}
+                  onChange={(v) => updateSettings({ animations_disabled: v })}
+                />
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-white/90">
                     {tt("settings.launcher.interfaceLanguage.label")}
@@ -1759,36 +2411,23 @@ export function SettingsTab({
                         width: `${languageIndicator.width}px`,
                       }}
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLanguage("ru");
-                        updateSettings({ interface_language: "ru" });
-                      }}
-                      ref={(el) => {
-                        languageTabRefs.current.ru = el;
-                      }}
-                      className={`interactive-press relative z-10 min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-                        language === "ru" ? "text-black" : "text-white/70 hover:text-white"
-                      }`}
-                    >
-                      {tt("settings.launcher.interfaceLanguage.ru")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLanguage("en");
-                        updateSettings({ interface_language: "en" });
-                      }}
-                      ref={(el) => {
-                        languageTabRefs.current.en = el;
-                      }}
-                      className={`interactive-press relative z-10 min-w-[80px] rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-                        language === "en" ? "text-black" : "text-white/70 hover:text-white"
-                      }`}
-                    >
-                      {tt("settings.launcher.interfaceLanguage.en")}
-                    </button>
+                    {SUPPORTED_LANGUAGES.map((langCode) => (
+                      <button
+                        key={langCode}
+                        type="button"
+                        onClick={() => {
+                          setLanguage(langCode);
+                        }}
+                        ref={(el) => {
+                          languageTabRefs.current[langCode] = el;
+                        }}
+                        className={`interactive-press relative z-10 min-w-[72px] rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          language === langCode ? "text-black" : "text-white/70 hover:text-white"
+                        }`}
+                      >
+                        {tt(`settings.launcher.interfaceLanguage.${langCode}`)}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-4">
@@ -1985,7 +2624,7 @@ export function SettingsTab({
                             filters: [
                               {
                                 name: tt("settings.common.imagesFilterName"),
-                                extensions: ["png", "jpg", "jpeg", "webp"],
+                                extensions: ["png", "jpg", "jpeg", "webp", "gif"],
                               },
                             ],
                           });
@@ -2039,6 +2678,61 @@ export function SettingsTab({
                     onChange={(v) => updateSettings({ background_blur_enabled: v })}
                   />
                 </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm text-white/90">
+                    {tt("settings.launcher.sidebarPosition.label")}
+                  </span>
+                  <div
+                    ref={sidebarPositionDropdownRef}
+                    className="relative min-w-[10rem] shrink-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsSidebarPositionDropdownOpen((prev) => !prev)}
+                      className="interactive-press flex h-10 w-full min-w-[10rem] items-center justify-between rounded-xl border border-white/20 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/35 hover:bg-black/40"
+                    >
+                      <span>
+                        {tt(
+                          `settings.launcher.sidebarPosition.${parseSidebarPosition(settings?.sidebar_position)}`,
+                        )}
+                      </span>
+                      <span className="text-[10px] text-white/50">▾</span>
+                    </button>
+                    <AnimatePresence>
+                      {isSidebarPositionDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                          transition={{ duration: 0.14, ease: "easeOut" }}
+                          className="absolute right-0 z-30 mt-1 w-full min-w-[10rem] overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                        >
+                          {SIDEBAR_POSITIONS.map((pos) => {
+                            const active =
+                              parseSidebarPosition(settings?.sidebar_position) === pos;
+                            return (
+                              <button
+                                key={pos}
+                                type="button"
+                                onClick={() => {
+                                  updateSettings({ sidebar_position: pos });
+                                  setIsSidebarPositionDropdownOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                  active
+                                    ? "bg-white/90 text-black"
+                                    : "text-white/80 hover:bg-white/10"
+                                }`}
+                              >
+                                <span>{tt(`settings.launcher.sidebarPosition.${pos}`)}</span>
+                              </button>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm text-white/90">
                     {tt("settings.launcher.sidebarOrder.label")}
@@ -2055,6 +2749,8 @@ export function SettingsTab({
                               ? "app.sidebar.play"
                               : id === "settings"
                                 ? "app.sidebar.settings"
+                                : id === "friends"
+                                  ? "app.sidebar.friends"
                                 : id === "mods"
                                   ? "app.sidebar.mods"
                                   : "app.sidebar.modpacks",
@@ -2096,6 +2792,9 @@ export function SettingsTab({
                     <div className="flex flex-col">
                       <span className="text-sm text-white/90">
                         {tt("settings.launcher.cache.label")}
+                      </span>
+                      <span className="text-xs text-white/60">
+                        {tt("settings.launcher.cache.description")}
                       </span>
                       <span className="text-xs text-white/60">
                         {isCacheLoading
@@ -2150,10 +2849,9 @@ export function SettingsTab({
           )}
 
           </div>
-        </div>
-      </div>
+          </div>
 
-      <div className="mt-4 mb-6 flex items-center justify-center">
+          <div className="flex shrink-0 justify-center">
         <div className="relative flex items-center gap-0 rounded-full border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
           <div
             className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
@@ -2197,6 +2895,8 @@ export function SettingsTab({
               </button>
             );
           })}
+        </div>
+          </div>
         </div>
       </div>
     </div>
