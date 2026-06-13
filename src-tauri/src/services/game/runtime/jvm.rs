@@ -99,6 +99,8 @@ pub(crate) fn build_java_command(
         }
     }
 
+//bebebe
+
     let xms_flag = format!("-Xms{}", format_mb_to_spec(xms_mb));
     let xmx_flag = format!("-Xmx{}", format_mb_to_spec(xmx_mb));
 
