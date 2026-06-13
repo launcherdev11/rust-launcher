@@ -30,6 +30,22 @@ pub struct CurseforgeSearchResult {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct CurseforgeModDetails {
+    pub id: u32,
+    pub name: String,
+    pub summary: String,
+    pub description: String,
+    pub download_count: u64,
+    pub thumbnail_url: Option<String>,
+    pub author: String,
+    pub website_url: Option<String>,
+    pub wiki_url: Option<String>,
+    pub issues_url: Option<String>,
+    pub source_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CurseforgeFileHit {
     pub id: u32,
     pub display_name: String,
@@ -70,10 +86,26 @@ struct CfMod {
     slug: String,
     name: String,
     summary: String,
+    #[serde(default)]
+    description: String,
     download_count: u64,
     class_id: u32,
     authors: Vec<CfAuthor>,
     logo: Option<CfLogo>,
+    links: Option<CfModLinks>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CfModLinks {
+    #[serde(default)]
+    website_url: Option<String>,
+    #[serde(default)]
+    wiki_url: Option<String>,
+    #[serde(default)]
+    issues_url: Option<String>,
+    #[serde(default)]
+    source_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -315,6 +347,42 @@ pub async fn curseforge_search_mods(
         index: body.pagination.index,
         page_size: body.pagination.page_size,
         total_count: body.pagination.total_count,
+    })
+}
+
+#[tauri::command]
+pub async fn curseforge_get_mod(mod_id: u32) -> Result<CurseforgeModDetails, String> {
+    let path = format!("/mods/{mod_id}");
+    let client = cf_client()?;
+    let body: CfApiResponse<CfMod> = cf_get_json(&client, &path).await?;
+    let m = body.data;
+    let author = m
+        .authors
+        .first()
+        .map(|a| a.name.clone())
+        .unwrap_or_else(|| "Unknown".to_string());
+    let thumbnail_url = m
+        .logo
+        .as_ref()
+        .and_then(|l| l.thumbnail_url.clone().or_else(|| l.url.clone()));
+    let links = m.links.unwrap_or(CfModLinks {
+        website_url: None,
+        wiki_url: None,
+        issues_url: None,
+        source_url: None,
+    });
+    Ok(CurseforgeModDetails {
+        id: m.id,
+        name: m.name,
+        summary: m.summary,
+        description: m.description,
+        download_count: m.download_count,
+        thumbnail_url,
+        author,
+        website_url: links.website_url,
+        wiki_url: links.wiki_url,
+        issues_url: links.issues_url,
+        source_url: links.source_url,
     })
 }
 
