@@ -94,8 +94,25 @@ body {
   will-change: transform, opacity;
 }
 
+@keyframes mods-detail-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.mods-detail-panel-animate {
+  animation: mods-detail-panel-in 260ms ease-out both;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .tab-animate {
+  .tab-animate,
+  .mods-detail-panel-animate {
     animation: none;
   }
 }
@@ -111,6 +128,7 @@ html.launcher-no-animations *::after {
 }
 
 html.launcher-no-animations .tab-animate,
+html.launcher-no-animations .mods-detail-panel-animate,
 html.launcher-no-animations .animate-notification-slide-in,
 html.launcher-no-animations .animate-notification-slide-out {
   animation: none;

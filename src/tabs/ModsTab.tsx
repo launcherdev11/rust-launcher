@@ -5,9 +5,11 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useT, t, type Language } from "../i18n";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
 
@@ -145,6 +147,28 @@ function invokeErrorMessage(e: unknown, fallback: string): string {
 function isDownloadCancelledMessage(msg: string): boolean {
   const lower = msg.toLowerCase();
   return msg.includes("отменена") || lower.includes("cancelled") || lower.includes("canceled");
+}
+
+function modrinthProjectUrl(
+  projectType: ModrinthProjectType,
+  slug: string,
+): string {
+  return `https://modrinth.com/${projectType}/${slug}`;
+}
+
+function curseforgeProjectUrl(
+  slug: string,
+  contentType: ModrinthContentType,
+): string {
+  const segment =
+    contentType === "resourcepack"
+      ? "texture-packs"
+      : contentType === "shader"
+        ? "customization"
+        : contentType === "modpack"
+          ? "modpacks"
+          : "mc-mods";
+  return `https://www.curseforge.com/minecraft/${segment}/${slug}`;
 }
 
 function HeartStatIcon() {
@@ -583,12 +607,15 @@ export function ModsTab({
         setModrinthProjects(data.hits);
         setModrinthTotalHits(data.total_hits ?? data.hits.length);
 
-        const nextSelected =
-          data.hits.find(
-            (p) => p.project_id === modrinthSelectedProject?.project_id,
-          ) ?? data.hits[0] ?? null;
-        setModrinthSelectedProject(nextSelected);
-        if (!nextSelected) {
+        const stillSelected = modrinthSelectedProject
+          ? data.hits.find(
+              (p) => p.project_id === modrinthSelectedProject.project_id,
+            ) ?? null
+          : null;
+        if (stillSelected) {
+          setModrinthSelectedProject(stillSelected);
+        } else {
+          setModrinthSelectedProject(null);
           setModrinthVersions([]);
         }
       } catch (e) {
@@ -662,12 +689,13 @@ export function ModsTab({
         setCurseforgeProjects(data.hits);
         setCurseforgeTotalHits(data.totalCount ?? data.hits.length);
 
-        const nextSelected =
-          data.hits.find((p) => p.id === curseforgeSelectedProject?.id) ??
-          data.hits[0] ??
-          null;
-        setCurseforgeSelectedProject(nextSelected);
-        if (!nextSelected) {
+        const stillSelected = curseforgeSelectedProject
+          ? data.hits.find((p) => p.id === curseforgeSelectedProject.id) ?? null
+          : null;
+        if (stillSelected) {
+          setCurseforgeSelectedProject(stillSelected);
+        } else {
+          setCurseforgeSelectedProject(null);
           setCurseforgeVersions([]);
         }
       } catch (e) {
@@ -719,6 +747,11 @@ export function ModsTab({
     setModrinthPage(0);
     setCurseforgePage(0);
   }, [modrinthContentType, modrinthGameVersion, modrinthLoader, contentProvider]);
+
+  useEffect(() => {
+    setModrinthSelectedProject(null);
+    setCurseforgeSelectedProject(null);
+  }, [modrinthContentType, contentProvider]);
 
   const setContentProviderPersisted = (provider: ContentProvider) => {
     setContentProvider(provider);
@@ -941,7 +974,403 @@ export function ModsTab({
   const currentPage = catalogPage + 1;
   const canPrevPage = currentPage > 1;
   const canNextPage = currentPage < totalPages;
-  const hasSelectedProject = catalogSelectedKey != null;
+
+  const selectedCatalogProject = useMemo(
+    () =>
+      catalogSelectedKey
+        ? (catalogProjects.find((p) => p.key === catalogSelectedKey) ?? null)
+        : null,
+    [catalogProjects, catalogSelectedKey],
+  );
+  const showDetailPanel = selectedCatalogProject != null;
+
+  const selectCatalogProject = useCallback(
+    (key: string) => {
+      if (contentProvider === "modrinth") {
+        const hit = modrinthProjects.find((m) => m.project_id === key);
+        if (!hit) return;
+        setModrinthSelectedProject(hit);
+      } else {
+        const hit = curseforgeProjects.find((m) => String(m.id) === key);
+        if (!hit) return;
+        setCurseforgeSelectedProject(hit);
+      }
+    },
+    [contentProvider, curseforgeProjects, modrinthProjects],
+  );
+
+  const selectedProjectPageUrl = useMemo(() => {
+    if (contentProvider === "modrinth" && modrinthSelectedProject) {
+      return modrinthProjectUrl(
+        modrinthSelectedProject.project_type,
+        modrinthSelectedProject.slug,
+      );
+    }
+    if (contentProvider === "curseforge" && curseforgeSelectedProject) {
+      return curseforgeProjectUrl(
+        curseforgeSelectedProject.slug,
+        modrinthContentType,
+      );
+    }
+    return null;
+  }, [
+    contentProvider,
+    modrinthSelectedProject,
+    curseforgeSelectedProject,
+    modrinthContentType,
+  ]);
+
+  const handleOpenExternalLink = useCallback(async (url: string) => {
+    try {
+      await openUrl(url);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const handleCatalogVersionDownload = useCallback(
+    async (v: CatalogVersion) => {
+      const canDownload =
+        contentProvider === "curseforge"
+          ? Boolean(curseforgeSelectedProject && v.filename)
+          : Boolean(v.file_url && v.filename);
+      if (!canDownload) return;
+
+      const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
+      const jobLabel =
+        modrinthSelectedProject?.title ??
+        curseforgeSelectedProject?.name ??
+        v.filename;
+      const fileKind: DownloadJobKind =
+        modrinthContentType === "modpack" ? "modpack" : "mod";
+      registerDownloadJob?.({
+        id: jobId,
+        label: jobLabel,
+        kind: fileKind,
+      });
+      try {
+        if (
+          modrinthContentType === "modpack" &&
+          contentProvider === "modrinth"
+        ) {
+          modpackImportStopReasonRef.current = null;
+          try {
+            await invoke("reset_download_cancel");
+          } catch (resetErr) {
+            console.error(resetErr);
+          }
+          modpackDownloadJobIdRef.current = jobId;
+          setModpackImportBusy(true);
+          setModpackImportProgress({
+            phase: "start",
+            current: undefined,
+            total: undefined,
+            message: undefined,
+          });
+          const imported = await invoke<{
+            id: string;
+            name: string;
+          }>("download_modrinth_modpack_and_import", {
+            url: v.file_url,
+            filename: v.filename,
+            iconUrl: modrinthSelectedProject?.icon_url ?? null,
+          });
+          await invoke("set_selected_profile", { id: imported.id });
+          onOpenModpacksTab?.();
+          showNotification(
+            "success",
+            tt("mods.modpackImportSuccess", {
+              name: imported.name ?? imported.id,
+            }),
+          );
+        } else if (contentProvider === "curseforge") {
+          const modId = curseforgeSelectedProject?.id;
+          if (!modId) return;
+          await invoke("download_curseforge_file", {
+            modId,
+            fileId: Number(v.id),
+            category: modrinthContentType,
+            filename: v.filename,
+            profileId: activeProfileId ?? null,
+          });
+          if (activeProfileId) {
+            setInstalledFilenames((prev) => new Set([...prev, v.filename]));
+          }
+          showNotification(
+            "success",
+            modrinthContentType === "modpack"
+              ? tt("mods.curseforgeModpackHint")
+              : activeProfileId
+                ? tt("mods.saveSuccessProfile", {
+                    filename: v.filename,
+                  })
+                : tt("mods.saveSuccessFolder", {
+                    filename: v.filename,
+                    folder:
+                      modrinthContentType === "mod"
+                        ? "mods"
+                        : modrinthContentType === "resourcepack"
+                          ? "resourcepacks"
+                          : modrinthContentType === "shader"
+                            ? "shaderpacks"
+                            : "modpacks",
+                  }),
+          );
+        } else if (
+          modrinthContentType === "mod" &&
+          contentProvider === "modrinth"
+        ) {
+          const downloaded = await invoke<
+            { filename: string; skipped: boolean }[]
+          >("download_modrinth_with_dependencies", {
+            category: modrinthContentType,
+            versionId: v.id,
+            gameVersion: modrinthGameVersion,
+            loader: modrinthLoader,
+            profileId: activeProfileId ?? null,
+          });
+          if (activeProfileId) {
+            setInstalledFilenames((prev) => {
+              const next = new Set(prev);
+              for (const item of downloaded) {
+                next.add(item.filename);
+              }
+              return next;
+            });
+          }
+          const skippedCount = downloaded.filter((item) => item.skipped).length;
+          const downloadedCount = downloaded.length - skippedCount;
+          if (downloadedCount === 0) {
+            showNotification(
+              "success",
+              tt("mods.alreadyInstalled", {
+                filename: v.filename,
+              }),
+            );
+          } else if (skippedCount > 0) {
+            showNotification(
+              "success",
+              tt("mods.saveSuccessWithDepsSkipped", {
+                downloaded: downloadedCount,
+                skipped: skippedCount,
+              }),
+            );
+          } else {
+            const depCount = Math.max(0, downloadedCount - 1);
+            showNotification(
+              "success",
+              depCount > 0
+                ? tt("mods.saveSuccessWithDeps", {
+                    filename: v.filename,
+                    count: depCount,
+                  })
+                : activeProfileId
+                  ? tt("mods.saveSuccessProfile", {
+                      filename: v.filename,
+                    })
+                  : tt("mods.saveSuccessFolder", {
+                      filename: v.filename,
+                      folder: "mods",
+                    }),
+            );
+          }
+        } else {
+          await invoke("download_modrinth_file", {
+            category: modrinthContentType,
+            url: v.file_url,
+            filename: v.filename,
+            profileId: activeProfileId ?? null,
+          });
+          if (activeProfileId) {
+            setInstalledFilenames((prev) => new Set([...prev, v.filename]));
+          }
+          showNotification(
+            "success",
+            activeProfileId
+              ? tt("mods.saveSuccessProfile", {
+                  filename: v.filename,
+                })
+              : tt("mods.saveSuccessFolder", {
+                  filename: v.filename,
+                  folder:
+                    modrinthContentType === "resourcepack"
+                      ? "resourcepacks"
+                      : "shaderpacks",
+                }),
+          );
+        }
+      } catch (e) {
+        const msg = invokeErrorMessage(
+          e,
+          contentProvider === "curseforge"
+            ? tt("mods.downloadFailedCurseforge")
+            : tt("mods.downloadFailedModrinth"),
+        );
+        const cancelled =
+          modpackImportStopReasonRef.current === "cancel" ||
+          isDownloadCancelledMessage(msg);
+        console.error(e);
+        if (cancelled) {
+          showNotification("info", tt("mods.modpackImport.cancelled"));
+        } else {
+          showNotification("error", msg);
+        }
+      } finally {
+        modpackDownloadJobIdRef.current = null;
+        modpackImportStopReasonRef.current = null;
+        finishDownloadJob?.(jobId);
+        if (
+          modrinthContentType === "modpack" &&
+          contentProvider === "modrinth"
+        ) {
+          setModpackImportBusy(false);
+          setModpackImportProgress(null);
+        }
+      }
+    },
+    [
+      activeProfileId,
+      contentProvider,
+      curseforgeSelectedProject,
+      finishDownloadJob,
+      makeDownloadJobId,
+      modrinthContentType,
+      modrinthGameVersion,
+      modrinthLoader,
+      modrinthSelectedProject,
+      onOpenModpacksTab,
+      registerDownloadJob,
+      showNotification,
+      tt,
+    ],
+  );
+
+  const renderCatalogVersionsList = (): ReactNode => {
+    if (catalogVersionsLoading) {
+      return (
+        <div className="py-8 text-center text-xs text-white/70">
+          {tt("mods.versionsLoading")}
+        </div>
+      );
+    }
+
+    if (modrinthContentType === "modpack" && modpackImportBusy) {
+      return (
+        <>
+          <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-white/80">
+                  {tt("mods.modpackImport.title")}
+                </div>
+                <div className="mt-1 text-[11px] text-white/60">
+                  {modpackImportPhaseLabel}
+                  {modpackImportProgress?.message
+                    ? `: ${modpackImportProgress.message}`
+                    : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleCancelModpackImport()}
+                className="interactive-press shrink-0 rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold text-white/80 hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full accent-bg transition-[width] duration-200"
+                style={{
+                  width: `${Math.max(0, Math.min(100, modpackImportPercent ?? 0))}%`,
+                }}
+              />
+            </div>
+            {modpackImportPercent != null && (
+              <div className="mt-1 text-[10px] text-white/50">
+                {modpackImportPercent}%
+              </div>
+            )}
+          </div>
+          {renderCatalogVersionRows()}
+        </>
+      );
+    }
+
+    if (catalogVersions.length === 0) {
+      return (
+        <div className="py-8 text-center text-xs text-white/60">
+          {tt("mods.noAvailableVersions")}
+        </div>
+      );
+    }
+
+    return renderCatalogVersionRows();
+  };
+
+  const renderCatalogVersionRows = (): ReactNode => (
+    <div>
+      {catalogVersions.map((v) => {
+        const isInstalled =
+          modrinthContentType !== "modpack" &&
+          v.filename &&
+          installedFilenames.has(v.filename);
+        const canDownload =
+          contentProvider === "curseforge"
+            ? Boolean(curseforgeSelectedProject && v.filename)
+            : Boolean(v.file_url && v.filename);
+        return (
+          <div
+            key={v.id}
+            className="first:mt-0 mt-2 flex items-center justify-between rounded-2xl bg-black/35 px-4 py-2.5 text-xs text-white/80"
+          >
+            <div className="mr-2 min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate font-semibold">
+                  {v.version_number}
+                </span>
+                {isInstalled && (
+                  <span className="shrink-0 rounded-full bg-emerald-500/80 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    {tt("mods.installed")}
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-white/55">
+                {modrinthGameVersion ? (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    MC {modrinthGameVersion}
+                  </span>
+                ) : (
+                  v.game_versions.length > 0 && (
+                    <span>{v.game_versions.join(", ")}</span>
+                  )
+                )}
+                {v.loaders.length > 0 && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5">
+                    {v.loaders.join(", ")}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={
+                !canDownload ||
+                (modpackImportBusy &&
+                  modrinthContentType === "modpack" &&
+                  contentProvider === "modrinth")
+              }
+              onClick={() => void handleCatalogVersionDownload(v)}
+              className="interactive-press ml-2 inline-flex items-center justify-center rounded-full accent-bg px-3 py-1 text-[11px] font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+            >
+              <DownloadStatIcon />
+              <span className="ml-1">{tt("mods.download")}</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   const modpackImportPercent =
     modpackImportProgress?.total && modpackImportProgress.total > 0
@@ -1272,7 +1701,11 @@ export function ModsTab({
         </div>
       </div>
 
-      <div className="relative z-10 flex min-h-0 flex-1 gap-4 pb-4">
+      <div
+        className={`relative z-10 flex min-h-0 flex-1 pb-4 transition-[gap] duration-300 ease-out ${
+          showDetailPanel ? "gap-4" : "gap-0"
+        }`}
+      >
         <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="mb-2 flex items-center justify-between text-xs text-white/60">
             <div className="flex items-center gap-2">
@@ -1301,23 +1734,7 @@ export function ModsTab({
                     <button
                       key={p.key}
                       type="button"
-                      onClick={() => {
-                        if (contentProvider === "modrinth") {
-                          const hit = modrinthProjects.find(
-                            (m) => m.project_id === p.key,
-                          );
-                          if (hit) {
-                            setModrinthSelectedProject(hit);
-                          }
-                        } else {
-                          const hit = curseforgeProjects.find(
-                            (m) => String(m.id) === p.key,
-                          );
-                          if (hit) {
-                            setCurseforgeSelectedProject(hit);
-                          }
-                        }
-                      }}
+                      onClick={() => selectCatalogProject(p.key)}
                       className={`interactive-press w-full rounded-2xl border px-3 py-3 text-left transition ${
                         modsLayout === "grid"
                           ? "flex flex-col"
@@ -1420,327 +1837,66 @@ export function ModsTab({
 
         </div>
 
-        <div className="glass-panel relative z-0 flex w-80 min-h-0 flex-shrink-0 flex-col xl:w-96 2xl:w-[26rem]">
-          <div className="mb-2 text-xs text-white/60">
-            {hasSelectedProject ? `` : tt("mods.selectProject")}
-          </div>
-          {modrinthContentType === "modpack" && modpackImportBusy && (
-              <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
-                <div className="flex items-start justify-between gap-2">
+        <div
+          aria-hidden={!showDetailPanel}
+          className={`relative z-0 flex shrink-0 flex-col overflow-hidden transition-[width,opacity] duration-300 ease-out ${
+            showDetailPanel
+              ? "w-80 opacity-100 xl:w-96 2xl:w-[26rem]"
+              : "pointer-events-none w-0 opacity-0"
+          }`}
+        >
+          {selectedCatalogProject ? (
+            <div
+              key={catalogSelectedKey ?? undefined}
+              className="glass-panel mods-detail-panel-animate flex h-full w-80 min-h-0 flex-col p-4 xl:w-96 2xl:w-[26rem]"
+            >
+              <div className="mb-4 shrink-0 space-y-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/5">
+                    {selectedCatalogProject.icon_url ? (
+                      <img
+                        src={selectedCatalogProject.icon_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-[10px] text-white/50">
+                        {tt("mods.noIcon")}
+                      </span>
+                    )}
+                  </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-semibold text-white/80">
-                      {tt("mods.modpackImport.title")}
+                    <div className="truncate text-sm font-semibold text-white">
+                      {selectedCatalogProject.title}
                     </div>
-                    <div className="mt-1 text-[11px] text-white/60">
-                      {modpackImportPhaseLabel}
-                      {modpackImportProgress?.message
-                        ? `: ${modpackImportProgress.message}`
-                        : ""}
+                    <div className="truncate text-[10px] text-white/50">
+                      by {selectedCatalogProject.author}
                     </div>
                   </div>
+                </div>
+                {selectedCatalogProject.description ? (
+                  <p className="line-clamp-3 text-xs leading-relaxed text-white/65">
+                    {selectedCatalogProject.description}
+                  </p>
+                ) : null}
+                {selectedProjectPageUrl ? (
                   <button
                     type="button"
-                    onClick={() => void handleCancelModpackImport()}
-                    className="interactive-press shrink-0 rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold text-white/80 hover:bg-white/20"
+                    onClick={() => void handleOpenExternalLink(selectedProjectPageUrl)}
+                    className="interactive-press text-[11px] font-semibold text-violet-300 hover:text-violet-200"
                   >
-                    {tt("common.cancel")}
+                    {contentProvider === "modrinth"
+                      ? tt("mods.openOnModrinth")
+                      : tt("mods.openOnCurseforge")}
                   </button>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full accent-bg transition-[width] duration-200"
-                    style={{
-                      width: `${Math.max(0, Math.min(100, modpackImportPercent ?? 0))}%`,
-                    }}
-                  />
-                </div>
-                {modpackImportPercent != null && (
-                  <div className="mt-1 text-[10px] text-white/50">
-                    {modpackImportPercent}%
-                  </div>
-                )}
+                ) : null}
               </div>
-            )}
-          <div className="custom-scrollbar -mr-3 min-h-0 flex-1 overflow-y-auto pr-3">
-            {catalogVersionsLoading && (
-              <div className="py-8 text-center text-xs text-white/70">
-                {tt("mods.versionsLoading")}
+
+              <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                {renderCatalogVersionsList()}
               </div>
-            )}
-            {!catalogVersionsLoading && hasSelectedProject && (
-                <div>
-                  {catalogVersions.map((v) => {
-                    const isInstalled =
-                      modrinthContentType !== "modpack" &&
-                      v.filename &&
-                      installedFilenames.has(v.filename);
-                    const canDownload =
-                      contentProvider === "curseforge"
-                        ? Boolean(curseforgeSelectedProject && v.filename)
-                        : Boolean(v.file_url && v.filename);
-                    return (
-                      <div
-                        key={v.id}
-                        className="first:mt-0 mt-2 flex items-center justify-between rounded-2xl bg-black/35 px-3 py-2 text-xs text-white/80"
-                      >
-                        <div className="mr-2 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate font-semibold">
-                              {v.version_number}
-                            </span>
-                            {isInstalled && (
-                              <span className="shrink-0 rounded-full bg-emerald-500/80 px-2 py-0.5 text-[10px] font-semibold text-white">
-                                {tt("mods.installed")}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-white/55">
-                            {modrinthGameVersion ? (
-                              <span className="rounded-full bg-white/10 px-2 py-0.5">
-                                MC {modrinthGameVersion}
-                              </span>
-                            ) : (
-                              v.game_versions.length > 0 && (
-                                <span>{v.game_versions.join(", ")}</span>
-                              )
-                            )}
-                            {v.loaders.length > 0 && (
-                              <span className="rounded-full bg-white/10 px-2 py-0.5">
-                                {v.loaders.join(", ")}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={
-                            !canDownload ||
-                            (modpackImportBusy &&
-                              modrinthContentType === "modpack" &&
-                              contentProvider === "modrinth")
-                          }
-                          onClick={async () => {
-                            if (!canDownload) return;
-                            const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
-                            const jobLabel =
-                              modrinthSelectedProject?.title ??
-                              curseforgeSelectedProject?.name ??
-                              v.filename;
-                            const fileKind: DownloadJobKind =
-                              modrinthContentType === "modpack" ? "modpack" : "mod";
-                            registerDownloadJob?.({
-                              id: jobId,
-                              label: jobLabel,
-                              kind: fileKind,
-                            });
-                            try {
-                              if (
-                                modrinthContentType === "modpack" &&
-                                contentProvider === "modrinth"
-                              ) {
-                                modpackImportStopReasonRef.current = null;
-                                try {
-                                  await invoke("reset_download_cancel");
-                                } catch (resetErr) {
-                                  console.error(resetErr);
-                                }
-                                modpackDownloadJobIdRef.current = jobId;
-                                setModpackImportBusy(true);
-                                setModpackImportProgress({
-                                  phase: "start",
-                                  current: undefined,
-                                  total: undefined,
-                                  message: undefined,
-                                });
-                                const imported = await invoke<{
-                                  id: string;
-                                  name: string;
-                                }>("download_modrinth_modpack_and_import", {
-                                  url: v.file_url,
-                                  filename: v.filename,
-                                  iconUrl: modrinthSelectedProject?.icon_url ?? null,
-                                });
-                                await invoke("set_selected_profile", { id: imported.id });
-                                onOpenModpacksTab?.();
-                                showNotification(
-                                  "success",
-                                  tt("mods.modpackImportSuccess", {
-                                    name: imported.name ?? imported.id,
-                                  }),
-                                );
-                              } else if (contentProvider === "curseforge") {
-                                const modId = curseforgeSelectedProject?.id;
-                                if (!modId) return;
-                                await invoke("download_curseforge_file", {
-                                  modId,
-                                  fileId: Number(v.id),
-                                  category: modrinthContentType,
-                                  filename: v.filename,
-                                  profileId: activeProfileId ?? null,
-                                });
-                                if (activeProfileId) {
-                                  setInstalledFilenames((prev) =>
-                                    new Set([...prev, v.filename]),
-                                  );
-                                }
-                                showNotification(
-                                  "success",
-                                  modrinthContentType === "modpack"
-                                    ? tt("mods.curseforgeModpackHint")
-                                    : activeProfileId
-                                      ? tt("mods.saveSuccessProfile", {
-                                          filename: v.filename,
-                                        })
-                                      : tt("mods.saveSuccessFolder", {
-                                          filename: v.filename,
-                                          folder:
-                                            modrinthContentType === "mod"
-                                              ? "mods"
-                                              : modrinthContentType === "resourcepack"
-                                                ? "resourcepacks"
-                                                : modrinthContentType === "shader"
-                                                  ? "shaderpacks"
-                                                  : "modpacks",
-                                        }),
-                                );
-                              } else if (
-                                modrinthContentType === "mod" &&
-                                contentProvider === "modrinth"
-                              ) {
-                                const downloaded = await invoke<
-                                  { filename: string; skipped: boolean }[]
-                                >("download_modrinth_with_dependencies", {
-                                  category: modrinthContentType,
-                                  versionId: v.id,
-                                  gameVersion: modrinthGameVersion,
-                                  loader: modrinthLoader,
-                                  profileId: activeProfileId ?? null,
-                                });
-                                if (activeProfileId) {
-                                  setInstalledFilenames((prev) => {
-                                    const next = new Set(prev);
-                                    for (const item of downloaded) {
-                                      next.add(item.filename);
-                                    }
-                                    return next;
-                                  });
-                                }
-                                const skippedCount = downloaded.filter(
-                                  (item) => item.skipped,
-                                ).length;
-                                const downloadedCount =
-                                  downloaded.length - skippedCount;
-                                if (downloadedCount === 0) {
-                                  showNotification(
-                                    "success",
-                                    tt("mods.alreadyInstalled", {
-                                      filename: v.filename,
-                                    }),
-                                  );
-                                } else if (skippedCount > 0) {
-                                  showNotification(
-                                    "success",
-                                    tt("mods.saveSuccessWithDepsSkipped", {
-                                      downloaded: downloadedCount,
-                                      skipped: skippedCount,
-                                    }),
-                                  );
-                                } else {
-                                  const depCount = Math.max(
-                                    0,
-                                    downloadedCount - 1,
-                                  );
-                                  showNotification(
-                                    "success",
-                                    depCount > 0
-                                      ? tt("mods.saveSuccessWithDeps", {
-                                          filename: v.filename,
-                                          count: depCount,
-                                        })
-                                      : activeProfileId
-                                        ? tt("mods.saveSuccessProfile", {
-                                            filename: v.filename,
-                                          })
-                                        : tt("mods.saveSuccessFolder", {
-                                            filename: v.filename,
-                                            folder: "mods",
-                                          }),
-                                  );
-                                }
-                              } else {
-                                await invoke("download_modrinth_file", {
-                                  category: modrinthContentType,
-                                  url: v.file_url,
-                                  filename: v.filename,
-                                  profileId: activeProfileId ?? null,
-                                });
-                                if (activeProfileId) {
-                                  setInstalledFilenames((prev) =>
-                                    new Set([...prev, v.filename]),
-                                  );
-                                }
-                                showNotification(
-                                  "success",
-                                  activeProfileId
-                                    ? tt("mods.saveSuccessProfile", {
-                                        filename: v.filename,
-                                      })
-                                    : tt("mods.saveSuccessFolder", {
-                                        filename: v.filename,
-                                        folder:
-                                          modrinthContentType === "resourcepack"
-                                            ? "resourcepacks"
-                                            : "shaderpacks",
-                                      }),
-                                );
-                              }
-                            } catch (e) {
-                              const msg = invokeErrorMessage(
-                                e,
-                                contentProvider === "curseforge"
-                                  ? tt("mods.downloadFailedCurseforge")
-                                  : tt("mods.downloadFailedModrinth"),
-                              );
-                              const cancelled =
-                                modpackImportStopReasonRef.current === "cancel" ||
-                                isDownloadCancelledMessage(msg);
-                              console.error(e);
-                              if (cancelled) {
-                                showNotification("info", tt("mods.modpackImport.cancelled"));
-                              } else {
-                                showNotification("error", msg);
-                              }
-                            } finally {
-                              modpackDownloadJobIdRef.current = null;
-                              modpackImportStopReasonRef.current = null;
-                              finishDownloadJob?.(jobId);
-                              if (
-                                modrinthContentType === "modpack" &&
-                                contentProvider === "modrinth"
-                              ) {
-                                setModpackImportBusy(false);
-                                setModpackImportProgress(null);
-                              }
-                            }
-                          }}
-                          className="interactive-press ml-2 inline-flex items-center justify-center rounded-full accent-bg px-3 py-1 text-[11px] font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
-                        >
-                          <DownloadStatIcon />
-                          <span className="ml-1">{tt("mods.download")}</span>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            {!catalogVersionsLoading &&
-              hasSelectedProject &&
-              catalogVersions.length === 0 && (
-                <div className="py-8 text-center text-xs text-white/60">
-                  {tt("mods.noAvailableVersions")}
-                </div>
-              )}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
