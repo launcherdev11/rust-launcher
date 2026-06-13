@@ -6,7 +6,35 @@ use reqwest::Client;
 use sha1::{Digest, Sha1};
 
 use crate::services::game::state::CANCEL_DOWNLOAD;
-use crate::services::game::version_types::{Library, LibraryArtifact, OsInfo};
+use crate::services::game::version_types::{Library, LibraryArtifact, LibraryDownloads, OsInfo};
+
+pub(crate) fn fabric_intermediary_library(game_version: &str) -> Library {
+    let name = format!("net.fabricmc:intermediary:{game_version}");
+    let path = fabric_library_path(&name);
+    Library {
+        name,
+        downloads: LibraryDownloads {
+            artifact: Some(LibraryArtifact {
+                path: path.clone(),
+                url: format!("https://maven.fabricmc.net/{path}"),
+                sha1: None,
+                size: 0,
+            }),
+            classifiers: None,
+        },
+        rules: vec![],
+        extract: None,
+        natives: None,
+    }
+}
+
+pub(crate) fn ensure_fabric_intermediary_library(libraries: &mut Vec<Library>, game_version: &str) {
+    let token = format!("net.fabricmc:intermediary:{game_version}");
+    if libraries.iter().any(|l| l.name == token) {
+        return;
+    }
+    libraries.push(fabric_intermediary_library(game_version));
+}
 
 pub(crate) fn fabric_library_path(name: &str) -> String {
     let parts: Vec<&str> = name.splitn(3, ':').collect();

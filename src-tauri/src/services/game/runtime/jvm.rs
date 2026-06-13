@@ -10,7 +10,7 @@ use crate::services::java as java_service;
 
 pub(crate) use crate::services::game::arguments::{
     ensure_forge_ignore_list_includes_vanilla_client_jar, ensure_forge_safe_opens,
-    filter_forge_problematic_jvm_args, remove_add_opens_for_java_under_9,
+    filter_forge_problematic_jvm_args, filter_launcher_owned_jvm_args, remove_add_opens_for_java_under_9,
 };
 
 pub(crate) fn build_java_command(
@@ -39,12 +39,10 @@ pub(crate) fn build_java_command(
     };
 
     #[cfg(target_os = "windows")]
-    if settings.show_console_on_launch {
-        if let Some(parent) = java_path.parent() {
-            let candidate = parent.join("java.exe");
-            if candidate.exists() {
-                java_path = candidate;
-            }
+    if let Some(parent) = java_path.parent() {
+        let candidate = parent.join("java.exe");
+        if candidate.exists() {
+            java_path = candidate;
         }
     }
 

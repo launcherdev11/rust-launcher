@@ -5,17 +5,19 @@ use tauri::command;
 
 use crate::services::game::state::{CANCEL_DOWNLOAD, GAME_PROCESS_PID};
 
-pub(crate) fn is_minecraft_java_process_running() -> bool {
+fn is_minecraft_java_process_running_except(exclude_pid: u32) -> bool {
     let mut sys = System::new_all();
     sys.refresh_processes(ProcessesToUpdate::All, true);
-    for (_pid, process) in sys.processes() {
+    for (pid, process) in sys.processes() {
+        if exclude_pid != 0 && pid.as_u32() == exclude_pid {
+            continue;
+        }
+
         let name = process.name().to_string_lossy().to_ascii_lowercase();
         if !(name.contains("javaw.exe")
             || name == "javaw"
-            || name == "javaw.exe"
             || name.contains("java.exe")
-            || name == "java"
-            || name == "java.exe")
+            || name == "java")
         {
             continue;
         }
@@ -45,24 +47,39 @@ pub(crate) fn is_minecraft_java_process_running() -> bool {
     false
 }
 
+pub(crate) fn is_external_minecraft_running() -> bool {
+    let our_pid = GAME_PROCESS_PID.load(Ordering::SeqCst) as u32;
+    is_minecraft_java_process_running_except(our_pid)
+}
+
+pub(crate) fn is_our_game_process_alive() -> bool {
+    let pid = GAME_PROCESS_PID.load(Ordering::SeqCst);
+    if pid == 0 {
+        return false;
+    }
+
+    let mut sys = System::new_all();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    sys.process(Pid::from_u32(pid as u32)).is_some()
+}
+
 #[command]
 pub fn is_game_running_now() -> Result<bool, String> {
     let pid = GAME_PROCESS_PID.load(Ordering::SeqCst);
-    if pid != 0 {
-        let mut sys = System::new_all();
-        sys.refresh_processes(ProcessesToUpdate::All, true);
-
-        let pid_u32 = pid as u32;
-        let pid_obj = Pid::from_u32(pid_u32);
-        if sys.process(pid_obj).is_some() {
-            return Ok(true);
-        }
-
-        GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+    if pid == 0 {
         return Ok(false);
     }
 
-    Ok(is_minecraft_java_process_running())
+    let mut sys = System::new_all();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+
+    let pid_obj = Pid::from_u32(pid as u32);
+    if sys.process(pid_obj).is_some() {
+        return Ok(true);
+    }
+
+    GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+    Ok(false)
 }
 
 #[command]
