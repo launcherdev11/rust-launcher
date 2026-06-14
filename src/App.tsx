@@ -4227,7 +4227,7 @@ function App() {
           </button>
         </div>
         {activeInstanceProfile ? (
-          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-28">
+          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-20">
             <SelectedProfileTitleBar
               profile={{
                 id: activeInstanceProfile.id,

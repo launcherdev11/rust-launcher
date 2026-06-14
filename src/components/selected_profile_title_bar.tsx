@@ -1,6 +1,18 @@
+import { useEffect, useRef, useState } from "react";
 import { ProfileInstanceIcon } from "./profile_instance_icon";
 import type { Language } from "../i18n";
 import { useT } from "../i18n";
+
+function formatSessionElapsed(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  }
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
 
 type SelectedProfileTitleBarProps = {
   profile: {
@@ -34,16 +46,40 @@ export function SelectedProfileTitleBar({
 }: SelectedProfileTitleBarProps) {
   const tt = useT(language);
   const isRunning = gameStatus === "running" || isStopping;
+  const sessionStartRef = useRef<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!isRunning) {
+      sessionStartRef.current = null;
+      setElapsedSeconds(0);
+      return;
+    }
+
+    if (sessionStartRef.current === null) {
+      sessionStartRef.current = Date.now();
+    }
+
+    const tick = () => {
+      if (sessionStartRef.current !== null) {
+        setElapsedSeconds(Math.floor((Date.now() - sessionStartRef.current) / 1000));
+      }
+    };
+
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [isRunning]);
 
   return (
     <div
-      className="pointer-events-auto flex max-w-[min(320px,calc(100vw-22rem))] items-center gap-2 rounded-lg border border-white/12 bg-black/30 px-1.5 py-0.5 shadow-soft backdrop-blur-md"
+      className="pointer-events-auto flex min-w-[280px] max-w-[min(480px,calc(100vw-16rem))] items-center gap-2.5 rounded-lg bg-black/30 px-2.5 py-1 shadow-soft backdrop-blur-md"
       data-no-drag
     >
       <button
         type="button"
         onClick={onOpenProfile}
-        className="interactive-press flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-white/10"
+        className="interactive-press flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-white/10"
         title={profile.name}
       >
         <ProfileInstanceIcon
@@ -56,7 +92,17 @@ export function SelectedProfileTitleBar({
         <span className="truncate text-[11px] font-semibold text-white/90">{profile.name}</span>
       </button>
 
-      <div className="flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1">
+      {isRunning ? (
+        <span
+          className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] tabular-nums text-emerald-400/90"
+          title={tt("modpacks.list.playtimeLabel")}
+        >
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+          {formatSessionElapsed(elapsedSeconds)}
+        </span>
+      ) : null}
+
+      <div className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1.5">
         {isRunning ? (
           <button
             type="button"
