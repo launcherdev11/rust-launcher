@@ -3,6 +3,7 @@ pub mod events;
 pub mod export;
 pub mod java;
 pub mod launcher_account;
+pub mod plugin;
 pub mod profile;
 pub mod settings;
 

@@ -42,6 +42,7 @@ import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
+import { usePlugins } from "./hooks/usePlugins";
 import {
   useHotkeys,
   type ModpackHotkeyActions,
@@ -84,6 +85,11 @@ import {
   type TabDropZone,
   type TabSplitLayout,
 } from "./splitView";
+import {
+  PluginHost,
+  isPluginSidebarId,
+  parsePluginSidebarId,
+} from "./features/plugins";
 
 type Profile = {
   nickname: string;
@@ -101,6 +107,7 @@ type LauncherAccountSummary = {
 };
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
+type NavItemId = SidebarItemId | `plugin:${string}`;
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "game" | "versions" | "launcher";
@@ -743,7 +750,7 @@ function MaximizeIcon() {
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
-  const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
+  const [activeItem, setActiveItem] = useState<NavItemId>("play");
   const [tabSplitLayout, setTabSplitLayout] = useState<TabSplitLayout | null>(() =>
     loadTabSplitLayout(),
   );
@@ -791,7 +798,7 @@ function App() {
   const sidebarHorizontal = isSidebarHorizontal(sidebarPosition);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarButtonRefs = useRef<
-    Partial<Record<SidebarItemId, HTMLButtonElement | null>>
+    Partial<Record<string, HTMLButtonElement | null>>
   >({});
   const [sidebarIndicator, setSidebarIndicator] = useState<{
     offset: number;
@@ -905,7 +912,7 @@ function App() {
     finishJob: finishDownloadJob,
     makeJobId: makeDownloadJobId,
   } = useDownloadJobs();
-  const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
+  const prevActiveItemRef = useRef<NavItemId>(activeItem);
   const lastPersistedNickNormRef = useRef<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const notificationTimersRef = useRef(
@@ -1065,7 +1072,7 @@ function App() {
   }, [splitViewEnabled, tabSplitLayout]);
 
   const setActiveItemWithSound = useCallback(
-    (next: SidebarItemId) => {
+    (next: NavItemId) => {
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
       if (uiSoundsEnabled && next !== activeItem) playTabSwitchSound();
       setActiveItem(next);
@@ -1327,7 +1334,10 @@ function App() {
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
 
   const { handleModpackSidebarClick } = useHotkeys({
-    activeTab: activeItem,
+    activeTab:
+      activeItem === "accounts" || isSplittableTab(activeItem)
+        ? activeItem
+        : "play",
     effectiveTabSplit,
     isConsoleVisible,
     playConsoleActionsRef: playConsoleHotkeysRef,
@@ -1910,6 +1920,8 @@ function App() {
     },
     [settings, pushNotification],
   );
+
+  const { sidebarItems: pluginSidebarItems, reloadPlugins } = usePlugins({ showNotification });
 
   const showSettingsSavedNotification = useCallback(() => {
     showNotification("success", tt("app.toast.settingsSaved"));
@@ -3602,6 +3614,7 @@ function App() {
               updateDownloadPercent={updateDownloadPercent}
               onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
               onInstallUpdate={() => void installUpdate()}
+              onPluginsChanged={() => void reloadPlugins()}
             />
             </div>
           );
@@ -3717,6 +3730,9 @@ function App() {
   );
 
   const singleMainTab: SplittableTabId = isSplittableTab(activeItem) ? activeItem : "play";
+  const activePluginId = isPluginSidebarId(activeItem)
+    ? parsePluginSidebarId(activeItem)
+    : null;
 
   if (onboardingVisible === null) {
     return (
@@ -4499,6 +4515,32 @@ function App() {
               </div>
             );
             })}
+            {pluginSidebarItems.map((item: { id: string; label: string }) => (
+              <div
+                key={item.id}
+                className="interactive-press group relative flex items-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => setActiveItemWithSound(item.id as NavItemId)}
+                  title={item.label}
+                  ref={(el) => {
+                    sidebarButtonRefs.current[item.id] = el;
+                  }}
+                  className="relative flex items-center"
+                >
+                  <div
+                    className={`sidebar-icon flex items-center justify-center ${
+                      sidebarHorizontal ? "" : "ml-2"
+                    } ${activeItem === item.id ? "text-white" : "text-white/55"}`}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-7 w-7 fill-current" aria-hidden="true">
+                      <path d="M12 2 4 6v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V6l-8-4Zm0 2.2 6 3v5.3c0 3.8-2.5 7.4-6 8.7-3.5-1.3-6-4.9-6-8.7V7.2l6-3Z" />
+                    </svg>
+                  </div>
+                </button>
+              </div>
+            ))}
           </div>
 
           <div
@@ -4929,6 +4971,13 @@ function App() {
                   {renderMainTabContent(effectiveTabSplit.secondary, true)}
                 </div>
               </div>
+            </div>
+          ) : activePluginId ? (
+            <div
+              key={activePluginId}
+              className="tab-animate flex min-h-0 w-full flex-1 flex-col items-stretch justify-start"
+            >
+              <PluginHost pluginId={activePluginId} />
             </div>
           ) : (
             <div

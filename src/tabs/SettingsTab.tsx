@@ -9,6 +9,7 @@ import { clearLauncherAvatarCache } from "../lib/avatar";
 import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
+import { PluginsManager } from "../features/plugins";
 
 const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
 
@@ -84,6 +85,7 @@ type SettingsTabProps = {
   updateDownloadPercent?: number | null;
   onCheckUpdate?: () => void;
   onInstallUpdate?: () => void;
+  onPluginsChanged?: () => void;
   fillPane?: boolean;
 };
 
@@ -289,6 +291,7 @@ export function SettingsTab({
   updateDownloadPercent = null,
   onCheckUpdate,
   onInstallUpdate,
+  onPluginsChanged,
   fillPane = false,
 }: SettingsTabProps) {
   const tt = useT(language);
@@ -2845,6 +2848,17 @@ export function SettingsTab({
                     </div>
               </div>
               </div>
+            </SettingsCard>
+          )}
+
+          {settingsTab === "launcher" && (
+            <SettingsCard title={tt("plugins.title")}>
+              <PluginsManager
+                language={language}
+                showNotification={showNotification}
+                onPluginsChanged={onPluginsChanged}
+                compact
+              />
             </SettingsCard>
           )}
 

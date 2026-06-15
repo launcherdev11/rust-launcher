@@ -1,0 +1,6 @@
+{
+  "jvm_args_append": ["-D16launcher.example.hook.file=true"],
+  "game_args_append": [],
+  "profile_filter": null,
+  "version_filter": null
+}

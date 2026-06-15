@@ -1049,5 +1049,20 @@
       "subtitle": "Setup is complete. Head to the launcher and start playing.",
       "cta": "Start playing"
     }
+  },
+  "plugins": {
+    "title": "Plugins",
+    "folderHint": "User plugins folder. Copy a plugin directory containing plugin.json here.",
+    "openFolder": "Open folder",
+    "reload": "Reload",
+    "empty": "No plugins found.",
+    "emptyHint": "Create a plugin folder in the directory above or copy the sample from docs/plugins/example-plugin.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "enabled": "Plugin \"{{name}}\" enabled",
+    "disabled": "Plugin \"{{name}}\" disabled",
+    "error": "Error",
+    "noDescription": "No description",
+    "hooks": "Hooks"
   }
 }
