@@ -39,6 +39,12 @@ cd packaging/archlinux
 makepkg -si
 ```
 
+На Hyprland / Wayland с AMD или NVIDIA WebKitGTK может падать при запуске игры. Лаунчер по умолчанию переключает UI на XWayland (`GDK_BACKEND=x11`). Если нужен нативный Wayland:
+
+```bash
+MC16LAUNCHER_ALLOW_WAYLAND=1 16launcher
+```
+
 ## Возможности
 
 - **Быстрый и оптимизированный**: Быстрый запуск и плавная работа

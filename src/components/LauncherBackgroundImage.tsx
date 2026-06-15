@@ -43,23 +43,21 @@ export function LauncherBackgroundImage({
   }
 
   if (isAnimated && useSafeBlur) {
-    const blurStyle = blurEnabled
-      ? { filter: "blur(22px)", transform: "scale(1.08)" }
-      : {};
-
     return (
       <img
         src={imageUrl}
         alt=""
         aria-hidden
         className={`absolute inset-0 h-full w-full object-cover ${className}`.trim()}
-        style={blurStyle}
+        style={blurEnabled ? { transform: "scale(1.08)" } : undefined}
       />
     );
   }
 
   const blurStyle = blurEnabled
-    ? { filter: "blur(22px)", transform: "scale(1.08)" }
+    ? useSafeBlur
+      ? { transform: "scale(1.08)" }
+      : { filter: "blur(22px)", transform: "scale(1.08)" }
     : {};
 
   return (
