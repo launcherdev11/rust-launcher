@@ -35,6 +35,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libglib2.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
             pkg-config \
             libwayland-dev \
             libxkbcommon-dev \

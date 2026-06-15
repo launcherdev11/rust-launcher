@@ -75,6 +75,11 @@ fn get_launcher_logs() -> String {
     std::fs::read_to_string("launcher.log").unwrap_or_else(|_| "Логи пусты".to_string())
 }
 
+#[tauri::command]
+fn linux_ui_audio_available() -> bool {
+    infra::platform::linux_gstreamer_audio_available()
+}
+
 fn load_dotenv() {
     app::env::load_dotenv_files();
     crate::services::game::runtime::load_project_env_for_runtime();
@@ -136,6 +141,7 @@ pub fn run() {
                     eprintln!("[16Launcher] game data migration: {e}");
                 }
                 infra::window_icon::apply_launcher_icon_to_main_window(app);
+                infra::webkit_linux::configure_app_webviews(app);
                 Ok(())
             }
         })
@@ -256,11 +262,26 @@ pub fn run() {
             delete_screenshot,
             open_screenshots_folder,
             open_screenshot,
-            get_launcher_logs
+            get_launcher_logs,
+            linux_ui_audio_available
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
+            #[cfg(target_os = "linux")]
+            match &event {
+                tauri::RunEvent::Ready => {
+                    infra::webkit_linux::ensure_linux_webview_policies(app_handle);
+                }
+                tauri::RunEvent::WindowEvent {
+                    event: tauri::WindowEvent::Focused(true),
+                    ..
+                } => {
+                    infra::webkit_linux::ensure_linux_webview_policies(app_handle);
+                }
+                _ => {}
+            }
+
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = &event {
                 for url in urls {
