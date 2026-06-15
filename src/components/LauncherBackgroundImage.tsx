@@ -1,4 +1,5 @@
 import { isAnimatedBackgroundPath } from "../lib/launcherBackground";
+import { isLinux } from "../lib/platform";
 
 type Props = {
   imageUrl: string;
@@ -14,8 +15,9 @@ export function LauncherBackgroundImage({
   className = "",
 }: Props) {
   const isAnimated = animated ?? isAnimatedBackgroundPath(imageUrl);
+  const useSafeBlur = isLinux();
 
-  if (isAnimated) {
+  if (isAnimated && !useSafeBlur) {
     return (
       <div
         className={`absolute inset-0 overflow-hidden ${className}`.trim()}
@@ -37,6 +39,22 @@ export function LauncherBackgroundImage({
           />
         ) : null}
       </div>
+    );
+  }
+
+  if (isAnimated && useSafeBlur) {
+    const blurStyle = blurEnabled
+      ? { filter: "blur(22px)", transform: "scale(1.08)" }
+      : {};
+
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        aria-hidden
+        className={`absolute inset-0 h-full w-full object-cover ${className}`.trim()}
+        style={blurStyle}
+      />
     );
   }
 

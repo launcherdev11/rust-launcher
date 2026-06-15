@@ -48,6 +48,29 @@ body {
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* WebKitGTK aborts in the GPU compositor when backdrop-filter is used (AMDGPU + Wayland). */
+html.platform-linux .glass-panel {
+  background: rgba(20, 20, 28, 0.92);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.platform-linux .glass-chip {
+  background: rgba(20, 20, 28, 0.94);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.platform-linux [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.platform-linux .blur-3xl {
+  filter: none !important;
+  opacity: 0.4;
+}
+
 .sidebar-icon {
   @apply flex h-10 w-10 items-center justify-center rounded-2xl text-gray-300 transition-colors;
 }
