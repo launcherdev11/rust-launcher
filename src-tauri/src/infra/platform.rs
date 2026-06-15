@@ -400,6 +400,28 @@ fn has_amd_gpu() -> bool {
 
 #[cfg(target_os = "linux")]
 
+fn linux_allow_native_wayland() -> bool {
+
+    use std::env;
+
+
+
+    env::var("MC16LAUNCHER_ALLOW_WAYLAND")
+
+        .map(|value| {
+
+            let normalized = value.trim().to_ascii_lowercase();
+
+            normalized == "1" || normalized == "true" || normalized == "yes"
+
+        })
+
+        .unwrap_or(false)
+
+}
+
+
+
 fn configure_webkit_stability() {
 
     use std::env;
@@ -408,13 +430,15 @@ fn configure_webkit_stability() {
 
     // WebKitGTK on Wayland/Hyprland often aborts in the GPU compositor path (DMA-BUF / gallium).
 
-    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    // Always set these: Hyprland sessions often pre-export conflicting values.
 
-    set_env_if_missing("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
 
-    set_env_if_missing("WEBKIT_USE_SINGLE_WEB_PROCESS", "1");
+    env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
 
-    set_env_if_missing("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+    env::set_var("WEBKIT_USE_SINGLE_WEB_PROCESS", "1");
+
+    env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
 
 }
 
@@ -450,35 +474,35 @@ pub fn configure_linux_startup() {
 
     let has_amd = has_amd_gpu();
 
+    let prefer_x11_for_webview =
+
+        has_wayland && (has_nvidia || has_amd) && !linux_allow_native_wayland();
 
 
-    if env::var_os("GDK_BACKEND").is_none() {
 
-        if has_wayland && (has_nvidia || has_amd) {
+    if prefer_x11_for_webview {
 
-            if has_nvidia {
+        if has_nvidia {
 
-                set_env_if_missing("__NV_DISABLE_EXPLICIT_SYNC", "1");
+            set_env_if_missing("__NV_DISABLE_EXPLICIT_SYNC", "1");
 
-            }
+        }
 
-            env::set_var("GDK_BACKEND", "x11");
+        env::set_var("GDK_BACKEND", "x11");
 
-            if env::var_os("WINIT_UNIX_BACKEND").is_none() {
+        env::set_var("WINIT_UNIX_BACKEND", "x11");
 
-                env::set_var("WINIT_UNIX_BACKEND", "x11");
+        eprintln!(
 
-            }
+            "[16Launcher] Wayland + {}: GDK_BACKEND=x11 (MC16LAUNCHER_ALLOW_WAYLAND=1 для нативного Wayland)",
 
-            eprintln!(
+            if has_nvidia { "NVIDIA" } else { "AMD" }
 
-                "[16Launcher] Wayland + {}: GDK_BACKEND=x11 (задайте GDK_BACKEND=wayland для отмены)",
+        );
 
-                if has_nvidia { "NVIDIA" } else { "AMD" }
+    } else if env::var_os("GDK_BACKEND").is_none() {
 
-            );
-
-        } else if has_wayland {
+        if has_wayland {
 
             env::set_var("GDK_BACKEND", "x11,wayland");
 

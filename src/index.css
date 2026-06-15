@@ -71,6 +71,14 @@ html.platform-linux .blur-3xl {
   opacity: 0.4;
 }
 
+html.platform-linux .animate-pulse {
+  animation: none !important;
+}
+
+html.platform-linux .will-change-transform {
+  will-change: auto;
+}
+
 .sidebar-icon {
   @apply flex h-10 w-10 items-center justify-center rounded-2xl text-gray-300 transition-colors;
 }
