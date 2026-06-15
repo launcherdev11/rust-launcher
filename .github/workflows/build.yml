@@ -8,6 +8,11 @@ on:
         type: boolean
         required: true
         default: false
+      prerelease:
+        description: 'Is this a beta/pre-release?'
+        type: boolean
+        required: false
+        default: false
       version:
         description: "Release version tag (e.g. v1.0.0)"
         required: false
@@ -16,12 +21,16 @@ on:
   push:
     branches:
       - main
+      - 16account
     tags:
       - "v*.*.*"
+      - "v*.*.*-beta*"
+      - "v*.*.*-rc*"
 
   pull_request:
     branches:
       - main
+      - 16account
 
 permissions:
   contents: write
@@ -30,7 +39,7 @@ jobs:
   check:
     name: CI checks (frontend deps + Rust check/clippy)
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/16account'))
       || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -153,6 +162,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          PRERELEASE=false
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            if [[ "${{ github.ref_name }}" == *-beta* || "${{ github.ref_name }}" == *-rc* ]]; then
+              PRERELEASE=true
+            fi
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.make_release }}" == "true" ]]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            if [[ "${{ github.event.inputs.prerelease }}" == "true" ]]; then
+              PRERELEASE=true
+            fi
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri bundles and create Release (with updater artifacts)
         if: github.event_name != 'push' || !contains(github.ref_name, '-beta.') || matrix.os == 'ubuntu-latest'
         id: tauri_build
@@ -170,14 +199,15 @@ jobs:
           DISCORD_RPC_LARGE_IMAGE_KEY: ${{ secrets.DISCORD_RPC_LARGE_IMAGE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         with:
           projectPath: .
           tauriScript: "npm run tauri"
           includeDebug: false
           includeRelease: true
-          tagName: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true' && github.event.inputs.version) || '' }}
-          releaseName: "16Launcher ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || (github.event_name == 'workflow_dispatch' && github.event.inputs.version) || 'v0.0.0' }}"
-          releaseBody: "Автоматический релиз 16Launcher."
+          tagName: ${{ steps.release_tag.outputs.tag }}
+          releaseName: 16Launcher ${{ steps.release_tag.outputs.tag }}
+          prerelease: ${{ steps.release_tag.outputs.prerelease }}
 
       - name: Prepare beta updater manifest
         if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-beta.')

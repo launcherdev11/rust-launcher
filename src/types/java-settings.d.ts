@@ -5,5 +5,6 @@ export interface JavaSettings {
   xmx: string | null;
   jvm_args: string | null;
   preset: "balanced" | "performance" | "low_memory" | null;
+  prefer_ipv6_network: boolean;
 }
 

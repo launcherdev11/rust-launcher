@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-latest, windows-latest, macos-latest]
+        platform: [ubuntu-24.04, windows-latest, macos-latest]
 
     runs-on: ${{ matrix.platform }}
 
@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install system dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-latest'
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -63,6 +63,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
+      - name: Resolve release tag from tauri.conf.json
+        id: release_tag
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *beta* || "$VERSION" == *rc* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and create GitHub release
         uses: tauri-apps/tauri-action@v0.6.1
         env:
@@ -76,10 +88,11 @@ jobs:
           PROXY_PASS: ${{ secrets.PROXY_PASS }}
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_RPC_LARGE_IMAGE_KEY: ${{ secrets.DISCORD_RPC_LARGE_IMAGE_KEY }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         with:
           projectPath: .
           tauriScript: "npm run tauri"
           tagName: "v__VERSION__"
           releaseName: "16Launcher v__VERSION__"
-          releaseBody: "Автоматический релиз 16Launcher v__VERSION__."
+          prerelease: ${{ steps.release_tag.outputs.prerelease }}
 
