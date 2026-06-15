@@ -342,16 +342,35 @@ fn configure_appimage_runtime() {
 
     }
 
+    configure_webkit_stability();
+
+    set_env_if_missing("GTK_IM_MODULE", "gtk-im-context-simple");
+
+}
 
 
 
-    env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+#[cfg(target_os = "linux")]
+
+fn configure_webkit_stability() {
+
+    use std::env;
+
+
+
+    // WebKitGTK on Wayland/Hyprland often aborts in the GPU compositor path (DMA-BUF / gallium).
+
+    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
 
     set_env_if_missing("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
 
     set_env_if_missing("WEBKIT_USE_SINGLE_WEB_PROCESS", "1");
 
-    set_env_if_missing("GTK_IM_MODULE", "gtk-im-context-simple");
+    if is_appimage() {
+
+        env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+
+    }
 
 }
 
@@ -367,7 +386,7 @@ pub fn configure_linux_startup() {
 
 
 
-    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    configure_webkit_stability();
 
 
 
