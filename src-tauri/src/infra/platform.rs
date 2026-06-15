@@ -352,6 +352,54 @@ fn configure_appimage_runtime() {
 
 #[cfg(target_os = "linux")]
 
+fn has_amd_gpu() -> bool {
+
+    use std::fs;
+
+    use std::path::Path;
+
+
+
+    let drm = Path::new("/sys/class/drm");
+
+    let entries = match fs::read_dir(drm) {
+
+        Ok(entries) => entries,
+
+        Err(_) => return false,
+
+    };
+
+
+
+    for entry in entries.flatten() {
+
+        let vendor_path = entry.path().join("device/vendor");
+
+        if let Ok(vendor) = fs::read_to_string(vendor_path) {
+
+            let normalized = vendor.trim().to_ascii_lowercase();
+
+            if normalized == "0x1002" || normalized == "0x1022" {
+
+                return true;
+
+            }
+
+        }
+
+    }
+
+
+
+    false
+
+}
+
+
+
+#[cfg(target_os = "linux")]
+
 fn configure_webkit_stability() {
 
     use std::env;
@@ -366,11 +414,7 @@ fn configure_webkit_stability() {
 
     set_env_if_missing("WEBKIT_USE_SINGLE_WEB_PROCESS", "1");
 
-    if is_appimage() {
-
-        env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
-
-    }
+    set_env_if_missing("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
 
 }
 
@@ -404,13 +448,19 @@ pub fn configure_linux_startup() {
 
     let has_nvidia = Path::new("/proc/driver/nvidia").exists();
 
+    let has_amd = has_amd_gpu();
+
 
 
     if env::var_os("GDK_BACKEND").is_none() {
 
-        if has_nvidia && has_wayland {
+        if has_wayland && (has_nvidia || has_amd) {
 
-            set_env_if_missing("__NV_DISABLE_EXPLICIT_SYNC", "1");
+            if has_nvidia {
+
+                set_env_if_missing("__NV_DISABLE_EXPLICIT_SYNC", "1");
+
+            }
 
             env::set_var("GDK_BACKEND", "x11");
 
@@ -422,13 +472,15 @@ pub fn configure_linux_startup() {
 
             eprintln!(
 
-                "[16Launcher] NVIDIA + Wayland: GDK_BACKEND=x11 (задайте GDK_BACKEND=wayland для отмены)"
+                "[16Launcher] Wayland + {}: GDK_BACKEND=x11 (задайте GDK_BACKEND=wayland для отмены)",
+
+                if has_nvidia { "NVIDIA" } else { "AMD" }
 
             );
 
         } else if has_wayland {
 
-            env::set_var("GDK_BACKEND", "wayland,x11");
+            env::set_var("GDK_BACKEND", "x11,wayland");
 
         } else if has_x11 {
 
