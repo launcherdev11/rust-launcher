@@ -39,10 +39,22 @@ cd packaging/archlinux
 makepkg -si
 ```
 
-На Hyprland / Wayland с AMD или NVIDIA WebKitGTK может падать при запуске игры. Лаунчер по умолчанию переключает UI на XWayland (`GDK_BACKEND=x11`). Если нужен нативный Wayland:
+Для `npm run tauri dev` на Arch также нужны системные пакеты:
 
 ```bash
-MC16LAUNCHER_ALLOW_WAYLAND=1 16launcher
+sudo pacman -S --needed base-devel git npm webkit2gtk-4.1 gtk3 libayatana-appindicator gstreamer gst-plugins-base gst-plugins-good xorg-xwayland
+```
+
+Проверка GStreamer (без `autoaudiosink` WebKit падает при звуке UI):
+
+```bash
+gst-inspect-1.0 autoaudiosink
+```
+
+На Hyprland / Wayland с AMD или NVIDIA WebKitGTK может падать при запуске игры. Лаунчер по умолчанию переключает UI на XWayland (`GDK_BACKEND=x11`) и отключает GPU-ускорение WebKit. Если нужен нативный Wayland или GPU WebKit:
+
+```bash
+MC16LAUNCHER_ALLOW_WAYLAND=1 MC16LAUNCHER_WEBKIT_GPU=1 npm run tauri dev
 ```
 
 ## Возможности

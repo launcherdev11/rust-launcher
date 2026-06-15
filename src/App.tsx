@@ -18,7 +18,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
-import { playNotificationSound, playTabSwitchSound, primeUiSounds } from "./uiSounds";
+import { playNotificationSound, playTabSwitchSound, primeUiSounds, initUiSoundsPlatform } from "./uiSounds";
 import {
   SettingsToggle,
   SettingsSlider,
@@ -989,6 +989,10 @@ function App() {
     },
     [tt],
   );
+
+  useEffect(() => {
+    void initUiSoundsPlatform();
+  }, []);
 
   useEffect(() => {
     const onFirstGesture = () => primeUiSounds();

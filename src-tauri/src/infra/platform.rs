@@ -422,6 +422,72 @@ fn linux_allow_native_wayland() -> bool {
 
 
 
+#[cfg(target_os = "linux")]
+
+fn warn_linux_gstreamer_runtime() {
+
+    if linux_gstreamer_audio_available() {
+
+        return;
+
+    }
+
+
+
+    eprintln!(
+
+        "[16Launcher] GStreamer: autoaudiosink не найден — WebKit может падать при воспроизведении звука"
+
+    );
+
+    eprintln!(
+
+        "[16Launcher] Arch: sudo pacman -S gstreamer gst-plugins-base gst-plugins-good"
+
+    );
+
+}
+
+
+
+#[cfg(target_os = "linux")]
+
+pub fn linux_gstreamer_audio_available() -> bool {
+
+    use std::process::{Command, Stdio};
+
+
+
+    Command::new("gst-inspect-1.0")
+
+        .arg("autoaudiosink")
+
+        .stdout(Stdio::null())
+
+        .stderr(Stdio::null())
+
+        .status()
+
+        .map(|status| status.success())
+
+        .unwrap_or(false)
+
+}
+
+
+
+#[cfg(not(target_os = "linux"))]
+
+pub fn linux_gstreamer_audio_available() -> bool {
+
+    true
+
+}
+
+
+
+#[cfg(target_os = "linux")]
+
 fn configure_webkit_stability() {
 
     use std::env;
@@ -455,6 +521,8 @@ pub fn configure_linux_startup() {
 
 
     configure_webkit_stability();
+
+    warn_linux_gstreamer_runtime();
 
 
 
