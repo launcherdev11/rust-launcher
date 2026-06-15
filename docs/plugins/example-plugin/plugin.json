@@ -1,0 +1,30 @@
+{
+  "api_version": 1,
+  "id": "example-hello",
+  "name": "Example Hello Plugin",
+  "version": "1.0.0",
+  "description": "Демонстрационный плагин 16Launcher: панель в боковом меню и хук перед запуском игры.",
+  "author": "16Launcher",
+  "homepage": "https://github.com/16steyy/16Launcher",
+  "min_launcher_version": "2.1.0",
+  "entry": "main.js",
+  "hooks": ["launcher_ready", "pre_launch", "post_launch"],
+  "permissions": [
+    "read_plugin_config",
+    "write_plugin_config",
+    "modify_jvm_args"
+  ],
+  "ui": {
+    "sidebar": true,
+    "sidebar_label": "Hello",
+    "sidebar_order": 50,
+    "settings_section": false
+  },
+  "defaults": {
+    "enabled": true,
+    "config": {
+      "greeting": "Привет из плагина!",
+      "addJvmFlag": true
+    }
+  }
+}

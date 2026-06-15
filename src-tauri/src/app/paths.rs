@@ -154,3 +154,11 @@ pub fn build_preset_icon_path(preset_id: &str) -> Result<PathBuf, String> {
 pub fn screenshots_dir() -> Result<PathBuf, String> {
     Ok(game_root_dir()?.join("screenshots"))
 }
+
+pub fn plugins_dir() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("plugins"))
+}
+
+pub fn plugin_dir(plugin_id: &str) -> Result<PathBuf, String> {
+    Ok(plugins_dir()?.join(plugin_id))
+}

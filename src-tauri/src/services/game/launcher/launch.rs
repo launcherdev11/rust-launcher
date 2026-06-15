@@ -37,6 +37,7 @@ use crate::services::game::settings as settings_service;
 use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID};
 use crate::services::game::version_types::*;
 use crate::services::game::versions::get_mojang_version_url;
+use crate::services::plugins::{apply_pre_launch_hooks, emit_post_launch};
 
 const ELY_AUTHLIB_INJECTOR_TARGET: &str = "ely.by";
 #[tauri::command]
@@ -798,6 +799,14 @@ pub async fn launch_game(
         );
     }
 
+    apply_pre_launch_hooks(
+        &app,
+        &mut jvm_args,
+        &mut game_args,
+        playtime_profile_id.as_deref(),
+        &version_id,
+    );
+
     let mut cmd = std::process::Command::new(&java_path);
     cmd.args(&jvm_args)
         .arg(&detail.main_class)
@@ -826,6 +835,13 @@ pub async fn launch_game(
     let spawned_pid = child.id();
     GAME_PROCESS_PID.store(spawned_pid as u64, Ordering::SeqCst);
     eprintln!("[Launch] PID: {spawned_pid}");
+
+    emit_post_launch(
+        &app,
+        playtime_profile_id.as_deref(),
+        &version_id,
+        spawned_pid,
+    );
 
     if let Some(ref profile_id) = playtime_profile_id {
         if let Ok(last_played_at) = record_profile_last_played(profile_id) {

@@ -63,6 +63,12 @@ use profile_launch::{
     take_pending_profile_launch,
 };
 use services::shortcuts::create_profile_desktop_shortcut;
+use services::plugins::{
+    emit_launcher_ready, get_launcher_plugin_config, get_launcher_plugin_icon,
+    get_plugins_directory, list_launcher_plugins, open_plugins_folder, read_launcher_plugin_script,
+    reload_launcher_plugins, set_launcher_plugin_config, set_launcher_plugin_enabled,
+    set_launcher_plugin_launch_overrides,
+};
 
 #[tauri::command]
 fn get_launcher_logs_file() -> String {
@@ -135,6 +141,12 @@ pub fn run() {
                 if let Err(e) = app::paths::ensure_game_data_layout() {
                     eprintln!("[16Launcher] game data migration: {e}");
                 }
+                if let Err(e) = app::paths::plugins_dir().and_then(|d| {
+                    std::fs::create_dir_all(&d).map_err(|e| format!("{e}"))
+                }) {
+                    eprintln!("[16Launcher] plugins dir: {e}");
+                }
+                emit_launcher_ready(app.handle());
                 infra::window_icon::apply_launcher_icon_to_main_window(app);
                 Ok(())
             }
@@ -256,7 +268,17 @@ pub fn run() {
             delete_screenshot,
             open_screenshots_folder,
             open_screenshot,
-            get_launcher_logs
+            get_launcher_logs,
+            list_launcher_plugins,
+            get_plugins_directory,
+            open_plugins_folder,
+            set_launcher_plugin_enabled,
+            get_launcher_plugin_config,
+            set_launcher_plugin_config,
+            read_launcher_plugin_script,
+            get_launcher_plugin_icon,
+            set_launcher_plugin_launch_overrides,
+            reload_launcher_plugins
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -293,4 +315,3 @@ pub fn run() {
             }
         });
 }
-// bebe
