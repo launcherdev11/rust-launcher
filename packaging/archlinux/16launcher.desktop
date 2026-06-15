@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=16Launcher
+Comment=Optimized Minecraft launcher
+Exec=16launcher
+Icon=16launcher
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=16Launcher

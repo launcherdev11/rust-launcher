@@ -1,130 +1,159 @@
-mod game_provider;
-mod java_runtime;
-mod ely_auth;
-mod ms_auth;
+use tauri::Manager;
+
+mod app;
 mod commands;
-mod discord_rpc;
+mod infra;
+mod java_runtime;
+mod mrpack_open;
+mod profile_launch;
+mod models;
+mod services;
 
-use game_provider::{
-    cancel_download, fetch_all_versions, fetch_forge_versions, fetch_fabric_loaders,
-    fetch_neoforge_versions, check_version_files_integrity,
-    fetch_vanilla_releases, get_game_root_dir, get_installed_fabric_profile_id,
-    get_installed_quilt_profile_id, get_profile, get_profiles,
-    install_fabric, install_forge, install_neoforge, install_quilt, install_version, launch_game,
-    list_installed_fabric_game_versions, list_installed_quilt_game_versions, list_installed_versions,
-    open_game_folder, open_profile_folder, reset_download_cancel,
-    set_profile, set_selected_profile, get_settings, set_settings, get_effective_settings,
-    is_game_running_now, stop_game, get_system_memory_gb, delete_item, delete_profile,
-    download_modrinth_file, download_modrinth_modpack_and_import, import_mrpack, import_mrpack_as_new_profile,
-    import_modpack_files, update_profile_settings, list_profile_items, rename_profile,
-    add_profile_files, create_profile, get_java_settings, set_java_settings,
-    validate_java_args, detect_java_runtimes, get_profile_java_settings, set_profile_java_settings,
-    reset_settings_to_default, get_launcher_cache_size, clear_launcher_cache,
-    set_background_image, get_background_data_uri,
-    export_launcher_settings_backup, import_launcher_settings_backup,
-    get_profile_play_time_seconds,
-    list_launcher_accounts, switch_launcher_account, remove_launcher_account, add_launcher_account,
+use services::background::{get_background_data_uri, set_background_image};
+use services::game::{
+    add_launcher_account, add_profile_files, cancel_download, check_version_files_integrity,
+    clear_launcher_cache, create_build_preset_from_profile, create_profile, delete_build_preset,
+    delete_item, delete_profile, detect_java_runtimes, get_build_preset_icon_data_uri,
+    list_build_presets, save_build_preset,
+    download_modrinth_file, download_modrinth_modpack_and_import, export_launcher_settings_backup,
+    default_external_launcher_path, list_importable_instances, import_selected_external_instance,
+    fetch_all_versions, fetch_fabric_loaders, fetch_forge_builds_for_game, fetch_forge_versions,
+    fetch_neoforge_builds_for_game, fetch_neoforge_versions, fetch_quilt_loaders,
+    delete_minecraft_installation, fetch_vanilla_releases, fetch_versions_for_loader,
+    get_effective_settings, get_game_root_dir, get_version_install_details,
+    get_installed_fabric_profile_id, get_installed_quilt_profile_id, get_java_settings, get_profile,
+    get_profile_icon_data_uri, get_profile_java_settings, get_profile_play_time_seconds, get_profiles,
+    set_profile_icon_from_file,
+    get_selected_profile,
+    get_settings, get_system_memory_gb, get_launcher_cache_size, import_custom_version,
+    import_launcher_settings_backup, import_modpack_files, import_mrpack, import_mrpack_as_new_profile,
+    install_fabric, install_forge, install_local_version, install_neoforge, install_quilt, install_version,
+    is_game_running_now,
+    launch_game, list_installed_fabric_game_versions, list_installed_quilt_game_versions,
+    list_installed_versions, list_launcher_accounts, list_profile_items,     open_game_folder,
+    open_profile_folder, delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail,
+    list_screenshots, open_screenshot, open_screenshots_folder, remove_launcher_account,
+    change_profile_version, rename_profile,
+    reset_download_cancel,
+    reset_settings_to_default, set_java_settings, set_profile, set_profile_item_enabled,
+    set_profile_java_settings, set_selected_profile, set_settings, stop_game, switch_launcher_account,
+    update_profile_settings,
+    validate_java_args,
 };
-use commands::{list_build_files, preview_export, export_build};
-use ely_auth::{
-    ely_login_with_password, ely_logout, handle_oauth_callback, refresh_ely_session,
-    start_ely_oauth,
+use services::auth::{
+    ely_login_with_password, ely_logout, handle_oauth_callback, ms_logout, refresh_ely_session,
+    start_ely_oauth, start_ms_oauth,
 };
-use ms_auth::{ms_logout, start_ms_oauth};
-use discord_rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
+use services::curseforge::{
+    curseforge_get_mod, curseforge_get_mod_files, curseforge_list_minecraft_versions,
+    curseforge_search_mods,
+    download_curseforge_file,
+};
+use services::modrinth::{
+    apply_profile_content_updates, check_profile_content_updates,
+    download_modrinth_with_dependencies, resolve_modrinth_required_dependencies,
+    resolve_profile_item_metadata,
+};
+use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
+use commands::{export_build, get_ely_avatar, get_ely_skin, list_build_files, preview_export};
+use mrpack_open::take_pending_mrpack_open;
+use profile_launch::{
+    extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
+    emit_profile_launch_request,
+    take_pending_profile_launch,
+};
+use services::shortcuts::create_profile_desktop_shortcut;
 
-#[cfg(target_os = "linux")]
-fn configure_linux_display_backend() {
-    use std::env;
-    fn set_env_if_missing(key: &str, value: &str) {
-        if env::var_os(key).is_none() {
-            env::set_var(key, value);
-        }
-    }
-
-    let xdg_session_type = env::var("XDG_SESSION_TYPE")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let has_wayland = env::var_os("WAYLAND_DISPLAY").is_some() || xdg_session_type == "wayland";
-    let has_x11 = env::var_os("DISPLAY").is_some() || xdg_session_type == "x11";
-
-    if env::var_os("WINIT_UNIX_BACKEND").is_none() {
-        if has_wayland {
-            env::set_var("WINIT_UNIX_BACKEND", "wayland");
-        } else if has_x11 {
-            env::set_var("WINIT_UNIX_BACKEND", "x11");
-        }
-    }
-
-    if env::var_os("GDK_BACKEND").is_none() {
-        if has_wayland {
-            env::set_var("GDK_BACKEND", "wayland,x11");
-        } else if has_x11 {
-            env::set_var("GDK_BACKEND", "x11,wayland");
-        }
-    }
-
-    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-
-    let is_appimage = env::var_os("APPIMAGE").is_some() || env::var_os("APPDIR").is_some();
-    if is_appimage {
-        // Different WebKitGTK builds use different env knobs for sandbox control.
-        // Setting both makes AppImage startup more robust on distros with strict
-        // user namespace policies (common source of WebKitWebProcess SIGABRT).
-        set_env_if_missing("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
-        set_env_if_missing("WEBKIT_FORCE_SANDBOX", "0");
-    }
+#[tauri::command]
+fn get_launcher_logs_file() -> String {
+    std::fs::read_to_string("launcher.log")
+        .unwrap_or_else(|_| "Логи пусты или файл не найден".to_string())
 }
 
-#[cfg(target_os = "windows")]
-fn configure_windows_webview_memory() {
-    use std::env;
-
-    if env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
-        env::set_var(
-            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-            "--renderer-process-limit=2 --process-per-site --js-flags=--max-old-space-size=192 --disk-cache-size=33554432 --media-cache-size=8388608",
-        );
-    }
+#[tauri::command]
+fn get_launcher_logs() -> String {
+    std::fs::read_to_string("launcher.log").unwrap_or_else(|_| "Логи пусты".to_string())
 }
 
 fn load_dotenv() {
-    use std::path::Path;
-    let repo_env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env");
-    let _ = dotenvy::from_path(repo_env);
-    let _ = dotenvy::dotenv();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let _ = dotenvy::from_path(dir.join(".env"));
-        }
-    }
+    app::env::load_dotenv_files();
+    crate::services::game::runtime::load_project_env_for_runtime();
+}
+
+#[cfg(target_os = "linux")]
+pub fn linux_startup_init() {
+    infra::platform::configure_linux_startup();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     load_dotenv();
 
-    #[cfg(target_os = "linux")]
-    configure_linux_display_backend();
     #[cfg(target_os = "windows")]
-    configure_windows_webview_memory();
+    infra::platform::configure_windows_webview_memory();
 
-    tauri::Builder::default()
+    let pending_mrpack = mrpack_open::pending_mrpack_new();
+    let pending_profile_launch = pending_profile_launch_new();
+
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .setup(|_app| Ok(()))
+        .manage(pending_mrpack.clone())
+        .manage(pending_profile_launch.clone());
+
+    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    {
+        builder = builder.plugin(
+            tauri_plugin_single_instance::Builder::new()
+                .dbus_id("com.steyy.mc16launcher")
+                .callback(|app, args, _cwd| {
+                    if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
+                        mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
+                    }
+                    if let Some(profile_id) = extract_profile_launch_from_os_args(&args) {
+                        emit_profile_launch_request(&app, profile_id);
+                    }
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                })
+                .build(),
+        );
+    }
+
+    builder
+        .setup({
+            let pending_mrpack = pending_mrpack.clone();
+            let pending_launch = pending_profile_launch.clone();
+            move |app| {
+                mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
+                stash_argv_profile_launch_if_any(&pending_launch);
+                if let Err(e) = app::paths::ensure_game_data_layout() {
+                    eprintln!("[16Launcher] game data migration: {e}");
+                }
+                infra::window_icon::apply_launcher_icon_to_main_window(app);
+                Ok(())
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
             fetch_all_versions,
+            fetch_versions_for_loader,
             check_version_files_integrity,
             fetch_vanilla_releases,
             fetch_fabric_loaders,
+            fetch_quilt_loaders,
+            import_custom_version,
             fetch_forge_versions,
+            fetch_forge_builds_for_game,
             fetch_neoforge_versions,
+            fetch_neoforge_builds_for_game,
             install_version,
+            install_local_version,
             install_fabric,
             install_quilt,
             install_forge,
@@ -136,13 +165,23 @@ pub fn run() {
             get_installed_quilt_profile_id,
             list_installed_fabric_game_versions,
             list_installed_quilt_game_versions,
+            get_version_install_details,
+            delete_minecraft_installation,
             open_game_folder,
             open_profile_folder,
             get_profile,
             get_profiles,
+            get_profile_icon_data_uri,
+            set_profile_icon_from_file,
             get_profile_play_time_seconds,
             create_profile,
+            list_build_presets,
+            save_build_preset,
+            delete_build_preset,
+            create_build_preset_from_profile,
+            get_build_preset_icon_data_uri,
             set_profile,
+            get_selected_profile,
             set_selected_profile,
             get_settings,
             set_settings,
@@ -160,13 +199,28 @@ pub fn run() {
             cancel_download,
             reset_download_cancel,
             download_modrinth_file,
+            download_modrinth_with_dependencies,
+            resolve_modrinth_required_dependencies,
+            check_profile_content_updates,
+            apply_profile_content_updates,
+            resolve_profile_item_metadata,
             download_modrinth_modpack_and_import,
+            curseforge_search_mods,
+            curseforge_get_mod,
+            curseforge_get_mod_files,
+            curseforge_list_minecraft_versions,
+            download_curseforge_file,
             import_mrpack,
             import_mrpack_as_new_profile,
+            default_external_launcher_path,
+            list_importable_instances,
+            import_selected_external_instance,
             update_profile_settings,
             delete_item,
             list_profile_items,
+            set_profile_item_enabled,
             rename_profile,
+            change_profile_version,
             add_profile_files,
             import_modpack_files,
             delete_profile,
@@ -189,20 +243,54 @@ pub fn run() {
             list_launcher_accounts,
             switch_launcher_account,
             remove_launcher_account,
-            add_launcher_account
+            add_launcher_account,
+            get_ely_avatar,
+            get_ely_skin,
+            take_pending_mrpack_open,
+            take_pending_profile_launch,
+            create_profile_desktop_shortcut,
+            get_launcher_logs_file,
+            list_screenshots,
+            get_screenshot_data_uri,
+            get_screenshot_thumbnail,
+            delete_screenshot,
+            open_screenshots_folder,
+            open_screenshot,
+            get_launcher_logs
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| match event {
-            tauri::RunEvent::WindowEvent { label, event, .. } => {
-                if label == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                    discord_presence_shutdown();
-                    app_handle.exit(0);
+        .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        if mrpack_open::is_mrpack_path(&path) {
+                            if let Some(pending) = app_handle.try_state::<mrpack_open::PendingMrpackArc>()
+                            {
+                                mrpack_open::stash_mrpack_path(&pending, &path);
+                            }
+                            mrpack_open::emit_mrpack_open_request(
+                                &app_handle,
+                                path.to_string_lossy().to_string(),
+                            );
+                        }
+                    }
                 }
             }
-            tauri::RunEvent::Exit => {
-                discord_presence_shutdown();
+
+            match event {
+                tauri::RunEvent::WindowEvent { label, event, .. } => {
+                    if label == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        discord_presence_shutdown();
+                        app_handle.exit(0);
+                    }
+                }
+                tauri::RunEvent::Exit => {
+                    discord_presence_shutdown();
+                }
+                _ => {}
             }
-            _ => {}
         });
 }
+// bebe

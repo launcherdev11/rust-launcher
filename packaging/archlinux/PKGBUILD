@@ -1,0 +1,45 @@
+pkgname=16launcher-git
+pkgver=2.0.24_beta7
+pkgrel=1
+pkgdesc="Optimized Minecraft launcher (Tauri) built against system WebKitGTK"
+arch=('x86_64')
+url="https://github.com/launcherdev11/rust-launcher"
+license=('GPL-3.0-only')
+depends=(
+  'webkit2gtk-4.1'
+  'gtk3'
+  'libayatana-appindicator'
+  'glib2'
+  'hicolor-icon-theme'
+)
+makedepends=(
+  'cargo'
+  'rust'
+  'nodejs'
+  'npm'
+)
+source=(
+  "${pkgname}::git+${url}.git"
+  '16launcher.desktop'
+)
+sha256sums=(
+  'SKIP'
+  'd16da06050eb6b15ba4fd2d1752bc0665e8c90fb81bb2611cec1bbe13bcf741c'
+)
+
+build() {
+  cd "${srcdir}/${pkgname}"
+
+  npm ci
+  npm run build
+
+  cargo build --release --manifest-path src-tauri/Cargo.toml
+}
+
+package() {
+  cd "${srcdir}/${pkgname}"
+
+  install -Dm755 "src-tauri/target/release/mc16launcher" "${pkgdir}/usr/bin/16launcher"
+  install -Dm644 "src-tauri/icons/128x128.png" "${pkgdir}/usr/share/icons/hicolor/128x128/apps/16launcher.png"
+  install -Dm644 "${srcdir}/16launcher.desktop" "${pkgdir}/usr/share/applications/16launcher.desktop"
+}
