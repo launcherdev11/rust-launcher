@@ -9,6 +9,8 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 use tauri::command;
 
+use serde::Deserialize;
+
 use crate::models::profile::{InstanceConfig, ProfileItemEntry, SelectedProfileFile};
 use crate::models::{InstanceProfileSummary, InstanceSettings};
 use crate::app::paths::{
@@ -396,6 +398,66 @@ pub fn record_profile_last_played(profile_id: &str) -> Result<u64, String> {
         .map_err(|e| format!("Ошибка записи config.json для last_played_at: {e}"))?;
 
     Ok(now)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CloudStatsMergeInput {
+    pub play_time_seconds: u64,
+    pub last_played_at: Option<u64>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct CloudStatsMergeResult {
+    pub updated: bool,
+    pub play_time_seconds: u64,
+    pub last_played_at: Option<u64>,
+}
+
+#[command]
+pub fn merge_profile_cloud_stats(
+    profile_id: String,
+    remote: CloudStatsMergeInput,
+) -> Result<CloudStatsMergeResult, String> {
+    let cfg_path = instance_config_path(&profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(CloudStatsMergeResult {
+            updated: false,
+            play_time_seconds: remote.play_time_seconds,
+            last_played_at: remote.last_played_at,
+        });
+    }
+
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для cloud stats: {e}"))?;
+
+    let mut cfg: InstanceConfig = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+
+    let merged_playtime = cfg.play_time_seconds.max(remote.play_time_seconds);
+    let merged_last_played = match (cfg.last_played_at, remote.last_played_at) {
+        (Some(local), Some(remote_ts)) => Some(local.max(remote_ts)),
+        (Some(local), None) => Some(local),
+        (None, Some(remote_ts)) => Some(remote_ts),
+        (None, None) => None,
+    };
+
+    let updated =
+        merged_playtime != cfg.play_time_seconds || merged_last_played != cfg.last_played_at;
+
+    if updated {
+        cfg.play_time_seconds = merged_playtime;
+        cfg.last_played_at = merged_last_played;
+        let new_text = serde_json::to_string_pretty(&cfg)
+            .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
+        std::fs::write(&cfg_path, new_text)
+            .map_err(|e| format!("Ошибка записи config.json: {e}"))?;
+    }
+
+    Ok(CloudStatsMergeResult {
+        updated,
+        play_time_seconds: merged_playtime,
+        last_played_at: merged_last_played,
+    })
 }
 
 pub fn selected_instance_dir() -> Option<PathBuf> {

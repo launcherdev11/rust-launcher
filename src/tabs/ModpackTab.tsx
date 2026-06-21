@@ -16,7 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { ChevronDown, Download, UploadCloud } from "lucide-react";
+import { ChevronDown, Cloud, Download, UploadCloud } from "lucide-react";
 import { SettingsToggle, SettingsSlider } from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
 import {
@@ -52,6 +52,15 @@ import {
   ProfileInfoModal,
   type ProfileInfoData,
 } from "../components/profile_info_modal";
+import { CloudBuildsModal } from "../components/CloudBuildsModal";
+import { API_AUTH_CHANGED_EVENT } from "../api/auth";
+import { getStoredAccessToken } from "../api/client";
+import {
+  getLinkedProfileIds,
+  scheduleProfileSync,
+  syncAllProfilesToCloud,
+  type ProfileForSync,
+} from "../lib/buildSync";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type LoaderVersionChannel = "stable" | "beta" | "alpha";
@@ -525,6 +534,13 @@ export function ModpackTab({
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
   const [presetIconUris, setPresetIconUris] = useState<Record<string, string>>({});
   const [profileIconRevisions, setProfileIconRevisions] = useState<Record<string, number>>({});
+  const [apiSignedIn, setApiSignedIn] = useState(() => Boolean(getStoredAccessToken()));
+  const [isCloudBuildsOpen, setIsCloudBuildsOpen] = useState(false);
+  const [cloudLinkedProfileIds, setCloudLinkedProfileIds] = useState<Set<string>>(
+    () => getLinkedProfileIds(),
+  );
+  const apiSignedInRef = useRef(apiSignedIn);
+  apiSignedInRef.current = apiSignedIn;
   const [versionOptions, setVersionOptions] = useState<VersionSummary[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
@@ -862,6 +878,41 @@ export function ModpackTab({
     () => buildPresets.find((p) => p.id === createSelectedPresetId) ?? null,
     [buildPresets, createSelectedPresetId],
   );
+
+  useEffect(() => {
+    const syncAuth = () => setApiSignedIn(Boolean(getStoredAccessToken()));
+    syncAuth();
+    window.addEventListener(API_AUTH_CHANGED_EVENT, syncAuth);
+    window.addEventListener("storage", syncAuth);
+    return () => {
+      window.removeEventListener(API_AUTH_CHANGED_EVENT, syncAuth);
+      window.removeEventListener("storage", syncAuth);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!apiSignedIn || profiles.length === 0) return;
+    void (async () => {
+      const synced = await syncAllProfilesToCloud(profiles as ProfileForSync[]);
+      setProfiles((prev) =>
+        prev.map((p) => {
+          const updated = synced.find((s) => s.id === p.id);
+          if (!updated) return p;
+          return {
+            ...p,
+            play_time_seconds: updated.play_time_seconds ?? p.play_time_seconds,
+            last_played_at: updated.last_played_at ?? p.last_played_at,
+          };
+        }),
+      );
+      setCloudLinkedProfileIds(getLinkedProfileIds());
+    })();
+  }, [apiSignedIn]);
+
+  function pushProfileSync(profile: InstanceProfile) {
+    if (!apiSignedInRef.current) return;
+    scheduleProfileSync(profile as ProfileForSync);
+  }
 
   const refreshBuildPresets = useCallback(async () => {
     setBuildPresetsLoading(true);
@@ -1751,8 +1802,21 @@ export function ModpackTab({
   async function refreshProfiles() {
     setLoadingProfiles(true);
     try {
-      const list = await invoke<InstanceProfile[]>("get_profiles");
+      let list = await invoke<InstanceProfile[]>("get_profiles");
       profilesLoadedRef.current = true;
+      if (getStoredAccessToken()) {
+        const synced = await syncAllProfilesToCloud(list as ProfileForSync[]);
+        list = list.map((p) => {
+          const updated = synced.find((s) => s.id === p.id);
+          if (!updated) return p;
+          return {
+            ...p,
+            play_time_seconds: updated.play_time_seconds ?? p.play_time_seconds,
+            last_played_at: updated.last_played_at ?? p.last_played_at,
+          };
+        });
+        setCloudLinkedProfileIds(getLinkedProfileIds());
+      }
       setProfiles(list);
       onProfilesChange?.(list);
       try {
@@ -1781,11 +1845,14 @@ export function ModpackTab({
               "get_profile_play_time_seconds",
               { profile_id },
             );
-            setProfiles((prev) =>
-              prev.map((p) =>
+            setProfiles((prev) => {
+              const next = prev.map((p) =>
                 p.id === profile_id ? { ...p, play_time_seconds: seconds } : p,
-              ),
-            );
+              );
+              const updated = next.find((p) => p.id === profile_id);
+              if (updated) pushProfileSync(updated);
+              return next;
+            });
           } catch (e) {
             console.error(e);
           }
@@ -1796,11 +1863,14 @@ export function ModpackTab({
       "last-played-updated",
       (event) => {
         const { profile_id, last_played_at } = event.payload;
-        setProfiles((prev) =>
-          prev.map((p) =>
+        setProfiles((prev) => {
+          const next = prev.map((p) =>
             p.id === profile_id ? { ...p, last_played_at } : p,
-          ),
-        );
+          );
+          const updated = next.find((p) => p.id === profile_id);
+          if (updated) pushProfileSync(updated);
+          return next;
+        });
       },
     );
     return () => {
@@ -3080,6 +3150,14 @@ export function ModpackTab({
                   {tt("modpacks.list.activeBadge")}
                 </span>
               )}
+              {apiSignedIn && cloudLinkedProfileIds.has(p.id) && (
+                <span
+                  className="rounded-full bg-sky-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200"
+                  title={tt("modpacks.cloud.linkedBadgeTitle")}
+                >
+                  {tt("modpacks.cloud.badge")}
+                </span>
+              )}
             </div>
             <div className="mt-0.5 flex flex-col gap-1 text-[11px] text-white/70">
               <div className="flex flex-wrap items-center gap-2">
@@ -3218,6 +3296,16 @@ export function ModpackTab({
                 className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-soft hover:bg-white/20"
               >
                 <span>{tt("modpacks.presets.manage")}</span>
+              </button>
+            )}
+            {apiSignedIn && (
+              <button
+                type="button"
+                onClick={() => setIsCloudBuildsOpen(true)}
+                className="interactive-press inline-flex items-center gap-2 rounded-2xl border border-sky-400/30 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-soft hover:bg-sky-500/25"
+              >
+                <Cloud className="h-4 w-4" />
+                <span>{tt("modpacks.cloud.open")}</span>
               </button>
             )}
             <button
@@ -5909,6 +5997,22 @@ export function ModpackTab({
         onClose={() => setIsScreenshotsOpen(false)}
         showNotification={showNotification}
       />
+
+      {isCloudBuildsOpen && apiSignedIn ? (
+        <CloudBuildsModal
+          language={language}
+          profiles={profiles as ProfileForSync[]}
+          onClose={() => {
+            setIsCloudBuildsOpen(false);
+            setCloudLinkedProfileIds(getLinkedProfileIds());
+          }}
+          onProfilesUpdated={() => {
+            void refreshProfiles();
+            setCloudLinkedProfileIds(getLinkedProfileIds());
+          }}
+          showNotification={showNotification}
+        />
+      ) : null}
     </div>
   );
 }
