@@ -28,6 +28,8 @@ import { ModsTab } from "./tabs/ModsTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
+import { FriendsTab } from "./tabs/FriendsTab";
+import { PlatformAccountPanel } from "./tabs/PlatformAccountPanel";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
@@ -100,7 +102,7 @@ type LauncherAccountSummary = {
   is_active: boolean;
 };
 
-type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
+type SidebarItemId = "play" | "settings" | "friends" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "game" | "versions" | "launcher";
@@ -192,6 +194,7 @@ type InstanceProfileCard = InstanceProfileSummary & {
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
   settings: "/launcher-assets/settings.png",
+  friends: "/launcher-assets/favorite.png",
   mods: "/launcher-assets/mods.png",
   modpacks: "/launcher-assets/modpack_icon.png",
 };
@@ -576,11 +579,12 @@ const REMOTE_NOTIFICATIONS_URLS = [
 const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
 const TELEGRAM_LINK = "https://t.me/of16launcher";
 
-const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
+const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "friends", "mods", "modpacks"];
 
 const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
   { id: "play", labelKey: "app.sidebar.play" },
   { id: "settings", labelKey: "app.sidebar.settings" },
+  { id: "friends", labelKey: "app.sidebar.friends" },
   { id: "mods", labelKey: "app.sidebar.mods" },
   { id: "modpacks", labelKey: "app.sidebar.modpacks" },
 ];
@@ -2557,6 +2561,9 @@ function App() {
       case "modpacks":
         details = t(language, "app.discord.modpacks");
         if (activeInstanceProfile?.name) state = activeInstanceProfile.name;
+        break;
+      case "friends":
+        details = t(language, "app.discord.friends");
         break;
       case "accounts":
         details = t(language, "app.discord.accounts");
@@ -4616,7 +4623,11 @@ function App() {
               )}
             </div>
           ) : null}
-          {activeItem === "accounts" ? (
+          {activeItem === "friends" ? (
+            <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
+              <FriendsTab showNotification={showNotification} language={language} />
+            </div>
+          ) : activeItem === "accounts" ? (
             <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-5 overflow-y-auto py-1 lg:gap-6 lg:overflow-hidden">
               <header className="shrink-0 text-center">
                 <h1 className="text-lg font-bold tracking-tight text-white/95">
@@ -4836,6 +4847,21 @@ function App() {
                   </div>
                 )}
               </div>
+
+              <PlatformAccountPanel
+                showNotification={showNotification}
+                language={language}
+                launcherProfile={{
+                  launcher_nickname: profile.nickname?.trim() || null,
+                  ely_username: profile.ely_username,
+                  microsoft_username: profile.mc_uuid ? profile.nickname : null,
+                  ely_uuid: profile.ely_uuid,
+                  mc_uuid: profile.mc_uuid,
+                }}
+                onMicrosoftLogin={handleMicrosoftLogin}
+                onElyLogin={handleElyLogin}
+                providerLoginBusy={elyLoading || msLoading}
+              />
                 </div>
                 <div className="flex min-h-[min(360px,40vh)] min-w-0 flex-col lg:min-h-0">
                   <AccountSkinPreview

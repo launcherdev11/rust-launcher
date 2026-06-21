@@ -24,5 +24,6 @@ dist-ssr
 .env.*
 
 src-tauri/target
+backend/target
 
 %USERPROFILE%

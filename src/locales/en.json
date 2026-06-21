@@ -472,6 +472,34 @@
       "unselect": "Unselect",
       "createShortcut": "Create desktop shortcut"
     },
+    "cloud": {
+      "open": "Cloud builds",
+      "title": "Your cloud builds",
+      "subtitle": "Builds synced to your 16Launcher account. Friends can view them if you are connected.",
+      "badge": "Cloud",
+      "linkedBadgeTitle": "Synced to cloud",
+      "loading": "Loading builds…",
+      "empty": "No cloud builds yet. Play a profile while signed in to sync automatically.",
+      "back": "Back",
+      "close": "Close",
+      "refresh": "Refresh",
+      "syncNow": "Sync now",
+      "syncAll": "Sync all profiles",
+      "syncSuccess": "“{{name}}” synced to cloud.",
+      "syncAllSuccess": "All profiles synced to cloud.",
+      "delete": "Delete from cloud",
+      "deleteConfirm": "Delete cloud build “{{name}}”? Local profile files will not be removed.",
+      "deleteSuccess": "Cloud build deleted.",
+      "noLocalProfile": "No matching local profile found. Create a profile with the same name, version, and loader.",
+      "linkedProfile": "Linked profile: {{name}}",
+      "unlinked": "Not linked to a local profile",
+      "buildMeta": "{{version}} • {{loader}}",
+      "buildPlaytime": "Playtime: {{time}}",
+      "buildLastLaunch": "Last launch: {{date}}",
+      "contents": "Contents",
+      "contentCount": "{{count}} items",
+      "noContents": "No content metadata synced yet."
+    },
     "shortcut": {
       "created": "Desktop shortcut created.",
       "failed": "Failed to create shortcut: {{msg}}"
@@ -763,7 +791,7 @@
   },
   "friends": {
     "subtitleSignedIn": "Manage friends by nickname.",
-    "subtitleSignedOut": "Sign in to Supabase in the Accounts tab to use friends.",
+    "subtitleSignedOut": "Sign in to your 16Launcher platform account in the Accounts tab to use friends.",
     "friendNicknamePlaceholder": "Friend's nickname",
     "add": "Add",
     "refresh": "Refresh",
@@ -775,6 +803,21 @@
     "reject": "Reject",
     "yourFriends": "Your friends",
     "noFriends": "No friends yet. Send a request by nickname.",
+    "viewBuilds": "Builds",
+    "friendBuildsTitle": "{{nickname}}'s builds",
+    "noBuilds": "No saved builds.",
+    "loadingBuilds": "Loading builds…",
+    "buildContents": "Contents",
+    "contentCount": "{{count}} items",
+    "contentSource": "Source",
+    "contentProject": "Project",
+    "contentType": "Type",
+    "close": "Close",
+    "back": "Back",
+    "buildMeta": "{{version}} • {{loader}}",
+    "buildPlaytime": "Playtime: {{time}}",
+    "buildLastLaunch": "Last launch: {{date}}",
+    "buildsPrivacyNote": "You can only view builds of friends who have synced them to the platform.",
     "toast": {
       "requestAccepted": "Request accepted",
       "requestRejected": "Request rejected",
@@ -784,8 +827,8 @@
       "requestSent": "Request sent"
     }
   },
-  "supabase": {
-    "accountTitle": "16launcher account",
+  "platform": {
+    "accountTitle": "16Launcher account",
     "accountManagement": "Account management",
     "signIn": "Sign in",
     "signUp": "Sign up",
@@ -819,8 +862,7 @@
       "nicknameTooShort": "Nickname must be at least 3 characters.",
       "nicknameAlreadySet": "This nickname is already set.",
       "nicknameUpdated": "Nickname updated.",
-      "sessionExpired": "16launcher session expired. Sign in again.",
-      "sessionExpiredWithMsg": "16launcher session expired: {{msg}}",
+      "sessionExpired": "16Launcher session expired. Sign in again.",
       "signInMicrosoftThenLink": "Sign in with Microsoft, then click Link again.",
       "signInElyThenLink": "Sign in with Ely.by, then click Link again.",
       "minecraftLinked": "Minecraft linked to account",
@@ -828,24 +870,16 @@
       "enterEmailSignup": "Enter email for registration.",
       "enterSignupNickname": "Enter a nickname for registration.",
       "enterPassword": "Enter password",
-      "passwordTooShort": "Password must be at least 6 characters.",
-      "envNotConfigured": "VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY are not configured in .env",
-      "noAccessToken": "No Supabase access_token — sign in first.",
-      "noRefreshToken": "Failed to get refresh_token from Supabase response.",
-      "noAccessTokenResponse": "Failed to get access_token from Supabase response.",
-      "refreshNoToken": "Supabase refresh did not return access_token.",
-      "nicknameLoginUnsupported": "Supabase server does not support nickname login yet (users_resolve_login missing).",
-      "nicknameEmailNotFound": "No email found for this nickname.",
-      "resolveLoginFailed": "Failed to call users_resolve_login (nickname login). Usually CORS/OPTIONS in Edge Function. Sign in with email for now, then check CORS in users_resolve_login."
+      "passwordTooShort": "Password must be at least 8 characters."
     },
     "errors": {
-      "connectionFailed": "Cannot connect to Supabase. Check VITE_SUPABASE_PROJECT_URL (must be https://<project>.supabase.co), internet, and service availability.",
+      "connectionFailed": "Cannot connect to the 16Launcher server. Check VITE_API_BASE_URL, internet, and API availability.",
       "invalidCredentials": "Invalid login or password.",
       "invalidPassword": "Invalid password.",
-      "passwordTooShort": "Password is too short. Minimum 6 characters.",
-      "weakPassword": "Password is too weak.",
-      "identityAlreadyLinked": "{{provider}} is already linked to another 16launcher account. Unlink it there or use a different {{provider}} account.",
-      "linkConnectionFailed": "Failed to link {{provider}}: no connection to Supabase. Check internet and project settings."
+      "passwordTooShort": "Password is too short. Minimum 8 characters.",
+      "emailTaken": "This email is already registered.",
+      "nicknameTaken": "This nickname is already taken.",
+      "identityAlreadyLinked": "{{provider}} is already linked to another 16Launcher account."
     }
   },
   "app": {
@@ -970,6 +1004,7 @@
       "settings": "Configuring the launcher",
       "mods": "Selecting a mod",
       "modpacks": "Selecting a profile",
+      "friends": "Viewing friends",
       "accounts": "Managing account"
     },
     "pinnedProfiles": {
