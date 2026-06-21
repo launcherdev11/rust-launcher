@@ -1,6 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
-import { useT, type Language } from "../i18n";
+import { useCallback, useEffect, useState } from "react";
+import {
+  acceptFriendRequest,
+  listFriends,
+  listIncomingRequests,
+  rejectFriendRequest,
+  sendFriendRequest,
+  type FriendRow,
+  type IncomingRequestRow,
+} from "../api/friends";
+import {
+  fetchUserBuild,
+  fetchUserBuilds,
+} from "../api/users";
+import type { BuildDetail, BuildRow } from "../api/builds";
+import {
+  API_AUTH_CHANGED_EVENT,
+  API_NICKNAME_KEY,
+} from "../api/auth";
+import { getStoredAccessToken } from "../api/client";
+import { ApiError } from "../api/client";
+import { useT, formatPlaytimeShort, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getElyAvatarByUsername } from "../lib/avatar";
+
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
 
@@ -9,119 +30,58 @@ type FriendsTabProps = {
   language: Language;
 };
 
-type FriendRow = {
-  user_id: string;
-  nickname: string;
-  ely_username?: string | null;
-};
-
-type IncomingRequestRow = {
-  request_id: string;
-  from_user_id: string;
-  from_nickname: string;
-  from_ely_username?: string | null;
-  created_at?: string;
-};
-
-const STORAGE_TOKEN_KEY = "mc16launcher:supabase_access_token_v1";
-const STORAGE_NICKNAME_KEY = "mc16launcher:supabase_nickname_v1";
-
-function jsonErrorFromBody(body: unknown): string {
-  if (!body) return "Unknown error";
-  if (typeof body === "string") return body;
-  if (typeof body === "object") {
-    const o = body as any;
-    const msg = o.message ?? o.error ?? null;
-    const detail = o.detail ?? o.details ?? null;
-    if (msg && detail) return `${msg}: ${detail}`;
-    if (msg) return String(msg);
-    if (detail) return String(detail);
-  }
-  return "Unknown error";
-}
-
 export function FriendsTab({ showNotification, language }: FriendsTabProps) {
   const tt = useT(language);
 
-  const supabaseProjectUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL as string | undefined) ?? "";
-  const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
-
-  const edgeAuthHeaders = useMemo(() => {
-    if (!supabaseAnonKey) return null;
-    return {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
-    };
-  }, [supabaseAnonKey]);
-
   const [loading, setLoading] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
-  const [accessToken, setAccessToken] = useState<string>("");
-  const [profileNickname, setProfileNickname] = useState<string>("");
+  const [accessToken, setAccessToken] = useState("");
+  const [profileNickname, setProfileNickname] = useState("");
 
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequestRow[]>([]);
   const [friendNickToAdd, setFriendNickToAdd] = useState("");
   const [friendAvatarByKey, setFriendAvatarByKey] = useState<Record<string, string>>({});
+  const [buildsFriend, setBuildsFriend] = useState<FriendRow | null>(null);
+  const [friendBuilds, setFriendBuilds] = useState<BuildRow[]>([]);
+  const [friendBuildsLoading, setFriendBuildsLoading] = useState(false);
+  const [selectedFriendBuild, setSelectedFriendBuild] = useState<BuildDetail | null>(null);
+  const [friendBuildDetailLoading, setFriendBuildDetailLoading] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const syncAuth = useCallback(() => {
+    const token = getStoredAccessToken() ?? "";
+    setAccessToken(token);
     try {
-      const t = window.localStorage.getItem(STORAGE_TOKEN_KEY);
-      const n = window.localStorage.getItem(STORAGE_NICKNAME_KEY);
-      if (t) setAccessToken(t);
-      if (n) setProfileNickname(n);
+      setProfileNickname(window.localStorage.getItem(API_NICKNAME_KEY) ?? "");
     } catch {
-      // ignore
+      setProfileNickname("");
     }
   }, []);
 
-  const loadFriends = async (token: string) => {
-    if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
-    if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
+  useEffect(() => {
+    syncAuth();
+    const onChanged = () => syncAuth();
+    window.addEventListener(API_AUTH_CHANGED_EVENT, onChanged);
+    window.addEventListener("storage", onChanged);
+    return () => {
+      window.removeEventListener(API_AUTH_CHANGED_EVENT, onChanged);
+      window.removeEventListener("storage", onChanged);
+    };
+  }, [syncAuth]);
 
-    const url = `${supabaseProjectUrl}/functions/v1/friends_list_friends`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...edgeAuthHeaders,
-      },
-      body: JSON.stringify({ supabase_access_token: token }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(jsonErrorFromBody(data));
-    return data as { friends: FriendRow[] };
-  };
-
-  const loadIncomingRequests = async (token: string) => {
-    if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
-    if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
-
-    const url = `${supabaseProjectUrl}/functions/v1/friends_list_requests`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...edgeAuthHeaders,
-      },
-      body: JSON.stringify({ supabase_access_token: token }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(jsonErrorFromBody(data));
-    return data as { incoming_requests: IncomingRequestRow[] };
-  };
+  const reloadAll = useCallback(async () => {
+    const [friendsRes, requestsRes] = await Promise.all([listFriends(), listIncomingRequests()]);
+    setFriends(friendsRes);
+    setIncomingRequests(requestsRes);
+  }, []);
 
   const handleLoadFriends = async () => {
     if (!accessToken) return;
     setLoading(true);
     try {
-      const res = await loadFriends(accessToken);
-      setFriends(res.friends ?? []);
+      setFriends(await listFriends());
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -131,10 +91,9 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     if (!accessToken) return;
     setRequestsLoading(true);
     try {
-      const res = await loadIncomingRequests(accessToken);
-      setIncomingRequests(res.incoming_requests ?? []);
+      setIncomingRequests(await listIncomingRequests());
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setRequestsLoading(false);
     }
@@ -144,29 +103,11 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     if (!accessToken) return;
     setRequestsLoading(true);
     try {
-      const url = `${supabaseProjectUrl}/functions/v1/friends_accept_request`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(edgeAuthHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          supabase_access_token: accessToken,
-          request_id: requestId,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(jsonErrorFromBody(data));
+      await acceptFriendRequest(requestId);
       showNotification("success", tt("friends.toast.requestAccepted"));
-      const [reqRes, friendsRes] = await Promise.all([
-        loadIncomingRequests(accessToken),
-        loadFriends(accessToken),
-      ]);
-      setIncomingRequests(reqRes.incoming_requests ?? []);
-      setFriends(friendsRes.friends ?? []);
+      await reloadAll();
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setRequestsLoading(false);
     }
@@ -176,28 +117,50 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     if (!accessToken) return;
     setRequestsLoading(true);
     try {
-      const url = `${supabaseProjectUrl}/functions/v1/friends_reject_request`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(edgeAuthHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          supabase_access_token: accessToken,
-          request_id: requestId,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(jsonErrorFromBody(data));
+      await rejectFriendRequest(requestId);
       showNotification("info", tt("friends.toast.requestRejected"));
-      const reqRes = await loadIncomingRequests(accessToken);
-      setIncomingRequests(reqRes.incoming_requests ?? []);
+      setIncomingRequests(await listIncomingRequests());
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setRequestsLoading(false);
     }
+  };
+
+  const handleOpenFriendBuilds = async (friend: FriendRow) => {
+    if (!accessToken) return;
+    setBuildsFriend(friend);
+    setSelectedFriendBuild(null);
+    setFriendBuilds([]);
+    setFriendBuildsLoading(true);
+    try {
+      setFriendBuilds(await fetchUserBuilds(friend.user_id));
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+      setBuildsFriend(null);
+    } finally {
+      setFriendBuildsLoading(false);
+    }
+  };
+
+  const handleOpenFriendBuildDetail = async (build: BuildRow) => {
+    if (!buildsFriend || !accessToken) return;
+    setFriendBuildDetailLoading(true);
+    try {
+      setSelectedFriendBuild(await fetchUserBuild(buildsFriend.user_id, build.id));
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setFriendBuildDetailLoading(false);
+    }
+  };
+
+  const closeFriendBuildsModal = () => {
+    setBuildsFriend(null);
+    setFriendBuilds([]);
+    setSelectedFriendBuild(null);
+    setFriendBuildsLoading(false);
+    setFriendBuildDetailLoading(false);
   };
 
   const handleSendRequest = async () => {
@@ -214,30 +177,15 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
 
     setLoading(true);
     try {
-      const url = `${supabaseProjectUrl}/functions/v1/friends_send_request`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(edgeAuthHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          supabase_access_token: accessToken,
-          to_nickname: toNick,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(jsonErrorFromBody(data));
-
-      if (data?.already_exists) {
+      const result = await sendFriendRequest(toNick);
+      if (result.already_exists) {
         showNotification("info", tt("friends.toast.requestExists"));
       } else {
         showNotification("success", tt("friends.toast.requestSent"));
       }
-
       setFriendNickToAdd("");
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -250,33 +198,27 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       return;
     }
 
-    let isCancelled = false;
+    let cancelled = false;
     setLoading(true);
     setRequestsLoading(true);
 
-    void Promise.all([
-      loadFriends(accessToken),
-      loadIncomingRequests(accessToken),
-    ])
-      .then(([friendsRes, requestsRes]) => {
-        if (isCancelled) return;
-        setFriends(friendsRes.friends ?? []);
-        setIncomingRequests(requestsRes.incoming_requests ?? []);
-      })
+    void reloadAll()
       .catch((e) => {
-        if (isCancelled) return;
-        showNotification("error", e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          showNotification("error", e instanceof ApiError ? e.message : String(e));
+        }
       })
       .finally(() => {
-        if (isCancelled) return;
-        setLoading(false);
-        setRequestsLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setRequestsLoading(false);
+        }
       });
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
     };
-  }, [accessToken, edgeAuthHeaders, supabaseProjectUrl, showNotification]);
+  }, [accessToken, reloadAll, showNotification]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -322,7 +264,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
         </p>
       </div>
 
-      <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-6 shadow-xl backdrop-blur-md bg-black/40">
+      <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-6 py-6 shadow-xl backdrop-blur-md">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
@@ -374,13 +316,12 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                     key={r.request_id}
                     className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
                   >
-                    <div className="min-w-0 flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <img
                         src={
                           (r.from_ely_username
                             ? friendAvatarByKey[r.from_ely_username.trim().toLowerCase()]
-                            : undefined) ??
-                          buildInitialAvatarDataUrl(r.from_nickname)
+                            : undefined) ?? buildInitialAvatarDataUrl(r.from_nickname)
                         }
                         alt=""
                         className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
@@ -390,8 +331,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                         }}
                       />
                       <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
-                      <p className="text-[11px] text-white/45 truncate">{r.from_user_id}</p>
+                        <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -433,13 +373,12 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                     key={f.user_id}
                     className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
                   >
-                    <div className="min-w-0 flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <img
                         src={
                           (f.ely_username
                             ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
-                            : undefined) ??
-                          buildInitialAvatarDataUrl(f.nickname)
+                            : undefined) ?? buildInitialAvatarDataUrl(f.nickname)
                         }
                         alt=""
                         className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
@@ -450,7 +389,13 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                       />
                       <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
                     </div>
-                    <span className="text-[11px] text-white/40 truncate max-w-[160px]">{f.user_id}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleOpenFriendBuilds(f)}
+                      className="interactive-press shrink-0 rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/80 hover:bg-black/60"
+                    >
+                      {tt("friends.viewBuilds")}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -458,7 +403,131 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
           </div>
         </div>
       </div>
+
+      {buildsFriend ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={closeFriendBuildsModal}
+        >
+          <div
+            className="flex max-h-[min(80vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#12141a] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-white/10 px-5 py-4">
+              <h2 className="text-base font-bold text-white/95">
+                {tt("friends.friendBuildsTitle", { nickname: buildsFriend.nickname })}
+              </h2>
+              <p className="mt-1 text-xs text-white/50">{tt("friends.buildsPrivacyNote")}</p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+              {selectedFriendBuild ? (
+                <div className="flex flex-col gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFriendBuild(null)}
+                    className="self-start text-xs font-semibold text-emerald-300/90 hover:text-emerald-200"
+                  >
+                    ← {tt("friends.back")}
+                  </button>
+                  <div>
+                    <p className="text-sm font-semibold text-white/95">{selectedFriendBuild.build.name}</p>
+                    <p className="mt-1 text-xs text-white/55">
+                      {tt("friends.buildMeta", {
+                        version: selectedFriendBuild.build.minecraft_version,
+                        loader: selectedFriendBuild.build.loader,
+                      })}
+                    </p>
+                    <p className="mt-1 text-xs text-white/55">
+                      {tt("friends.buildPlaytime", {
+                        time: formatPlaytimeShort(language, selectedFriendBuild.build.playtime_seconds),
+                      })}
+                    </p>
+                    {selectedFriendBuild.build.last_launch_at ? (
+                      <p className="mt-1 text-xs text-white/55">
+                        {tt("friends.buildLastLaunch", {
+                          date: new Date(selectedFriendBuild.build.last_launch_at).toLocaleString(),
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-white/45">
+                      {tt("friends.buildContents")} ({tt("friends.contentCount", {
+                        count: selectedFriendBuild.contents.length,
+                      })})
+                    </p>
+                    {friendBuildDetailLoading ? (
+                      <p className="text-sm text-white/60">{tt("friends.loadingBuilds")}</p>
+                    ) : selectedFriendBuild.contents.length === 0 ? (
+                      <p className="text-sm text-white/60">{tt("friends.noBuilds")}</p>
+                    ) : (
+                      <ul className="flex flex-col gap-2">
+                        {selectedFriendBuild.contents.map((item) => {
+                          const title =
+                            typeof item.metadata?.title === "string"
+                              ? item.metadata.title
+                              : item.project_id;
+                          return (
+                            <li
+                              key={item.id}
+                              className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/85"
+                            >
+                              <p className="font-medium">{title}</p>
+                              <p className="mt-1 text-[11px] text-white/50">
+                                {item.source} • {item.type} • {item.project_id}
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              ) : friendBuildsLoading ? (
+                <p className="text-sm text-white/60">{tt("friends.loadingBuilds")}</p>
+              ) : friendBuilds.length === 0 ? (
+                <p className="text-sm text-white/60">{tt("friends.noBuilds")}</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {friendBuilds.map((build) => (
+                    <li key={build.id}>
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenFriendBuildDetail(build)}
+                        className="interactive-press w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-left hover:bg-black/45"
+                      >
+                        <p className="text-sm font-semibold text-white/90">{build.name}</p>
+                        <p className="mt-1 text-xs text-white/55">
+                          {tt("friends.buildMeta", {
+                            version: build.minecraft_version,
+                            loader: build.loader,
+                          })}
+                        </p>
+                        <p className="mt-1 text-xs text-white/50">
+                          {tt("friends.buildPlaytime", {
+                            time: formatPlaytimeShort(language, build.playtime_seconds),
+                          })}
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="border-t border-white/10 px-5 py-3">
+              <button
+                type="button"
+                onClick={closeFriendBuildsModal}
+                className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/75 hover:bg-black/50"
+              >
+                {tt("friends.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
-

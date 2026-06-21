@@ -20,6 +20,7 @@ declare module "lucide-react" {
   export const Search: LucideIcon;
   export const Trash2: LucideIcon;
   export const UploadCloud: LucideIcon;
+  export const Cloud: LucideIcon;
   export const Puzzle: LucideIcon;
   export const HardDrive: LucideIcon;
   export const ArrowLeft: LucideIcon;

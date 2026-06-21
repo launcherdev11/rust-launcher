@@ -551,3 +551,270 @@ pub async fn apply_profile_content_updates(
 
     Ok(applied)
 }
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileBuildContentEntry {
+    pub source: String,
+    pub project_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_id: Option<String>,
+    #[serde(rename = "type")]
+    pub content_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+async fn collect_enabled_filenames(content_dir: &Path) -> Result<HashMap<String, bool>, String> {
+    let mut enabled_by_filename = HashMap::new();
+    if !content_dir.is_dir() {
+        return Ok(enabled_by_filename);
+    }
+
+    let mut read_dir = tokio::fs::read_dir(content_dir)
+        .await
+        .map_err(|e| format!("Ошибка чтения папки {:?}: {e}", content_dir))?;
+    while let Some(entry) = read_dir
+        .next_entry()
+        .await
+        .map_err(|e| format!("Ошибка чтения записи в {:?}: {e}", content_dir))?
+    {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let display = profile_item_display_name(stored_name);
+        enabled_by_filename.insert(display, !profile_item_is_disabled(stored_name));
+    }
+    Ok(enabled_by_filename)
+}
+
+async fn collect_modrinth_build_contents(
+    profile_id: &str,
+    category: &str,
+    content_type: &str,
+) -> Result<(Vec<ProfileBuildContentEntry>, std::collections::HashSet<String>), String> {
+    let cfg = load_profile_config(profile_id)?;
+    let game_version = cfg.game_version.trim().to_string();
+    let loader = cfg.loader.trim().to_lowercase();
+    let subdir = modrinth_category_from_profile_category(category)?;
+    let profile_dir = instance_dir(profile_id)?;
+    let content_dir = profile_dir.join(subdir);
+    if !content_dir.is_dir() {
+        return Ok((Vec::new(), std::collections::HashSet::new()));
+    }
+
+    let sha_by_filename = index_content_dir_sha1(&content_dir).await?;
+    if sha_by_filename.is_empty() {
+        return Ok((Vec::new(), std::collections::HashSet::new()));
+    }
+
+    let enabled_by_filename = collect_enabled_filenames(&content_dir).await?;
+    let hashes: Vec<String> = sha_by_filename.values().cloned().collect();
+    let loaders = if category == "mods" && should_filter_by_loader(&loader) {
+        vec![loader.clone()]
+    } else {
+        Vec::new()
+    };
+    let game_versions = if game_version.is_empty() {
+        Vec::new()
+    } else {
+        vec![game_version]
+    };
+
+    let client = modrinth_http_client();
+    let mut entries = Vec::new();
+    let mut matched_filenames = std::collections::HashSet::new();
+
+    for chunk in hashes.chunks(VERSION_FILES_BATCH) {
+        let body = VersionFilesRequest {
+            hashes: chunk.to_vec(),
+            algorithm: "sha1".to_string(),
+            loaders: loaders.clone(),
+            game_versions: game_versions.clone(),
+        };
+
+        let current_map = post_version_files_map(
+            &client,
+            &body,
+            "version_files",
+            "идентификация файлов Modrinth",
+        )
+        .await?;
+
+        for (filename, sha1) in &sha_by_filename {
+            let Some(version) = current_map.get(sha1) else {
+                continue;
+            };
+            let enabled = *enabled_by_filename.get(filename).unwrap_or(&true);
+            let title = version_display_title(version);
+            entries.push(ProfileBuildContentEntry {
+                source: "modrinth".to_string(),
+                project_id: version.project_id.clone(),
+                version_id: Some(version.id.clone()),
+                file_id: None,
+                content_type: content_type.to_string(),
+                metadata: Some(serde_json::json!({
+                    "filename": filename,
+                    "title": title,
+                    "enabled": enabled,
+                })),
+            });
+            matched_filenames.insert(filename.clone());
+        }
+    }
+
+    Ok((entries, matched_filenames))
+}
+
+async fn collect_curseforge_build_contents(
+    content_dir: &Path,
+    enabled_by_filename: &HashMap<String, bool>,
+    content_type: &str,
+    skip_filenames: &std::collections::HashSet<String>,
+) -> Result<Vec<ProfileBuildContentEntry>, String> {
+    if !content_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut fingerprints: Vec<i32> = Vec::new();
+
+    let mut read_dir = tokio::fs::read_dir(content_dir)
+        .await
+        .map_err(|e| format!("Ошибка чтения папки {:?}: {e}", content_dir))?;
+    while let Some(entry) = read_dir
+        .next_entry()
+        .await
+        .map_err(|e| format!("Ошибка чтения записи в {:?}: {e}", content_dir))?
+    {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let filename = profile_item_display_name(stored_name);
+        if skip_filenames.contains(&filename) {
+            continue;
+        }
+
+        let bytes = tokio::fs::read(&path)
+            .await
+            .map_err(|e| format!("Ошибка чтения файла {:?}: {e}", path))?;
+        let fp = curseforge_file_fingerprint(&bytes);
+        fingerprints.push(fp);
+    }
+
+    fingerprints.sort_unstable();
+    fingerprints.dedup();
+    if fingerprints.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let api_key = curseforge_api_key()?;
+    let client = crate::infra::http::http_client(false);
+    let url = format!("{CF_API_BASE}/fingerprints/{MINECRAFT_GAME_ID}");
+    let body = CurseforgeFingerprintRequest { fingerprints };
+    let resp = client
+        .post(&url)
+        .header("x-api-key", api_key)
+        .header("Accept", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("идентификация файлов CurseForge: сеть: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let parsed: CfFingerprintResponse = resp
+        .json::<CfFingerprintResponse>()
+        .await
+        .map_err(|e| format!("идентификация файлов CurseForge: ошибка разбора JSON: {e}"))?;
+
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for exact in parsed.data.exact_matches {
+        let current = exact.file;
+        let filename = current.file_name.clone();
+        if filename.trim().is_empty() || seen.contains(&filename) {
+            continue;
+        }
+        if skip_filenames.contains(&filename) {
+            continue;
+        }
+
+        let enabled = enabled_by_filename.get(&filename).copied().unwrap_or(true);
+        let title = if !current.display_name.trim().is_empty() {
+            current.display_name.trim().to_string()
+        } else {
+            current.id.to_string()
+        };
+
+        out.push(ProfileBuildContentEntry {
+            source: "curseforge".to_string(),
+            project_id: current.mod_id.to_string(),
+            version_id: None,
+            file_id: Some(current.id.to_string()),
+            content_type: content_type.to_string(),
+            metadata: Some(serde_json::json!({
+                "filename": filename,
+                "title": title,
+                "enabled": enabled,
+            })),
+        });
+        seen.insert(filename);
+    }
+
+    Ok(out)
+}
+
+async fn collect_category_build_contents(
+    profile_id: &str,
+    category: &str,
+    content_type: &str,
+) -> Result<Vec<ProfileBuildContentEntry>, String> {
+    let subdir = modrinth_category_from_profile_category(category)?;
+    let profile_dir = instance_dir(profile_id)?;
+    let content_dir = profile_dir.join(subdir);
+
+    let (mut entries, matched) =
+        collect_modrinth_build_contents(profile_id, category, content_type).await?;
+
+    let enabled_by_filename = collect_enabled_filenames(&content_dir).await?;
+    if let Ok(cf_entries) = collect_curseforge_build_contents(
+        &content_dir,
+        &enabled_by_filename,
+        content_type,
+        &matched,
+    )
+    .await
+    {
+        entries.extend(cf_entries);
+    }
+
+    Ok(entries)
+}
+
+#[tauri::command]
+pub async fn collect_profile_build_contents(
+    profile_id: String,
+) -> Result<Vec<ProfileBuildContentEntry>, String> {
+    let mut all = Vec::new();
+    for (category, content_type) in [
+        ("mods", "mod"),
+        ("resourcepacks", "resourcepack"),
+        ("shaderpacks", "shader"),
+    ] {
+        all.extend(collect_category_build_contents(&profile_id, category, content_type).await?);
+    }
+    Ok(all)
+}

@@ -20,7 +20,7 @@ export type ModpackNavigationActions = {
   openProfileSettings: (profileId: string) => void;
 };
 
-type SidebarTabId = "play" | "settings" | "mods" | "modpacks" | "accounts";
+type SidebarTabId = "play" | "settings" | "friends" | "mods" | "modpacks" | "accounts";
 type SettingsTabId = "game" | "versions" | "launcher";
 
 type NavSnapshot = {

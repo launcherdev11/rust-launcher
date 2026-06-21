@@ -23,6 +23,7 @@ use services::game::{
     get_effective_settings, get_game_root_dir, get_version_install_details,
     get_installed_fabric_profile_id, get_installed_quilt_profile_id, get_java_settings, get_profile,
     get_profile_icon_data_uri, get_profile_java_settings, get_profile_play_time_seconds, get_profiles,
+    merge_profile_cloud_stats,
     set_profile_icon_from_file,
     get_selected_profile,
     get_settings, get_system_memory_gb, get_launcher_cache_size, import_custom_version,
@@ -50,7 +51,7 @@ use services::curseforge::{
     download_curseforge_file,
 };
 use services::modrinth::{
-    apply_profile_content_updates, check_profile_content_updates,
+    apply_profile_content_updates, check_profile_content_updates, collect_profile_build_contents,
     download_modrinth_with_dependencies, resolve_modrinth_required_dependencies,
     resolve_profile_item_metadata,
 };
@@ -174,6 +175,7 @@ pub fn run() {
             get_profile_icon_data_uri,
             set_profile_icon_from_file,
             get_profile_play_time_seconds,
+            merge_profile_cloud_stats,
             create_profile,
             list_build_presets,
             save_build_preset,
@@ -203,6 +205,7 @@ pub fn run() {
             resolve_modrinth_required_dependencies,
             check_profile_content_updates,
             apply_profile_content_updates,
+            collect_profile_build_contents,
             resolve_profile_item_metadata,
             download_modrinth_modpack_and_import,
             curseforge_search_mods,

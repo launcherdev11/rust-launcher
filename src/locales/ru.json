@@ -472,6 +472,34 @@
       "unselect": "Снять выбор",
       "createShortcut": "Создать ярлык на рабочем столе"
     },
+    "cloud": {
+      "open": "Облачные сборки",
+      "title": "Ваши облачные сборки",
+      "subtitle": "Сборки, синхронизированные с аккаунтом 16Launcher. Друзья могут их просматривать.",
+      "badge": "Облако",
+      "linkedBadgeTitle": "Синхронизировано с облаком",
+      "loading": "Загрузка сборок…",
+      "empty": "Облачных сборок пока нет. Играйте в профиль, будучи авторизованным — синхронизация произойдёт автоматически.",
+      "back": "Назад",
+      "close": "Закрыть",
+      "refresh": "Обновить",
+      "syncNow": "Синхронизировать",
+      "syncAll": "Синхронизировать все профили",
+      "syncSuccess": "«{{name}}» синхронизирована с облаком.",
+      "syncAllSuccess": "Все профили синхронизированы с облаком.",
+      "delete": "Удалить из облака",
+      "deleteConfirm": "Удалить облачную сборку «{{name}}»? Локальные файлы профиля не будут удалены.",
+      "deleteSuccess": "Облачная сборка удалена.",
+      "noLocalProfile": "Локальный профиль не найден. Создайте профиль с тем же именем, версией и загрузчиком.",
+      "linkedProfile": "Связанный профиль: {{name}}",
+      "unlinked": "Не связана с локальным профилем",
+      "buildMeta": "{{version}} • {{loader}}",
+      "buildPlaytime": "Наиграно: {{time}}",
+      "buildLastLaunch": "Последний запуск: {{date}}",
+      "contents": "Содержимое",
+      "contentCount": "{{count}} элементов",
+      "noContents": "Метаданные содержимого ещё не синхронизированы."
+    },
     "shortcut": {
       "created": "Ярлык на рабочем столе создан.",
       "failed": "Не удалось создать ярлык: {{msg}}"
@@ -763,7 +791,7 @@
   },
   "friends": {
     "subtitleSignedIn": "Управляйте друзьями по nickname.",
-    "subtitleSignedOut": "Войдите в Supabase во вкладке «Аккаунты», чтобы пользоваться друзьями.",
+    "subtitleSignedOut": "Войдите в платформенный аккаунт 16Launcher во вкладке «Аккаунты», чтобы пользоваться друзьями.",
     "friendNicknamePlaceholder": "Никнейм друга",
     "add": "Добавить",
     "refresh": "Обновить",
@@ -775,6 +803,21 @@
     "reject": "Отклонить",
     "yourFriends": "Ваши друзья",
     "noFriends": "Пока никого нет. Отправьте заявку по nickname.",
+    "viewBuilds": "Сборки",
+    "friendBuildsTitle": "Сборки {{nickname}}",
+    "noBuilds": "Нет сохранённых сборок.",
+    "loadingBuilds": "Загрузка сборок…",
+    "buildContents": "Содержимое",
+    "contentCount": "{{count}} элементов",
+    "contentSource": "Источник",
+    "contentProject": "Проект",
+    "contentType": "Тип",
+    "close": "Закрыть",
+    "back": "Назад",
+    "buildMeta": "{{version}} • {{loader}}",
+    "buildPlaytime": "Наиграно: {{time}}",
+    "buildLastLaunch": "Последний запуск: {{date}}",
+    "buildsPrivacyNote": "Сборки видны только у друзей, которые синхронизировали их с платформой.",
     "toast": {
       "requestAccepted": "Заявка принята",
       "requestRejected": "Заявка отклонена",
@@ -784,8 +827,8 @@
       "requestSent": "Заявка отправлена"
     }
   },
-  "supabase": {
-    "accountTitle": "16launcher аккаунт",
+  "platform": {
+    "accountTitle": "16Launcher аккаунт",
     "accountManagement": "Управление аккаунтом",
     "signIn": "Войти",
     "signUp": "Регистрация",
@@ -819,8 +862,7 @@
       "nicknameTooShort": "Никнейм должен быть не короче 3 символов.",
       "nicknameAlreadySet": "Этот никнейм уже установлен.",
       "nicknameUpdated": "Никнейм обновлен.",
-      "sessionExpired": "Сессия 16launcher истекла. Войдите в аккаунт снова.",
-      "sessionExpiredWithMsg": "Сессия 16launcher истекла: {{msg}}",
+      "sessionExpired": "Сессия 16Launcher истекла. Войдите в аккаунт снова.",
       "signInMicrosoftThenLink": "Выполните вход Microsoft, затем снова нажмите «Привязать».",
       "signInElyThenLink": "Выполните вход Ely.by, затем снова нажмите «Привязать».",
       "minecraftLinked": "Minecraft привязан к аккаунту",
@@ -828,24 +870,16 @@
       "enterEmailSignup": "Для регистрации укажите email.",
       "enterSignupNickname": "Введите никнейм для регистрации.",
       "enterPassword": "Введите пароль",
-      "passwordTooShort": "Пароль должен содержать минимум 6 символов.",
-      "envNotConfigured": "Не настроены VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY в .env",
-      "noAccessToken": "Нет Supabase access_token — войдите в аккаунт.",
-      "noRefreshToken": "Не удалось получить refresh_token из ответа Supabase.",
-      "noAccessTokenResponse": "Не удалось получить access_token из ответа Supabase.",
-      "refreshNoToken": "Supabase refresh не вернул access_token.",
-      "nicknameLoginUnsupported": "Сервер Supabase пока не поддерживает вход по nickname (нет users_resolve_login).",
-      "nicknameEmailNotFound": "По этому nickname не найден email для входа.",
-      "resolveLoginFailed": "Не удалось обратиться к функции users_resolve_login (вход по никнейму). Обычно это CORS/OPTIONS в Edge Function. Временно войдите по email, затем проверьте CORS в users_resolve_login."
+      "passwordTooShort": "Пароль должен содержать минимум 8 символов."
     },
     "errors": {
-      "connectionFailed": "Не удается подключиться к Supabase. Проверьте VITE_SUPABASE_PROJECT_URL (должен быть https://<project>.supabase.co), интернет и доступность сервиса.",
+      "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте VITE_API_BASE_URL, интернет и доступность API.",
       "invalidCredentials": "Неверный логин или пароль.",
       "invalidPassword": "Неверный пароль.",
-      "passwordTooShort": "Пароль слишком короткий. Минимум 6 символов.",
-      "weakPassword": "Слишком слабый пароль.",
-      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16launcher. Отвяжите его в том аккаунте или используйте другой аккаунт {{provider}}.",
-      "linkConnectionFailed": "Не удалось привязать {{provider}}: нет соединения с Supabase. Проверьте интернет и настройки проекта."
+      "passwordTooShort": "Пароль слишком короткий. Минимум 8 символов.",
+      "emailTaken": "Этот email уже зарегистрирован.",
+      "nicknameTaken": "Этот никнейм уже занят.",
+      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16Launcher."
     }
   },
   "app": {
@@ -970,6 +1004,7 @@
       "settings": "Настраивает лаунчер",
       "mods": "Выбирает мод",
       "modpacks": "Выбирает профиль",
+      "friends": "Смотрит друзей",
       "accounts": "Управляет аккаунтом"
     },
     "pinnedProfiles": {
