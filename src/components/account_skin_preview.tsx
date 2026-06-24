@@ -9,9 +9,16 @@ import {
 export type AccountSkinPreviewProps = {
   profile: ProfileAvatarInput;
   username: string;
+  onSettingsClick?: () => void;
+  settingsTitle?: string;
 };
 
-export function AccountSkinPreview({ profile, username }: AccountSkinPreviewProps) {
+export function AccountSkinPreview({
+  profile,
+  username,
+  onSettingsClick,
+  settingsTitle,
+}: AccountSkinPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
 
@@ -101,6 +108,16 @@ export function AccountSkinPreview({ profile, username }: AccountSkinPreviewProp
 
   return (
     <div className="relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md">
+      {onSettingsClick ? (
+        <button
+          type="button"
+          onClick={onSettingsClick}
+          className="interactive-press absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/50 backdrop-blur-sm transition hover:bg-black/70"
+          title={settingsTitle}
+        >
+          <img src="/launcher-assets/settings.png" alt="" className="h-4 w-4 object-contain" />
+        </button>
+      ) : null}
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.12),transparent_68%)]"
         aria-hidden

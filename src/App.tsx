@@ -29,11 +29,10 @@ import { SettingsTab } from "./tabs/SettingsTab";
 import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
-import { PlatformAccountPanel } from "./tabs/PlatformAccountPanel";
+import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
-import { AccountSkinPreview } from "./components/account_skin_preview";
 import { DeleteIcon } from "./components/delete_icon";
 import {
   ProfileInfoIcon,
@@ -649,14 +648,6 @@ function ProfileIcon() {
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
-      <path d="M16.84 2.73a2.5 2.5 0 0 1 3.54 3.54l-1.06 1.06-3.54-3.54 1.06-1.06ZM4.92 14.49l9.19-9.19 3.54 3.54-9.19 9.19-3.82.42.42-3.96Z" />
-    </svg>
-  );
-}
-
 function PlusIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
@@ -677,25 +668,6 @@ function ChevronDownIcon({ className }: { className?: string }) {
     >
       <path d="M7 10l5 5 5-5H7z" />
     </svg>
-  );
-}
-
-function MicrosoftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
-      <path fill="#f25022" d="M2 2h9.5v9.5H2V2z" />
-      <path fill="#00a4ef" d="M12.5 2H22v9.5h-9.5V2z" />
-      <path fill="#7fba00" d="M2 12.5H11.5V22H2v-9.5z" />
-      <path fill="#ffb900" d="M12.5 12.5H22V22h-9.5v-9.5z" />
-    </svg>
-  );
-}
-
-function ElyByIcon() {
-  return (
-    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#2d7d46] text-[10px] font-bold text-white">
-      E
-    </span>
   );
 }
 
@@ -4628,250 +4600,44 @@ function App() {
               <FriendsTab showNotification={showNotification} language={language} />
             </div>
           ) : activeItem === "accounts" ? (
-            <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-5 overflow-y-auto py-1 lg:gap-6 lg:overflow-hidden">
-              <header className="shrink-0 text-center">
-                <h1 className="text-lg font-bold tracking-tight text-white/95">
-                  {tt("app.accounts.managerTitle")}
-                </h1>
-                {tt("app.accounts.managerSubtitle") ? (
-                  <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
-                ) : null}
-              </header>
-
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
-                <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
-              <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-4 shadow-xl backdrop-blur-md">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
-                      {tt("app.accounts.savedListTitle")}
-                    </h2>
-                    {tt("app.accounts.savedListHint") ? (
-                      <p className="mt-1 text-[11px] leading-snug text-white/45">
-                        {tt("app.accounts.savedListHint")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={addingAccount}
-                    onClick={() => void handleAddLauncherAccount()}
-                    className="interactive-press flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50"
-                  >
-                    <PlusIcon className="h-3.5 w-3.5" />
-                    {tt("app.accounts.addAccount")}
-                  </button>
-                </div>
-                {launcherAccounts.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-white/45">—</p>
-                ) : (
-                  <ul className="flex max-h-[min(360px,42vh)] flex-col gap-2 overflow-y-auto">
-                    {launcherAccounts.map((acc) => (
-                      <li
-                        key={acc.id}
-                        className={`flex items-stretch gap-2 rounded-xl border px-2 py-2 transition ${
-                          acc.is_active
-                            ? "border-emerald-400/35 bg-emerald-500/10"
-                            : "border-white/10 bg-black/30 hover:bg-black/50"
-                        }`}
-                      >
-                        <AccountAvatar
-                          username={acc.label}
-                          profile={acc.is_active ? profileAvatarInput : undefined}
-                          kind={acc.kind}
-                          size={88}
-                          className={`h-11 w-11 shrink-0 self-center rounded-full ${accountKindAvatarClass(acc.kind)}`}
-                        />
-                        <button
-                          type="button"
-                          disabled={acc.is_active}
-                          onClick={() => {
-                            if (!acc.is_active) void handleSwitchLauncherAccount(acc.id);
-                          }}
-                          className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition enabled:cursor-pointer enabled:hover:bg-white/5 enabled:active:scale-[0.99] disabled:cursor-default"
-                        >
-                          <span className="block truncate text-sm font-semibold text-white/95">
-                            {acc.label}
-                          </span>
-                          <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                                acc.kind === "microsoft"
-                                  ? "bg-sky-500/25 text-sky-100"
-                                  : acc.kind === "ely"
-                                    ? "bg-[#2d7d46]/35 text-emerald-100"
-                                    : "bg-white/10 text-white/55"
-                              }`}
-                            >
-                              {accountKindShortLabel(acc.kind)}
-                            </span>
-                            {acc.is_active ? (
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-300/90">
-                                {tt("app.accounts.activeBadge")}
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => requestRemoveLauncherAccount(acc.id)}
-                          className="interactive-press shrink-0 self-center rounded-lg p-2.5 text-white/35 hover:bg-red-500/15 hover:text-red-300"
-                          title={tt("app.accounts.removeTitle")}
-                        >
-                          <DeleteIcon className="h-4 w-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="w-full">
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-white/45">
-                  {tt("app.accounts.currentProfileSection")}
-                </h2>
-                <div
-                  className="flex w-full items-center gap-5 rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-4 shadow-xl backdrop-blur-md"
-                >
-                  <button
-                    type="button"
-                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] transition hover:border-white hover:bg-[#1e3a5f]"
-                  >
-                    <AccountAvatar
-                      username={displayedNickname}
-                      profile={profileAvatarInput}
-                      kind={activeAccountKind}
-                      size={80}
-                      className="h-full w-full rounded-full"
-                    />
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={isAuthorized ? displayedNickname : nicknameDraft}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setNicknameDraft(v);
-                          setProfile((p) => ({ ...p, nickname: v }));
-                        }}
-                        onFocus={() => {
-                          if (!isAuthorized) nicknameInputFocusedRef.current = true;
-                        }}
-                        onBlur={(e) => {
-                          nicknameInputFocusedRef.current = false;
-                          if (isAuthorized) return;
-                          const v = e.target.value.trim();
-                          const prevNick = profile.nickname.trim();
-                          setNicknameDraft(v);
-                          setProfile((p) => ({ ...p, nickname: v }));
-                          if (v !== prevNick) void handleSaveNickname(v);
-                        }}
-                        placeholder={tt("app.accounts.nicknamePlaceholder")}
-                        className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
-                        disabled={isAuthorized}
-                      />
-                      {!isAuthorized && (
-                        <span className="text-white/50" title={tt("app.accounts.editNickname")}>
-                          <PencilIcon />
-                        </span>
-                      )}
-                    </div>
-                    {profile.ely_username && (
-                      <p className="mt-0.5 text-xs text-white/60">{profile.ely_username}</p>
-                    )}
-                  </div>
-                </div>
-                {!isAuthorized && (
-                  <p className="mt-4 text-center text-sm text-white/80">{tt("app.accounts.hint")}</p>
-                )}
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {profile.ms_id_token ? (
-                    <button
-                      type="button"
-                      onClick={handleMicrosoftLogout}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
-                    >
-                      <MicrosoftIcon />
-                      <span>{tt("app.accounts.microsoftLogout")}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleMicrosoftLogin}
-                      disabled={elyLoading || msLoading}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
-                    >
-                      <MicrosoftIcon />
-                      <span>{tt("app.accounts.microsoftSignIn")}</span>
-                    </button>
-                  )}
-                  {profile.ely_username ? (
-                    <button
-                      type="button"
-                      onClick={handleElyLogout}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
-                    >
-                      <ElyByIcon />
-                      <span>{tt("app.accounts.elyLogout")}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleElyLogin}
-                      disabled={elyLoading}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
-                    >
-                      <ElyByIcon />
-                      <span>
-                        {elyLoading ? tt("app.accounts.elyWaiting") : "Ely.by"}
-                      </span>
-                    </button>
-                  )}
-                </div>
-                {elyAuthUrl && (
-                  <div className="mt-4 w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
-                    <p className="mb-1.5 text-xs font-medium text-amber-200">
-                      {tt("app.accounts.elyDialogTitle")}
-                    </p>
-                    <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
-                    <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
-                  </div>
-                )}
-                {msAuthUrl && (
-                  <div className="mt-4 w-full rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-left">
-                    <p className="mb-1.5 text-xs font-medium text-blue-200">
-                      {tt("app.accounts.microsoftSignIn")}
-                    </p>
-                    <p className="break-all text-xs text-white/90">{msAuthUrl}</p>
-                  </div>
-                )}
-              </div>
-
-              <PlatformAccountPanel
-                showNotification={showNotification}
-                language={language}
-                launcherProfile={{
-                  launcher_nickname: profile.nickname?.trim() || null,
-                  ely_username: profile.ely_username,
-                  microsoft_username: profile.mc_uuid ? profile.nickname : null,
-                  ely_uuid: profile.ely_uuid,
-                  mc_uuid: profile.mc_uuid,
-                }}
-                onMicrosoftLogin={handleMicrosoftLogin}
-                onElyLogin={handleElyLogin}
-                providerLoginBusy={elyLoading || msLoading}
-              />
-                </div>
-                <div className="flex min-h-[min(360px,40vh)] min-w-0 flex-col lg:min-h-0">
-                  <AccountSkinPreview
-                    key={`${activeAccountFromList?.id ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
-                    profile={profileAvatarInput}
-                    username={displayedNickname}
-                  />
-                </div>
-              </div>
-            </div>
+            <AccountsTab
+              showNotification={showNotification}
+              language={language}
+              profile={profile}
+              setProfile={setProfile}
+              launcherAccounts={launcherAccounts}
+              nicknameDraft={nicknameDraft}
+              setNicknameDraft={setNicknameDraft}
+              isAuthorized={isAuthorized}
+              displayedNickname={displayedNickname}
+              profileAvatarInput={profileAvatarInput}
+              activeAccountKind={activeAccountKind}
+              activeAccountId={activeAccountId}
+              elyLoading={elyLoading}
+              msLoading={msLoading}
+              elyAuthUrl={elyAuthUrl}
+              msAuthUrl={msAuthUrl}
+              addingAccount={addingAccount}
+              accountKindShortLabel={accountKindShortLabel}
+              onSaveNickname={handleSaveNickname}
+              onMicrosoftLogin={handleMicrosoftLogin}
+              onMicrosoftLogout={handleMicrosoftLogout}
+              onElyLogin={handleElyLogin}
+              onElyLogout={handleElyLogout}
+              onSwitchAccount={handleSwitchLauncherAccount}
+              onRemoveAccount={async (accountId) => {
+                try {
+                  await invoke("remove_launcher_account", { accountId });
+                  await loadProfile();
+                  await refreshLauncherAccounts();
+                  setAccountSwitcherOpen(false);
+                  showNotification("info", tt("app.accounts.toast.removed"));
+                } catch (e) {
+                  showNotification("error", e instanceof Error ? e.message : String(e));
+                }
+              }}
+              onAddAccount={handleAddLauncherAccount}
+            />
           ) : effectiveTabSplit ? (
             <div
               className={`tab-split-main tab-animate min-h-0 w-full flex-1 ${
