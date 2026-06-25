@@ -766,6 +766,30 @@
       "checkGameProcesses": "Verifique los procesos en ejecución del juego:",
       "memoryRam": "Memoria (RAM):"
     },
+    "conflicts": {
+      "title": "Conflictos",
+      "loading": "Comprobando…",
+      "count": "{{count}}",
+      "none": "No se detectaron conflictos.",
+      "severity": {
+        "error": "Error",
+        "warning": "Advertencia"
+      },
+      "affected": "Afectado",
+      "solutions": "Posibles soluciones",
+      "duplicate": {
+        "title": "Archivos de mods duplicados",
+        "reason": "Varios archivos habilitados parecen ser el mismo mod: {{name}}.",
+        "solutionDisableExtra": "Deshabilite o elimine las versiones extra (deje una).",
+        "solutionKeepLatest": "Conserve la versión más nueva que coincida con su versión de Minecraft."
+      },
+      "loaderMismatch": {
+        "title": "Incompatibilidad de loader (probable)",
+        "reason": "El perfil usa {{loader}}, pero el nombre del archivo sugiere: {{variants}}.",
+        "solutionPickCorrect": "Instale la versión del mod para {{loader}} (o una compilación universal).",
+        "solutionSwitchLoader": "O cambie el loader del perfil para que coincida con el conjunto de mods."
+      }
+    },
     "exportModal": {
       "title": "Exportar compilación",
       "format": "Formato",

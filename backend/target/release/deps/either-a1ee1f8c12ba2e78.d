@@ -1,0 +1,11 @@
+C:\Users\BAZA\mc16launcher\backend\target\release\deps\either-a1ee1f8c12ba2e78.d: C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\lib.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged_optional.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\iterator.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\into_either.rs
+
+C:\Users\BAZA\mc16launcher\backend\target\release\deps\libeither-a1ee1f8c12ba2e78.rlib: C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\lib.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged_optional.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\iterator.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\into_either.rs
+
+C:\Users\BAZA\mc16launcher\backend\target\release\deps\libeither-a1ee1f8c12ba2e78.rmeta: C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\lib.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged_optional.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\iterator.rs C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\into_either.rs
+
+C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\lib.rs:
+C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged.rs:
+C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\serde_untagged_optional.rs:
+C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\iterator.rs:
+C:\Users\BAZA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.16.0\src\into_either.rs:
