@@ -608,6 +608,17 @@ export function ModpackTab({
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
   const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
+  const [profileConflictsLoading, setProfileConflictsLoading] = useState(false);
+  const [profileConflicts, setProfileConflicts] = useState<
+    {
+      id: string;
+      severity: "warning" | "error";
+      title: string;
+      reason: string;
+      affected: string[];
+      solutions: string[];
+    }[]
+  >([]);
   const [isChangeVersionOpen, setIsChangeVersionOpen] = useState(false);
   const [migrateGameVersion, setMigrateGameVersion] = useState("");
   const [migrateLoaderVersion, setMigrateLoaderVersion] = useState("");
@@ -857,6 +868,137 @@ export function ModpackTab({
     () => profiles.find((p) => p.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+
+  const detectProfileConflicts = useCallback(
+    (
+      entries: { name: string; enabled: boolean }[],
+      profile: { loader?: string | null },
+    ) => {
+      const enabled = (entries ?? []).filter((e) => e && e.enabled && e.name);
+
+      const stripExt = (s: string) => s.replace(/\.(jar|zip|disabled)$/i, "");
+      const guessKey = (filename: string) => {
+        const base = stripExt(filename).trim();
+        const idx = base.search(/\d/);
+        const raw = (idx > 1 ? base.slice(0, idx) : base).replace(/[-_.]+$/g, "");
+        return raw.trim().toLowerCase();
+      };
+      const guessVariant = (filename: string) => {
+        const f = stripExt(filename).toLowerCase();
+        if (/(^|[-_.])(neoforge)([-_.]|$)/.test(f)) return "neoforge";
+        if (/(^|[-_.])(forge)([-_.]|$)/.test(f)) return "forge";
+        if (/(^|[-_.])(fabric)([-_.]|$)/.test(f)) return "fabric";
+        if (/(^|[-_.])(quilt)([-_.]|$)/.test(f)) return "quilt";
+        return null;
+      };
+
+      const byKey = new Map<string, string[]>();
+      const byKeyVariants = new Map<string, Set<string>>();
+      for (const e of enabled) {
+        const key = guessKey(e.name);
+        if (!key) continue;
+        const arr = byKey.get(key) ?? [];
+        arr.push(e.name);
+        byKey.set(key, arr);
+        const v = guessVariant(e.name);
+        if (v) {
+          const vs = byKeyVariants.get(key) ?? new Set<string>();
+          vs.add(v);
+          byKeyVariants.set(key, vs);
+        }
+      }
+
+      const conflicts: {
+        id: string;
+        severity: "warning" | "error";
+        title: string;
+        reason: string;
+        affected: string[];
+        solutions: string[];
+      }[] = [];
+
+      for (const [key, files] of byKey.entries()) {
+        if (files.length < 2) continue;
+        conflicts.push({
+          id: `dup:${key}`,
+          severity: "error",
+          title: tt("modpacks.conflicts.duplicate.title"),
+          reason: tt("modpacks.conflicts.duplicate.reason", { name: key }),
+          affected: files.slice(0, 8),
+          solutions: [
+            tt("modpacks.conflicts.duplicate.solutionDisableExtra"),
+            tt("modpacks.conflicts.duplicate.solutionKeepLatest"),
+          ],
+        });
+      }
+
+      const loader = (profile.loader ?? "").toLowerCase();
+      if (loader && loader !== "vanilla") {
+        for (const [key, variants] of byKeyVariants.entries()) {
+          if (variants.size === 0) continue;
+          if (!variants.has(loader)) {
+            const affected = (byKey.get(key) ?? []).slice(0, 8);
+            conflicts.push({
+              id: `loader:${key}`,
+              severity: "warning",
+              title: tt("modpacks.conflicts.loaderMismatch.title"),
+              reason: tt("modpacks.conflicts.loaderMismatch.reason", {
+                loader,
+                variants: [...variants].join(", "),
+              }),
+              affected,
+              solutions: [
+                tt("modpacks.conflicts.loaderMismatch.solutionPickCorrect", { loader }),
+                tt("modpacks.conflicts.loaderMismatch.solutionSwitchLoader"),
+              ],
+            });
+          }
+        }
+      }
+
+      return conflicts;
+    },
+    [tt],
+  );
+
+  useEffect(() => {
+    if (!isProfileSettingsOpen || !selectedProfile) {
+      setProfileConflicts([]);
+      setProfileConflictsLoading(false);
+      return;
+    }
+    if (profileConflictsLoading || profileConflicts.length > 0) {
+      return;
+    }
+    let cancelled = false;
+    setProfileConflictsLoading(true);
+    invoke<{ name: string; enabled: boolean }[]>("list_profile_items", {
+      id: selectedProfile.id,
+      category: "mods",
+    })
+      .then((entries) => {
+        if (cancelled) return;
+        setProfileConflicts(detectProfileConflicts(entries ?? [], selectedProfile));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProfileConflicts([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setProfileConflictsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    detectProfileConflicts,
+    isProfileSettingsOpen,
+    selectedProfile?.id,
+    selectedProfile?.loader,
+    profileConflictsLoading,
+    profileConflicts.length,
+  ]);
 
   const selectedCreatePreset = useMemo(
     () => buildPresets.find((p) => p.id === createSelectedPresetId) ?? null,
@@ -5342,6 +5484,89 @@ export function ModpackTab({
                   >
                     {tt("modpacks.changeVersion.button")}
                   </button>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-medium text-white/70">
+                      <span>{tt("modpacks.conflicts.title")}</span>
+                      <span className="rounded-full border border-amber-300/40 bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em] text-amber-100">
+                        BETA
+                      </span>
+                    </div>
+                    <div className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+                      {profileConflictsLoading
+                        ? tt("modpacks.conflicts.loading")
+                        : tt("modpacks.conflicts.count", { count: profileConflicts.length })}
+                    </div>
+                  </div>
+
+                  {!profileConflictsLoading && profileConflicts.length === 0 ? (
+                    <div className="text-xs text-white/60">
+                      {tt("modpacks.conflicts.none")}
+                    </div>
+                  ) : null}
+
+                  {profileConflicts.length > 0 ? (
+                    <div className="mt-2 space-y-2">
+                      {profileConflicts.map((c) => (
+                        <div
+                          key={c.id}
+                          className={`rounded-2xl border px-3 py-2 text-xs ${
+                            c.severity === "error"
+                              ? "border-rose-400/30 bg-rose-500/10"
+                              : "border-amber-400/25 bg-amber-500/10"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-white/90">{c.title}</div>
+                              <div className="mt-0.5 text-[11px] text-white/65">{c.reason}</div>
+                            </div>
+                            <div
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                c.severity === "error"
+                                  ? "bg-rose-500/30 text-rose-100"
+                                  : "bg-amber-500/30 text-amber-100"
+                              }`}
+                            >
+                              {c.severity === "error"
+                                ? tt("modpacks.conflicts.severity.error")
+                                : tt("modpacks.conflicts.severity.warning")}
+                            </div>
+                          </div>
+
+                          {c.affected.length > 0 ? (
+                            <div className="mt-2 rounded-xl bg-black/25 px-2 py-1.5">
+                              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">
+                                {tt("modpacks.conflicts.affected")}
+                              </div>
+                              <div className="mt-1 flex flex-col gap-0.5">
+                                {c.affected.map((f) => (
+                                  <div key={f} className="truncate text-[11px] text-white/75">
+                                    {f}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {c.solutions.length > 0 ? (
+                            <div className="mt-2">
+                              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">
+                                {tt("modpacks.conflicts.solutions")}
+                              </div>
+                              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-white/75">
+                                {c.solutions.map((s) => (
+                                  <li key={s}>{s}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
