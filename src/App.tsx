@@ -2727,6 +2727,9 @@ function App() {
           });
           setFabricProfileId(id);
           setQuiltProfileId(null);
+          if (id) {
+            setInstalledGameVersions((prev) => new Set(prev).add(selectedVersion.id));
+          }
         } else if (loader === "quilt") {
           const id = await invoke<string | null>("get_installed_quilt_profile_id", {
             gameVersion: selectedVersion.id,
@@ -2734,6 +2737,9 @@ function App() {
           });
           setQuiltProfileId(id);
           setFabricProfileId(null);
+          if (id) {
+            setInstalledGameVersions((prev) => new Set(prev).add(selectedVersion.id));
+          }
         }
       } catch {
         setFabricProfileId(null);
@@ -3013,10 +3019,18 @@ function App() {
 
   const isInstalled = useMemo(() => {
     if (!selectedVersion) return false;
-    if (loader === "fabric" && !isForgeVersion(selectedVersion)) return !!fabricProfileId;
-    if (loader === "quilt" && !isForgeVersion(selectedVersion)) return !!quiltProfileId;
+    if (loader === "fabric" && !isForgeVersion(selectedVersion)) {
+      return (
+        !!fabricProfileId || installedGameVersions.has(selectedVersion.id)
+      );
+    }
+    if (loader === "quilt" && !isForgeVersion(selectedVersion)) {
+      return (
+        !!quiltProfileId || installedGameVersions.has(selectedVersion.id)
+      );
+    }
     return installedIds.has(selectedVersion.id);
-  }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId]);
+  }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId, installedGameVersions]);
 
   const installedVersionIdsForDropdown = useMemo(() => {
     if (loader === "fabric" || loader === "quilt") {
@@ -3242,6 +3256,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setFabricProfileId(profileId);
+        setInstalledGameVersions((prev) => new Set(prev).add(v.id));
         showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
         return;
       } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
@@ -3252,6 +3267,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setQuiltProfileId(profileId);
+        setInstalledGameVersions((prev) => new Set(prev).add(v.id));
         showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
         return;
       } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
