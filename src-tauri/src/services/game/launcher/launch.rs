@@ -30,7 +30,7 @@ use crate::services::game::runtime::{
     ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args,
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
-    resolve_natives_dir_for_launch,
+    resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version,
 };
 use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
 use crate::services::game::settings as settings_service;
@@ -516,6 +516,12 @@ pub async fn launch_game(
         if is_forge && !is_neoforge {
             eprintln!("[Launch] Forge без java_version в manifest: используем Java 17");
             (17, "java-runtime-gamma".to_string())
+        } else if is_fabric {
+            let (major, component) = fallback_java_runtime_for_mc_version(&effective_jar_version);
+            eprintln!(
+                "[Launch] Fabric без java_version в manifest: используем Java {major} ({component})"
+            );
+            (major, component.to_string())
         } else {
             (8, "jre-legacy".to_string())
         }
@@ -710,12 +716,23 @@ pub async fn launch_game(
         &version_id,
         &classpath_str,
         jvm_args,
-        if is_forge {
+        if is_forge || is_fabric {
             Some(default_java_path)
         } else {
             None
         },
     )?;
+
+    if let Some(actual_java_major) =
+        crate::services::java::detect::detect_java_major_version(&java_path)
+    {
+        if actual_java_major < java_major {
+            return Err(format!(
+                "Для Minecraft {effective_jar_version} нужна Java {java_major}, а для запуска выбрана Java {actual_java_major}. \
+                 Проверьте путь к Java в настройках — для Fabric/Forge используется встроенная Java Mojang."
+            ));
+        }
+    }
     #[cfg(unix)]
     {
         if let Err(e) = crate::java_runtime::ensure_executable(&java_path) {
