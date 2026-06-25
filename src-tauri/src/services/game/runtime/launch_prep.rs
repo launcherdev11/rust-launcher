@@ -139,7 +139,7 @@ pub(crate) fn offline_uuid_from_username(name: &str) -> String {
     )
 }
 
-pub(crate) fn is_release_1_17_or_newer(version_id: &str) -> bool {
+fn parse_release_version_parts(version_id: &str) -> (u32, u32, u32) {
     let normalized = version_id
         .split_once('-')
         .map(|(base, _)| base)
@@ -147,7 +147,30 @@ pub(crate) fn is_release_1_17_or_newer(version_id: &str) -> bool {
     let mut parts = normalized.split('.');
     let major = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
     let minor = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let patch = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    (major, minor, patch)
+}
+
+pub(crate) fn is_release_1_17_or_newer(version_id: &str) -> bool {
+    let (major, minor, _) = parse_release_version_parts(version_id);
     major > 1 || (major == 1 && minor >= 17)
+}
+
+pub(crate) fn is_release_1_20_5_or_newer(version_id: &str) -> bool {
+    let (major, minor, patch) = parse_release_version_parts(version_id);
+    major > 1
+        || (major == 1 && minor > 20)
+        || (major == 1 && minor == 20 && patch >= 5)
+}
+
+pub(crate) fn fallback_java_runtime_for_mc_version(version_id: &str) -> (u8, &'static str) {
+    if is_release_1_20_5_or_newer(version_id) {
+        (21, "java-runtime-delta")
+    } else if is_release_1_17_or_newer(version_id) {
+        (17, "java-runtime-gamma")
+    } else {
+        (8, "jre-legacy")
+    }
 }
 
 pub(crate) fn lwjgl_fallback_modules() -> &'static [&'static str] {

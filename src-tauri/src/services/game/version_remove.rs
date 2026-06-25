@@ -68,6 +68,14 @@ fn extract_loader_version_from_profile_id(profile_id: &str, game_version: &str) 
     rest.strip_suffix(&suffix).map(|s| s.to_string())
 }
 
+fn try_read_fabric_profile(path: &Path) -> Option<FabricProfile> {
+    let s = std::fs::read_to_string(path).ok()?;
+    if s.trim().is_empty() {
+        return None;
+    }
+    serde_json::from_str(&s).ok()
+}
+
 fn find_mod_loader_profiles(
     game_version: &str,
     quilt: bool,
@@ -88,10 +96,13 @@ fn find_mod_loader_profiles(
         if !profile_path.exists() {
             continue;
         }
-        let s = std::fs::read_to_string(&profile_path)
-            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
-        let profile: FabricProfile = serde_json::from_str(&s)
-            .map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        let Some(profile) = try_read_fabric_profile(&profile_path) else {
+            eprintln!(
+                "[Versions] Пропущен повреждённый profile.json: {}",
+                profile_path.display()
+            );
+            continue;
+        };
         if !profile.id.starts_with(prefix) || profile.inherits_from != game_version {
             continue;
         }
@@ -109,6 +120,38 @@ fn find_mod_loader_profiles(
     }
     out.sort_by(|a, b| b.1.cmp(&a.1));
     Ok(out)
+}
+
+pub(crate) fn remove_fabric_profiles_for_game_version(game_version: &str) -> Result<(), String> {
+    let vers_root = versions_dir()?;
+    if !vers_root.exists() {
+        return Ok(());
+    }
+    let suffix = format!("-{game_version}");
+    for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
+        let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
+        let path = e.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let folder_id = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let matches_name = folder_id.starts_with("fabric-loader-") && folder_id.ends_with(&suffix);
+        let matches_profile = if !matches_name {
+            let profile_path = path.join("profile.json");
+            try_read_fabric_profile(&profile_path).is_some_and(|profile| {
+                profile.id.starts_with("fabric-loader-") && profile.inherits_from == game_version
+            })
+        } else {
+            false
+        };
+        if matches_name || matches_profile {
+            remove_dir_if_exists(&path)?;
+        }
+    }
+    Ok(())
 }
 
 fn remove_mod_loader_profiles(game_version: &str, quilt: bool) -> Result<(), String> {

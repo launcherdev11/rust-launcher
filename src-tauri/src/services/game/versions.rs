@@ -736,6 +736,20 @@ pub async fn fetch_neoforge_builds_for_game(game_version: String) -> Result<Vec<
 }
 
 
+pub(crate) fn is_legacy_fabric_profile(profile: &FabricProfile) -> bool {
+    profile
+        .main_class
+        .starts_with("net.fabricmc.loader.launch.")
+}
+
+fn try_read_fabric_profile(path: &std::path::Path) -> Option<FabricProfile> {
+    let s = std::fs::read_to_string(path).ok()?;
+    if s.trim().is_empty() {
+        return None;
+    }
+    serde_json::from_str(&s).ok()
+}
+
 fn fabric_profile_matches_loader_version(profile: &FabricProfile, loader_version: &str) -> bool {
     profile.id.contains(loader_version)
         || profile
@@ -770,7 +784,7 @@ pub fn get_installed_fabric_profile_id(
     if !vers_root.exists() {
         return Ok(None);
     }
-    let mut matches: Vec<(String, String)> = Vec::new();
+    let mut matches: Vec<(String, String, bool)> = Vec::new();
     for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
         let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
         let path = e.path();
@@ -781,10 +795,9 @@ pub fn get_installed_fabric_profile_id(
         if !profile_path.exists() {
             continue;
         }
-        let s = std::fs::read_to_string(&profile_path)
-            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
-        let profile: FabricProfile = serde_json::from_str(&s)
-            .map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        let Some(profile) = try_read_fabric_profile(&profile_path) else {
+            continue;
+        };
         if profile.id.starts_with("fabric-loader-") && profile.inherits_from == game_version {
             if let Some(ref lv) = loader_version {
                 if !fabric_profile_matches_loader_version(&profile, lv) {
@@ -794,14 +807,24 @@ pub fn get_installed_fabric_profile_id(
             let id = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
             if !id.is_empty() {
                 let loader_ver = fabric_loader_version_from_profile_id(&id, &game_version);
-                matches.push((id, loader_ver));
+                let legacy = is_legacy_fabric_profile(&profile);
+                matches.push((id, loader_ver, legacy));
             }
         }
     }
     if matches.is_empty() {
         return Ok(None);
     }
-    matches.sort_by(|a, b| compare_version_like(&b.1, &a.1));
+    matches.sort_by(|a, b| {
+        match (a.2, b.2) {
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => compare_version_like(&b.1, &a.1),
+        }
+    });
+    if matches[0].2 {
+        return Ok(None);
+    }
     Ok(Some(matches[0].0.clone()))
 }
 
@@ -825,10 +848,9 @@ pub fn get_installed_quilt_profile_id(
         if !profile_path.exists() {
             continue;
         }
-        let s = std::fs::read_to_string(&profile_path)
-            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
-        let profile: FabricProfile = serde_json::from_str(&s)
-            .map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        let Some(profile) = try_read_fabric_profile(&profile_path) else {
+            continue;
+        };
         if profile.id.starts_with("quilt-loader-") && profile.inherits_from == game_version {
             if let Some(ref lv) = loader_version {
                 if !quilt_profile_matches_loader_version(&profile, lv) {
@@ -862,11 +884,13 @@ pub fn list_installed_fabric_game_versions() -> Result<Vec<String>, String> {
         if !profile_path.exists() {
             continue;
         }
-        let s = std::fs::read_to_string(&profile_path)
-            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
-        let profile: FabricProfile =
-            serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
-        if profile.id.starts_with("fabric-loader-") && !profile.inherits_from.is_empty() {
+        let Some(profile) = try_read_fabric_profile(&profile_path) else {
+            continue;
+        };
+        if profile.id.starts_with("fabric-loader-")
+            && !profile.inherits_from.is_empty()
+            && !is_legacy_fabric_profile(&profile)
+        {
             out.insert(profile.inherits_from);
         }
     }
@@ -893,10 +917,9 @@ pub fn list_installed_quilt_game_versions() -> Result<Vec<String>, String> {
         if !profile_path.exists() {
             continue;
         }
-        let s = std::fs::read_to_string(&profile_path)
-            .map_err(|e| format!("Ошибка чтения profile.json: {e}"))?;
-        let profile: FabricProfile =
-            serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора profile.json: {e}"))?;
+        let Some(profile) = try_read_fabric_profile(&profile_path) else {
+            continue;
+        };
         if profile.id.starts_with("quilt-loader-") && !profile.inherits_from.is_empty() {
             out.insert(profile.inherits_from);
         }

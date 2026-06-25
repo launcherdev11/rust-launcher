@@ -65,6 +65,11 @@ pub async fn install_fabric(
             "[Fabric] Начало установки Fabric для Minecraft {game_version}, loader {loader_version}"
         ),
     );
+    crate::services::game::version_remove::remove_fabric_profiles_for_game_version(&game_version)?;
+    log_to_console(
+        &app,
+        &format!("[Fabric] Удалены старые профили Fabric для {game_version}"),
+    );
     let profile_url =
         format!("{FABRIC_META_PROFILE}/{game_version}/{loader_version}/profile/json");
     log_to_console(&app, &format!("[Fabric] Загрузка профиля с {profile_url}"));
