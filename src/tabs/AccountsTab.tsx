@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AccountAvatar } from "../components/account_avatar";
 import { AccountSkinPreview } from "../components/account_skin_preview";
 import { DeleteIcon } from "../components/delete_icon";
-import { listBuilds, type BuildRow } from "../api/builds";
-import { getStoredAccessToken } from "../api/client";
-import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { useT, type Language } from "../i18n";
 import type { ProfileAvatarInput } from "../lib/avatar";
 import { PlatformAccountPanel } from "./PlatformAccountPanel";
+import { AchievementsPanel } from "../components/AchievementsPanel";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -144,38 +142,8 @@ export function AccountsTab({
   const tt = useT(language);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
-  const [publishedBuilds, setPublishedBuilds] = useState<BuildRow[]>([]);
-  const [buildsLoading, setBuildsLoading] = useState(false);
   const [headerNicknameEditing, setHeaderNicknameEditing] = useState(false);
   const nicknameInputFocusedRef = useRef(false);
-
-  const loadPublishedBuilds = useCallback(async () => {
-    if (!getStoredAccessToken()) {
-      setPublishedBuilds([]);
-      return;
-    }
-    setBuildsLoading(true);
-    try {
-      const builds = await listBuilds();
-      setPublishedBuilds(builds);
-    } catch {
-      setPublishedBuilds([]);
-    } finally {
-      setBuildsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadPublishedBuilds();
-    const onAuthChanged = () => void loadPublishedBuilds();
-    window.addEventListener(API_AUTH_CHANGED_EVENT, onAuthChanged);
-    return () => window.removeEventListener(API_AUTH_CHANGED_EVENT, onAuthChanged);
-  }, [loadPublishedBuilds]);
-
-  useEffect(() => {
-    if (!settingsOpen) return;
-    void loadPublishedBuilds();
-  }, [settingsOpen, loadPublishedBuilds]);
 
   const confirmRemoveAccount = async () => {
     const accountId = pendingRemoveAccountId;
@@ -194,9 +162,6 @@ export function AccountsTab({
     setProfile((p) => ({ ...p, nickname: trimmed }));
     if (trimmed !== prevNick) await onSaveNickname(trimmed);
   };
-
-  const gridBuilds = publishedBuilds.slice(0, 4);
-  const emptySlots = Math.max(0, 4 - gridBuilds.length);
 
   return (
     <>
@@ -318,39 +283,7 @@ export function AccountsTab({
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch lg:gap-5">
-          <section className="flex min-h-[min(320px,38vh)] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-5 shadow-xl backdrop-blur-md glass-panel lg:min-h-0">
-            <h2 className="mb-4 text-base font-semibold text-white/90">
-              {tt("app.accounts.publishedBuildsTitle")}
-            </h2>
-            {buildsLoading ? (
-              <p className="text-sm text-white/45">{tt("common.loading")}</p>
-            ) : !getStoredAccessToken() ? (
-              <p className="text-sm leading-relaxed text-white/50">{tt("app.accounts.publishedBuildsSignIn")}</p>
-            ) : gridBuilds.length === 0 ? (
-              <p className="text-sm leading-relaxed text-white/50">{tt("app.accounts.publishedBuildsEmpty")}</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 content-start">
-                {gridBuilds.map((build) => (
-                  <button
-                    key={build.id}
-                    type="button"
-                    className="interactive-press flex min-h-[52px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-2 py-2 text-center transition hover:border-white/20 hover:bg-white/[0.1]"
-                  >
-                    <span className="line-clamp-2 text-sm font-semibold text-white/90">{build.name}</span>
-                  </button>
-                ))}
-                {Array.from({ length: emptySlots }).map((_, i) => (
-                  <div
-                    key={`empty-${i}`}
-                    className="flex min-h-[52px] items-center justify-center rounded-xl border border-dashed border-white/8 bg-white/[0.02]"
-                    aria-hidden
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-
+        <div className="flex min-h-0 flex-1 flex-col lg:items-stretch">
           <div className="flex min-h-[min(360px,42vh)] min-w-0 flex-col lg:min-h-0">
             <AccountSkinPreview
               key={`${activeAccountId ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
@@ -550,6 +483,8 @@ export function AccountsTab({
                 onElyLogin={onElyLogin}
                 providerLoginBusy={elyLoading || msLoading}
               />
+
+              <AchievementsPanel language={language} />
             </div>
           </div>
         </div>

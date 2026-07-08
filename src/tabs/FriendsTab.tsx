@@ -9,17 +9,12 @@ import {
   type IncomingRequestRow,
 } from "../api/friends";
 import {
-  fetchUserBuild,
-  fetchUserBuilds,
-} from "../api/users";
-import type { BuildDetail, BuildRow } from "../api/builds";
-import {
   API_AUTH_CHANGED_EVENT,
   API_NICKNAME_KEY,
 } from "../api/auth";
 import { getStoredAccessToken } from "../api/client";
 import { ApiError } from "../api/client";
-import { useT, formatPlaytimeShort, type Language } from "../i18n";
+import { useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getElyAvatarByUsername } from "../lib/avatar";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -42,11 +37,6 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequestRow[]>([]);
   const [friendNickToAdd, setFriendNickToAdd] = useState("");
   const [friendAvatarByKey, setFriendAvatarByKey] = useState<Record<string, string>>({});
-  const [buildsFriend, setBuildsFriend] = useState<FriendRow | null>(null);
-  const [friendBuilds, setFriendBuilds] = useState<BuildRow[]>([]);
-  const [friendBuildsLoading, setFriendBuildsLoading] = useState(false);
-  const [selectedFriendBuild, setSelectedFriendBuild] = useState<BuildDetail | null>(null);
-  const [friendBuildDetailLoading, setFriendBuildDetailLoading] = useState(false);
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -125,42 +115,6 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     } finally {
       setRequestsLoading(false);
     }
-  };
-
-  const handleOpenFriendBuilds = async (friend: FriendRow) => {
-    if (!accessToken) return;
-    setBuildsFriend(friend);
-    setSelectedFriendBuild(null);
-    setFriendBuilds([]);
-    setFriendBuildsLoading(true);
-    try {
-      setFriendBuilds(await fetchUserBuilds(friend.user_id));
-    } catch (e) {
-      showNotification("error", e instanceof ApiError ? e.message : String(e));
-      setBuildsFriend(null);
-    } finally {
-      setFriendBuildsLoading(false);
-    }
-  };
-
-  const handleOpenFriendBuildDetail = async (build: BuildRow) => {
-    if (!buildsFriend || !accessToken) return;
-    setFriendBuildDetailLoading(true);
-    try {
-      setSelectedFriendBuild(await fetchUserBuild(buildsFriend.user_id, build.id));
-    } catch (e) {
-      showNotification("error", e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setFriendBuildDetailLoading(false);
-    }
-  };
-
-  const closeFriendBuildsModal = () => {
-    setBuildsFriend(null);
-    setFriendBuilds([]);
-    setSelectedFriendBuild(null);
-    setFriendBuildsLoading(false);
-    setFriendBuildDetailLoading(false);
   };
 
   const handleSendRequest = async () => {
@@ -371,31 +325,22 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                 {friends.map((f) => (
                   <li
                     key={f.user_id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <img
-                        src={
-                          (f.ely_username
-                            ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
-                            : undefined) ?? buildInitialAvatarDataUrl(f.nickname)
-                        }
-                        alt=""
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
-                        draggable={false}
-                        onError={(event) => {
-                          event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
-                        }}
-                      />
-                      <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleOpenFriendBuilds(f)}
-                      className="interactive-press shrink-0 rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/80 hover:bg-black/60"
-                    >
-                      {tt("friends.viewBuilds")}
-                    </button>
+                    <img
+                      src={
+                        (f.ely_username
+                          ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
+                          : undefined) ?? buildInitialAvatarDataUrl(f.nickname)
+                      }
+                      alt=""
+                      className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                      draggable={false}
+                      onError={(event) => {
+                        event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+                      }}
+                    />
+                    <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
                   </li>
                 ))}
               </ul>
@@ -403,131 +348,6 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
           </div>
         </div>
       </div>
-
-      {buildsFriend ? (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={closeFriendBuildsModal}
-        >
-          <div
-            className="flex max-h-[min(80vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#12141a] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-white/10 px-5 py-4">
-              <h2 className="text-base font-bold text-white/95">
-                {tt("friends.friendBuildsTitle", { nickname: buildsFriend.nickname })}
-              </h2>
-              <p className="mt-1 text-xs text-white/50">{tt("friends.buildsPrivacyNote")}</p>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-              {selectedFriendBuild ? (
-                <div className="flex flex-col gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFriendBuild(null)}
-                    className="self-start text-xs font-semibold text-emerald-300/90 hover:text-emerald-200"
-                  >
-                    ← {tt("friends.back")}
-                  </button>
-                  <div>
-                    <p className="text-sm font-semibold text-white/95">{selectedFriendBuild.build.name}</p>
-                    <p className="mt-1 text-xs text-white/55">
-                      {tt("friends.buildMeta", {
-                        version: selectedFriendBuild.build.minecraft_version,
-                        loader: selectedFriendBuild.build.loader,
-                      })}
-                    </p>
-                    <p className="mt-1 text-xs text-white/55">
-                      {tt("friends.buildPlaytime", {
-                        time: formatPlaytimeShort(language, selectedFriendBuild.build.playtime_seconds),
-                      })}
-                    </p>
-                    {selectedFriendBuild.build.last_launch_at ? (
-                      <p className="mt-1 text-xs text-white/55">
-                        {tt("friends.buildLastLaunch", {
-                          date: new Date(selectedFriendBuild.build.last_launch_at).toLocaleString(),
-                        })}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-white/45">
-                      {tt("friends.buildContents")} ({tt("friends.contentCount", {
-                        count: selectedFriendBuild.contents.length,
-                      })})
-                    </p>
-                    {friendBuildDetailLoading ? (
-                      <p className="text-sm text-white/60">{tt("friends.loadingBuilds")}</p>
-                    ) : selectedFriendBuild.contents.length === 0 ? (
-                      <p className="text-sm text-white/60">{tt("friends.noBuilds")}</p>
-                    ) : (
-                      <ul className="flex flex-col gap-2">
-                        {selectedFriendBuild.contents.map((item) => {
-                          const title =
-                            typeof item.metadata?.title === "string"
-                              ? item.metadata.title
-                              : item.project_id;
-                          return (
-                            <li
-                              key={item.id}
-                              className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/85"
-                            >
-                              <p className="font-medium">{title}</p>
-                              <p className="mt-1 text-[11px] text-white/50">
-                                {item.source} • {item.type} • {item.project_id}
-                              </p>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              ) : friendBuildsLoading ? (
-                <p className="text-sm text-white/60">{tt("friends.loadingBuilds")}</p>
-              ) : friendBuilds.length === 0 ? (
-                <p className="text-sm text-white/60">{tt("friends.noBuilds")}</p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {friendBuilds.map((build) => (
-                    <li key={build.id}>
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenFriendBuildDetail(build)}
-                        className="interactive-press w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-left hover:bg-black/45"
-                      >
-                        <p className="text-sm font-semibold text-white/90">{build.name}</p>
-                        <p className="mt-1 text-xs text-white/55">
-                          {tt("friends.buildMeta", {
-                            version: build.minecraft_version,
-                            loader: build.loader,
-                          })}
-                        </p>
-                        <p className="mt-1 text-xs text-white/50">
-                          {tt("friends.buildPlaytime", {
-                            time: formatPlaytimeShort(language, build.playtime_seconds),
-                          })}
-                        </p>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="border-t border-white/10 px-5 py-3">
-              <button
-                type="button"
-                onClick={closeFriendBuildsModal}
-                className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/75 hover:bg-black/50"
-              >
-                {tt("friends.close")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
