@@ -498,34 +498,6 @@
       "unselect": "Auswahl aufheben",
       "createShortcut": "Erstellen Sie eine Desktop-Verknüpfung"
     },
-    "cloud": {
-      "open": "Cloud-Builds",
-      "title": "Deine Cloud-Builds",
-      "subtitle": "Mit deinem 16Launcher-Konto synchronisierte Builds. Freunde können sie sehen, wenn ihr verbunden seid.",
-      "badge": "Cloud",
-      "linkedBadgeTitle": "Mit Cloud synchronisiert",
-      "loading": "Builds werden geladen…",
-      "empty": "Noch keine Cloud-Builds. Spiele ein Profil, während du angemeldet bist, um automatisch zu synchronisieren.",
-      "back": "Zurück",
-      "close": "Schließen",
-      "refresh": "Aktualisieren",
-      "syncNow": "Jetzt synchronisieren",
-      "syncAll": "Alle Profile synchronisieren",
-      "syncSuccess": "„{{name}}“ mit der Cloud synchronisiert.",
-      "syncAllSuccess": "Alle Profile mit der Cloud synchronisiert.",
-      "delete": "Aus Cloud löschen",
-      "deleteConfirm": "Cloud-Build „{{name}}“ löschen? Lokale Profildateien werden nicht entfernt.",
-      "deleteSuccess": "Cloud-Build gelöscht.",
-      "noLocalProfile": "Kein passendes lokales Profil gefunden. Erstelle ein Profil mit gleichem Namen, Version und Loader.",
-      "linkedProfile": "Verknüpftes Profil: {{name}}",
-      "unlinked": "Nicht mit lokalem Profil verknüpft",
-      "buildMeta": "{{version}} • {{loader}}",
-      "buildPlaytime": "Spielzeit: {{time}}",
-      "buildLastLaunch": "Letzter Start: {{date}}",
-      "contents": "Inhalt",
-      "contentCount": "{{count}} Einträge",
-      "noContents": "Noch keine Inhalts-Metadaten synchronisiert."
-    },
     "shortcut": {
       "created": "Desktop-Verknüpfung erstellt.",
       "failed": "Verknüpfung konnte nicht erstellt werden: {{msg}}"
@@ -829,21 +801,6 @@
     "reject": "Ablehnen",
     "yourFriends": "Deine Freunde",
     "noFriends": "Noch keine Freunde. Senden Sie eine Anfrage per Nickname.",
-    "viewBuilds": "Builds",
-    "friendBuildsTitle": "Builds von {{nickname}}",
-    "noBuilds": "Keine gespeicherten Builds.",
-    "loadingBuilds": "Builds werden geladen…",
-    "buildContents": "Inhalt",
-    "contentCount": "{{count}} Einträge",
-    "contentSource": "Quelle",
-    "contentProject": "Projekt",
-    "contentType": "Typ",
-    "close": "Schließen",
-    "back": "Zurück",
-    "buildMeta": "{{version}} • {{loader}}",
-    "buildPlaytime": "Spielzeit: {{time}}",
-    "buildLastLaunch": "Letzter Start: {{date}}",
-    "buildsPrivacyNote": "Builds sind nur bei Freunden sichtbar, die sie mit der Plattform synchronisiert haben.",
     "toast": {
       "requestAccepted": "Anfrage angenommen",
       "requestRejected": "Anfrage abgelehnt",
@@ -852,6 +809,15 @@
       "requestExists": "Die Anfrage existiert bereits oder Sie sind bereits befreundet.",
       "requestSent": "Anfrage gesendet"
     }
+  },
+  "achievements": {
+    "title": "Erfolge",
+    "signInFirst": "Melde dich mit deinem Plattformkonto an, um Erfolge zu sehen.",
+    "refresh": "Aktualisieren",
+    "empty": "Noch keine Erfolge.",
+    "locked": "Gesperrt",
+    "progress": "{{unlocked}} / {{total}} freigeschaltet",
+    "unlockedAt": "Freigeschaltet am {{date}}"
   },
   "platform": {
     "accountTitle": "16Launcher-Konto",

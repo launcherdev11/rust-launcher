@@ -8,8 +8,7 @@ mod updates;
 pub use types::ModrinthDownloadTarget;
 pub use content_metadata::resolve_profile_item_metadata;
 pub use updates::{
-    apply_profile_content_updates, check_profile_content_updates, collect_profile_build_contents,
-    ProfileBuildContentEntry,
+    apply_profile_content_updates, check_profile_content_updates,
 };
 
 use std::path::PathBuf;
