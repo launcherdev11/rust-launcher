@@ -472,7 +472,7 @@
     "changeVersion": {
       "button": "Profilversion ändern",
       "title": "Profilversion ändern",
-      "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Mods, die für die alte Version erstellt wurden, müssen möglicherweise aktualisiert werden.",
+      "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Kompatible Inhalte von Modrinth und CurseForge werden automatisch aktualisiert.",
       "currentVersion": "Aktuelle Version",
       "gameVersionLabel": "Neue Minecraft-Version",
       "loaderVersionLabel": "Loader-Version",
@@ -480,6 +480,7 @@
       "confirm": "Wandern",
       "migrating": "Migration…",
       "success": "Profilversion geändert.",
+      "successWithContentUpdates": "Profilversion geändert. Inhaltsdateien aktualisiert: {{count}}.",
       "failed": "Profilversion konnte nicht geändert werden: {{msg}}",
       "sameVersion": "Wählen Sie eine andere Minecraft- oder Loader-Version.",
       "selectLoaderVersion": "Wählen Sie eine Loader-Version aus."

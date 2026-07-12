@@ -215,6 +215,7 @@ type ModpackTabProps = {
   onRequestedModpackViewApplied?: () => void;
   requestedProfileSettingsId?: string | null;
   onRequestedProfileSettingsApplied?: () => void;
+  onManageConsoleExpandedChange?: (expanded: boolean) => void;
 };
 
 type ViewId = "list" | "create" | "import" | "manage";
@@ -484,6 +485,7 @@ export function ModpackTab({
   onRequestedModpackViewApplied,
   requestedProfileSettingsId,
   onRequestedProfileSettingsApplied,
+  onManageConsoleExpandedChange,
 }: ModpackTabProps) {
   const tt = useT(language);
   const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
@@ -609,6 +611,7 @@ export function ModpackTab({
   const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
   const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
   const [profileConflictsLoading, setProfileConflictsLoading] = useState(false);
+  const [profileConflictsRefreshToken, setProfileConflictsRefreshToken] = useState(0);
   const [profileConflicts, setProfileConflicts] = useState<
     {
       id: string;
@@ -617,6 +620,7 @@ export function ModpackTab({
       reason: string;
       affected: string[];
       solutions: string[];
+      actions?: { id: string; label: string; kind: "disable_all_but" | "keep_latest"; keep?: string }[];
     }[]
   >([]);
   const [isChangeVersionOpen, setIsChangeVersionOpen] = useState(false);
@@ -677,6 +681,13 @@ export function ModpackTab({
       return true;
     }
   });
+  useEffect(() => {
+    const isActive = activeView === "manage" && manageConsoleExpanded;
+    onManageConsoleExpandedChange?.(isActive);
+    return () => {
+      onManageConsoleExpandedChange?.(false);
+    };
+  }, [activeView, manageConsoleExpanded, onManageConsoleExpandedChange]);
   const [selectedLogSessionId, setSelectedLogSessionId] = useState<"live" | string>(
     "live",
   );
@@ -877,6 +888,43 @@ export function ModpackTab({
       const enabled = (entries ?? []).filter((e) => e && e.enabled && e.name);
 
       const stripExt = (s: string) => s.replace(/\.(jar|zip|disabled)$/i, "");
+      const extractVersionParts = (filename: string): number[] | null => {
+        const base = stripExt(filename);
+        const m = base.match(/(\d+(?:\.\d+){0,4})/);
+        if (!m) return null;
+        const parts = m[1]
+          .split(".")
+          .map((p) => Number.parseInt(p, 10))
+          .filter((n) => Number.isFinite(n));
+        return parts.length > 0 ? parts : null;
+      };
+      const cmpVersionParts = (a: number[], b: number[]): number => {
+        const n = Math.max(a.length, b.length);
+        for (let i = 0; i < n; i++) {
+          const av = a[i] ?? 0;
+          const bv = b[i] ?? 0;
+          if (av !== bv) return av < bv ? -1 : 1;
+        }
+        return 0;
+      };
+      const pickLatestFilename = (files: string[]): string | null => {
+        let best: { file: string; ver: number[] | null } | null = null;
+        for (const f of files) {
+          const ver = extractVersionParts(f);
+          if (!best) {
+            best = { file: f, ver };
+            continue;
+          }
+          if (!best.ver && ver) {
+            best = { file: f, ver };
+            continue;
+          }
+          if (best.ver && ver && cmpVersionParts(best.ver, ver) < 0) {
+            best = { file: f, ver };
+          }
+        }
+        return best?.file ?? null;
+      };
       const guessKey = (filename: string) => {
         const base = stripExt(filename).trim();
         const idx = base.search(/\d/);
@@ -915,10 +963,12 @@ export function ModpackTab({
         reason: string;
         affected: string[];
         solutions: string[];
+        actions?: { id: string; label: string; kind: "disable_all_but" | "keep_latest"; keep?: string }[];
       }[] = [];
 
       for (const [key, files] of byKey.entries()) {
         if (files.length < 2) continue;
+        const keepLatest = pickLatestFilename(files);
         conflicts.push({
           id: `dup:${key}`,
           severity: "error",
@@ -929,6 +979,19 @@ export function ModpackTab({
             tt("modpacks.conflicts.duplicate.solutionDisableExtra"),
             tt("modpacks.conflicts.duplicate.solutionKeepLatest"),
           ],
+          actions: [
+            { id: "disable_extra", label: tt("modpacks.conflicts.actions.disableExtra"), kind: "disable_all_but" },
+            ...(keepLatest
+              ? [
+                  {
+                    id: "keep_latest",
+                    label: tt("modpacks.conflicts.actions.keepLatest"),
+                    kind: "keep_latest",
+                    keep: keepLatest,
+                  } as const,
+                ]
+              : []),
+          ],
         });
       }
 
@@ -936,6 +999,23 @@ export function ModpackTab({
       if (loader && loader !== "vanilla") {
         for (const [key, variants] of byKeyVariants.entries()) {
           if (variants.size === 0) continue;
+          if (variants.size > 1) {
+            const affected = (byKey.get(key) ?? []).slice(0, 8);
+            conflicts.push({
+              id: `mixed:${key}`,
+              severity: "error",
+              title: tt("modpacks.conflicts.mixedVariants.title"),
+              reason: tt("modpacks.conflicts.mixedVariants.reason", {
+                variants: [...variants].join(", "),
+              }),
+              affected,
+              solutions: [
+                tt("modpacks.conflicts.mixedVariants.solutionKeepOne"),
+                tt("modpacks.conflicts.mixedVariants.solutionUseUniversal"),
+              ],
+            });
+            continue;
+          }
           if (!variants.has(loader)) {
             const affected = (byKey.get(key) ?? []).slice(0, 8);
             conflicts.push({
@@ -967,11 +1047,9 @@ export function ModpackTab({
       setProfileConflictsLoading(false);
       return;
     }
-    if (profileConflictsLoading || profileConflicts.length > 0) {
-      return;
-    }
     let cancelled = false;
     setProfileConflictsLoading(true);
+    setProfileConflicts([]);
     invoke<{ name: string; enabled: boolean }[]>("list_profile_items", {
       id: selectedProfile.id,
       category: "mods",
@@ -996,8 +1074,7 @@ export function ModpackTab({
     isProfileSettingsOpen,
     selectedProfile?.id,
     selectedProfile?.loader,
-    profileConflictsLoading,
-    profileConflicts.length,
+    profileConflictsRefreshToken,
   ]);
 
   const selectedCreatePreset = useMemo(
@@ -1632,6 +1709,7 @@ export function ModpackTab({
         gameVersion: migrateGameVersion,
         loaderVersion,
       });
+      const contentUpdatesApplied = await applyContentUpdatesAfterVersionChange(updated.id);
       setProfiles((prev) => {
         const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
         onProfilesChange?.(next);
@@ -1640,7 +1718,16 @@ export function ModpackTab({
       onProfileSelectionChange?.(updated);
       await refreshItems(selectedProfile.id, contentTab);
       setIsChangeVersionOpen(false);
-      showNotification("success", tt("modpacks.changeVersion.success"));
+      if (contentUpdatesApplied > 0) {
+        showNotification(
+          "success",
+          tt("modpacks.changeVersion.successWithContentUpdates", {
+            count: contentUpdatesApplied,
+          }),
+        );
+      } else {
+        showNotification("success", tt("modpacks.changeVersion.success"));
+      }
     } catch (e) {
       console.error(e);
       const msg =
@@ -1989,6 +2076,9 @@ export function ModpackTab({
       });
       await refreshItems(selectedProfile.id, contentTab);
       showNotification("success", t(language, "modpacks.toast.filesAdded"));
+      if (category === "mods" && isProfileSettingsOpen) {
+        setProfileConflictsRefreshToken((v) => v + 1);
+      }
     } catch (e) {
       console.error(e);
       showNotification("error", t(language, "modpacks.toast.addFilesFailed"));
@@ -2650,7 +2740,6 @@ export function ModpackTab({
     const path = openedMrpackPath;
     onOpenedMrpackPathConsumed?.();
     void handleImportMrpack(path);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- реакция только на путь из ОС
   }, [openedMrpackPath, onOpenedMrpackPathConsumed]);
 
   useEffect(() => {
@@ -2671,7 +2760,6 @@ export function ModpackTab({
       }
     }).then((fn) => { unlisten = fn; }).catch(console.error);
     return () => { unlisten?.(); };
-    //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
 
   useEffect(() => {
@@ -2721,7 +2809,6 @@ export function ModpackTab({
       setIsManageDropTarget(false);
       unlisten?.();
     };
-    //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, selectedProfile?.id, contentTab, language]);
 
   async function handleAddFilesFromPc() {
@@ -2771,6 +2858,9 @@ export function ModpackTab({
         filename: item.name,
       });
       setItems((prev) => prev.filter((f) => f.name !== item.name));
+      if (category === "mods" && isProfileSettingsOpen) {
+        setProfileConflictsRefreshToken((v) => v + 1);
+      }
     } catch (e) {
       console.error(e);
       showNotification("error", t(language, "modpacks.toast.deleteFileFailed"));
@@ -2798,6 +2888,9 @@ export function ModpackTab({
           entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
         ),
       );
+      if (category === "mods" && isProfileSettingsOpen) {
+        setProfileConflictsRefreshToken((v) => v + 1);
+      }
     } catch (e) {
       console.error(e);
       showNotification(
@@ -2805,6 +2898,36 @@ export function ModpackTab({
         tt("modpacks.manage.toggleFailed"),
       );
     }
+  }
+
+  async function applyContentUpdatesAfterVersionChange(profileId: string): Promise<number> {
+    const categories = ["mods", "resourcepacks", "shaderpacks"] as const;
+    let total = 0;
+    for (const category of categories) {
+      try {
+        const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+          profileId,
+          category,
+        });
+        if (updates.length === 0) continue;
+        const payload = updates.map((u) => ({
+          filename: u.filename,
+          enabled: u.enabled,
+          latestUrl: u.latestUrl,
+          latestFilename: u.latestFilename,
+          latestSha1: u.latestSha1 ?? null,
+        }));
+        const applied = await invoke<number>("apply_profile_content_updates", {
+          profileId,
+          category,
+          updates: payload,
+        });
+        total += applied;
+      } catch (e) {
+        console.warn(`Content update failed for ${category}:`, e);
+      }
+    }
+    return total;
   }
 
   async function handleCheckContentUpdates() {
@@ -3596,7 +3719,6 @@ export function ModpackTab({
               className="interactive-press flex h-28 w-24 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 text-xs text-white/70 hover:bg-black/60"
             >
               {createIconPath ? (
-                //eslint-disable-next-line jsx-a11y/img-redundant-alt
                 <img
                   src={resolveIconSrc(createIconPath)}
                   alt="icon"
@@ -4631,11 +4753,7 @@ export function ModpackTab({
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               <span
-                className={`h-2 w-2 shrink-0 rounded-full ${manageConsoleStatusDotClass} ${
-                  selectedLogSessionId === "live" && gameStatus === "running"
-                    ? "animate-pulse"
-                    : ""
-                }`}
+                className={`h-2 w-2 shrink-0 rounded-full ${manageConsoleStatusDotClass}`}
               />
               <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
                 {tt("play.console.title")}
@@ -5561,6 +5679,47 @@ export function ModpackTab({
                                   <li key={s}>{s}</li>
                                 ))}
                               </ul>
+                            </div>
+                          ) : null}
+
+                          {c.actions && c.actions.length > 0 && selectedProfile ? (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {c.actions.map((a) => (
+                                <button
+                                  key={a.id}
+                                  type="button"
+                                  className="interactive-press rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/15"
+                                  onClick={() => {
+                                    const affected = (c.affected ?? []).slice();
+                                    const keep =
+                                      a.kind === "keep_latest"
+                                        ? a.keep ?? affected[0]
+                                        : affected[0];
+                                    if (!keep) return;
+                                    const toDisable =
+                                      a.kind === "disable_all_but" || a.kind === "keep_latest"
+                                        ? affected.filter((f) => f && f !== keep)
+                                        : [];
+                                    if (toDisable.length === 0) return;
+                                    void (async () => {
+                                      try {
+                                        for (const f of toDisable) {
+                                          await invoke("set_profile_item_enabled", {
+                                            id: selectedProfile.id,
+                                            category: "mods",
+                                            filename: f,
+                                            enabled: false,
+                                          });
+                                        }
+                                        setProfileConflictsRefreshToken((v) => v + 1);
+                                      } catch {
+                                      }
+                                    })();
+                                  }}
+                                >
+                                  {a.label}
+                                </button>
+                              ))}
                             </div>
                           ) : null}
                         </div>

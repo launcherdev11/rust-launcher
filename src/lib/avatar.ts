@@ -156,6 +156,28 @@ async function fetchSkinBlobUrl(url: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+async function fetchMcSkinViaBackend(uuid: string): Promise<string | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const dataUrl = await invoke<string | null>("get_mc_skin", { uuid });
+    return dataUrl ?? null;
+  } catch (error) {
+    console.debug("[skin] Rust Mojang skin command unavailable", error);
+    return null;
+  }
+}
+
+async function fetchMcAvatarViaBackend(uuid: string): Promise<string | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const dataUrl = await invoke<string | null>("get_mc_avatar", { uuid });
+    return dataUrl ?? null;
+  } catch (error) {
+    console.debug("[avatar] Rust Mojang avatar command unavailable", error);
+    return null;
+  }
+}
+
 export async function loadViewerSkinSource(
   profile: ProfileAvatarInput,
   _username: string = "",
@@ -177,11 +199,10 @@ export async function loadViewerSkinSource(
     }
   }
 
-  const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
-  const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
-  const uuid = mcUuid || elyUuid;
-  if (uuid) {
-    return fetchSkinBlobUrl(`https://crafatar.com/skins/${uuid}?default=MHF_Steve`);
+  const mcUuid = profile.mc_uuid?.trim();
+  if (mcUuid) {
+    const dataUrl = await fetchMcSkinViaBackend(mcUuid);
+    if (dataUrl) return dataUrl;
   }
 
   if (elyUsername) {
@@ -203,7 +224,7 @@ export function resolveSkinUrl(profile: ProfileAvatarInput, _username: string = 
   const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
   const uuid = mcUuid || elyUuid;
   if (uuid) {
-    return `https://crafatar.com/skins/${uuid}?default=MHF_Steve`;
+    return `https://vzge.me/full/512/${uuid}.png`;
   }
 
   return STEVE_SKIN_URL;
@@ -299,11 +320,10 @@ export async function getAvatarSrc(
     if (src !== fallbackSrc) return src;
   }
 
-  const mcUuid = profile.mc_uuid?.trim().replace(/-/g, "");
-  const elyUuid = profile.ely_uuid?.trim().replace(/-/g, "");
-  const uuid = mcUuid || elyUuid;
-  if (uuid) {
-    return `https://crafatar.com/renders/head/${uuid}?scale=6&default=MHF_Steve`;
+  const mcUuid = profile.mc_uuid?.trim();
+  if (mcUuid) {
+    const avatarSrc = await fetchMcAvatarViaBackend(mcUuid);
+    if (avatarSrc) return avatarSrc;
   }
 
   return fallbackSrc;

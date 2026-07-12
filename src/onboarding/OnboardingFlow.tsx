@@ -163,7 +163,7 @@ export function OnboardingFlow({
         window.setTimeout(() => goFinish(), 600);
       });
 
-      const url = await invoke<string>("start_ms_oauth");
+      const url = await invoke<string>("start_ms_oauth", { language });
       setMsAuthUrl(url);
       await openUrl(url);
     } catch (e) {

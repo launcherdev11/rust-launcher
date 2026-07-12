@@ -3,6 +3,7 @@ pub mod arguments;
 pub mod build_presets;
 pub mod cache;
 pub mod console;
+pub mod console_filter;
 pub mod core;
 pub mod download;
 pub mod files;
