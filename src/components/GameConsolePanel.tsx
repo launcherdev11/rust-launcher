@@ -66,7 +66,7 @@ export function GameConsolePanel({
       <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span
-            className={`h-2 w-2 rounded-full ${statusDotClass} animate-pulse`}
+            className={`h-2 w-2 rounded-full ${statusDotClass}`}
           />
           <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
             {tt("play.console.title")}

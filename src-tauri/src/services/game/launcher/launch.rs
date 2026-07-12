@@ -8,9 +8,10 @@ use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
 use crate::infra::process::hide_console;
 use crate::models::events::{
-    GameConsoleLinePayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload, EVENT_GAME_CONSOLE_LINE,
-    EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
+    GameConsoleLinePayload, GameProcessExitedPayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload,
+    EVENT_GAME_CONSOLE_LINE, EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
 };
+use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 use crate::services::game::accounts::get_profile;
 use crate::services::game::arguments::resolve_arguments;
@@ -863,6 +864,9 @@ pub async fn launch_game(
             for line in reader.lines() {
                 match line {
                     Ok(text) => {
+                        if !is_game_console_line_important(&text, "stdout") {
+                            continue;
+                        }
                         let payload = GameConsoleLinePayload {
                             line: text,
                             source: "stdout".to_string(),
@@ -882,6 +886,9 @@ pub async fn launch_game(
             for line in reader.lines() {
                 match line {
                     Ok(text) => {
+                        if !is_game_console_line_important(&text, "stderr") {
+                            continue;
+                        }
                         let payload = GameConsoleLinePayload {
                             line: text,
                             source: "stderr".to_string(),
@@ -898,8 +905,16 @@ pub async fn launch_game(
     let started_at = play_start_time;
     let app_clone_for_playtime = app.clone();
     std::thread::spawn(move || {
-        let _ = child.wait();
+        let exit_code = child
+            .wait()
+            .ok()
+            .and_then(|status| status.code());
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+
+        let _ = app_clone_for_playtime.emit(
+            EVENT_GAME_PROCESS_EXITED,
+            GameProcessExitedPayload { exit_code },
+        );
 
         if let Some(profile_id) = profile_id_for_playtime {
             let delta_secs = started_at

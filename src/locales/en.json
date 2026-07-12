@@ -446,7 +446,7 @@
     "changeVersion": {
       "button": "Change profile version",
       "title": "Change profile version",
-      "description": "Mods, resource packs, shaders, and worlds stay in this profile and remain available after the version change. The selected Minecraft and loader versions will be installed. Mods built for the old version may need updating.",
+      "description": "Mods, resource packs, shaders, and worlds stay in this profile and remain available after the version change. The selected Minecraft and loader versions will be installed. Compatible content from Modrinth and CurseForge will be updated automatically.",
       "currentVersion": "Current version",
       "gameVersionLabel": "New Minecraft version",
       "loaderVersionLabel": "Loader version",
@@ -454,6 +454,7 @@
       "confirm": "Migrate",
       "migrating": "Migrating…",
       "success": "Profile version changed.",
+      "successWithContentUpdates": "Profile version changed. Content files updated: {{count}}.",
       "failed": "Failed to change profile version: {{msg}}",
       "sameVersion": "Choose a different Minecraft or loader version.",
       "selectLoaderVersion": "Select a loader version."
@@ -745,6 +746,10 @@
       "loading": "Checking…",
       "count": "{{count}}",
       "none": "No conflicts detected.",
+      "actions": {
+        "disableExtra": "Disable extras",
+        "keepLatest": "Keep latest"
+      },
       "severity": {
         "error": "Error",
         "warning": "Warning"
@@ -756,6 +761,12 @@
         "reason": "Multiple enabled files look like the same mod: {{name}}.",
         "solutionDisableExtra": "Disable or remove the extra versions (leave one).",
         "solutionKeepLatest": "Keep the newest version that matches your Minecraft version."
+      },
+      "mixedVariants": {
+        "title": "Mixed loader variants",
+        "reason": "A mod looks like it has multiple loader builds enabled at once: {{variants}}.",
+        "solutionKeepOne": "Keep only the variant that matches your profile loader.",
+        "solutionUseUniversal": "If available, use a universal build instead of separate loader variants."
       },
       "loaderMismatch": {
         "title": "Loader mismatch (likely)",

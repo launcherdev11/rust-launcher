@@ -296,6 +296,9 @@ const GAME_CONSOLE_STORAGE_KEY = "game_console_persist_v2";
 const GAME_CONSOLE_STORAGE_KEY_V1 = "game_console_persist_v1";
 const MAX_CONSOLE_LINES = 2000;
 const MAX_ARCHIVED_SESSIONS = 25;
+const HIDDEN_CONSOLE_BUFFER_MAX = 500;
+const GAME_CONSOLE_BATCH_FLUSH_MS = 150;
+const GAME_CONSOLE_PERSIST_DEBOUNCE_MS = 2500;
 
 function normalizeConsoleLine(l: unknown, i: number): GameConsoleLine | null {
   if (!l || typeof l !== "object") return null;
@@ -1318,6 +1321,16 @@ function App() {
   const [consoleByProfile, setConsoleByProfile] = useState<
     Record<string, ProfileConsoleData>
   >(initialPersistedConsoleByProfile);
+  const pendingConsoleLinesRef = useRef<Record<string, GameConsoleLine[]>>({});
+  const hiddenConsoleBufferRef = useRef<Record<string, GameConsoleLine[]>>({});
+  const consoleFlushTimerRef = useRef<number | null>(null);
+  const nextConsoleLineIdRef = useRef(Date.now());
+  const lastConsoleLineTextRef = useRef("");
+  const manageConsoleExpandedRef = useRef(false);
+  const isConsoleDetachedRef = useRef(false);
+  const consoleUiActiveRef = useRef(false);
+  const gameStatusRef = useRef<GameStatus>("idle");
+  const isLaunchingRef = useRef(false);
   const runningConsoleProfileIdRef = useRef<string | null>(null);
   const [runningConsoleProfileId, setRunningConsoleProfileId] = useState<string | null>(null);
   const setRunningConsoleProfile = useCallback((profileId: string | null) => {
@@ -1343,6 +1356,8 @@ function App() {
 
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
   const [isLaunching, setIsLaunching] = useState(false);
+  gameStatusRef.current = gameStatus;
+  isLaunchingRef.current = isLaunching;
   const [isStopping, setIsStopping] = useState(false);
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
@@ -1410,6 +1425,8 @@ function App() {
 
   const archiveCurrentConsoleAndClear = useCallback((profileId: string) => {
     resetGameConsoleFilter();
+    pendingConsoleLinesRef.current[profileId] = [];
+    delete hiddenConsoleBufferRef.current[profileId];
     setConsoleByProfile((prev) => {
       const current = prev[profileId] ?? { lines: [], sessions: [] };
       if (current.lines.length === 0) {
@@ -1431,29 +1448,90 @@ function App() {
     });
   }, []);
 
+  const flushPendingConsoleLines = useCallback(() => {
+    if (consoleFlushTimerRef.current !== null) {
+      window.clearTimeout(consoleFlushTimerRef.current);
+      consoleFlushTimerRef.current = null;
+    }
+
+    const pendingEntries = Object.entries(pendingConsoleLinesRef.current).filter(
+      ([, lines]) => lines.length > 0,
+    );
+    if (pendingEntries.length === 0) return;
+
+    pendingConsoleLinesRef.current = {};
+    setConsoleByProfile((prev) => {
+      const next = { ...prev };
+      for (const [profileId, queuedLines] of pendingEntries) {
+        const current = next[profileId] ?? { lines: [], sessions: [] };
+        const mergedLines =
+          current.lines.length > 0 ? [...current.lines, ...queuedLines] : queuedLines.slice();
+        next[profileId] = {
+          ...current,
+          lines:
+            mergedLines.length > MAX_CONSOLE_LINES
+              ? mergedLines.slice(mergedLines.length - MAX_CONSOLE_LINES)
+              : mergedLines,
+        };
+      }
+      return next;
+    });
+  }, []);
+
+  const scheduleConsoleFlush = useCallback(() => {
+    if (consoleFlushTimerRef.current !== null) return;
+    consoleFlushTimerRef.current = window.setTimeout(() => {
+      flushPendingConsoleLines();
+    }, GAME_CONSOLE_BATCH_FLUSH_MS);
+  }, [flushPendingConsoleLines]);
+
+  const restoreHiddenConsoleBuffer = useCallback(
+    (profileId: string) => {
+      const buffered = hiddenConsoleBufferRef.current[profileId];
+      if (!buffered || buffered.length === 0) return;
+      delete hiddenConsoleBufferRef.current[profileId];
+      pendingConsoleLinesRef.current[profileId] = [
+        ...(pendingConsoleLinesRef.current[profileId] ?? []),
+        ...buffered,
+      ];
+      flushPendingConsoleLines();
+    },
+    [flushPendingConsoleLines],
+  );
+
+  const handleManageConsoleExpandedChange = useCallback(
+    (expanded: boolean) => {
+      manageConsoleExpandedRef.current = expanded;
+      if (!expanded) return;
+      const profileId =
+        activeInstanceProfile?.id ?? runningConsoleProfileIdRef.current ?? null;
+      if (profileId) restoreHiddenConsoleBuffer(profileId);
+    },
+    [activeInstanceProfile?.id, restoreHiddenConsoleBuffer],
+  );
+
   const appendConsoleLine = useCallback(
     (profileId: string, text: string, source: "stdout" | "stderr") => {
       if (!isGameConsoleLineImportant(text, source)) return;
-      setConsoleByProfile((prev) => {
-        const current = prev[profileId] ?? { lines: [], sessions: [] };
-        const nextLines: GameConsoleLine[] = [
-          ...current.lines,
-          { id: Date.now() + Math.random(), line: text, source },
-        ];
-        const trimmed =
-          nextLines.length > MAX_CONSOLE_LINES
-            ? nextLines.slice(nextLines.length - MAX_CONSOLE_LINES)
-            : nextLines;
-        return { ...prev, [profileId]: { ...current, lines: trimmed } };
+      lastConsoleLineTextRef.current = text;
+      const queued = pendingConsoleLinesRef.current[profileId] ?? [];
+      queued.push({
+        id: nextConsoleLineIdRef.current++,
+        line: text,
+        source,
       });
+      pendingConsoleLinesRef.current[profileId] = queued;
+      scheduleConsoleFlush();
     },
-    [],
+    [scheduleConsoleFlush],
   );
 
   const prepareInstallConsole = useCallback(
     (profileId?: string | null) => {
       resetGameConsoleFilter();
       const targetId = profileId ?? activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
+      pendingConsoleLinesRef.current[targetId] = [];
+      delete hiddenConsoleBufferRef.current[targetId];
       setConsoleByProfile((prev) => ({
         ...prev,
         [targetId]: {
@@ -1684,48 +1762,35 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
-    let cancelled = false;
+    let unlisten: (() => void) | undefined;
 
-    const checkStatus = async () => {
-      try {
-        const running = await invoke<boolean>("is_game_running_now");
-        if (cancelled) return;
-
-        if (running) {
-          lastRunningRef.current = true;
-          setGameStatus("running");
-        } else {
-          if (lastRunningRef.current) {
-            lastRunningRef.current = false;
-            setRunningConsoleProfile(null);
-            setGameStatus((prev) => {
-              const lastLine = consoleLines[consoleLines.length - 1]?.line ?? "";
-              const lower = lastLine.toLowerCase();
-              const looksCrash =
-                lower.includes("exception") ||
-                lower.includes("fatal") ||
-                lower.includes("crash") ||
-                lower.includes("ошибка");
-              if (looksCrash) return "crashed";
-              if (prev === "running") return "stopped";
-              return prev;
-            });
-          } else {
-            setGameStatus((prev) => (prev === "running" ? "stopped" : prev));
-          }
-        }
-      } catch {
-      }
-    };
-
-    const id = window.setInterval(checkStatus, 4000);
-    void checkStatus();
+    void listen<{ exit_code?: number | null }>("game-process-exited", () => {
+      if (!lastRunningRef.current) return;
+      const profileId =
+        runningConsoleProfileIdRef.current ?? activeInstanceProfile?.id ?? null;
+      if (profileId) restoreHiddenConsoleBuffer(profileId);
+      lastRunningRef.current = false;
+      flushPendingConsoleLines();
+      setRunningConsoleProfile(null);
+      setGameStatus((prev) => {
+        if (prev !== "running") return prev;
+        const lastLine = lastConsoleLineTextRef.current;
+        const lower = lastLine.toLowerCase();
+        const looksCrash =
+          lower.includes("exception") ||
+          lower.includes("fatal") ||
+          lower.includes("crash") ||
+          lower.includes("ошибка");
+        return looksCrash ? "crashed" : "stopped";
+      });
+    }).then((fn) => {
+      unlisten = fn;
+    });
 
     return () => {
-      cancelled = true;
-      window.clearInterval(id);
+      unlisten?.();
     };
-  }, [consoleLines]);
+  }, [activeInstanceProfile?.id, flushPendingConsoleLines, restoreHiddenConsoleBuffer]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1749,12 +1814,14 @@ function App() {
                 ? payload.line
                 : "";
           if (!text) return;
+          lastConsoleLineTextRef.current = text;
           const source: "stdout" | "stderr" =
             typeof payload === "string"
               ? "stdout"
               : payload.source === "stderr"
                 ? "stderr"
                 : "stdout";
+          if (!isGameConsoleLineImportant(text, source)) return;
           const runningId = runningConsoleProfileIdRef.current;
           let profileId: string | null = runningId;
           if (!profileId) {
@@ -1765,6 +1832,25 @@ function App() {
             }
           }
           if (!profileId) return;
+
+          const capturePaused =
+            gameStatusRef.current === "running" &&
+            !isLaunchingRef.current &&
+            !consoleUiActiveRef.current;
+          if (capturePaused) {
+            const buffered = hiddenConsoleBufferRef.current[profileId] ?? [];
+            buffered.push({
+              id: nextConsoleLineIdRef.current++,
+              line: text,
+              source,
+            });
+            if (buffered.length > HIDDEN_CONSOLE_BUFFER_MAX) {
+              buffered.splice(0, buffered.length - HIDDEN_CONSOLE_BUFFER_MAX);
+            }
+            hiddenConsoleBufferRef.current[profileId] = buffered;
+            return;
+          }
+
           appendConsoleLine(profileId, text, source);
         });
       } catch (e) {
@@ -1779,7 +1865,9 @@ function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isLaunching || gameStatus === "running") return;
     const t = window.setTimeout(() => {
+      flushPendingConsoleLines();
       try {
         window.localStorage.setItem(
           GAME_CONSOLE_STORAGE_KEY,
@@ -1787,9 +1875,15 @@ function App() {
         );
       } catch {
       }
-    }, 400);
+    }, GAME_CONSOLE_PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
-  }, [consoleByProfile]);
+  }, [consoleByProfile, flushPendingConsoleLines, gameStatus, isLaunching]);
+
+  useEffect(() => {
+    return () => {
+      flushPendingConsoleLines();
+    };
+  }, [flushPendingConsoleLines]);
 
   const clearNotificationDismissTimers = useCallback((id: number) => {
     const t = notificationTimersRef.current.get(id);
@@ -2928,7 +3022,7 @@ function App() {
         showNotification("success", tt("app.accounts.toast.msLoggedIn"));
       });
 
-      const url = await invoke<string>("start_ms_oauth");
+      const url = await invoke<string>("start_ms_oauth", { language });
       setMsAuthUrl(url);
       try {
         await openUrl(url);
@@ -3067,6 +3161,8 @@ function App() {
     resetGameConsoleFilter();
     const profileId =
       activeInstanceProfile?.id ?? runningConsoleProfileId ?? INSTALL_CONSOLE_PROFILE_ID;
+    pendingConsoleLinesRef.current[profileId] = [];
+    delete hiddenConsoleBufferRef.current[profileId];
     setConsoleByProfile((prev) => ({
       ...prev,
       [profileId]: {
@@ -3087,6 +3183,28 @@ function App() {
     onClearConsole: handleClearConsole,
     onToggleConsole: handleToggleConsole,
   });
+
+  useEffect(() => {
+    isConsoleDetachedRef.current = isConsoleDetached;
+    consoleUiActiveRef.current =
+      isConsoleVisible ||
+      isConsoleDetached ||
+      manageConsoleExpandedRef.current ||
+      isLaunching;
+
+    if (!consoleUiActiveRef.current) return;
+    const profileId =
+      activeInstanceProfile?.id ?? runningConsoleProfileIdRef.current ?? null;
+    if (profileId) restoreHiddenConsoleBuffer(profileId);
+  }, [
+    isConsoleVisible,
+    isConsoleDetached,
+    isLaunching,
+    activeInstanceProfile?.id,
+    restoreHiddenConsoleBuffer,
+  ]);
+
+  const gameRunningPowerSave = gameStatus === "running";
 
   const handleOpenGameFolder = async () => {
     try {
@@ -3566,6 +3684,7 @@ function App() {
                 consoleHistorySessions={consoleHistorySessions}
                 onClearConsole={handleClearConsole}
                 prepareInstallConsole={prepareInstallConsole}
+                onManageConsoleExpandedChange={handleManageConsoleExpandedChange}
               />
             </div>
           );
@@ -3779,13 +3898,18 @@ function App() {
       }
     >
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <LauncherBackgroundImage
-          imageUrl={backgroundImageUrl}
-          blurEnabled={settings?.background_blur_enabled ?? true}
-          animated={backgroundIsAnimated}
-        />
+        {gameRunningPowerSave ? (
+          <div className="absolute inset-0 bg-[#0a0a0f]" />
+        ) : (
+          <LauncherBackgroundImage
+            imageUrl={backgroundImageUrl}
+            blurEnabled={settings?.background_blur_enabled ?? true}
+            animated={backgroundIsAnimated}
+          />
+        )}
       </div>
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
+      {!gameRunningPowerSave ? (
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl"
@@ -3806,6 +3930,7 @@ function App() {
           }}
         />
       </div>
+      ) : null}
 
       <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center px-4">
         {notifications.map((n) => {
