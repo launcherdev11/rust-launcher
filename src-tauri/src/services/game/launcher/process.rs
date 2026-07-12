@@ -70,7 +70,7 @@ pub fn is_game_running_now() -> Result<bool, String> {
         return Ok(false);
     }
 
-    let mut sys = System::new_all();
+    let mut sys = System::new();
     sys.refresh_processes(ProcessesToUpdate::All, true);
 
     let pid_obj = Pid::from_u32(pid as u32);

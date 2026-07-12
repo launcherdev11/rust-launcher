@@ -472,7 +472,7 @@
     "changeVersion": {
       "button": "Cambiar versión de perfil",
       "title": "Cambiar versión de perfil",
-      "description": "Los mods, paquetes de recursos, sombreadores y mundos permanecen en este perfil y permanecen disponibles después del cambio de versión. Se instalarán las versiones seleccionadas de Minecraft y del cargador. Es posible que sea necesario actualizar las modificaciones creadas para la versión anterior.",
+      "description": "Los mods, paquetes de recursos, sombreadores y mundos permanecen en este perfil y permanecen disponibles después del cambio de versión. Se instalarán las versiones seleccionadas de Minecraft y del cargador. El contenido compatible de Modrinth y CurseForge se actualizará automáticamente.",
       "currentVersion": "Versión actual",
       "gameVersionLabel": "Nueva versión de Minecraft",
       "loaderVersionLabel": "Versión del cargador",
@@ -480,6 +480,7 @@
       "confirm": "Emigrar",
       "migrating": "Migrando…",
       "success": "La versión del perfil cambió.",
+      "successWithContentUpdates": "La versión del perfil cambió. Archivos de contenido actualizados: {{count}}.",
       "failed": "No se pudo cambiar la versión del perfil: {{msg}}",
       "sameVersion": "Elija una versión diferente de Minecraft o del cargador.",
       "selectLoaderVersion": "Seleccione una versión del cargador."

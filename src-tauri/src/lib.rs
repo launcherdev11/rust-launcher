@@ -55,7 +55,7 @@ use services::modrinth::{
     resolve_profile_item_metadata,
 };
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
-use commands::{export_build, get_ely_avatar, get_ely_skin, list_build_files, preview_export};
+use commands::{export_build, get_ely_avatar, get_ely_skin, get_mc_avatar, get_mc_skin, list_build_files, preview_export};
 use mrpack_open::take_pending_mrpack_open;
 use profile_launch::{
     extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
@@ -246,6 +246,8 @@ pub fn run() {
             add_launcher_account,
             get_ely_avatar,
             get_ely_skin,
+            get_mc_avatar,
+            get_mc_skin,
             take_pending_mrpack_open,
             take_pending_profile_launch,
             create_profile_desktop_shortcut,
