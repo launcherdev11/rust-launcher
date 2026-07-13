@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { useT, type Language } from "../i18n";
+import { readDataCache, writeDataCache } from "../lib/launcherDataCache";
 import { copyTextToClipboard } from "../lib/clipboard";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
@@ -189,6 +190,14 @@ export function PlayTab({
       : null;
 
   useEffect(() => {
+    const cached = readDataCache<LauncherBannerData[]>("play-banners", 300_000);
+    if (cached?.length) {
+      setBanners(cached);
+      setActiveBannerIndex(0);
+      setBannerLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
 
     async function fetchBanner() {
@@ -230,6 +239,7 @@ export function PlayTab({
             );
 
             if (parsed.length > 0) {
+              writeDataCache("play-banners", parsed);
               setBanners(parsed);
               setActiveBannerIndex(0);
               return;

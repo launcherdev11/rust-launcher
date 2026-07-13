@@ -45,6 +45,11 @@ import {
   type ProfileGroupColor,
 } from "../lib/profile-groups";
 import type { DownloadJobKind } from "../hooks/useDownloadJobs";
+import {
+  readDataCache,
+  scheduleIdleWork,
+  writeDataCache,
+} from "../lib/launcherDataCache";
 import type { ModpackHotkeyActions, ModpackNavigationActions } from "../hooks/useHotkeys";
 import { ScreenshotsModal } from "../features/screenshots";
 import {
@@ -182,6 +187,7 @@ type ModpackTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   onProfileSelectionChange?: (profile: InstanceProfile | null) => void;
   initialSelectedProfileId?: string | null;
+  initialProfiles?: InstanceProfile[];
   onOpenModsTab?: () => void;
   onPlaySelectedProfile?: () => void;
   primaryLabel?: string;
@@ -457,6 +463,7 @@ export function ModpackTab({
   showNotification,
   onProfileSelectionChange,
   initialSelectedProfileId,
+  initialProfiles,
   onOpenModsTab,
   onPlaySelectedProfile,
   primaryLabel: _primaryLabel,
@@ -488,7 +495,7 @@ export function ModpackTab({
   onManageConsoleExpandedChange,
 }: ModpackTabProps) {
   const tt = useT(language);
-  const [profiles, setProfiles] = useState<InstanceProfile[]>([]);
+  const [profiles, setProfiles] = useState<InstanceProfile[]>(() => initialProfiles ?? []);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(() => {
     if (typeof window === "undefined") return initialSelectedProfileId ?? null;
     try {
@@ -507,7 +514,7 @@ export function ModpackTab({
   const [itemMetadataByFilename, setItemMetadataByFilename] = useState<
     Record<string, ProfileItemMetadata>
   >({});
-  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [loadingProfiles, setLoadingProfiles] = useState(() => !(initialProfiles && initialProfiles.length > 0));
   const profilesLoadedRef = useRef(false);
   const [search, setSearch] = useState("");
   const [createName, setCreateName] = useState("");
@@ -1771,6 +1778,12 @@ export function ModpackTab({
   }, [selectedProfileId]);
 
   useEffect(() => {
+    if (initialProfiles?.length) {
+      profilesLoadedRef.current = true;
+      return scheduleIdleWork(() => {
+        void refreshProfiles({ background: true });
+      });
+    }
     void refreshProfiles();
   }, []);
 
@@ -1977,11 +1990,23 @@ export function ModpackTab({
     };
   }, [language, showNotification]);
 
-  async function refreshProfiles() {
-    setLoadingProfiles(true);
+  async function refreshProfiles(options?: { background?: boolean }) {
+    const cached = readDataCache<InstanceProfile[]>("profiles", 8_000);
+    if (cached) {
+      profilesLoadedRef.current = true;
+      setProfiles(cached);
+      onProfilesChange?.(cached);
+      if (!options?.background) {
+        setLoadingProfiles(false);
+      }
+    } else if (!options?.background) {
+      setLoadingProfiles(true);
+    }
+
     try {
       const list = await invoke<InstanceProfile[]>("get_profiles");
       profilesLoadedRef.current = true;
+      writeDataCache("profiles", list);
       setProfiles(list);
       onProfilesChange?.(list);
       try {
@@ -1992,10 +2017,14 @@ export function ModpackTab({
       } catch {
       }
     } catch (e) {
-      console.error(e);
-      showNotification("error", t(language, "modpacks.toast.loadProfilesFailed"));
+      if (!cached) {
+        console.error(e);
+        showNotification("error", t(language, "modpacks.toast.loadProfilesFailed"));
+      }
     } finally {
-      setLoadingProfiles(false);
+      if (!options?.background || !cached) {
+        setLoadingProfiles(false);
+      }
     }
   }
 
