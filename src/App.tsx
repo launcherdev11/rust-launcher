@@ -5,6 +5,9 @@ import {
   useMemo,
   useRef,
   useState,
+  lazy,
+  Suspense,
+  startTransition,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -25,8 +28,6 @@ import {
   SettingsCard,
 } from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
-import { SettingsTab } from "./tabs/SettingsTab";
-import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
@@ -41,6 +42,14 @@ import {
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
+import { readDataCache, writeDataCache } from "./lib/launcherDataCache";
+
+const ModpackTab = lazy(() =>
+  import("./tabs/ModpackTab").then((m) => ({ default: m.ModpackTab })),
+);
+const SettingsTab = lazy(() =>
+  import("./tabs/SettingsTab").then((m) => ({ default: m.SettingsTab })),
+);
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
   useHotkeys,
@@ -743,6 +752,14 @@ function MaximizeIcon() {
   );
 }
 
+function TabPaneLoading() {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center py-8">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/70" />
+    </div>
+  );
+}
+
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
@@ -1071,7 +1088,9 @@ function App() {
     (next: SidebarItemId) => {
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
       if (uiSoundsEnabled && next !== activeItem) playTabSwitchSound();
-      setActiveItem(next);
+      startTransition(() => {
+        setActiveItem(next);
+      });
     },
     [activeItem, settings?.ui_sounds_enabled],
   );
@@ -2518,27 +2537,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const cached = readDataCache<InstanceProfileCard[]>("profiles", 8_000);
+    if (cached?.length) {
+      setKnownProfiles(cached);
+      setProfilesHydrated(true);
+    }
+
     (async () => {
       try {
         const list = await invoke<InstanceProfileCard[]>("get_profiles");
-        setKnownProfiles(
-          list.map((p) => ({
-            id: p.id,
-            name: p.name,
-            game_version: p.game_version,
-            loader: p.loader,
-            loader_version: p.loader_version ?? null,
-            icon_path: p.icon_path,
-            created_at: p.created_at,
-            play_time_seconds: p.play_time_seconds,
-            last_played_at: p.last_played_at ?? null,
-            mods_count: p.mods_count,
-            resourcepacks_count: p.resourcepacks_count,
-            shaderpacks_count: p.shaderpacks_count,
-            total_size_bytes: p.total_size_bytes,
-            directory: p.directory,
-          })),
-        );
+        const mapped = list.map((p) => ({
+          id: p.id,
+          name: p.name,
+          game_version: p.game_version,
+          loader: p.loader,
+          loader_version: p.loader_version ?? null,
+          icon_path: p.icon_path,
+          created_at: p.created_at,
+          play_time_seconds: p.play_time_seconds,
+          last_played_at: p.last_played_at ?? null,
+          mods_count: p.mods_count,
+          resourcepacks_count: p.resourcepacks_count,
+          shaderpacks_count: p.shaderpacks_count,
+          total_size_bytes: p.total_size_bytes,
+          directory: p.directory,
+        }));
+        writeDataCache("profiles", mapped);
+        setKnownProfiles(mapped);
       } catch {
       } finally {
         setProfilesHydrated(true);
@@ -3204,8 +3229,6 @@ function App() {
     restoreHiddenConsoleBuffer,
   ]);
 
-  const gameRunningPowerSave = gameStatus === "running";
-
   const handleOpenGameFolder = async () => {
     try {
       await invoke("open_game_folder", {
@@ -3608,9 +3631,11 @@ function App() {
                   : "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4"
               }
             >
+              <Suspense fallback={<TabPaneLoading />}>
               <ModpackTab
                 fillPane={inSplitPane}
                 language={language}
+                initialProfiles={profilesHydrated ? knownProfiles : undefined}
                 onRegisterModpackHotkeys={registerModpackHotkeys}
                 onRegisterModpackNavigation={registerModpackNavigation}
                 onActiveViewChange={setModpackView}
@@ -3686,6 +3711,7 @@ function App() {
                 prepareInstallConsole={prepareInstallConsole}
                 onManageConsoleExpandedChange={handleManageConsoleExpandedChange}
               />
+              </Suspense>
             </div>
           );
         case "settings":
@@ -3697,6 +3723,7 @@ function App() {
                   : "flex h-full min-h-0 w-full flex-1 flex-col"
               }
             >
+            <Suspense fallback={<TabPaneLoading />}>
             <SettingsTab
               fillPane={inSplitPane}
               settings={settings}
@@ -3738,6 +3765,7 @@ function App() {
               onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
               onInstallUpdate={() => void installUpdate()}
             />
+            </Suspense>
             </div>
           );
         case "play":
@@ -3827,6 +3855,8 @@ function App() {
       pinnedProfileIds,
       primaryColorClasses,
       primaryLabel,
+      profilesHydrated,
+      knownProfiles,
       progress,
       selectedVersion,
       setDiscordModsTitle,
@@ -3898,18 +3928,13 @@ function App() {
       }
     >
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        {gameRunningPowerSave ? (
-          <div className="absolute inset-0 bg-[#0a0a0f]" />
-        ) : (
-          <LauncherBackgroundImage
-            imageUrl={backgroundImageUrl}
-            blurEnabled={settings?.background_blur_enabled ?? true}
-            animated={backgroundIsAnimated}
-          />
-        )}
+        <LauncherBackgroundImage
+          imageUrl={backgroundImageUrl}
+          blurEnabled={settings?.background_blur_enabled ?? true}
+          animated={backgroundIsAnimated}
+        />
       </div>
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
-      {!gameRunningPowerSave ? (
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl"
@@ -3930,7 +3955,6 @@ function App() {
           }}
         />
       </div>
-      ) : null}
 
       <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center px-4">
         {notifications.map((n) => {
@@ -4996,7 +5020,6 @@ function App() {
               }`}
             >
               <div
-                key={effectiveTabSplit.primary}
                 className={`tab-split-pane ${
                   effectiveTabSplit.focused !== "primary" ? "tab-split-pane-inactive" : ""
                 }`}
@@ -5041,7 +5064,6 @@ function App() {
                 onPointerDown={onTabSplitDividerPointerDown}
               />
               <div
-                key={effectiveTabSplit.secondary}
                 className={`tab-split-pane ${
                   effectiveTabSplit.focused !== "secondary" ? "tab-split-pane-inactive" : ""
                 }`}
