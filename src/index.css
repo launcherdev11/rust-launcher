@@ -91,7 +91,6 @@ body {
 
 .tab-animate {
   animation: tab-fade-in 220ms ease-out both;
-  will-change: transform, opacity;
 }
 
 @keyframes mods-detail-panel-in {

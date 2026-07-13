@@ -14,7 +14,6 @@ pub struct JavaSettings {
     pub jvm_args: Option<String>,
     //имя пресета ("balanced", "performance", "low_memory")
     pub preset: Option<String>,
-    /// Предпочитать IPv6 при сетевых подключениях Java (игра, мультиплеер).
     #[serde(default)]
     pub prefer_ipv6_network: bool,
 }
