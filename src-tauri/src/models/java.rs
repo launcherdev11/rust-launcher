@@ -6,9 +6,9 @@ pub struct JavaSettings {
     pub use_custom_jvm_args: bool,
     //явный путь к java/javaw. по дефолту офиц runtime Mojang
     pub java_path: Option<String>,
-    //мин. объем памяти xms (1G\\1024M)
+    //мин. объем памяти xms (1G\1024M)
     pub xms: Option<String>,
-    //макс объем памяти xmx (4G\\4096M)
+    //макс объем памяти xmx (4G\4096M)
     pub xmx: Option<String>,
     //доп JVM аргументы
     pub jvm_args: Option<String>,

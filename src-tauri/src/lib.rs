@@ -106,23 +106,32 @@ pub fn run() {
 
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
-        builder = builder.plugin(
-            tauri_plugin_single_instance::Builder::new()
-                .dbus_id("com.steyy.mc16launcher")
-                .callback(|app, args, _cwd| {
-                    if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
-                        mrpack_open::emit_mrpack_open_request(&app, p.to_string_lossy().to_string());
-                    }
-                    if let Some(profile_id) = extract_profile_launch_from_os_args(&args) {
-                        emit_profile_launch_request(&app, profile_id);
-                    }
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                })
-                .build(),
-        );
+        builder = builder
+            .plugin(
+                tauri_plugin_autostart::Builder::new()
+                    .app_name("16Launcher")
+                    .build(),
+            )
+            .plugin(
+                tauri_plugin_single_instance::Builder::new()
+                    .dbus_id("com.steyy.mc16launcher")
+                    .callback(|app, args, _cwd| {
+                        if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
+                            mrpack_open::emit_mrpack_open_request(
+                                &app,
+                                p.to_string_lossy().to_string(),
+                            );
+                        }
+                        if let Some(profile_id) = extract_profile_launch_from_os_args(&args) {
+                            emit_profile_launch_request(&app, profile_id);
+                        }
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    })
+                    .build(),
+            );
     }
 
     builder
@@ -136,6 +145,11 @@ pub fn run() {
                     eprintln!("[16Launcher] game data migration: {e}");
                 }
                 infra::window_icon::apply_launcher_icon_to_main_window(app);
+                if let Err(e) = infra::tray::setup_tray(app) {
+                    eprintln!("[16Launcher] tray setup failed: {e}");
+                }
+                let settings = services::game::settings::load_settings_from_disk();
+                infra::autostart::sync_autostart_from_settings(app.handle(), settings.autostart_enabled);
                 Ok(())
             }
         })
@@ -283,9 +297,21 @@ pub fn run() {
 
             match event {
                 tauri::RunEvent::WindowEvent { label, event, .. } => {
-                    if label == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                        discord_presence_shutdown();
-                        app_handle.exit(0);
+                    if label == "main" {
+                        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                            let hide_to_tray =
+                                services::game::settings::load_settings_from_disk()
+                                    .minimize_to_tray_on_close;
+                            if hide_to_tray {
+                                api.prevent_close();
+                                if let Some(window) = app_handle.get_webview_window("main") {
+                                    let _ = window.hide();
+                                }
+                            } else {
+                                discord_presence_shutdown();
+                                app_handle.exit(0);
+                            }
+                        }
                     }
                 }
                 tauri::RunEvent::Exit => {
