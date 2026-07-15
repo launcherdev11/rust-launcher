@@ -231,6 +231,12 @@
       "uiSounds": {
         "label": "Sonidos de la interfaz:"
       },
+      "minimizeToTray": {
+        "label": "Minimizar a la bandeja al cerrar:"
+      },
+      "autostart": {
+        "label": "Iniciar al encender el sistema:"
+      },
       "splitView": {
         "label": "Modo de pestaña de doble panel:"
       },

@@ -219,6 +219,8 @@
         "no": "Main"
       },
       "uiSounds": { "label": "Interface sounds:" },
+      "minimizeToTray": { "label": "Minimize to tray on close:" },
+      "autostart": { "label": "Launch at system startup:" },
       "splitView": { "label": "Dual-pane tab mode:" },
       "disableAnimations": { "label": "Disable animations:" },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
