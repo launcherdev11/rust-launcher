@@ -33,6 +33,12 @@ pub struct Settings {
     pub ui_sounds_enabled: bool,
 
     #[serde(default)]
+    pub minimize_to_tray_on_close: bool,
+
+    #[serde(default)]
+    pub autostart_enabled: bool,
+
+    #[serde(default)]
     pub animations_disabled: bool,
 
     #[serde(default = "default_interface_language")]
@@ -95,6 +101,8 @@ impl Default for Settings {
             auto_install_updates: false,
             open_launcher_on_profiles_tab: false,
             ui_sounds_enabled: true,
+            minimize_to_tray_on_close: false,
+            autostart_enabled: false,
             animations_disabled: false,
             interface_language: "ru".to_string(),
             background_accent_color: "#0b1530".to_string(),

@@ -35,6 +35,8 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  minimize_to_tray_on_close: boolean;
+  autostart_enabled: boolean;
   animations_disabled: boolean;
   interface_language?: string;
   background_accent_color: string;
@@ -2381,6 +2383,20 @@ export function SettingsTab({
                   noLabel={tt("settings.common.toggle.off")}
                   value={settings?.ui_sounds_enabled ?? true}
                   onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
+                />
+                <SettingsToggle
+                  label={tt("settings.launcher.minimizeToTray.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={settings?.minimize_to_tray_on_close ?? false}
+                  onChange={(v) => updateSettings({ minimize_to_tray_on_close: v })}
+                />
+                <SettingsToggle
+                  label={tt("settings.launcher.autostart.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={settings?.autostart_enabled ?? false}
+                  onChange={(v) => updateSettings({ autostart_enabled: v })}
                 />
                 <SettingsToggle
                   label={tt("settings.launcher.splitView.label")}

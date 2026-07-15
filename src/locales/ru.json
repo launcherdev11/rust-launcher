@@ -219,6 +219,8 @@
         "no": "Главная"
       },
       "uiSounds": { "label": "Звук интерфейса:" },
+      "minimizeToTray": { "label": "Скрывать в трей при закрытии:" },
+      "autostart": { "label": "Запускать при включении системы:" },
       "splitView": { "label": "Двухпанельный режим вкладок:" },
       "disableAnimations": { "label": "Убрать анимации:" },
       "notifyNewUpdate": { "label": "Новое обновление:" },

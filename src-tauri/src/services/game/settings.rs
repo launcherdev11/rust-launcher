@@ -79,7 +79,7 @@ pub fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
 }
 
 #[command]
-pub fn reset_settings_to_default() -> Result<Settings, String> {
+pub fn reset_settings_to_default(app: AppHandle) -> Result<Settings, String> {
     let previous = load_settings_from_disk();
     let defaults = Settings::default();
     save_settings_to_disk(&defaults)?;
@@ -87,6 +87,12 @@ pub fn reset_settings_to_default() -> Result<Settings, String> {
         previous.game_directory.as_deref(),
         defaults.game_directory.as_deref(),
     )?;
+    crate::infra::tray::sync_tray_from_settings(
+        &app,
+        defaults.minimize_to_tray_on_close,
+        &defaults.interface_language,
+    );
+    crate::infra::autostart::sync_autostart_from_settings(&app, defaults.autostart_enabled);
     Ok(defaults)
 }
 
@@ -204,7 +210,7 @@ pub fn get_settings() -> Result<Settings, String> {
 }
 
 #[command]
-pub fn set_settings(settings: Settings) -> Result<(), String> {
+pub fn set_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     let previous = load_settings_from_disk();
     let old_dir = previous.game_directory.clone();
     let new_dir = settings.game_directory.clone();
@@ -214,6 +220,12 @@ pub fn set_settings(settings: Settings) -> Result<(), String> {
     } else {
         crate::app::paths::ensure_game_data_layout()?;
     }
+    crate::infra::tray::sync_tray_from_settings(
+        &app,
+        settings.minimize_to_tray_on_close,
+        &settings.interface_language,
+    );
+    crate::infra::autostart::sync_autostart_from_settings(&app, settings.autostart_enabled);
     Ok(())
 }
 

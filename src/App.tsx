@@ -133,6 +133,8 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  minimize_to_tray_on_close: boolean;
+  autostart_enabled: boolean;
   animations_disabled: boolean;
   interface_language?: string;
   background_accent_color: string;
@@ -2047,6 +2049,8 @@ function App() {
     auto_install_updates: false,
     open_launcher_on_profiles_tab: false,
     ui_sounds_enabled: true,
+    minimize_to_tray_on_close: false,
+    autostart_enabled: false,
     animations_disabled: false,
     background_accent_color: "#0b1530",
     background_image_url: null,
