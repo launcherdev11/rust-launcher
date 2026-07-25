@@ -14,7 +14,7 @@ import {
 import { MotionConfig } from "framer-motion";
 import { flushSync } from "react-dom";
 import { getVersion } from "@tauri-apps/api/app";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -143,6 +143,7 @@ type Settings = {
   split_view_enabled: boolean;
   sidebar_position?: string;
   onboarding_completed?: boolean;
+  custom_theme_id?: string | null;
 };
 
 const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
@@ -2059,6 +2060,7 @@ function App() {
     sidebar_position: "left",
     onboarding_completed: false,
     interface_language: "ru",
+    custom_theme_id: null,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -3589,6 +3591,48 @@ function App() {
       }
     })();
   }, [settings?.background_image_url]);
+
+  useEffect(() => {
+    (async () => {
+      const themeId = settings?.custom_theme_id;
+      const existingStyle = document.getElementById("custom-theme-style");
+      if (!themeId) {
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+        return;
+      }
+      try {
+        let css = await invoke<string>("get_theme_css", { themeId });
+        const themeDir = await invoke<string>("get_theme_dir", { themeId });
+        
+        // Rewrite relative url(...) paths to absolute asset URLs
+        css = css.replace(/url\((['"]?)(?!data:|http:|https:|asset:)(.*?)\1\)/g, (_match, quote, path) => {
+          // Ignore empty paths
+          if (!path || path.trim() === "") return `url(${quote}${path}${quote})`;
+          // Construct absolute path using Tauri's convertFileSrc
+          // themeDir contains the absolute path to the theme folder
+          const separator = themeDir.includes("\\") ? "\\" : "/";
+          const absolutePath = themeDir + separator + path.replace(/[\\/]/g, separator);
+          return `url("${convertFileSrc(absolutePath)}")`;
+        });
+
+        if (existingStyle) {
+          existingStyle.textContent = css;
+        } else {
+          const style = document.createElement("style");
+          style.id = "custom-theme-style";
+          style.textContent = css;
+          document.head.appendChild(style);
+        }
+      } catch (err) {
+        console.error("Не удалось применить тему:", err);
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+      }
+    })();
+  }, [settings?.custom_theme_id]);
 
   const backgroundImageUrl = resolveLauncherBackgroundUrl(
     settings?.background_image_url,

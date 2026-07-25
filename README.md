@@ -38,6 +38,7 @@
 - **Multi-Version Support**: Play any Minecraft version from classic to latest
 - **Secure**: Regular updates and security patches
 - **Mod Management**: Easy mod installation and organization
+- **Custom Themes**: Full support for custom visual themes
 
 ## Quick Start
 
@@ -48,11 +49,8 @@
 
 # Screenshots
 
-![readme_screen.png](public/launcher-assets/readme_screen.png)
-![readme_screen2.png](public/launcher-assets/readme_screen2.png)
-![readme_screen3.png](public/launcher-assets/readme_screen3.png)
-![readme_screen4.png](public/launcher-assets/readme_screen4.png)
-![readme_screen5.png](public/launcher-assets/readme_screen5.png)
+![Main window with theme](images/main.png)
+![Settings window with theme](images/settings.png)
 
 ## Support
 
