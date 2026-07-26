@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+
 export type Language = "ru" | "en" | "de" | "es";
 
 export const SUPPORTED_LANGUAGES: Language[] = ["ru", "en", "de", "es"];
@@ -61,7 +63,10 @@ export function t(
 }
 
 export function useT(lang: Language) {
-  return (key: string, vars?: Record<string, string | number>) => t(lang, key, vars);
+  return useCallback(
+    (key: string, vars?: Record<string, string | number>) => t(lang, key, vars),
+    [lang],
+  );
 }
 
 export function localeTag(lang: Language): string {

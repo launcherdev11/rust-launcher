@@ -5,6 +5,9 @@ import {
   useMemo,
   useRef,
   useState,
+  lazy,
+  Suspense,
+  startTransition,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -25,8 +28,6 @@ import {
   SettingsCard,
 } from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
-import { SettingsTab } from "./tabs/SettingsTab";
-import { ModpackTab } from "./tabs/ModpackTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
@@ -42,6 +43,14 @@ import {
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
+import { readDataCache, writeDataCache } from "./lib/launcherDataCache";
+
+const ModpackTab = lazy(() =>
+  import("./tabs/ModpackTab").then((m) => ({ default: m.ModpackTab })),
+);
+const SettingsTab = lazy(() =>
+  import("./tabs/SettingsTab").then((m) => ({ default: m.SettingsTab })),
+);
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
   useHotkeys,
@@ -125,6 +134,8 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  minimize_to_tray_on_close: boolean;
+  autostart_enabled: boolean;
   animations_disabled: boolean;
   interface_language?: string;
   background_accent_color: string;
@@ -298,6 +309,9 @@ const GAME_CONSOLE_STORAGE_KEY = "game_console_persist_v2";
 const GAME_CONSOLE_STORAGE_KEY_V1 = "game_console_persist_v1";
 const MAX_CONSOLE_LINES = 2000;
 const MAX_ARCHIVED_SESSIONS = 25;
+const HIDDEN_CONSOLE_BUFFER_MAX = 500;
+const GAME_CONSOLE_BATCH_FLUSH_MS = 150;
+const GAME_CONSOLE_PERSIST_DEBOUNCE_MS = 2500;
 
 function normalizeConsoleLine(l: unknown, i: number): GameConsoleLine | null {
   if (!l || typeof l !== "object") return null;
@@ -716,6 +730,14 @@ function MaximizeIcon() {
   );
 }
 
+function TabPaneLoading() {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center py-8">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/70" />
+    </div>
+  );
+}
+
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
@@ -1044,7 +1066,9 @@ function App() {
     (next: SidebarItemId) => {
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
       if (uiSoundsEnabled && next !== activeItem) playTabSwitchSound();
-      setActiveItem(next);
+      startTransition(() => {
+        setActiveItem(next);
+      });
     },
     [activeItem, settings?.ui_sounds_enabled],
   );
@@ -1294,6 +1318,16 @@ function App() {
   const [consoleByProfile, setConsoleByProfile] = useState<
     Record<string, ProfileConsoleData>
   >(initialPersistedConsoleByProfile);
+  const pendingConsoleLinesRef = useRef<Record<string, GameConsoleLine[]>>({});
+  const hiddenConsoleBufferRef = useRef<Record<string, GameConsoleLine[]>>({});
+  const consoleFlushTimerRef = useRef<number | null>(null);
+  const nextConsoleLineIdRef = useRef(Date.now());
+  const lastConsoleLineTextRef = useRef("");
+  const manageConsoleExpandedRef = useRef(false);
+  const isConsoleDetachedRef = useRef(false);
+  const consoleUiActiveRef = useRef(false);
+  const gameStatusRef = useRef<GameStatus>("idle");
+  const isLaunchingRef = useRef(false);
   const runningConsoleProfileIdRef = useRef<string | null>(null);
   const [runningConsoleProfileId, setRunningConsoleProfileId] = useState<string | null>(null);
   const setRunningConsoleProfile = useCallback((profileId: string | null) => {
@@ -1319,6 +1353,8 @@ function App() {
 
   const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
   const [isLaunching, setIsLaunching] = useState(false);
+  gameStatusRef.current = gameStatus;
+  isLaunchingRef.current = isLaunching;
   const [isStopping, setIsStopping] = useState(false);
   const lastRunningRef = useRef(false);
   const [activeInstanceProfile, setActiveInstanceProfile] =
@@ -1386,6 +1422,8 @@ function App() {
 
   const archiveCurrentConsoleAndClear = useCallback((profileId: string) => {
     resetGameConsoleFilter();
+    pendingConsoleLinesRef.current[profileId] = [];
+    delete hiddenConsoleBufferRef.current[profileId];
     setConsoleByProfile((prev) => {
       const current = prev[profileId] ?? { lines: [], sessions: [] };
       if (current.lines.length === 0) {
@@ -1407,29 +1445,90 @@ function App() {
     });
   }, []);
 
+  const flushPendingConsoleLines = useCallback(() => {
+    if (consoleFlushTimerRef.current !== null) {
+      window.clearTimeout(consoleFlushTimerRef.current);
+      consoleFlushTimerRef.current = null;
+    }
+
+    const pendingEntries = Object.entries(pendingConsoleLinesRef.current).filter(
+      ([, lines]) => lines.length > 0,
+    );
+    if (pendingEntries.length === 0) return;
+
+    pendingConsoleLinesRef.current = {};
+    setConsoleByProfile((prev) => {
+      const next = { ...prev };
+      for (const [profileId, queuedLines] of pendingEntries) {
+        const current = next[profileId] ?? { lines: [], sessions: [] };
+        const mergedLines =
+          current.lines.length > 0 ? [...current.lines, ...queuedLines] : queuedLines.slice();
+        next[profileId] = {
+          ...current,
+          lines:
+            mergedLines.length > MAX_CONSOLE_LINES
+              ? mergedLines.slice(mergedLines.length - MAX_CONSOLE_LINES)
+              : mergedLines,
+        };
+      }
+      return next;
+    });
+  }, []);
+
+  const scheduleConsoleFlush = useCallback(() => {
+    if (consoleFlushTimerRef.current !== null) return;
+    consoleFlushTimerRef.current = window.setTimeout(() => {
+      flushPendingConsoleLines();
+    }, GAME_CONSOLE_BATCH_FLUSH_MS);
+  }, [flushPendingConsoleLines]);
+
+  const restoreHiddenConsoleBuffer = useCallback(
+    (profileId: string) => {
+      const buffered = hiddenConsoleBufferRef.current[profileId];
+      if (!buffered || buffered.length === 0) return;
+      delete hiddenConsoleBufferRef.current[profileId];
+      pendingConsoleLinesRef.current[profileId] = [
+        ...(pendingConsoleLinesRef.current[profileId] ?? []),
+        ...buffered,
+      ];
+      flushPendingConsoleLines();
+    },
+    [flushPendingConsoleLines],
+  );
+
+  const handleManageConsoleExpandedChange = useCallback(
+    (expanded: boolean) => {
+      manageConsoleExpandedRef.current = expanded;
+      if (!expanded) return;
+      const profileId =
+        activeInstanceProfile?.id ?? runningConsoleProfileIdRef.current ?? null;
+      if (profileId) restoreHiddenConsoleBuffer(profileId);
+    },
+    [activeInstanceProfile?.id, restoreHiddenConsoleBuffer],
+  );
+
   const appendConsoleLine = useCallback(
     (profileId: string, text: string, source: "stdout" | "stderr") => {
       if (!isGameConsoleLineImportant(text, source)) return;
-      setConsoleByProfile((prev) => {
-        const current = prev[profileId] ?? { lines: [], sessions: [] };
-        const nextLines: GameConsoleLine[] = [
-          ...current.lines,
-          { id: Date.now() + Math.random(), line: text, source },
-        ];
-        const trimmed =
-          nextLines.length > MAX_CONSOLE_LINES
-            ? nextLines.slice(nextLines.length - MAX_CONSOLE_LINES)
-            : nextLines;
-        return { ...prev, [profileId]: { ...current, lines: trimmed } };
+      lastConsoleLineTextRef.current = text;
+      const queued = pendingConsoleLinesRef.current[profileId] ?? [];
+      queued.push({
+        id: nextConsoleLineIdRef.current++,
+        line: text,
+        source,
       });
+      pendingConsoleLinesRef.current[profileId] = queued;
+      scheduleConsoleFlush();
     },
-    [],
+    [scheduleConsoleFlush],
   );
 
   const prepareInstallConsole = useCallback(
     (profileId?: string | null) => {
       resetGameConsoleFilter();
       const targetId = profileId ?? activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
+      pendingConsoleLinesRef.current[targetId] = [];
+      delete hiddenConsoleBufferRef.current[targetId];
       setConsoleByProfile((prev) => ({
         ...prev,
         [targetId]: {
@@ -1660,48 +1759,35 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
-    let cancelled = false;
+    let unlisten: (() => void) | undefined;
 
-    const checkStatus = async () => {
-      try {
-        const running = await invoke<boolean>("is_game_running_now");
-        if (cancelled) return;
-
-        if (running) {
-          lastRunningRef.current = true;
-          setGameStatus("running");
-        } else {
-          if (lastRunningRef.current) {
-            lastRunningRef.current = false;
-            setRunningConsoleProfile(null);
-            setGameStatus((prev) => {
-              const lastLine = consoleLines[consoleLines.length - 1]?.line ?? "";
-              const lower = lastLine.toLowerCase();
-              const looksCrash =
-                lower.includes("exception") ||
-                lower.includes("fatal") ||
-                lower.includes("crash") ||
-                lower.includes("ошибка");
-              if (looksCrash) return "crashed";
-              if (prev === "running") return "stopped";
-              return prev;
-            });
-          } else {
-            setGameStatus((prev) => (prev === "running" ? "stopped" : prev));
-          }
-        }
-      } catch {
-      }
-    };
-
-    const id = window.setInterval(checkStatus, 4000);
-    void checkStatus();
+    void listen<{ exit_code?: number | null }>("game-process-exited", () => {
+      if (!lastRunningRef.current) return;
+      const profileId =
+        runningConsoleProfileIdRef.current ?? activeInstanceProfile?.id ?? null;
+      if (profileId) restoreHiddenConsoleBuffer(profileId);
+      lastRunningRef.current = false;
+      flushPendingConsoleLines();
+      setRunningConsoleProfile(null);
+      setGameStatus((prev) => {
+        if (prev !== "running") return prev;
+        const lastLine = lastConsoleLineTextRef.current;
+        const lower = lastLine.toLowerCase();
+        const looksCrash =
+          lower.includes("exception") ||
+          lower.includes("fatal") ||
+          lower.includes("crash") ||
+          lower.includes("ошибка");
+        return looksCrash ? "crashed" : "stopped";
+      });
+    }).then((fn) => {
+      unlisten = fn;
+    });
 
     return () => {
-      cancelled = true;
-      window.clearInterval(id);
+      unlisten?.();
     };
-  }, [consoleLines]);
+  }, [activeInstanceProfile?.id, flushPendingConsoleLines, restoreHiddenConsoleBuffer]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1725,12 +1811,14 @@ function App() {
                 ? payload.line
                 : "";
           if (!text) return;
+          lastConsoleLineTextRef.current = text;
           const source: "stdout" | "stderr" =
             typeof payload === "string"
               ? "stdout"
               : payload.source === "stderr"
                 ? "stderr"
                 : "stdout";
+          if (!isGameConsoleLineImportant(text, source)) return;
           const runningId = runningConsoleProfileIdRef.current;
           let profileId: string | null = runningId;
           if (!profileId) {
@@ -1741,6 +1829,25 @@ function App() {
             }
           }
           if (!profileId) return;
+
+          const capturePaused =
+            gameStatusRef.current === "running" &&
+            !isLaunchingRef.current &&
+            !consoleUiActiveRef.current;
+          if (capturePaused) {
+            const buffered = hiddenConsoleBufferRef.current[profileId] ?? [];
+            buffered.push({
+              id: nextConsoleLineIdRef.current++,
+              line: text,
+              source,
+            });
+            if (buffered.length > HIDDEN_CONSOLE_BUFFER_MAX) {
+              buffered.splice(0, buffered.length - HIDDEN_CONSOLE_BUFFER_MAX);
+            }
+            hiddenConsoleBufferRef.current[profileId] = buffered;
+            return;
+          }
+
           appendConsoleLine(profileId, text, source);
         });
       } catch (e) {
@@ -1755,7 +1862,9 @@ function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isLaunching || gameStatus === "running") return;
     const t = window.setTimeout(() => {
+      flushPendingConsoleLines();
       try {
         window.localStorage.setItem(
           GAME_CONSOLE_STORAGE_KEY,
@@ -1763,9 +1872,15 @@ function App() {
         );
       } catch {
       }
-    }, 400);
+    }, GAME_CONSOLE_PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
-  }, [consoleByProfile]);
+  }, [consoleByProfile, flushPendingConsoleLines, gameStatus, isLaunching]);
+
+  useEffect(() => {
+    return () => {
+      flushPendingConsoleLines();
+    };
+  }, [flushPendingConsoleLines]);
 
   const clearNotificationDismissTimers = useCallback((id: number) => {
     const t = notificationTimersRef.current.get(id);
@@ -1910,6 +2025,8 @@ function App() {
     auto_install_updates: false,
     open_launcher_on_profiles_tab: false,
     ui_sounds_enabled: true,
+    minimize_to_tray_on_close: false,
+    autostart_enabled: false,
     animations_disabled: false,
     background_accent_color: "#0b1530",
     background_image_url: null,
@@ -2400,27 +2517,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const cached = readDataCache<InstanceProfileCard[]>("profiles", 8_000);
+    if (cached?.length) {
+      setKnownProfiles(cached);
+      setProfilesHydrated(true);
+    }
+
     (async () => {
       try {
         const list = await invoke<InstanceProfileCard[]>("get_profiles");
-        setKnownProfiles(
-          list.map((p) => ({
-            id: p.id,
-            name: p.name,
-            game_version: p.game_version,
-            loader: p.loader,
-            loader_version: p.loader_version ?? null,
-            icon_path: p.icon_path,
-            created_at: p.created_at,
-            play_time_seconds: p.play_time_seconds,
-            last_played_at: p.last_played_at ?? null,
-            mods_count: p.mods_count,
-            resourcepacks_count: p.resourcepacks_count,
-            shaderpacks_count: p.shaderpacks_count,
-            total_size_bytes: p.total_size_bytes,
-            directory: p.directory,
-          })),
-        );
+        const mapped = list.map((p) => ({
+          id: p.id,
+          name: p.name,
+          game_version: p.game_version,
+          loader: p.loader,
+          loader_version: p.loader_version ?? null,
+          icon_path: p.icon_path,
+          created_at: p.created_at,
+          play_time_seconds: p.play_time_seconds,
+          last_played_at: p.last_played_at ?? null,
+          mods_count: p.mods_count,
+          resourcepacks_count: p.resourcepacks_count,
+          shaderpacks_count: p.shaderpacks_count,
+          total_size_bytes: p.total_size_bytes,
+          directory: p.directory,
+        }));
+        writeDataCache("profiles", mapped);
+        setKnownProfiles(mapped);
       } catch {
       } finally {
         setProfilesHydrated(true);
@@ -2706,6 +2829,9 @@ function App() {
           });
           setFabricProfileId(id);
           setQuiltProfileId(null);
+          if (id) {
+            setInstalledGameVersions((prev) => new Set(prev).add(selectedVersion.id));
+          }
         } else if (loader === "quilt") {
           const id = await invoke<string | null>("get_installed_quilt_profile_id", {
             gameVersion: selectedVersion.id,
@@ -2713,6 +2839,9 @@ function App() {
           });
           setQuiltProfileId(id);
           setFabricProfileId(null);
+          if (id) {
+            setInstalledGameVersions((prev) => new Set(prev).add(selectedVersion.id));
+          }
         }
       } catch {
         setFabricProfileId(null);
@@ -2901,7 +3030,7 @@ function App() {
         showNotification("success", tt("app.accounts.toast.msLoggedIn"));
       });
 
-      const url = await invoke<string>("start_ms_oauth");
+      const url = await invoke<string>("start_ms_oauth", { language });
       setMsAuthUrl(url);
       try {
         await openUrl(url);
@@ -2992,10 +3121,18 @@ function App() {
 
   const isInstalled = useMemo(() => {
     if (!selectedVersion) return false;
-    if (loader === "fabric" && !isForgeVersion(selectedVersion)) return !!fabricProfileId;
-    if (loader === "quilt" && !isForgeVersion(selectedVersion)) return !!quiltProfileId;
+    if (loader === "fabric" && !isForgeVersion(selectedVersion)) {
+      return (
+        !!fabricProfileId || installedGameVersions.has(selectedVersion.id)
+      );
+    }
+    if (loader === "quilt" && !isForgeVersion(selectedVersion)) {
+      return (
+        !!quiltProfileId || installedGameVersions.has(selectedVersion.id)
+      );
+    }
     return installedIds.has(selectedVersion.id);
-  }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId]);
+  }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId, installedGameVersions]);
 
   const installedVersionIdsForDropdown = useMemo(() => {
     if (loader === "fabric" || loader === "quilt") {
@@ -3032,6 +3169,8 @@ function App() {
     resetGameConsoleFilter();
     const profileId =
       activeInstanceProfile?.id ?? runningConsoleProfileId ?? INSTALL_CONSOLE_PROFILE_ID;
+    pendingConsoleLinesRef.current[profileId] = [];
+    delete hiddenConsoleBufferRef.current[profileId];
     setConsoleByProfile((prev) => ({
       ...prev,
       [profileId]: {
@@ -3052,6 +3191,26 @@ function App() {
     onClearConsole: handleClearConsole,
     onToggleConsole: handleToggleConsole,
   });
+
+  useEffect(() => {
+    isConsoleDetachedRef.current = isConsoleDetached;
+    consoleUiActiveRef.current =
+      isConsoleVisible ||
+      isConsoleDetached ||
+      manageConsoleExpandedRef.current ||
+      isLaunching;
+
+    if (!consoleUiActiveRef.current) return;
+    const profileId =
+      activeInstanceProfile?.id ?? runningConsoleProfileIdRef.current ?? null;
+    if (profileId) restoreHiddenConsoleBuffer(profileId);
+  }, [
+    isConsoleVisible,
+    isConsoleDetached,
+    isLaunching,
+    activeInstanceProfile?.id,
+    restoreHiddenConsoleBuffer,
+  ]);
 
   const handleOpenGameFolder = async () => {
     try {
@@ -3221,6 +3380,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setFabricProfileId(profileId);
+        setInstalledGameVersions((prev) => new Set(prev).add(v.id));
         showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
         return;
       } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
@@ -3231,6 +3391,7 @@ function App() {
         });
         setInstalledIds((prev) => new Set(prev).add(profileId));
         setQuiltProfileId(profileId);
+        setInstalledGameVersions((prev) => new Set(prev).add(v.id));
         showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
         return;
       } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
@@ -3453,9 +3614,11 @@ function App() {
                   : "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-auto self-stretch py-4"
               }
             >
+              <Suspense fallback={<TabPaneLoading />}>
               <ModpackTab
                 fillPane={inSplitPane}
                 language={language}
+                initialProfiles={profilesHydrated ? knownProfiles : undefined}
                 onRegisterModpackHotkeys={registerModpackHotkeys}
                 onRegisterModpackNavigation={registerModpackNavigation}
                 onActiveViewChange={setModpackView}
@@ -3529,7 +3692,9 @@ function App() {
                 consoleHistorySessions={consoleHistorySessions}
                 onClearConsole={handleClearConsole}
                 prepareInstallConsole={prepareInstallConsole}
+                onManageConsoleExpandedChange={handleManageConsoleExpandedChange}
               />
+              </Suspense>
             </div>
           );
         case "settings":
@@ -3541,6 +3706,7 @@ function App() {
                   : "flex h-full min-h-0 w-full flex-1 flex-col"
               }
             >
+            <Suspense fallback={<TabPaneLoading />}>
             <SettingsTab
               fillPane={inSplitPane}
               settings={settings}
@@ -3582,6 +3748,7 @@ function App() {
               onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
               onInstallUpdate={() => void installUpdate()}
             />
+            </Suspense>
             </div>
           );
         case "play":
@@ -3671,6 +3838,8 @@ function App() {
       pinnedProfileIds,
       primaryColorClasses,
       primaryLabel,
+      profilesHydrated,
+      knownProfiles,
       progress,
       selectedVersion,
       setDiscordModsTitle,
@@ -4647,7 +4816,6 @@ function App() {
               }`}
             >
               <div
-                key={effectiveTabSplit.primary}
                 className={`tab-split-pane ${
                   effectiveTabSplit.focused !== "primary" ? "tab-split-pane-inactive" : ""
                 }`}
@@ -4692,7 +4860,6 @@ function App() {
                 onPointerDown={onTabSplitDividerPointerDown}
               />
               <div
-                key={effectiveTabSplit.secondary}
                 className={`tab-split-pane ${
                   effectiveTabSplit.focused !== "secondary" ? "tab-split-pane-inactive" : ""
                 }`}

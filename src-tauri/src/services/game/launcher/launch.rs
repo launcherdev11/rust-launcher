@@ -8,9 +8,10 @@ use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
 use crate::infra::process::hide_console;
 use crate::models::events::{
-    GameConsoleLinePayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload, EVENT_GAME_CONSOLE_LINE,
-    EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
+    GameConsoleLinePayload, GameProcessExitedPayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload,
+    EVENT_GAME_CONSOLE_LINE, EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
 };
+use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 use crate::services::game::accounts::get_profile;
 use crate::services::game::arguments::resolve_arguments;
@@ -30,7 +31,7 @@ use crate::services::game::runtime::{
     ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args,
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
-    resolve_natives_dir_for_launch,
+    resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version,
 };
 use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
 use crate::services::game::settings as settings_service;
@@ -516,6 +517,12 @@ pub async fn launch_game(
         if is_forge && !is_neoforge {
             eprintln!("[Launch] Forge без java_version в manifest: используем Java 17");
             (17, "java-runtime-gamma".to_string())
+        } else if is_fabric {
+            let (major, component) = fallback_java_runtime_for_mc_version(&effective_jar_version);
+            eprintln!(
+                "[Launch] Fabric без java_version в manifest: используем Java {major} ({component})"
+            );
+            (major, component.to_string())
         } else {
             (8, "jre-legacy".to_string())
         }
@@ -710,12 +717,23 @@ pub async fn launch_game(
         &version_id,
         &classpath_str,
         jvm_args,
-        if is_forge {
+        if is_forge || is_fabric {
             Some(default_java_path)
         } else {
             None
         },
     )?;
+
+    if let Some(actual_java_major) =
+        crate::services::java::detect::detect_java_major_version(&java_path)
+    {
+        if actual_java_major < java_major {
+            return Err(format!(
+                "Для Minecraft {effective_jar_version} нужна Java {java_major}, а для запуска выбрана Java {actual_java_major}. \
+                 Проверьте путь к Java в настройках — для Fabric/Forge используется встроенная Java Mojang."
+            ));
+        }
+    }
     #[cfg(unix)]
     {
         if let Err(e) = crate::java_runtime::ensure_executable(&java_path) {
@@ -846,6 +864,9 @@ pub async fn launch_game(
             for line in reader.lines() {
                 match line {
                     Ok(text) => {
+                        if !is_game_console_line_important(&text, "stdout") {
+                            continue;
+                        }
                         let payload = GameConsoleLinePayload {
                             line: text,
                             source: "stdout".to_string(),
@@ -865,6 +886,9 @@ pub async fn launch_game(
             for line in reader.lines() {
                 match line {
                     Ok(text) => {
+                        if !is_game_console_line_important(&text, "stderr") {
+                            continue;
+                        }
                         let payload = GameConsoleLinePayload {
                             line: text,
                             source: "stderr".to_string(),
@@ -881,8 +905,16 @@ pub async fn launch_game(
     let started_at = play_start_time;
     let app_clone_for_playtime = app.clone();
     std::thread::spawn(move || {
-        let _ = child.wait();
+        let exit_code = child
+            .wait()
+            .ok()
+            .and_then(|status| status.code());
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+
+        let _ = app_clone_for_playtime.emit(
+            EVENT_GAME_PROCESS_EXITED,
+            GameProcessExitedPayload { exit_code },
+        );
 
         if let Some(profile_id) = profile_id_for_playtime {
             let delta_secs = started_at
