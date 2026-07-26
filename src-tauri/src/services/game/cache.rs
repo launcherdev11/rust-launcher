@@ -9,6 +9,10 @@ pub(crate) fn avatars_ely_cache_dir() -> Result<PathBuf, String> {
     Ok(launcher_cache_dir()?.join("avatars").join("ely"))
 }
 
+pub(crate) fn avatars_mc_cache_dir() -> Result<PathBuf, String> {
+    Ok(launcher_cache_dir()?.join("avatars").join("mc"))
+}
+
 pub(crate) fn tmp_cache_dir() -> Result<PathBuf, String> {
     Ok(launcher_cache_dir()?.join("tmp"))
 }
@@ -16,6 +20,8 @@ pub(crate) fn tmp_cache_dir() -> Result<PathBuf, String> {
 pub(crate) fn ensure_launcher_cache_layout() -> Result<(), String> {
     std::fs::create_dir_all(avatars_ely_cache_dir()?)
         .map_err(|e| format!("Не удалось создать папку кэша аватаров: {e}"))?;
+    std::fs::create_dir_all(avatars_mc_cache_dir()?)
+        .map_err(|e| format!("Не удалось создать папку кэша аватаров Minecraft: {e}"))?;
     std::fs::create_dir_all(tmp_cache_dir()?)
         .map_err(|e| format!("Не удалось создать папку временных файлов: {e}"))?;
     migrate_legacy_launcher_cache()?;

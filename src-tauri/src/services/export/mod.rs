@@ -418,3 +418,169 @@ pub async fn get_ely_avatar(username: String) -> Result<Option<String>, String> 
 
     Ok(Some(png_data_url(&avatar_png)))
 }
+
+#[derive(Debug, Deserialize)]
+struct McSessionProperty {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct McSessionProfile {
+    #[serde(default)]
+    properties: Vec<McSessionProperty>,
+}
+
+#[derive(Debug, Deserialize)]
+struct McTexturesPayload {
+    #[serde(default)]
+    textures: McTexturesMap,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct McTexturesMap {
+    #[serde(default, rename = "SKIN")]
+    skin: Option<McSkinTexture>,
+}
+
+#[derive(Debug, Deserialize)]
+struct McSkinTexture {
+    url: String,
+}
+
+fn normalize_mc_uuid_cache_key(uuid: &str) -> Result<String, String> {
+    let key = uuid.trim().to_ascii_lowercase().replace('-', "");
+    if key.len() != 32 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Invalid Minecraft UUID".to_string());
+    }
+    Ok(key)
+}
+
+fn mc_avatar_cache_file_path(uuid: &str) -> Result<PathBuf, String> {
+    let key = normalize_mc_uuid_cache_key(uuid)?;
+    cache::ensure_launcher_cache_layout()?;
+    Ok(cache::avatars_mc_cache_dir()?.join(format!("{key}.png")))
+}
+
+async fn fetch_mc_skin_png(uuid: &str) -> Result<Vec<u8>, String> {
+    let key = normalize_mc_uuid_cache_key(uuid)?;
+    let profile_url = format!(
+        "https://sessionserver.mojang.com/session/minecraft/profile/{key}"
+    );
+    let client = reqwest::Client::builder()
+        .user_agent("16Launcher/1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let profile_resp = client
+        .get(&profile_url)
+        .send()
+        .await
+        .map_err(|e| format!("Mojang profile request failed: {e}"))?;
+
+    let status = profile_resp.status();
+    if status == reqwest::StatusCode::NO_CONTENT || status == reqwest::StatusCode::NOT_FOUND {
+        return Err(format!("Mojang profile unavailable: HTTP {status}"));
+    }
+    if !status.is_success() {
+        return Err(format!("Mojang profile bad response: HTTP {status}"));
+    }
+
+    let profile: McSessionProfile = profile_resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Mojang profile: {e}"))?;
+
+    let textures_value = profile
+        .properties
+        .into_iter()
+        .find(|p| p.name == "textures")
+        .ok_or_else(|| "Mojang profile has no textures".to_string())?
+        .value;
+
+    let decoded = BASE64_STANDARD
+        .decode(textures_value.as_bytes())
+        .map_err(|e| format!("Failed to decode Mojang textures: {e}"))?;
+    let payload: McTexturesPayload = serde_json::from_slice(&decoded)
+        .map_err(|e| format!("Failed to parse Mojang textures JSON: {e}"))?;
+
+    let skin_url = payload
+        .textures
+        .skin
+        .ok_or_else(|| "Mojang profile has no skin texture".to_string())?
+        .url;
+
+    let skin_resp = client
+        .get(&skin_url)
+        .send()
+        .await
+        .map_err(|e| format!("Mojang skin request failed: {e}"))?;
+
+    let skin_status = skin_resp.status();
+    if !skin_status.is_success() {
+        return Err(format!("Mojang skin bad response: HTTP {skin_status}"));
+    }
+
+    skin_resp
+        .bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("Failed to read Mojang skin body: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_mc_skin(uuid: String) -> Result<Option<String>, String> {
+    let trimmed = uuid.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let skin_png = match fetch_mc_skin_png(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[skin] failed to fetch Mojang skin for '{trimmed}': {error}");
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&skin_png)))
+}
+
+#[tauri::command]
+pub async fn get_mc_avatar(uuid: String) -> Result<Option<String>, String> {
+    let trimmed = uuid.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let cache_path = mc_avatar_cache_file_path(trimmed)?;
+
+    if is_cache_fresh(&cache_path) {
+        match std::fs::read(&cache_path) {
+            Ok(bytes) => return Ok(Some(png_data_url(&bytes))),
+            Err(error) => eprintln!("[avatar] failed to read Mojang avatar cache: {error}"),
+        }
+    }
+
+    let skin_png = match fetch_mc_skin_png(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[avatar] failed to fetch Mojang skin for '{trimmed}': {error}");
+            return Ok(None);
+        }
+    };
+
+    let avatar_png = match render_skin_head_png(&skin_png) {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[avatar] failed to build Mojang avatar for '{trimmed}': {error}");
+            return Ok(None);
+        }
+    };
+
+    if let Err(error) = std::fs::write(&cache_path, &avatar_png) {
+        eprintln!("[avatar] failed to write Mojang avatar cache: {error}");
+    }
+
+    Ok(Some(png_data_url(&avatar_png)))
+}

@@ -59,6 +59,12 @@ pub fn import_launcher_settings_backup(app: AppHandle, path: String) -> Result<L
 
     settings_service::save_settings_to_disk(&settings)?;
     settings_service::save_java_settings(&app, &java_settings)?;
+    crate::infra::tray::sync_tray_from_settings(
+        &app,
+        settings.minimize_to_tray_on_close,
+        &settings.interface_language,
+    );
+    crate::infra::autostart::sync_autostart_from_settings(&app, settings.autostart_enabled);
 
     Ok(LauncherSettingsBackupV1 {
         format_version: 1,

@@ -63,12 +63,62 @@ fn merge_dir_contents_non_destructive(from: &Path, to: &Path) -> Result<(), Stri
     Ok(())
 }
 
-fn consolidate_profile_game_content(profile_dir: &Path) -> Result<(), String> {
+fn version_specific_instance_roots(profile_dir: &Path, old_game_version: &str) -> Vec<PathBuf> {
+    let ver = old_game_version.trim();
+    if ver.is_empty() {
+        return Vec::new();
+    }
+
+    let mut roots = vec![
+        profile_dir.join(ver),
+        profile_dir.join("versions").join(ver),
+    ];
+    for nested in [profile_dir.join(".minecraft"), profile_dir.join("minecraft")] {
+        roots.push(nested.join(ver));
+        roots.push(nested.join("versions").join(ver));
+    }
+    roots
+}
+
+fn merge_instance_content_roots(from_roots: &[PathBuf], profile_dir: &Path) -> Result<(), String> {
+    for root in from_roots {
+        if !root.is_dir() {
+            continue;
+        }
+        for sub in PROFILE_CONTENT_DIRS {
+            merge_dir_contents_non_destructive(&root.join(sub), &profile_dir.join(sub))?;
+        }
+        for file in PROFILE_CONTENT_FILES {
+            let from = root.join(file);
+            let to = profile_dir.join(file);
+            if from.is_file() && !to.exists() {
+                std::fs::copy(&from, &to).map_err(|e| {
+                    format!(
+                        "Не удалось скопировать {} → {}: {e}",
+                        from.display(),
+                        to.display()
+                    )
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn consolidate_profile_game_content(
+    profile_dir: &Path,
+    old_game_version: &str,
+) -> Result<(), String> {
     for sub in PROFILE_CONTENT_DIRS {
         let target = profile_dir.join(sub);
         std::fs::create_dir_all(&target)
             .map_err(|e| format!("Не удалось создать папку {}: {e}", target.display()))?;
     }
+
+    merge_instance_content_roots(
+        &version_specific_instance_roots(profile_dir, old_game_version),
+        profile_dir,
+    )?;
 
     for nested in [profile_dir.join(".minecraft"), profile_dir.join("minecraft")] {
         if !nested.is_dir() {
@@ -114,9 +164,10 @@ fn clear_loader_version_caches(profile_dir: &Path, loader: &str) -> Result<(), S
 
 fn migrate_profile_content_for_version_change(
     profile_dir: &Path,
+    old_game_version: &str,
     loader: &str,
 ) -> Result<(), String> {
-    consolidate_profile_game_content(profile_dir)?;
+    consolidate_profile_game_content(profile_dir, old_game_version)?;
     clear_loader_version_caches(profile_dir, loader)
 }
 
@@ -703,7 +754,7 @@ pub fn change_profile_version(
         return Err("Сборка уже использует выбранную версию".to_string());
     }
 
-    migrate_profile_content_for_version_change(profile_dir, &loader)?;
+    migrate_profile_content_for_version_change(profile_dir, &cfg.game_version, &loader)?;
 
     cfg.game_version = game_version;
     cfg.loader_version = if loader == "vanilla" {

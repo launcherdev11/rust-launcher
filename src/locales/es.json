@@ -231,6 +231,12 @@
       "uiSounds": {
         "label": "Sonidos de la interfaz:"
       },
+      "minimizeToTray": {
+        "label": "Minimizar a la bandeja al cerrar:"
+      },
+      "autostart": {
+        "label": "Iniciar al encender el sistema:"
+      },
       "splitView": {
         "label": "Modo de pestaña de doble panel:"
       },
@@ -472,7 +478,7 @@
     "changeVersion": {
       "button": "Cambiar versión de perfil",
       "title": "Cambiar versión de perfil",
-      "description": "Los mods, paquetes de recursos, sombreadores y mundos permanecen en este perfil y permanecen disponibles después del cambio de versión. Se instalarán las versiones seleccionadas de Minecraft y del cargador. Es posible que sea necesario actualizar las modificaciones creadas para la versión anterior.",
+      "description": "Los mods, paquetes de recursos, sombreadores y mundos permanecen en este perfil y permanecen disponibles después del cambio de versión. Se instalarán las versiones seleccionadas de Minecraft y del cargador. El contenido compatible de Modrinth y CurseForge se actualizará automáticamente.",
       "currentVersion": "Versión actual",
       "gameVersionLabel": "Nueva versión de Minecraft",
       "loaderVersionLabel": "Versión del cargador",
@@ -480,6 +486,7 @@
       "confirm": "Emigrar",
       "migrating": "Migrando…",
       "success": "La versión del perfil cambió.",
+      "successWithContentUpdates": "La versión del perfil cambió. Archivos de contenido actualizados: {{count}}.",
       "failed": "No se pudo cambiar la versión del perfil: {{msg}}",
       "sameVersion": "Elija una versión diferente de Minecraft o del cargador.",
       "selectLoaderVersion": "Seleccione una versión del cargador."
@@ -765,6 +772,30 @@
       "closeLauncherOnStart": "Cerrar el iniciador cuando comience el juego:",
       "checkGameProcesses": "Verifique los procesos en ejecución del juego:",
       "memoryRam": "Memoria (RAM):"
+    },
+    "conflicts": {
+      "title": "Conflictos",
+      "loading": "Comprobando…",
+      "count": "{{count}}",
+      "none": "No se detectaron conflictos.",
+      "severity": {
+        "error": "Error",
+        "warning": "Advertencia"
+      },
+      "affected": "Afectado",
+      "solutions": "Posibles soluciones",
+      "duplicate": {
+        "title": "Archivos de mods duplicados",
+        "reason": "Varios archivos habilitados parecen ser el mismo mod: {{name}}.",
+        "solutionDisableExtra": "Deshabilite o elimine las versiones extra (deje una).",
+        "solutionKeepLatest": "Conserve la versión más nueva que coincida con su versión de Minecraft."
+      },
+      "loaderMismatch": {
+        "title": "Incompatibilidad de loader (probable)",
+        "reason": "El perfil usa {{loader}}, pero el nombre del archivo sugiere: {{variants}}.",
+        "solutionPickCorrect": "Instale la versión del mod para {{loader}} (o una compilación universal).",
+        "solutionSwitchLoader": "O cambie el loader del perfil para que coincida con el conjunto de mods."
+      }
     },
     "exportModal": {
       "title": "Exportar compilación",
