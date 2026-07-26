@@ -28,4 +28,18 @@ backend/target/
 src-tauri/target
 backend/target
 
+.tauri/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+
+Thumbs.db
+
 %USERPROFILE%
