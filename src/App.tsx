@@ -34,6 +34,7 @@ import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
 import { AccountAvatar } from "./components/account_avatar";
+import { AuthProviderWatermark } from "./components/auth_provider_watermark";
 import { DeleteIcon } from "./components/delete_icon";
 import {
   ProfileInfoIcon,
@@ -4401,19 +4402,20 @@ function App() {
                 void refreshLauncherAccounts();
                 setAccountSwitcherOpen((o) => !o);
               }}
-              className="interactive-press flex max-w-[200px] items-center gap-2 rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
+              className="interactive-press relative flex max-w-[200px] items-center gap-2 overflow-hidden rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
               title={tt("app.accounts.switcherTitle")}
             >
+              <AuthProviderWatermark kind={activeAccountKind} />
               <AccountAvatar
                 username={activeAccountLabel}
                 profile={profileAvatarInput}
                 kind={activeAccountKind}
                 size={56}
-                className={`h-7 w-7 shrink-0 rounded-full ${accountKindAvatarClass(activeAccountKind)}`}
+                className={`relative z-[1] h-7 w-7 shrink-0 rounded-full ${accountKindAvatarClass(activeAccountKind)}`}
               />
-              <span className="min-w-0 flex-1 truncate">{activeAccountLabel}</span>
+              <span className="relative z-[1] min-w-0 flex-1 truncate">{activeAccountLabel}</span>
               <ChevronDownIcon
-                className={accountSwitcherOpen ? "rotate-180 opacity-100" : "opacity-70"}
+                className={`relative z-[1] ${accountSwitcherOpen ? "rotate-180 opacity-100" : "opacity-70"}`}
               />
             </button>
             {accountSwitcherOpen ? (
