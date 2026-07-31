@@ -799,7 +799,7 @@
     }
   },
   "friends": {
-    "subtitleSignedIn": "Manage friends by nickname.",
+    "subtitleSignedIn": "Manage friends in this section.",
     "subtitleSignedOut": "Sign in to your 16Launcher platform account in the Accounts tab to use friends.",
     "friendNicknamePlaceholder": "Friend's nickname",
     "add": "Add",
@@ -811,7 +811,9 @@
     "accept": "Accept",
     "reject": "Reject",
     "yourFriends": "Your friends",
-    "noFriends": "No friends yet. Send a request by nickname.",
+    "noFriends": "No friends yet. Send a request, entering the user's nickname.",
+    "online": "Online",
+    "offline": "Offline",
     "toast": {
       "requestAccepted": "Request accepted",
       "requestRejected": "Request rejected",
@@ -820,6 +822,89 @@
       "requestExists": "Request already exists or you are already friends.",
       "requestSent": "Request sent"
     }
+  },
+  "rooms": {
+    "subtitleSignedIn": "Create rooms and invite friends (up to 5 players).",
+    "subtitleSignedOut": "Sign in to your 16Launcher platform account in the Accounts tab to use rooms.",
+    "create": "Create room",
+    "refresh": "Refresh",
+    "join": "Join",
+    "joinIdPlaceholder": "Paste room ID…",
+    "joinById": "Join by ID",
+    "yourRooms": "Your rooms",
+    "friendsRooms": "Friends' rooms",
+    "signInFirst": "Sign in first in the Accounts tab.",
+    "noRooms": "No rooms yet. Create one or join by ID.",
+    "noFriendsRooms": "No friends are hosting a room right now.",
+    "youOwner": "Owner",
+    "youMember": "Member",
+    "ownedBy": "Host: {{nick}}",
+    "players": "{{count}} / {{max}} players",
+    "openRoom": "Open",
+    "joinFriendRoom": "Join",
+    "backToList": "Back to rooms",
+    "copyId": "Copy ID",
+    "idCopied": "Room ID copied",
+    "manageTitle": "Room control",
+    "connectionTitle": "Connection",
+    "worldTitle": "Minecraft world",
+    "membersTitle": "Members",
+    "inviteTitle": "Invite a friend",
+    "inviteFriendPlaceholder": "Choose a friend…",
+    "close": "Close room",
+    "leave": "Leave room",
+    "kick": "Kick",
+    "invite": "Invite",
+    "inviteNicknamePlaceholder": "Friend's nickname",
+    "mcAccount": "Minecraft account",
+    "mcOnlineMicrosoft": "online Microsoft",
+    "mcOnlineEly": "online Ely",
+    "mcOffline": "offline",
+    "mcOfflineHint": "— Microsoft or Ely required to join a friend's world",
+    "p2pLabel": "P2P",
+    "bridgeLabel": "bridge",
+    "channelOpen": "channel open",
+    "lanPort": "LAN port",
+    "shareWorld": "Share world",
+    "shareWorldWaiting": "Waiting for guest",
+    "joinWorld": "Join world",
+    "hostSteps": "Host: open the world → Open to LAN → enter the port → Share world.",
+    "guestSteps": "Guest: Microsoft/Ely account + matching version on Play → Join world.",
+    "waitForPeer": "Waiting for a second player to connect…",
+    "needP2p": "Wait for the P2P connection first",
+    "status": {
+      "open": "open",
+      "full": "full",
+      "closed": "closed"
+    },
+    "role": {
+      "owner": "owner",
+      "member": "member"
+    },
+    "toast": {
+      "signInFirst": "Sign in first in the Accounts tab",
+      "created": "Room created",
+      "joined": "Joined the room",
+      "left": "Left the room",
+      "closed": "Room closed",
+      "invited": "Player invited",
+      "kicked": "Member kicked",
+      "cannotInviteSelf": "You cannot invite yourself"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "signInFirst": "Sign in to see notifications.",
+    "unread": "Unread: {{count}}",
+    "refresh": "Refresh",
+    "readAll": "Read all",
+    "markRead": "Read",
+    "empty": "No notifications yet.",
+    "friendRequest": "Friend request from {{nick}}",
+    "friendAccept": "{{nick}} accepted your friend request",
+    "roomInvite": "{{nick}} invited you to a room",
+    "achievement": "Achievement: {{title}}",
+    "system": "System notification"
   },
   "achievements": {
     "title": "Achievements",
@@ -891,7 +976,8 @@
       "settings": "Settings",
       "mods": "Mods",
       "modpacks": "Modpacks",
-      "friends": "Friends"
+      "friends": "Friends",
+      "rooms": "Rooms"
     },
     "splitView": {
       "zones": {
@@ -1009,6 +1095,7 @@
       "mods": "Selecting a mod",
       "modpacks": "Selecting a profile",
       "friends": "Viewing friends",
+      "rooms": "In rooms",
       "accounts": "Managing account"
     },
     "pinnedProfiles": {

@@ -1,45 +1,73 @@
-logs
+#logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+hs_err_pid*.log
+replay_pid*.log
 
-node_modules
-dist
-dist-ssr
+#dependencies/build
+node_modules/
+dist/
+dist-ssr/
 *.local
+backend/target/
+src-tauri/target/
+.tauri/
 
+#env/secrets (keep examples tracked)
+.env
+.env.*
+!.env.example
+!**/.env.example
+!deploy/env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+**/secrets/
+**/secret/
+
+#local databases/dumps
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*.dump
+*.sql.gz
+
+#ide/os
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.env
-.env.*
+*~
 
-backend/target/
+#coverage/test artifacts
+coverage/
+*.lcov
+.nyc_output/
+tarpaulin-report.html
+*.profraw
 
-src-tauri/target
-backend/target
+#frontend/tooling caches
+.cache/
+.turbo/
+.vite/
+*.tsbuildinfo
 
-.tauri/
-*.key
-*.pem
-*.p12
-*.pfx
-*.jks
-
-*.db
-*.sqlite
-*.sqlite3
-*.bak
-
-Thumbs.db
-
-%USERPROFILE%
+#rust backups
+**/*.rs.bk

@@ -58,11 +58,19 @@ async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
 static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 fn get_client_secret() -> Result<String, String> {
+    // Ensure .env is loaded even if cwd/exe differ from project root (e.g. Sandbox).
+    crate::app::env::load_dotenv_files();
+    crate::services::game::runtime::load_project_env_for_runtime();
+
     std::env::var("ELY_CLIENT_SECRET")
         .or_else(|_| option_env!("ELY_CLIENT_SECRET").map(String::from).ok_or(()))
         .map(|s| s.trim().to_string())
         .and_then(|s| if s.is_empty() { Err(()) } else { Ok(s) })
-        .map_err(|_| "РЎРµРєСЂРµС‚ Ely.by OAuth2 РЅРµ Р·Р°РґР°РЅ.".to_string())
+        .map_err(|_| {
+            "Секрет Ely.by OAuth2 не задан. Добавьте ELY_CLIENT_SECRET в файл .env в корне проекта \
+             (рядом с package.json) и перезапустите лаунчер. Либо войдите по логину/паролю Ely."
+                .to_string()
+        })
 }
 
 fn gen_random_str(len: usize) -> String {
@@ -438,7 +446,7 @@ pub async fn refresh_ely_session_internal() -> Result<(), String> {
         .ok_or_else(|| {
             profile.ely_access_token = None;
             let _ = save_full_profile(&profile);
-            "РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°, РІРѕР№РґРёС‚Рµ Р·Р°РЅРѕРІРѕ."
+            "Сессия истекла, войдите заново."
         })?;
 
     let token_resp = refresh_oauth2_token(&refresh).await?;

@@ -799,7 +799,7 @@
     }
   },
   "friends": {
-    "subtitleSignedIn": "Управляйте друзьями по nickname.",
+    "subtitleSignedIn": "Управляйте друзьями в этом разделе.",
     "subtitleSignedOut": "Войдите в платформенный аккаунт 16Launcher во вкладке «Аккаунты», чтобы пользоваться друзьями.",
     "friendNicknamePlaceholder": "Никнейм друга",
     "add": "Добавить",
@@ -811,7 +811,9 @@
     "accept": "Принять",
     "reject": "Отклонить",
     "yourFriends": "Ваши друзья",
-    "noFriends": "Пока никого нет. Отправьте заявку по nickname.",
+    "noFriends": "Пока никого нет. Отправьте заявку, введя никнейм пользователя.",
+    "online": "В сети",
+    "offline": "Не в сети",
     "toast": {
       "requestAccepted": "Заявка принята",
       "requestRejected": "Заявка отклонена",
@@ -820,6 +822,89 @@
       "requestExists": "Заявка уже существует или вы уже друзья.",
       "requestSent": "Заявка отправлена"
     }
+  },
+  "rooms": {
+    "subtitleSignedIn": "Создавайте комнаты и приглашайте друзей (до 5 игроков).",
+    "subtitleSignedOut": "Войдите в платформенный аккаунт 16Launcher во вкладке «Аккаунты», чтобы пользоваться комнатами.",
+    "create": "Создать комнату",
+    "refresh": "Обновить",
+    "join": "Войти",
+    "joinIdPlaceholder": "Вставьте ID комнаты…",
+    "joinById": "Войти по ID",
+    "yourRooms": "Ваши комнаты",
+    "friendsRooms": "Комнаты друзей",
+    "signInFirst": "Сначала войдите во вкладке «Аккаунты».",
+    "noRooms": "Комнат пока нет. Создайте новую или войдите по ID.",
+    "noFriendsRooms": "Сейчас никто из друзей не ведёт комнату.",
+    "youOwner": "Владелец",
+    "youMember": "Участник",
+    "ownedBy": "Хост: {{nick}}",
+    "players": "{{count}} / {{max}} игроков",
+    "openRoom": "Открыть",
+    "joinFriendRoom": "Войти",
+    "backToList": "К списку комнат",
+    "copyId": "Копировать ID",
+    "idCopied": "ID комнаты скопирован",
+    "manageTitle": "Управление комнатой",
+    "connectionTitle": "Соединение",
+    "worldTitle": "Мир Minecraft",
+    "membersTitle": "Участники",
+    "inviteTitle": "Пригласить друга",
+    "inviteFriendPlaceholder": "Выберите друга…",
+    "close": "Закрыть комнату",
+    "leave": "Выйти из комнаты",
+    "kick": "Исключить",
+    "invite": "Пригласить",
+    "inviteNicknamePlaceholder": "Никнейм друга",
+    "mcAccount": "Аккаунт Minecraft",
+    "mcOnlineMicrosoft": "онлайн Microsoft",
+    "mcOnlineEly": "онлайн Ely",
+    "mcOffline": "офлайн",
+    "mcOfflineHint": "— для входа в мир друга нужен Microsoft или Ely",
+    "p2pLabel": "P2P",
+    "bridgeLabel": "мост",
+    "channelOpen": "канал открыт",
+    "lanPort": "LAN-порт",
+    "shareWorld": "Шарить мир",
+    "shareWorldWaiting": "Ожидание гостя",
+    "joinWorld": "Войти в мир",
+    "hostSteps": "Хост: откройте мир → Open to LAN → укажите порт → «Шарить мир».",
+    "guestSteps": "Гость: аккаунт Microsoft/Ely + версия на Play → «Войти в мир».",
+    "waitForPeer": "Ждём второго игрока для соединения…",
+    "needP2p": "Сначала дождитесь P2P соединения",
+    "status": {
+      "open": "открыта",
+      "full": "заполнена",
+      "closed": "закрыта"
+    },
+    "role": {
+      "owner": "владелец",
+      "member": "участник"
+    },
+    "toast": {
+      "signInFirst": "Сначала войдите во вкладке «Аккаунты»",
+      "created": "Комната создана",
+      "joined": "Вы вошли в комнату",
+      "left": "Вы вышли из комнаты",
+      "closed": "Комната закрыта",
+      "invited": "Игрок приглашён",
+      "kicked": "Участник исключён",
+      "cannotInviteSelf": "Нельзя пригласить самого себя"
+    }
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "signInFirst": "Войдите, чтобы видеть уведомления.",
+    "unread": "Непрочитанных: {{count}}",
+    "refresh": "Обновить",
+    "readAll": "Прочитать все",
+    "markRead": "Прочитано",
+    "empty": "Уведомлений пока нет.",
+    "friendRequest": "Заявка в друзья от {{nick}}",
+    "friendAccept": "{{nick}} принял заявку в друзья",
+    "roomInvite": "{{nick}} пригласил вас в комнату",
+    "achievement": "Достижение: {{title}}",
+    "system": "Системное уведомление"
   },
   "achievements": {
     "title": "Достижения",
@@ -891,7 +976,8 @@
       "settings": "Настройки",
       "mods": "Моды",
       "modpacks": "Сборки",
-      "friends": "Друзья"
+      "friends": "Друзья",
+      "rooms": "Комнаты"
     },
     "splitView": {
       "zones": {
@@ -1009,6 +1095,7 @@
       "mods": "Выбирает мод",
       "modpacks": "Выбирает профиль",
       "friends": "Смотрит друзей",
+      "rooms": "В комнатах",
       "accounts": "Управляет аккаунтом"
     },
     "pinnedProfiles": {

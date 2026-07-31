@@ -2649,7 +2649,7 @@ dependencies = [
 
 [[package]]
 name = "mc16launcher"
-version = "2.1.7"
+version = "2.2.1-beta"
 dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",

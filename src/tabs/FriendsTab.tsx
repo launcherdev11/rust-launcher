@@ -8,6 +8,8 @@ import {
   type FriendRow,
   type IncomingRequestRow,
 } from "../api/friends";
+import { fetchFriendsPresence, type PresenceInfo } from "../api/presence";
+import { WS_EVENT, type WsEvent } from "../api/ws";
 import {
   API_AUTH_CHANGED_EVENT,
   API_NICKNAME_KEY,
@@ -37,6 +39,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequestRow[]>([]);
   const [friendNickToAdd, setFriendNickToAdd] = useState("");
   const [friendAvatarByKey, setFriendAvatarByKey] = useState<Record<string, string>>({});
+  const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresenceInfo>>({});
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -60,9 +63,16 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
   }, [syncAuth]);
 
   const reloadAll = useCallback(async () => {
-    const [friendsRes, requestsRes] = await Promise.all([listFriends(), listIncomingRequests()]);
+    const [friendsRes, requestsRes, presenceRes] = await Promise.all([
+      listFriends(),
+      listIncomingRequests(),
+      fetchFriendsPresence().catch(() => [] as PresenceInfo[]),
+    ]);
     setFriends(friendsRes);
     setIncomingRequests(requestsRes);
+    setPresenceByUserId(
+      Object.fromEntries(presenceRes.map((p) => [p.user_id, p])),
+    );
   }, []);
 
   const handleLoadFriends = async () => {
@@ -149,6 +159,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     if (!accessToken) {
       setFriends([]);
       setIncomingRequests([]);
+      setPresenceByUserId({});
       return;
     }
 
@@ -173,6 +184,50 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       cancelled = true;
     };
   }, [accessToken, reloadAll, showNotification]);
+
+  useEffect(() => {
+    const onWs = (ev: Event) => {
+      const detail = (ev as CustomEvent<WsEvent>).detail;
+      if (!detail || typeof detail !== "object" || !("type" in detail)) return;
+
+      if (detail.type === "user_online") {
+        const userId = detail.payload.user_id;
+        setPresenceByUserId((prev) => ({
+          ...prev,
+          [userId]: {
+            user_id: userId,
+            online: true,
+            last_seen: prev[userId]?.last_seen,
+          },
+        }));
+        return;
+      }
+
+      if (detail.type === "user_offline") {
+        const userId = detail.payload.user_id;
+        setPresenceByUserId((prev) => ({
+          ...prev,
+          [userId]: {
+            user_id: userId,
+            online: false,
+            last_seen: detail.payload.last_seen ?? prev[userId]?.last_seen,
+          },
+        }));
+        return;
+      }
+
+      if (
+        detail.type === "friend_request_created" ||
+        detail.type === "friend_request_accepted" ||
+        detail.type === "friend_removed"
+      ) {
+        void reloadAll().catch(() => {});
+      }
+    };
+
+    window.addEventListener(WS_EVENT, onWs);
+    return () => window.removeEventListener(WS_EVENT, onWs);
+  }, [reloadAll]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -327,19 +382,33 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                     key={f.user_id}
                     className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
                   >
-                    <img
-                      src={
-                        (f.ely_username
-                          ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
-                          : undefined) ?? buildInitialAvatarDataUrl(f.nickname)
-                      }
-                      alt=""
-                      className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
-                      draggable={false}
-                      onError={(event) => {
-                        event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
-                      }}
-                    />
+                    <div className="relative shrink-0">
+                      <img
+                        src={
+                          (f.ely_username
+                            ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
+                            : undefined) ?? buildInitialAvatarDataUrl(f.nickname)
+                        }
+                        alt=""
+                        className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20"
+                        draggable={false}
+                        onError={(event) => {
+                          event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+                        }}
+                      />
+                      <span
+                        className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-black/80 ${
+                          presenceByUserId[f.user_id]?.online
+                            ? "bg-emerald-400"
+                            : "bg-white/25"
+                        }`}
+                        title={
+                          presenceByUserId[f.user_id]?.online
+                            ? tt("friends.online")
+                            : tt("friends.offline")
+                        }
+                      />
+                    </div>
                     <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
                   </li>
                 ))}

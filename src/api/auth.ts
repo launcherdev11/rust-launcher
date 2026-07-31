@@ -86,11 +86,21 @@ export async function linkIdentity(input: {
   provider: "ely" | "minecraft";
   provider_uuid: string;
   provider_username?: string | null;
+  provider_access_token: string;
+  provider_client_token?: string | null;
 }): Promise<void> {
   await apiFetch("/identities/link", {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+function persistNickname(nickname: string) {
+  try {
+    window.localStorage.setItem(API_NICKNAME_KEY, nickname);
+  } catch {
+    // Non-fatal: tokens already saved; UI can refetch /me.
+  }
 }
 
 export async function loginAndPersist(input: {
@@ -100,7 +110,7 @@ export async function loginAndPersist(input: {
   const tokens = await loginAccount(input);
   persistApiSession(tokens.access_token, tokens.refresh_token);
   const me = await fetchMe(tokens.access_token);
-  window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
+  persistNickname(me.nickname);
   return me;
 }
 
@@ -112,7 +122,7 @@ export async function registerAndPersist(input: {
   const tokens = await registerAccount(input);
   persistApiSession(tokens.access_token, tokens.refresh_token);
   const me = await fetchMe(tokens.access_token);
-  window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
+  persistNickname(me.nickname);
   return me;
 }
 

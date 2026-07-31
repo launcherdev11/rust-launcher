@@ -138,15 +138,31 @@ pub struct OsInfo {
 pub struct GameFeatures {
     pub is_demo_user: bool,
     pub has_custom_resolution: bool,
+    /// Mojang `has_quick_plays_support` — enables `--quickPlayPath`.
+    pub has_quick_plays_support: bool,
+    /// Mojang `is_quick_play_singleplayer` — enables `--quickPlaySingleplayer`.
+    pub is_quick_play_singleplayer: bool,
+    /// Mojang `is_quick_play_multiplayer` — enables `--quickPlayMultiplayer`.
+    pub is_quick_play_multiplayer: bool,
+    /// Mojang `is_quick_play_realms` — enables `--quickPlayRealms`.
+    pub is_quick_play_realms: bool,
+    /// Legacy alias (not used by Mojang manifests since 1.20).
     pub is_quick_play: bool,
 }
 
 impl GameFeatures {
+    /// Default launch: no demo, no custom resolution, no quick-play modes.
     pub fn full() -> Self {
+        Self::default()
+    }
+
+    /// Guest/server join: only multiplayer quick-play (+ path for logs).
+    pub fn for_multiplayer_join() -> Self {
         Self {
-            is_demo_user: false,
-            has_custom_resolution: false,
-            is_quick_play: false,
+            has_quick_plays_support: true,
+            is_quick_play_multiplayer: true,
+            is_quick_play: true,
+            ..Self::default()
         }
     }
 }
