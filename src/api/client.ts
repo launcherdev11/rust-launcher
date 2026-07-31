@@ -35,9 +35,50 @@ export function getStoredRefreshToken(): string | null {
   }
 }
 
+function isQuotaExceededError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) return false;
+  return (
+    error.name === "QuotaExceededError" ||
+    error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    error.code === 22
+  );
+}
+
+/** Drop bulky non-essential keys so auth tokens can be saved. */
+function freeDisposableLocalStorage() {
+  try {
+    window.localStorage.removeItem("game_console_persist_v2");
+    window.localStorage.removeItem("game_console_persist_v1");
+  } catch {
+    // ignore
+  }
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith("ely_avatar_cache_v1:")) keys.push(key);
+    }
+    for (const key of keys) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function setLocalStorageItem(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (error) {
+    if (!isQuotaExceededError(error)) throw error;
+    freeDisposableLocalStorage();
+    window.localStorage.setItem(key, value);
+  }
+}
+
 export function persistApiSession(accessToken: string, refreshToken: string) {
-  window.localStorage.setItem("mc16launcher:api_access_token_v1", accessToken);
-  window.localStorage.setItem("mc16launcher:api_refresh_token_v1", refreshToken);
+  setLocalStorageItem("mc16launcher:api_access_token_v1", accessToken);
+  setLocalStorageItem("mc16launcher:api_refresh_token_v1", refreshToken);
   window.dispatchEvent(new CustomEvent("mc16launcher:api-auth-changed"));
 }
 

@@ -8,8 +8,6 @@ services:
       POSTGRES_DB: launcher
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U launcher -d launcher"]
       interval: 5s
@@ -22,8 +20,6 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redisdata:/data
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -44,9 +40,19 @@ services:
       API_LISTEN_ADDR: 0.0.0.0:8080
       DATABASE_URL: postgres://launcher:launcher@postgres:5432/launcher
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # Compose fails fast if JWT_SECRET is missing — no insecure defaults.
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env (see env.example)}
       JWT_ACCESS_TTL_SECS: 900
       JWT_REFRESH_TTL_SECS: 2592000
+      JWT_ISSUER: ${JWT_ISSUER:-mc16launcher-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-mc16launcher}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_REALM: ${TURN_REALM:-16launcher.local}
+      TURN_TTL_SECS: ${TURN_TTL_SECS:-600}
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:1420,http://127.0.0.1:1420,tauri://localhost,https://tauri.localhost}
+      IDENTITY_REQUIRE_PROOF: ${IDENTITY_REQUIRE_PROOF:-true}
     ports:
       - "8080:8080"
 
@@ -56,6 +62,12 @@ services:
     network_mode: host
     volumes:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    environment:
+      TURN_SECRET: ${TURN_SECRET:?Set TURN_SECRET in deploy/.env when enabling the turn profile}
+    # Secret is injected at runtime — never commit a real static-auth-secret.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'exec turnserver -c /etc/coturn/turnserver.conf --static-auth-secret="$$TURN_SECRET"'
     profiles:
       - turn
 

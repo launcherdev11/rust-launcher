@@ -45,3 +45,8 @@ export async function rejectFriendRequest(requestId: string): Promise<void> {
   await ensureValidAccessToken();
   await apiFetch(`/friends/requests/${requestId}/reject`, { method: "POST" });
 }
+
+export async function removeFriend(userId: string): Promise<void> {
+  await ensureValidAccessToken();
+  await apiFetch(`/friends/${userId}`, { method: "DELETE" });
+}

@@ -24,10 +24,14 @@ pub fn load_dotenv_files() {
             load_dotenv_walking_up(dir);
         }
     }
+    // Compile-time project paths — stable even when cwd is target/debug or Sandbox mapping differs.
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixed = [
         PathBuf::from(".env"),
         PathBuf::from("../.env"),
         PathBuf::from("src-tauri/.env"),
+        manifest_dir.join(".env"),
+        manifest_dir.join("../.env"),
     ];
     for p in fixed {
         if p.is_file() {

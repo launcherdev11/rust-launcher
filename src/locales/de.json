@@ -819,7 +819,7 @@
     }
   },
   "friends": {
-    "subtitleSignedIn": "Verwalten Sie Freunde nach Spitznamen.",
+    "subtitleSignedIn": "Verwalten Sie Freunde in diesem Abschnitt.",
     "subtitleSignedOut": "Melden Sie sich auf der Registerkarte „Konten“ bei Ihrem 16Launcher-Plattformkonto an, um Freunde zu verwenden.",
     "friendNicknamePlaceholder": "Spitzname eines Freundes",
     "add": "Hinzufügen",
@@ -831,7 +831,9 @@
     "accept": "Akzeptieren",
     "reject": "Ablehnen",
     "yourFriends": "Deine Freunde",
-    "noFriends": "Noch keine Freunde. Senden Sie eine Anfrage per Nickname.",
+    "noFriends": "Noch keine Freunde. Senden Sie eine Anfrage, indem Sie den Spitznamen des Benutzers eingeben.",
+    "online": "Online",
+    "offline": "Offline",
     "toast": {
       "requestAccepted": "Anfrage angenommen",
       "requestRejected": "Anfrage abgelehnt",
@@ -840,6 +842,89 @@
       "requestExists": "Die Anfrage existiert bereits oder Sie sind bereits befreundet.",
       "requestSent": "Anfrage gesendet"
     }
+  },
+  "rooms": {
+    "subtitleSignedIn": "Erstelle Räume und lade Freunde ein (bis zu 5 Spieler).",
+    "subtitleSignedOut": "Melde dich auf der Registerkarte „Konten“ bei deinem 16Launcher-Konto an, um Räume zu nutzen.",
+    "create": "Raum erstellen",
+    "refresh": "Aktualisieren",
+    "join": "Beitreten",
+    "joinIdPlaceholder": "Raum-ID einfügen…",
+    "joinById": "Per ID beitreten",
+    "yourRooms": "Deine Räume",
+    "friendsRooms": "Räume von Freunden",
+    "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an.",
+    "noRooms": "Noch keine Räume. Erstelle einen oder tritt per ID bei.",
+    "noFriendsRooms": "Keine Freunde hosten gerade einen Raum.",
+    "youOwner": "Besitzer",
+    "youMember": "Mitglied",
+    "ownedBy": "Host: {{nick}}",
+    "players": "{{count}} / {{max}} Spieler",
+    "openRoom": "Öffnen",
+    "joinFriendRoom": "Beitreten",
+    "backToList": "Zurück zu Räumen",
+    "copyId": "ID kopieren",
+    "idCopied": "Raum-ID kopiert",
+    "manageTitle": "Raumsteuerung",
+    "connectionTitle": "Verbindung",
+    "worldTitle": "Minecraft-Welt",
+    "membersTitle": "Mitglieder",
+    "inviteTitle": "Freund einladen",
+    "inviteFriendPlaceholder": "Freund wählen…",
+    "close": "Raum schließen",
+    "leave": "Raum verlassen",
+    "kick": "Entfernen",
+    "invite": "Einladen",
+    "inviteNicknamePlaceholder": "Spitzname eines Freundes",
+    "mcAccount": "Minecraft-Konto",
+    "mcOnlineMicrosoft": "online Microsoft",
+    "mcOnlineEly": "online Ely",
+    "mcOffline": "offline",
+    "mcOfflineHint": "— Microsoft oder Ely nötig, um der Welt eines Freundes beizutreten",
+    "p2pLabel": "P2P",
+    "bridgeLabel": "Bridge",
+    "channelOpen": "Kanal offen",
+    "lanPort": "LAN-Port",
+    "shareWorld": "Welt teilen",
+    "shareWorldWaiting": "Warte auf Gast",
+    "joinWorld": "Welt beitreten",
+    "hostSteps": "Host: Welt öffnen → Open to LAN → Port eingeben → Welt teilen.",
+    "guestSteps": "Gast: Microsoft/Ely-Konto + passende Version unter Play → Welt beitreten.",
+    "waitForPeer": "Warte auf einen zweiten Spieler…",
+    "needP2p": "Warte zuerst auf die P2P-Verbindung",
+    "status": {
+      "open": "offen",
+      "full": "voll",
+      "closed": "geschlossen"
+    },
+    "role": {
+      "owner": "Besitzer",
+      "member": "Mitglied"
+    },
+    "toast": {
+      "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an",
+      "created": "Raum erstellt",
+      "joined": "Raum beigetreten",
+      "left": "Raum verlassen",
+      "closed": "Raum geschlossen",
+      "invited": "Spieler eingeladen",
+      "kicked": "Mitglied entfernt",
+      "cannotInviteSelf": "Du kannst dich nicht selbst einladen"
+    }
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "signInFirst": "Melde dich an, um Benachrichtigungen zu sehen.",
+    "unread": "Ungelesen: {{count}}",
+    "refresh": "Aktualisieren",
+    "readAll": "Alle lesen",
+    "markRead": "Gelesen",
+    "empty": "Noch keine Benachrichtigungen.",
+    "friendRequest": "Freundschaftsanfrage von {{nick}}",
+    "friendAccept": "{{nick}} hat deine Anfrage angenommen",
+    "roomInvite": "{{nick}} hat dich in einen Raum eingeladen",
+    "achievement": "Erfolg: {{title}}",
+    "system": "Systembenachrichtigung"
   },
   "achievements": {
     "title": "Erfolge",
@@ -911,7 +996,8 @@
       "settings": "Einstellungen",
       "mods": "Mods",
       "modpacks": "Modpacks",
-      "friends": "Freunde"
+      "friends": "Freunde",
+      "rooms": "Räume"
     },
     "splitView": {
       "zones": {
@@ -1031,6 +1117,8 @@
       "settings": "Konfigurieren des Launchers",
       "mods": "Einen Mod auswählen",
       "modpacks": "Auswählen eines Profils",
+      "friends": "Freunde ansehen",
+      "rooms": "In Räumen",
       "accounts": "Konto verwalten"
     },
     "pinnedProfiles": {

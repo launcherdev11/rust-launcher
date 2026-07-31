@@ -21,6 +21,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
+import { reportStats } from "./api/stats";
+import { getStoredAccessToken } from "./api/client";
 import { playNotificationSound, playTabSwitchSound, primeUiSounds } from "./uiSounds";
 import {
   SettingsToggle,
@@ -30,6 +32,7 @@ import {
 import { ModsTab } from "./tabs/ModsTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
+import { RoomsTab } from "./tabs/RoomsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
@@ -61,6 +64,10 @@ import {
   type PlayConsoleHotkeyActions,
 } from "./hooks/useHotkeys";
 import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
+import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
+import { usePlatformWebSocket } from "./hooks/usePlatformWebSocket";
+import { usePlatformNotificationToasts } from "./hooks/usePlatformNotificationToasts";
+import { useLauncherSession } from "./hooks/useLauncherSession";
 import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
@@ -111,7 +118,7 @@ type LauncherAccountSummary = {
   is_active: boolean;
 };
 
-type SidebarItemId = "play" | "settings" | "friends" | "mods" | "modpacks" | "accounts";
+type SidebarItemId = "play" | "settings" | "friends" | "rooms" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "game" | "versions" | "launcher";
@@ -206,6 +213,7 @@ const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
   settings: "/launcher-assets/settings.png",
   friends: "/launcher-assets/favorite.png",
+  rooms: "/launcher-assets/move.png",
   mods: "/launcher-assets/mods.png",
   modpacks: "/launcher-assets/modpack_icon.png",
 };
@@ -593,12 +601,13 @@ const REMOTE_NOTIFICATIONS_URLS = [
 const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
 const TELEGRAM_LINK = "https://t.me/of16launcher";
 
-const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "friends", "mods", "modpacks"];
+const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "friends", "rooms", "mods", "modpacks"];
 
 const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
   { id: "play", labelKey: "app.sidebar.play" },
   { id: "settings", labelKey: "app.sidebar.settings" },
   { id: "friends", labelKey: "app.sidebar.friends" },
+  { id: "rooms", labelKey: "app.sidebar.rooms" },
   { id: "mods", labelKey: "app.sidebar.mods" },
   { id: "modpacks", labelKey: "app.sidebar.modpacks" },
 ];
@@ -742,6 +751,9 @@ function TabPaneLoading() {
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
+  usePresenceHeartbeat();
+  usePlatformWebSocket();
+  useLauncherSession();
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
   const [tabSplitLayout, setTabSplitLayout] = useState<TabSplitLayout | null>(() =>
     loadTabSplitLayout(),
@@ -1663,6 +1675,7 @@ function App() {
         });
         lastRunningRef.current = true;
         setGameStatus("running");
+        void reportStats({ launched: true }).catch(() => {});
       } finally {
         setIsLaunching(false);
       }
@@ -1866,12 +1879,36 @@ function App() {
     if (isLaunching || gameStatus === "running") return;
     const t = window.setTimeout(() => {
       flushPendingConsoleLines();
-      try {
+      const writeConsole = (byProfile: Record<string, ProfileConsoleData>) => {
         window.localStorage.setItem(
           GAME_CONSOLE_STORAGE_KEY,
-          JSON.stringify({ byProfile: consoleByProfile }),
+          JSON.stringify({ byProfile }),
         );
+      };
+      try {
+        writeConsole(consoleByProfile);
       } catch {
+        // Quota: drop old sessions / trim lines, then give up cleanly.
+        try {
+          const pruned: Record<string, ProfileConsoleData> = {};
+          for (const [profileId, data] of Object.entries(consoleByProfile)) {
+            pruned[profileId] = {
+              lines: data.lines.slice(-200),
+              sessions: data.sessions.slice(0, 3).map((s) => ({
+                ...s,
+                lines: s.lines.slice(-100),
+              })),
+            };
+          }
+          writeConsole(pruned);
+        } catch {
+          try {
+            window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY);
+            window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY_V1);
+          } catch {
+            // ignore
+          }
+        }
       }
     }, GAME_CONSOLE_PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
@@ -2002,6 +2039,23 @@ function App() {
     },
     [settings, pushNotification],
   );
+
+  usePlatformNotificationToasts(showNotification, language);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ profile_id: string; delta_seconds: number }>("playtime-updated", (event) => {
+      const delta = Number(event.payload?.delta_seconds ?? 0);
+      if (!Number.isFinite(delta) || delta <= 0) return;
+      if (!getStoredAccessToken()) return;
+      void reportStats({ playtime_seconds_delta: Math.floor(delta) }).catch(() => {});
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   const showSettingsSavedNotification = useCallback(() => {
     showNotification("success", tt("app.toast.settingsSaved"));
@@ -2660,6 +2714,9 @@ function App() {
         break;
       case "friends":
         details = t(language, "app.discord.friends");
+        break;
+      case "rooms":
+        details = t(language, "app.discord.rooms");
         break;
       case "accounts":
         details = t(language, "app.discord.accounts");
@@ -3535,6 +3592,7 @@ function App() {
           });
           lastRunningRef.current = true;
           setGameStatus("running");
+          void reportStats({ launched: true }).catch(() => {});
         } finally {
           setIsLaunching(false);
         }
@@ -3552,6 +3610,90 @@ function App() {
 
     await runVersionInstall();
   };
+
+  /** Guest join friend-world: same Play version, but connect to local tunnel. */
+  const handleLaunchToServer = useCallback(
+    async (serverAddress: string) => {
+      if (!selectedVersion) {
+        throw new Error("Сначала выберите версию Minecraft на вкладке Play");
+      }
+      if (!isInstalled) {
+        throw new Error("Сначала установите выбранную версию на вкладке Play");
+      }
+      if (gameStatus === "running" || isLaunching) {
+        throw new Error("Сначала закройте уже запущенную игру");
+      }
+      if (activeAccountKind === "offline") {
+        throw new Error(
+          "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.",
+        );
+      }
+
+      await invoke("set_profile", {
+        nickname: profile.nickname,
+      });
+      const vanillaSummary =
+        loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
+          ? (selectedVersion as VersionSummary)
+          : null;
+      const versionUrl =
+        vanillaSummary && vanillaSummary.version_type !== "custom" && vanillaSummary.url
+          ? vanillaSummary.url
+          : null;
+      const versionId =
+        loader === "fabric" && fabricProfileId
+          ? fabricProfileId
+          : loader === "quilt" && quiltProfileId
+            ? quiltProfileId
+            : selectedVersion.id;
+
+      const consoleProfileId = await resolveLaunchConsoleProfileId();
+      if (consoleProfileId) {
+        setRunningConsoleProfile(consoleProfileId);
+        archiveCurrentConsoleAndClear(consoleProfileId);
+      }
+      if (settings?.show_console_on_launch) {
+        setIsConsoleVisible(true);
+      }
+
+      setIsLaunching(true);
+      try {
+        console.info("[LaunchToServer]", {
+          versionId,
+          versionUrl,
+          serverAddress,
+          activeAccountKind,
+        });
+        await invoke("launch_game", {
+          versionId,
+          versionUrl,
+          serverAddress,
+        });
+        lastRunningRef.current = true;
+        setGameStatus("running");
+        void reportStats({ launched: true }).catch(() => {});
+      } catch (error) {
+        setRunningConsoleProfile(null);
+        throw error;
+      } finally {
+        setIsLaunching(false);
+      }
+    },
+    [
+      selectedVersion,
+      isInstalled,
+      gameStatus,
+      isLaunching,
+      activeAccountKind,
+      profile.nickname,
+      loader,
+      fabricProfileId,
+      quiltProfileId,
+      resolveLaunchConsoleProfileId,
+      archiveCurrentConsoleAndClear,
+      settings?.show_console_on_launch,
+    ],
+  );
 
   const accentColor = settings?.background_accent_color ?? "#0b1530";
 
@@ -4769,6 +4911,15 @@ function App() {
           {activeItem === "friends" ? (
             <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
               <FriendsTab showNotification={showNotification} language={language} />
+            </div>
+          ) : activeItem === "rooms" ? (
+            <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
+              <RoomsTab
+                showNotification={showNotification}
+                language={language}
+                minecraftAccountKind={activeAccountKind}
+                onLaunchToServer={handleLaunchToServer}
+              />
             </div>
           ) : activeItem === "accounts" ? (
             <AccountsTab

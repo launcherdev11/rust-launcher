@@ -70,3 +70,59 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy --locked
 
+  backend-api-tests:
+    name: Backend API tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: launcher
+          POSTGRES_PASSWORD: launcher
+          POSTGRES_DB: launcher_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U launcher -d launcher_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry (backend)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-backend-cargo-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-cargo-
+
+      - name: Run backend unit + integration tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://launcher:launcher@127.0.0.1:5432/launcher_test
+          TEST_DATABASE_URL: postgres://launcher:launcher@127.0.0.1:5432/launcher_test
+          REDIS_URL: redis://127.0.0.1:6379
+          TEST_REDIS_URL: redis://127.0.0.1:6379
+          JWT_SECRET: ci-test-jwt-secret
+        run: cargo test --locked
+

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   API_AUTH_CHANGED_EVENT,
   API_NICKNAME_KEY,
@@ -24,6 +25,16 @@ export type LauncherProfileLite = {
   microsoft_username: string | null;
   ely_uuid: string | null;
   mc_uuid: string | null;
+};
+
+type IdentityProofProfile = {
+  ely_uuid?: string | null;
+  ely_username?: string | null;
+  ely_access_token?: string | null;
+  ely_client_token?: string | null;
+  mc_uuid?: string | null;
+  mc_username?: string | null;
+  mc_access_token?: string | null;
 };
 
 type PlatformAccountPanelProps = {
@@ -255,10 +266,31 @@ export function PlatformAccountPanel({
 
     setLinking(provider);
     try {
+      const fullProfile = await invoke<IdentityProofProfile>("get_profile");
+      const providerAccessToken =
+        provider === "ely"
+          ? fullProfile.ely_access_token?.trim()
+          : fullProfile.mc_access_token?.trim();
+      if (!providerAccessToken) {
+        showNotification(
+          "warning",
+          provider === "ely"
+            ? tt("platform.toast.signInElyThenLink")
+            : tt("platform.toast.signInMicrosoftThenLink"),
+        );
+        return;
+      }
+
       await linkIdentity({
         provider,
         provider_uuid: normalizeProviderUuid(uuid),
-        provider_username: provider === "ely" ? launcherProfile.ely_username : null,
+        provider_username:
+          provider === "ely"
+            ? fullProfile.ely_username ?? launcherProfile.ely_username
+            : fullProfile.mc_username ?? null,
+        provider_access_token: providerAccessToken,
+        provider_client_token:
+          provider === "ely" ? fullProfile.ely_client_token?.trim() || null : null,
       });
       setLinkedProviders((prev) => ({ ...prev, [provider]: true }));
       showNotification(

@@ -6,6 +6,7 @@ import { useT, type Language } from "../i18n";
 import type { ProfileAvatarInput } from "../lib/avatar";
 import { PlatformAccountPanel } from "./PlatformAccountPanel";
 import { AchievementsPanel } from "../components/AchievementsPanel";
+import { PlatformNotificationsPanel } from "../components/PlatformNotificationsPanel";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -482,6 +483,11 @@ export function AccountsTab({
                 onMicrosoftLogin={onMicrosoftLogin}
                 onElyLogin={onElyLogin}
                 providerLoginBusy={elyLoading || msLoading}
+              />
+
+              <PlatformNotificationsPanel
+                showNotification={showNotification}
+                language={language}
               />
 
               <AchievementsPanel language={language} />
