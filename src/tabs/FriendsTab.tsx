@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   acceptFriendRequest,
   listFriends,
   listIncomingRequests,
   rejectFriendRequest,
+  removeFriend,
   sendFriendRequest,
   type FriendRow,
   type IncomingRequestRow,
@@ -38,6 +39,7 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequestRow[]>([]);
   const [friendNickToAdd, setFriendNickToAdd] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [friendAvatarByKey, setFriendAvatarByKey] = useState<Record<string, string>>({});
   const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresenceInfo>>({});
 
@@ -74,30 +76,6 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
       Object.fromEntries(presenceRes.map((p) => [p.user_id, p])),
     );
   }, []);
-
-  const handleLoadFriends = async () => {
-    if (!accessToken) return;
-    setLoading(true);
-    try {
-      setFriends(await listFriends());
-    } catch (e) {
-      showNotification("error", e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLoadIncomingRequests = async () => {
-    if (!accessToken) return;
-    setRequestsLoading(true);
-    try {
-      setIncomingRequests(await listIncomingRequests());
-    } catch (e) {
-      showNotification("error", e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setRequestsLoading(false);
-    }
-  };
 
   const handleAcceptRequest = async (requestId: string) => {
     if (!accessToken) return;
@@ -148,6 +126,23 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
         showNotification("success", tt("friends.toast.requestSent"));
       }
       setFriendNickToAdd("");
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveFriend = async (friend: FriendRow) => {
+    if (!accessToken) return;
+    const ok = window.confirm(tt("friends.removeConfirm", { nick: friend.nickname }));
+    if (!ok) return;
+
+    setLoading(true);
+    try {
+      await removeFriend(friend.user_id);
+      showNotification("info", tt("friends.toast.removed"));
+      await reloadAll();
     } catch (e) {
       showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -264,6 +259,28 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     };
   }, [friends, incomingRequests]);
 
+  const onlineCount = useMemo(
+    () => friends.filter((f) => presenceByUserId[f.user_id]?.online).length,
+    [friends, presenceByUserId],
+  );
+
+  const filteredFriends = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const list = q
+      ? friends.filter((f) => f.nickname.toLowerCase().includes(q))
+      : friends;
+    return [...list].sort((a, b) => {
+      const aOnline = presenceByUserId[a.user_id]?.online ? 1 : 0;
+      const bOnline = presenceByUserId[b.user_id]?.online ? 1 : 0;
+      if (aOnline !== bOnline) return bOnline - aOnline;
+      return a.nickname.localeCompare(b.nickname, undefined, { sensitivity: "base" });
+    });
+  }, [friends, presenceByUserId, searchQuery]);
+
+  const avatarFor = (elyUsername: string | null | undefined, nickname: string) =>
+    (elyUsername ? friendAvatarByKey[elyUsername.trim().toLowerCase()] : undefined) ??
+    buildInitialAvatarDataUrl(nickname);
+
   return (
     <div className="flex w-full max-w-2xl flex-col items-center gap-6 py-6">
       <div className="w-full text-center">
@@ -273,14 +290,17 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
         </p>
       </div>
 
-      <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-6 py-6 shadow-xl backdrop-blur-md">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-5 shadow-xl backdrop-blur-md sm:px-6">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               type="text"
               value={friendNickToAdd}
               onChange={(e) => setFriendNickToAdd(e.target.value)}
-              className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && friendNickToAdd.trim()) void handleSendRequest();
+              }}
+              className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
               placeholder={tt("friends.friendNicknamePlaceholder")}
               disabled={!accessToken}
             />
@@ -288,133 +308,152 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
               type="button"
               disabled={!accessToken || loading || !friendNickToAdd.trim()}
               onClick={() => void handleSendRequest()}
-              className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+              className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
             >
               {tt("friends.add")}
             </button>
-            <button
-              type="button"
-              disabled={!accessToken || loading}
-              onClick={() => void handleLoadFriends()}
-              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-            >
-              {tt("friends.refresh")}
-            </button>
-            <button
-              type="button"
-              disabled={!accessToken || requestsLoading}
-              onClick={() => void handleLoadIncomingRequests()}
-              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-            >
-              {tt("friends.requests")}
-            </button>
           </div>
 
-          <div className="h-px w-full bg-white/10" />
-
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-white/45">{tt("friends.incomingTitle")}</p>
-            {!accessToken ? (
-              <p className="text-sm text-white/60">{tt("friends.signInFirst")}</p>
-            ) : incomingRequests.length === 0 ? (
-              <p className="text-sm text-white/60">{tt("friends.noIncoming")}</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {incomingRequests.map((r) => (
-                  <li
-                    key={r.request_id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <img
-                        src={
-                          (r.from_ely_username
-                            ? friendAvatarByKey[r.from_ely_username.trim().toLowerCase()]
-                            : undefined) ?? buildInitialAvatarDataUrl(r.from_nickname)
-                        }
-                        alt=""
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
-                        draggable={false}
-                        onError={(event) => {
-                          event.currentTarget.src = buildInitialAvatarDataUrl(r.from_nickname);
-                        }}
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={requestsLoading}
-                        onClick={() => void handleAcceptRequest(r.request_id)}
-                        className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+          {!accessToken ? (
+            <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-white/55">
+              {tt("friends.signInFirst")}
+            </p>
+          ) : (
+            <>
+              {incomingRequests.length > 0 ? (
+                <div className="flex flex-col gap-2.5">
+                  <p className="text-xs font-semibold tracking-wide text-amber-200/80">
+                    {tt("friends.incomingCount", { count: incomingRequests.length })}
+                  </p>
+                  <ul className="flex flex-col gap-2">
+                    {incomingRequests.map((r) => (
+                      <li
+                        key={r.request_id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2.5"
                       >
-                        {tt("friends.accept")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={requestsLoading}
-                        onClick={() => void handleRejectRequest(r.request_id)}
-                        className="interactive-press rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
-                      >
-                        {tt("friends.reject")}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <img
+                            src={avatarFor(r.from_ely_username, r.from_nickname)}
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                            draggable={false}
+                            onError={(event) => {
+                              event.currentTarget.src = buildInitialAvatarDataUrl(r.from_nickname);
+                            }}
+                          />
+                          <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={requestsLoading}
+                            onClick={() => void handleAcceptRequest(r.request_id)}
+                            className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+                          >
+                            {tt("friends.accept")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={requestsLoading}
+                            onClick={() => void handleRejectRequest(r.request_id)}
+                            className="interactive-press rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
+                          >
+                            {tt("friends.reject")}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
-          <div className="h-px w-full bg-white/10" />
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold tracking-wide text-white/45">
+                      {tt("friends.yourFriends")}
+                    </p>
+                    {friends.length > 0 ? (
+                      <p className="mt-0.5 text-xs text-white/40">
+                        {tt("friends.friendsOnline", {
+                          online: onlineCount,
+                          total: friends.length,
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                  {loading ? <span className="text-xs text-white/35">…</span> : null}
+                </div>
 
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-white/45">{tt("friends.yourFriends")}</p>
-            {!accessToken ? (
-              <p className="text-sm text-white/60">{tt("friends.signInFirst")}</p>
-            ) : friends.length === 0 ? (
-              <p className="text-sm text-white/60">{tt("friends.noFriends")}</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {friends.map((f) => (
-                  <li
-                    key={f.user_id}
-                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
-                  >
-                    <div className="relative shrink-0">
-                      <img
-                        src={
-                          (f.ely_username
-                            ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
-                            : undefined) ?? buildInitialAvatarDataUrl(f.nickname)
-                        }
-                        alt=""
-                        className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20"
-                        draggable={false}
-                        onError={(event) => {
-                          event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
-                        }}
-                      />
-                      <span
-                        className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-black/80 ${
-                          presenceByUserId[f.user_id]?.online
-                            ? "bg-emerald-400"
-                            : "bg-white/25"
-                        }`}
-                        title={
-                          presenceByUserId[f.user_id]?.online
-                            ? tt("friends.online")
-                            : tt("friends.offline")
-                        }
-                      />
-                    </div>
-                    <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                {friends.length > 0 ? (
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                    placeholder={tt("friends.searchPlaceholder")}
+                  />
+                ) : null}
+
+                {friends.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-white/55">
+                    {tt("friends.noFriends")}
+                  </p>
+                ) : filteredFriends.length === 0 ? (
+                  <p className="text-sm text-white/55">{tt("friends.noSearchResults")}</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {filteredFriends.map((f) => {
+                      const online = Boolean(presenceByUserId[f.user_id]?.online);
+                      return (
+                        <li
+                          key={f.user_id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="relative shrink-0">
+                              <img
+                                src={avatarFor(f.ely_username, f.nickname)}
+                                alt=""
+                                className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20"
+                                draggable={false}
+                                onError={(event) => {
+                                  event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+                                }}
+                              />
+                              <span
+                                className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-black/80 ${
+                                  online ? "bg-emerald-400" : "bg-white/25"
+                                }`}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-white/90">{f.nickname}</p>
+                              <p
+                                className={`text-xs ${
+                                  online ? "text-emerald-300/80" : "text-white/40"
+                                }`}
+                              >
+                                {online ? tt("friends.online") : tt("friends.offline")}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => void handleRemoveFriend(f)}
+                            className="interactive-press shrink-0 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/55 hover:border-red-400/30 hover:bg-red-600/15 hover:text-red-100 disabled:opacity-60"
+                          >
+                            {tt("friends.remove")}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -427,27 +427,6 @@ export function RoomsTab({
     }
   };
 
-  const handleInvite = async () => {
-    if (!selectedRoom) return;
-    const nick = inviteNickname.trim();
-    if (!nick) return;
-    if (nick === profileNickname.trim()) {
-      showNotification("warning", tt("rooms.toast.cannotInviteSelf"));
-      return;
-    }
-    setLoading(true);
-    try {
-      await inviteToRoom(selectedRoom.id, nick);
-      showNotification("success", tt("rooms.toast.invited"));
-      setInviteNickname("");
-      await reloadRooms();
-    } catch (e) {
-      showNotification("error", e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleKick = async (memberUserId: string) => {
     if (!selectedRoom) return;
     setLoading(true);
@@ -499,6 +478,33 @@ export function RoomsTab({
   }, [friends, selectedRoom]);
 
   const p2pReady = peerLink.status === "connected" && peerLink.channelOpen;
+
+  const p2pStatusLabel = (() => {
+    if (selectedRoom && selectedRoom.member_count < 2) return tt("rooms.p2pWaiting");
+    if (p2pReady) return tt("rooms.p2pReady");
+    return tt("rooms.p2pConnecting");
+  })();
+
+  const handleInviteFriend = async (nickname: string) => {
+    if (!selectedRoom) return;
+    const nick = nickname.trim();
+    if (!nick) return;
+    if (nick === profileNickname.trim()) {
+      showNotification("warning", tt("rooms.toast.cannotInviteSelf"));
+      return;
+    }
+    setLoading(true);
+    try {
+      await inviteToRoom(selectedRoom.id, nick);
+      showNotification("success", tt("rooms.toast.invited"));
+      setInviteNickname("");
+      await reloadRooms();
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderMyRoomCard = (room: Room) => {
     const owned = room.owner_user_id === userId;
@@ -696,15 +702,14 @@ export function RoomsTab({
                 {!mcAuthOnline ? (
                   <p className="text-xs text-amber-200/70">{tt("rooms.mcOfflineHint")}</p>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/30 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-black/30 px-3 py-2.5">
                   <span className="text-sm text-white/55">{tt("rooms.p2pLabel")}</span>
-                  <span className="text-right text-sm font-semibold text-white/80">
-                    {peerLink.status}
-                    {peerLink.connectionType ? ` · ${peerLink.connectionType}` : ""}
-                    {peerLink.channelOpen ? ` · ${tt("rooms.channelOpen")}` : ""}
-                    {bridgeStatus !== "idle"
-                      ? ` · ${tt("rooms.bridgeLabel")} ${bridgeStatus}`
-                      : ""}
+                  <span
+                    className={`text-sm font-semibold ${
+                      p2pReady ? "text-emerald-300/90" : "text-white/70"
+                    }`}
+                  >
+                    {p2pStatusLabel}
                   </span>
                 </div>
               </div>
@@ -810,37 +815,60 @@ export function RoomsTab({
                 </p>
                 <div className="mt-3 flex flex-col gap-2">
                   {inviteableFriends.length > 0 ? (
-                    <select
-                      value={inviteNickname}
-                      onChange={(e) => setInviteNickname(e.target.value)}
-                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/30"
-                      disabled={loading}
-                    >
-                      <option value="">{tt("rooms.inviteFriendPlaceholder")}</option>
+                    <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto">
                       {inviteableFriends.map((f) => (
-                        <option key={f.user_id} value={f.nickname}>
-                          {f.nickname}
-                        </option>
+                        <li
+                          key={f.user_id}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <img
+                              src={buildInitialAvatarDataUrl(f.nickname)}
+                              alt=""
+                              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                              draggable={false}
+                            />
+                            <span className="truncate text-sm font-semibold text-white/90">
+                              {f.nickname}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => void handleInviteFriend(f.nickname)}
+                            className="interactive-press shrink-0 rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+                          >
+                            {tt("rooms.invite")}
+                          </button>
+                        </li>
                       ))}
-                    </select>
+                    </ul>
                   ) : (
+                    <p className="text-sm leading-relaxed text-white/50">{tt("rooms.inviteEmpty")}</p>
+                  )}
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       value={inviteNickname}
                       onChange={(e) => setInviteNickname(e.target.value)}
-                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && inviteNickname.trim()) {
+                          void handleInviteFriend(inviteNickname);
+                        }
+                      }}
+                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
                       placeholder={tt("rooms.inviteNicknamePlaceholder")}
                       disabled={loading}
                     />
-                  )}
-                  <button
-                    type="button"
-                    disabled={loading || !inviteNickname.trim()}
-                    onClick={() => void handleInvite()}
-                    className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
-                  >
-                    {tt("rooms.invite")}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={loading || !inviteNickname.trim()}
+                      onClick={() => void handleInviteFriend(inviteNickname)}
+                      className="interactive-press shrink-0 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+                    >
+                      {tt("rooms.invite")}
+                    </button>
+                  </div>
                 </div>
               </section>
             ) : null}
