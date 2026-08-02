@@ -11,6 +11,7 @@ export type AccountSkinPreviewProps = {
   username: string;
   onSettingsClick?: () => void;
   settingsTitle?: string;
+  className?: string;
 };
 
 export function AccountSkinPreview({
@@ -18,6 +19,7 @@ export function AccountSkinPreview({
   username,
   onSettingsClick,
   settingsTitle,
+  className,
 }: AccountSkinPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
@@ -107,7 +109,12 @@ export function AccountSkinPreview({
   ]);
 
   return (
-    <div className="relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md">
+    <div
+      className={
+        className ??
+        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md"
+      }
+    >
       {onSettingsClick ? (
         <button
           type="button"

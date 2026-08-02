@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { listAchievements, type AchievementRow } from "../api/achievements";
+import {
+  listAchievements,
+  listUserAchievements,
+  type AchievementRow,
+} from "../api/achievements";
 import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
 import { useT, type Language } from "../i18n";
@@ -7,17 +11,31 @@ import { useT, type Language } from "../i18n";
 type AchievementsPanelProps = {
   language: Language;
   compact?: boolean;
+  /** When set, loads that user's achievements (friend/self). Otherwise loads own. */
+  userId?: string | null;
+  className?: string;
 };
 
-function TrophyIcon({ className }: { className?: string }) {
+const ACHIEVEMENTS_ICON_SRC = "/launcher-assets/achivements.png";
+
+function AchievementIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className ?? "h-5 w-5 fill-current"} aria-hidden="true">
-      <path d="M5 3h14v2a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V3Zm2 2v0a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V5H7Zm-2 4h2a7 7 0 0 0 6 6.92V19H7v2h10v-2h-6v-3.08A7 7 0 0 0 15 7h2a7 7 0 0 1-7 7 7 7 0 0 1-7-7Zm14 0h2a7 7 0 0 1-4.9 6.68A7.002 7.002 0 0 0 19 11Z" />
-    </svg>
+    <img
+      src={ACHIEVEMENTS_ICON_SRC}
+      alt=""
+      className={className ?? "h-5 w-5 object-contain"}
+      aria-hidden
+      draggable={false}
+    />
   );
 }
 
-export function AchievementsPanel({ language, compact = false }: AchievementsPanelProps) {
+export function AchievementsPanel({
+  language,
+  compact = false,
+  userId = null,
+  className = "",
+}: AchievementsPanelProps) {
   const tt = useT(language);
   const [loading, setLoading] = useState(false);
   const [accessToken, setAccessToken] = useState("");
@@ -36,13 +54,16 @@ export function AchievementsPanel({ language, compact = false }: AchievementsPan
     setLoading(true);
     setError("");
     try {
-      setAchievements(await listAchievements());
+      const rows = userId
+        ? await listUserAchievements(userId)
+        : await listAchievements();
+      setAchievements(rows);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     syncAuth();
@@ -64,10 +85,13 @@ export function AchievementsPanel({ language, compact = false }: AchievementsPan
   }, [accessToken, reload]);
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const shellClass =
+    className ||
+    "rounded-xl border border-white/10 bg-black/30 px-4 py-3";
 
   if (!accessToken) {
     return (
-      <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+      <div className={shellClass}>
         <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
           {tt("achievements.title")}
         </p>
@@ -77,10 +101,10 @@ export function AchievementsPanel({ language, compact = false }: AchievementsPan
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+    <div className={shellClass}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <TrophyIcon className="h-4 w-4 text-amber-300/90" />
+          <AchievementIcon className="h-4 w-4 object-contain" />
           <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
             {tt("achievements.title")}
           </p>
@@ -127,7 +151,7 @@ export function AchievementsPanel({ language, compact = false }: AchievementsPan
                       : "bg-white/5 text-white/35"
                   }`}
                 >
-                  <TrophyIcon className="h-4 w-4" />
+                  <AchievementIcon className="h-4 w-4 object-contain" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white/90">{achievement.title}</p>
