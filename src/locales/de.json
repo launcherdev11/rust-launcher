@@ -92,6 +92,10 @@
         "off": "Aus"
       }
     },
+    "search": {
+      "placeholder": "Einstellungen suchen…",
+      "noResults": "Keine Einstellungen gefunden."
+    },
     "tab": {
       "directories": "Verzeichnisse",
       "game": "Spiel",

@@ -2,6 +2,7 @@ import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
+import { Search } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { JavaSettingsTab } from "./JavaSettings";
@@ -13,6 +14,221 @@ import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
 const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
 
 type SettingsTabId = "game" | "versions" | "launcher";
+
+type SettingSearchId =
+  | "game.showConsole"
+  | "game.closeLauncher"
+  | "game.checkProcesses"
+  | "game.gameDirectory"
+  | "game.windowSize"
+  | "game.ram"
+  | "game.java"
+  | "versions.showSnapshots"
+  | "versions.showAlpha"
+  | "versions.forgeProxy"
+  | "versions.loaderFilter"
+  | "versions.versionFilter"
+  | "versions.available"
+  | "launcher.updates"
+  | "launcher.openOnProfiles"
+  | "launcher.uiSounds"
+  | "launcher.minimizeToTray"
+  | "launcher.autostart"
+  | "launcher.splitView"
+  | "launcher.disableAnimations"
+  | "launcher.language"
+  | "launcher.accentColor"
+  | "launcher.backgroundImage"
+  | "launcher.backgroundBlur"
+  | "launcher.sidebarPosition"
+  | "launcher.sidebarOrder"
+  | "launcher.resetSettings"
+  | "launcher.cache"
+  | "launcher.backup";
+
+type SettingSearchDef = {
+  id: SettingSearchId;
+  tab: SettingsTabId;
+  gameSubTab?: "general" | "java";
+  keys: string[];
+};
+
+const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
+  {
+    id: "game.showConsole",
+    tab: "game",
+    gameSubTab: "general",
+    keys: ["settings.game.showConsoleOnLaunch.label"],
+  },
+  {
+    id: "game.closeLauncher",
+    tab: "game",
+    gameSubTab: "general",
+    keys: ["settings.game.closeLauncherOnStart.label"],
+  },
+  {
+    id: "game.checkProcesses",
+    tab: "game",
+    gameSubTab: "general",
+    keys: ["settings.game.checkGameProcesses.label"],
+  },
+  {
+    id: "game.gameDirectory",
+    tab: "game",
+    gameSubTab: "general",
+    keys: [
+      "settings.game.gameDirectory.label",
+      "settings.game.gameDirectory.hint",
+      "settings.game.gameDirectory.defaultPathHint",
+    ],
+  },
+  {
+    id: "game.windowSize",
+    tab: "game",
+    gameSubTab: "general",
+    keys: ["settings.game.windowSize.label"],
+  },
+  {
+    id: "game.ram",
+    tab: "game",
+    gameSubTab: "java",
+    keys: ["settings.game.ram.label", "settings.game.subtab.java"],
+  },
+  {
+    id: "game.java",
+    tab: "game",
+    gameSubTab: "java",
+    keys: [
+      "settings.game.subtab.java",
+      "javaSettings.description",
+      "javaSettings.useCustomArgs.label",
+      "javaSettings.preferIpv6.label",
+      "javaSettings.javaPath.label",
+      "javaSettings.memory.title",
+      "javaSettings.jvmArgs.title",
+    ],
+  },
+  {
+    id: "versions.showSnapshots",
+    tab: "versions",
+    keys: ["settings.versions.showSnapshots.label", "settings.tab.versions"],
+  },
+  {
+    id: "versions.showAlpha",
+    tab: "versions",
+    keys: ["settings.versions.showAlpha.label"],
+  },
+  {
+    id: "versions.forgeProxy",
+    tab: "versions",
+    keys: ["settings.versions.forgeProxyFallback.label"],
+  },
+  {
+    id: "versions.loaderFilter",
+    tab: "versions",
+    keys: ["settings.versions.loaderFilter.label"],
+  },
+  {
+    id: "versions.versionFilter",
+    tab: "versions",
+    keys: ["settings.versions.versionFilter.label"],
+  },
+  {
+    id: "versions.available",
+    tab: "versions",
+    keys: ["settings.versions.available.label", "settings.card.versions"],
+  },
+  {
+    id: "launcher.updates",
+    tab: "launcher",
+    keys: [
+      "settings.card.updates",
+      "settings.updates.checkOnStart.label",
+      "settings.updates.autoInstall.label",
+      "settings.updates.checkNow",
+    ],
+  },
+  {
+    id: "launcher.openOnProfiles",
+    tab: "launcher",
+    keys: ["settings.launcher.openOnProfilesTab.label", "settings.card.customization"],
+  },
+  {
+    id: "launcher.uiSounds",
+    tab: "launcher",
+    keys: ["settings.launcher.uiSounds.label"],
+  },
+  {
+    id: "launcher.minimizeToTray",
+    tab: "launcher",
+    keys: ["settings.launcher.minimizeToTray.label"],
+  },
+  {
+    id: "launcher.autostart",
+    tab: "launcher",
+    keys: ["settings.launcher.autostart.label"],
+  },
+  {
+    id: "launcher.splitView",
+    tab: "launcher",
+    keys: ["settings.launcher.splitView.label"],
+  },
+  {
+    id: "launcher.disableAnimations",
+    tab: "launcher",
+    keys: ["settings.launcher.disableAnimations.label"],
+  },
+  {
+    id: "launcher.language",
+    tab: "launcher",
+    keys: ["settings.launcher.interfaceLanguage.label", "settings.card.interfaceLanguage"],
+  },
+  {
+    id: "launcher.accentColor",
+    tab: "launcher",
+    keys: ["settings.launcher.accentColor.label"],
+  },
+  {
+    id: "launcher.backgroundImage",
+    tab: "launcher",
+    keys: ["settings.launcher.backgroundImage.label", "settings.launcher.backgroundImage.hint"],
+  },
+  {
+    id: "launcher.backgroundBlur",
+    tab: "launcher",
+    keys: ["settings.launcher.backgroundBlur.label"],
+  },
+  {
+    id: "launcher.sidebarPosition",
+    tab: "launcher",
+    keys: ["settings.launcher.sidebarPosition.label"],
+  },
+  {
+    id: "launcher.sidebarOrder",
+    tab: "launcher",
+    keys: ["settings.launcher.sidebarOrder.label"],
+  },
+  {
+    id: "launcher.resetSettings",
+    tab: "launcher",
+    keys: ["settings.launcher.resetSettings.button"],
+  },
+  {
+    id: "launcher.cache",
+    tab: "launcher",
+    keys: ["settings.launcher.cache.label", "settings.launcher.cache.description"],
+  },
+  {
+    id: "launcher.backup",
+    tab: "launcher",
+    keys: [
+      "settings.launcher.backup.title",
+      "settings.launcher.backup.exportButton",
+      "settings.launcher.backup.importButton",
+      "settings.launcher.backup.hint",
+    ],
+  },
+];
 
 type SidebarItemId = "play" | "settings" | "mods" | "modpacks";
 
@@ -294,6 +510,7 @@ export function SettingsTab({
   fillPane = false,
 }: SettingsTabProps) {
   const tt = useT(language);
+  const [settingsSearch, setSettingsSearch] = useState("");
   const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
   const [isRamEditing, setIsRamEditing] = useState(false);
   const [ramInputMb, setRamInputMb] = useState("");
@@ -1397,6 +1614,51 @@ export function SettingsTab({
     }
   };
 
+  const settingsSearchQuery = settingsSearch.trim().toLowerCase();
+  const settingsSearchActive = settingsSearchQuery.length > 0;
+
+  const matchedSettingIds = useMemo(() => {
+    if (!settingsSearchActive) return null;
+    const ids = new Set<SettingSearchId>();
+    for (const item of SETTING_SEARCH_CATALOG) {
+      const haystack = item.keys
+        .map((key) => tt(key))
+        .join(" ")
+        .toLowerCase();
+      if (haystack.includes(settingsSearchQuery)) {
+        ids.add(item.id);
+      }
+    }
+    return ids;
+  }, [settingsSearchActive, settingsSearchQuery, tt, language]);
+
+  const showSetting = useCallback(
+    (id: SettingSearchId) => !matchedSettingIds || matchedSettingIds.has(id),
+    [matchedSettingIds],
+  );
+
+  const searchHasAnyMatches = !matchedSettingIds || matchedSettingIds.size > 0;
+  const searchHasMatchesOnTab = useMemo(() => {
+    if (!matchedSettingIds) return true;
+    return SETTING_SEARCH_CATALOG.some(
+      (item) => item.tab === settingsTab && matchedSettingIds.has(item.id),
+    );
+  }, [matchedSettingIds, settingsTab]);
+
+  useEffect(() => {
+    if (!matchedSettingIds || matchedSettingIds.size === 0) return;
+    const firstMatch = SETTING_SEARCH_CATALOG.find((item) => matchedSettingIds.has(item.id));
+    if (!firstMatch) return;
+    const hasOnCurrentTab = SETTING_SEARCH_CATALOG.some(
+      (item) => item.tab === settingsTab && matchedSettingIds.has(item.id),
+    );
+    if (!hasOnCurrentTab) {
+      setSettingsTab(firstMatch.tab);
+    }
+    // Only re-run when the search query changes — avoid fighting manual tab switches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsSearchQuery]);
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       {reinstallDialog && (
@@ -1680,6 +1942,19 @@ export function SettingsTab({
               : "max-h-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl",
           ].join(" ")}
         >
+          <div className="flex w-full shrink-0 justify-center">
+            <label className="flex w-full max-w-xl items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
+              <Search className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
+              <input
+                type="search"
+                value={settingsSearch}
+                onChange={(e) => setSettingsSearch(e.target.value)}
+                placeholder={tt("settings.search.placeholder")}
+                className="w-full bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+                aria-label={tt("settings.search.placeholder")}
+              />
+            </label>
+          </div>
           <div
             className={[
               "glass-panel w-full overflow-hidden",
@@ -1694,8 +1969,21 @@ export function SettingsTab({
                 : "max-h-[min(72vh,calc(100vh-11rem))] overflow-y-auto xl:max-h-[min(78vh,calc(100vh-10rem))] 2xl:max-h-[min(84vh,calc(100vh-9rem))]",
             ].join(" ")}
           >
+          {settingsSearchActive && !searchHasAnyMatches ? (
+            <p className="py-8 text-center text-sm text-white/55">
+              {tt("settings.search.noResults")}
+            </p>
+          ) : (
+          <>
           {settingsTab === "game" && (
             <SettingsCard title={tt("settings.card.game")}>
+              {settingsSearchActive && !searchHasMatchesOnTab ? (
+                <p className="py-6 text-center text-sm text-white/55">
+                  {tt("settings.search.noResults")}
+                </p>
+              ) : (
+                <>
+              {!settingsSearchActive && (
               <div className="mb-4 flex items-center rounded-full bg-white/10 p-1 relative overflow-hidden">
                 <div
                   className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
@@ -1735,8 +2023,23 @@ export function SettingsTab({
                   {tt("settings.game.subtab.java")}
                 </button>
               </div>
-              {gameSubTab === "general" ? (
-                <div className={`${SETTINGS_DARK_BOX} space-y-4`}>
+              )}
+              {(settingsSearchActive || gameSubTab === "general") &&
+                (!settingsSearchActive ||
+                  showSetting("game.showConsole") ||
+                  showSetting("game.closeLauncher") ||
+                  showSetting("game.checkProcesses") ||
+                  showSetting("game.gameDirectory") ||
+                  showSetting("game.windowSize")) && (
+                <div
+                  className={`${SETTINGS_DARK_BOX} space-y-4 ${
+                    settingsSearchActive &&
+                    (showSetting("game.ram") || showSetting("game.java"))
+                      ? "mb-4"
+                      : ""
+                  }`}
+                >
+                    {showSetting("game.showConsole") && (
                     <SettingsToggle
                       label={tt("settings.game.showConsoleOnLaunch.label")}
                       yesLabel={tt("settings.common.toggle.on")}
@@ -1744,6 +2047,8 @@ export function SettingsTab({
                       value={settings?.show_console_on_launch ?? false}
                       onChange={(value: boolean) => updateSettings({ show_console_on_launch: value })}
                     />
+                    )}
+                    {showSetting("game.closeLauncher") && (
                     <SettingsToggle
                       label={tt("settings.game.closeLauncherOnStart.label")}
                       yesLabel={tt("settings.common.yes")}
@@ -1751,6 +2056,8 @@ export function SettingsTab({
                       value={settings?.close_launcher_on_game_start ?? false}
                       onChange={(value: boolean) => updateSettings({ close_launcher_on_game_start: value })}
                     />
+                    )}
+                    {showSetting("game.checkProcesses") && (
                     <SettingsToggle
                       label={tt("settings.game.checkGameProcesses.label")}
                       yesLabel={tt("settings.common.yes")}
@@ -1758,7 +2065,10 @@ export function SettingsTab({
                       value={settings?.check_game_processes ?? true}
                       onChange={(value: boolean) => updateSettings({ check_game_processes: value })}
                     />
+                    )}
 
+                    {showSetting("game.gameDirectory") && (
+                    <>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm text-white/90">
@@ -1805,7 +2115,10 @@ export function SettingsTab({
                     <div className="mt-2 text-[11px] text-white/45">
                       {tt("settings.game.gameDirectory.hint")}
                     </div>
+                    </>
+                    )}
 
+                  {showSetting("game.windowSize") && (
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-sm text-white/90">
                       {tt("settings.game.windowSize.label")}
@@ -1866,9 +2179,13 @@ export function SettingsTab({
                       />
                     </div>
                   </div>
+                  )}
                 </div>
-              ) : (
+              )}
+              {(settingsSearchActive || gameSubTab === "java") &&
+                (showSetting("game.ram") || showSetting("game.java")) && (
                 <div className={`${SETTINGS_DARK_BOX} space-y-4`}>
+                  {showSetting("game.ram") && (
                   <SettingsSlider
                     label={tt("settings.game.ram.label")}
                     min={1}
@@ -1911,15 +2228,26 @@ export function SettingsTab({
                       )
                     }
                   />
+                  )}
+                  {showSetting("game.java") && (
                   <JavaSettingsTab language={language} systemMemoryGb={systemMemoryGb} showNotification={showNotification} />
+                  )}
                 </div>
+              )}
+                </>
               )}
             </SettingsCard>
           )}
 
           {settingsTab === "versions" && (
             <SettingsCard title={tt("settings.card.versions")}>
+              {settingsSearchActive && !searchHasMatchesOnTab ? (
+                <p className="py-6 text-center text-sm text-white/55">
+                  {tt("settings.search.noResults")}
+                </p>
+              ) : (
               <div className={`${SETTINGS_DARK_BOX} max-h-[clamp(260px,62vh,700px)] overflow-y-auto pr-1 space-y-4`}>
+              {showSetting("versions.showSnapshots") && (
               <SettingsToggle
                 label={tt("settings.versions.showSnapshots.label")}
                 yesLabel={tt("settings.common.yes")}
@@ -1927,6 +2255,8 @@ export function SettingsTab({
                 value={settings?.show_snapshots ?? false}
                 onChange={(value: boolean) => updateSettings({ show_snapshots: value })}
               />
+              )}
+              {showSetting("versions.showAlpha") && (
               <SettingsToggle
                 label={tt("settings.versions.showAlpha.label")}
                 yesLabel={tt("settings.common.yes")}
@@ -1934,6 +2264,8 @@ export function SettingsTab({
                 value={settings?.show_alpha_versions ?? false}
                 onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
               />
+              )}
+              {showSetting("versions.forgeProxy") && (
               <SettingsToggle
                 label={tt("settings.versions.forgeProxyFallback.label")}
                 yesLabel={tt("settings.common.yes")}
@@ -1941,7 +2273,10 @@ export function SettingsTab({
                 value={settings?.forge_proxy_fallback ?? false}
                 onChange={(value: boolean) => updateSettings({ forge_proxy_fallback: value })}
               />
+              )}
+              {(showSetting("versions.loaderFilter") || showSetting("versions.versionFilter")) && (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {showSetting("versions.loaderFilter") && (
                 <div ref={versionsLoaderDropdownRef} className="relative text-xs text-white/70">
                   <span className="mb-1 block">{tt("settings.versions.loaderFilter.label")}</span>
                   <button
@@ -1986,7 +2321,9 @@ export function SettingsTab({
                     )}
                   </AnimatePresence>
                 </div>
+                )}
 
+                {showSetting("versions.versionFilter") && (
                 <div ref={versionsFilterDropdownRef} className="relative text-xs text-white/70">
                   <span className="mb-1 block">{tt("settings.versions.versionFilter.label")}</span>
                   <button
@@ -2090,7 +2427,11 @@ export function SettingsTab({
                     )}
                   </AnimatePresence>
                 </div>
+                )}
               </div>
+              )}
+              {showSetting("versions.available") && (
+              <>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-white/90">
                   {tt("settings.versions.available.label")}
@@ -2284,14 +2625,22 @@ export function SettingsTab({
                   </div>
                 </div>
               )}
+              </>
+              )}
               </div>
+              )}
             </SettingsCard>
           )}
 
           {settingsTab === "launcher" && (
             <SettingsCard title={tt("settings.card.launcher")}>
+              {settingsSearchActive && !searchHasMatchesOnTab ? (
+                <p className="py-6 text-center text-sm text-white/55">
+                  {tt("settings.search.noResults")}
+                </p>
+              ) : (
               <div className="max-h-[clamp(220px,45vh,520px)] overflow-y-auto pr-1 space-y-3">
-              {onCheckUpdate && (
+              {onCheckUpdate && showSetting("launcher.updates") && (
                 <div className={`${SETTINGS_DARK_BOX} space-y-2`}>
                   <span className="text-xs font-semibold uppercase tracking-wider text-white/60">
                     {tt("settings.card.updates")}
@@ -2363,10 +2712,27 @@ export function SettingsTab({
                   )}
                 </div>
               )}
+              {(
+                !settingsSearchActive ||
+                showSetting("launcher.openOnProfiles") ||
+                showSetting("launcher.uiSounds") ||
+                showSetting("launcher.minimizeToTray") ||
+                showSetting("launcher.autostart") ||
+                showSetting("launcher.splitView") ||
+                showSetting("launcher.disableAnimations") ||
+                showSetting("launcher.language") ||
+                showSetting("launcher.accentColor") ||
+                showSetting("launcher.backgroundImage") ||
+                showSetting("launcher.backgroundBlur") ||
+                showSetting("launcher.sidebarPosition") ||
+                showSetting("launcher.sidebarOrder") ||
+                showSetting("launcher.resetSettings")
+              ) && (
               <div className={`${SETTINGS_DARK_BOX} space-y-4`}>
                 <span className="text-xs font-semibold uppercase tracking-wider text-white/60">
                   {tt("settings.card.customization")}
                 </span>
+                {showSetting("launcher.openOnProfiles") && (
                 <SettingsToggle
                   label={tt("settings.launcher.openOnProfilesTab.label")}
                   yesLabel={tt("settings.launcher.openOnProfilesTab.yes")}
@@ -2376,6 +2742,8 @@ export function SettingsTab({
                     updateSettings({ open_launcher_on_profiles_tab: value })
                   }
                 />
+                )}
+                {showSetting("launcher.uiSounds") && (
                 <SettingsToggle
                   label={tt("settings.launcher.uiSounds.label")}
                   yesLabel={tt("settings.common.toggle.on")}
@@ -2383,6 +2751,8 @@ export function SettingsTab({
                   value={settings?.ui_sounds_enabled ?? true}
                   onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
                 />
+                )}
+                {showSetting("launcher.minimizeToTray") && (
                 <SettingsToggle
                   label={tt("settings.launcher.minimizeToTray.label")}
                   yesLabel={tt("settings.common.toggle.on")}
@@ -2390,6 +2760,8 @@ export function SettingsTab({
                   value={settings?.minimize_to_tray_on_close ?? false}
                   onChange={(v) => updateSettings({ minimize_to_tray_on_close: v })}
                 />
+                )}
+                {showSetting("launcher.autostart") && (
                 <SettingsToggle
                   label={tt("settings.launcher.autostart.label")}
                   yesLabel={tt("settings.common.toggle.on")}
@@ -2397,6 +2769,8 @@ export function SettingsTab({
                   value={settings?.autostart_enabled ?? false}
                   onChange={(v) => updateSettings({ autostart_enabled: v })}
                 />
+                )}
+                {showSetting("launcher.splitView") && (
                 <SettingsToggle
                   label={tt("settings.launcher.splitView.label")}
                   yesLabel={tt("settings.common.toggle.on")}
@@ -2404,6 +2778,8 @@ export function SettingsTab({
                   value={settings?.split_view_enabled ?? false}
                   onChange={(v) => updateSettings({ split_view_enabled: v })}
                 />
+                )}
+                {showSetting("launcher.disableAnimations") && (
                 <SettingsToggle
                   label={tt("settings.launcher.disableAnimations.label")}
                   yesLabel={tt("settings.common.yes")}
@@ -2411,6 +2787,8 @@ export function SettingsTab({
                   value={settings?.animations_disabled ?? false}
                   onChange={(v) => updateSettings({ animations_disabled: v })}
                 />
+                )}
+                {showSetting("launcher.language") && (
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-white/90">
                     {tt("settings.launcher.interfaceLanguage.label")}
@@ -2445,6 +2823,8 @@ export function SettingsTab({
                     ))}
                   </div>
                 </div>
+                )}
+                {showSetting("launcher.accentColor") && (
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-white/90">
                     {tt("settings.launcher.accentColor.label")}
@@ -2624,7 +3004,11 @@ export function SettingsTab({
                     )}
                   </div>
                 </div>
+                )}
+                {(showSetting("launcher.backgroundImage") || showSetting("launcher.backgroundBlur")) && (
                 <div className="flex flex-col gap-1.5">
+                  {showSetting("launcher.backgroundImage") && (
+                  <>
                   <label className="text-sm text-white/90">
                     {tt("settings.launcher.backgroundImage.label")}
                   </label>
@@ -2685,6 +3069,9 @@ export function SettingsTab({
                   <p className="text-[11px] text-white/45">
                     {tt("settings.launcher.backgroundImage.hint")}
                   </p>
+                  </>
+                  )}
+                  {showSetting("launcher.backgroundBlur") && (
                   <SettingsToggle
                     label={tt("settings.launcher.backgroundBlur.label")}
                     yesLabel={tt("settings.common.toggle.on")}
@@ -2692,7 +3079,10 @@ export function SettingsTab({
                     value={settings?.background_blur_enabled ?? true}
                     onChange={(v) => updateSettings({ background_blur_enabled: v })}
                   />
+                  )}
                 </div>
+                )}
+                {showSetting("launcher.sidebarPosition") && (
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-sm text-white/90">
                     {tt("settings.launcher.sidebarPosition.label")}
@@ -2748,6 +3138,8 @@ export function SettingsTab({
                     </AnimatePresence>
                   </div>
                 </div>
+                )}
+                {showSetting("launcher.sidebarOrder") && (
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm text-white/90">
                     {tt("settings.launcher.sidebarOrder.label")}
@@ -2791,6 +3183,8 @@ export function SettingsTab({
                     ))}
                   </div>
                 </div>
+                )}
+                {showSetting("launcher.resetSettings") && (
                 <button
                   type="button"
                   onClick={() => void handleResetSettings()}
@@ -2799,7 +3193,10 @@ export function SettingsTab({
                 >
                   {tt("settings.launcher.resetSettings.button")}
                 </button>
+                )}
               </div>
+              )}
+              {showSetting("launcher.cache") && (
               <div className={SETTINGS_DARK_BOX}>
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex flex-col">
@@ -2827,6 +3224,8 @@ export function SettingsTab({
                     </button>
                   </div>
               </div>
+              )}
+              {showSetting("launcher.backup") && (
               <div className={`${SETTINGS_DARK_BOX} space-y-2`}>
                     <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">
                       {tt("settings.launcher.backup.title")}
@@ -2857,8 +3256,12 @@ export function SettingsTab({
                       {tt("settings.launcher.backup.hint")}
                     </div>
               </div>
+              )}
               </div>
+              )}
             </SettingsCard>
+          )}
+          </>
           )}
 
           </div>

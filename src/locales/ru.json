@@ -92,6 +92,10 @@
         "off": "Нет"
       }
     },
+    "search": {
+      "placeholder": "Поиск настроек…",
+      "noResults": "Ничего не найдено."
+    },
     "tab": {
       "directories": "Директории",
       "game": "Игра",
