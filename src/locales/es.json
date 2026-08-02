@@ -92,6 +92,10 @@
         "off": "Apagado"
       }
     },
+    "search": {
+      "placeholder": "Buscar ajustes…",
+      "noResults": "No se encontraron ajustes."
+    },
     "tab": {
       "directories": "Directorios",
       "game": "Juego",
