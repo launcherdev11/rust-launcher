@@ -6,6 +6,7 @@ export type UserPublicProfile = {
   nickname: string;
   is_sponsor?: boolean;
   ely_username?: string | null;
+  mc_uuid?: string | null;
 };
 
 export async function fetchUserProfile(userId: string): Promise<UserPublicProfile> {

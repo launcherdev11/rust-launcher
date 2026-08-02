@@ -63,6 +63,10 @@ coverage/
 tarpaulin-report.html
 *.profraw
 
+#packaged backend snapshots (local only)
+*.tar.gz
+backend-*.tar.gz
+
 #frontend/tooling caches
 .cache/
 .turbo/
