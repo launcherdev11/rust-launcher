@@ -4,6 +4,7 @@ import { ensureValidAccessToken } from "./auth";
 export type UserPublicProfile = {
   user_id: string;
   nickname: string;
+  is_sponsor?: boolean;
   ely_username?: string | null;
 };
 

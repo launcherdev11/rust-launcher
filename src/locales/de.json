@@ -12,6 +12,7 @@
     "add": "Hinzufügen",
     "rename": "Umbenennen",
     "browse": "Durchsuchen",
+    "sponsor": "Sponsor",
     "format": {
       "modsCount": "Mods: {{count}}",
       "playtimeHoursMinutes": "{{h}}h {{m}}m",
@@ -1045,6 +1046,7 @@
       "accountSettingsTitle": "Kontoeinstellungen",
       "editNickname": "Spitzname bearbeiten",
       "nicknamePlaceholder": "Spieler",
+      "systemNicknameSignedOut": "Nicht bei 16Launcher angemeldet",
       "signedInAsPrefix": "Angemeldet als:",
       "hint": "Konfigurieren Sie Ihr Profil und Ihr Erscheinungsbild, nachdem Sie sich angemeldet haben.",
       "microsoftSignIn": "Melden Sie sich bei Microsoft an",

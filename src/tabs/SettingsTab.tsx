@@ -14,7 +14,7 @@ const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
 
 type SettingsTabId = "game" | "versions" | "launcher";
 
-type SidebarItemId = "play" | "settings" | "friends" | "rooms" | "mods" | "modpacks";
+type SidebarItemId = "play" | "settings" | "mods" | "modpacks";
 
 type Settings = {
   game_directory: string | null;
@@ -1285,7 +1285,7 @@ export function SettingsTab({
       }
       const defaults = await invoke<Settings>("reset_settings_to_default");
       updateSettings(defaults);
-      setSidebarOrder(["play", "settings", "friends", "rooms", "mods", "modpacks"]);
+      setSidebarOrder(["play", "settings", "mods", "modpacks"]);
       try {
         window.localStorage.removeItem("sidebar_order");
       } catch {
@@ -1353,8 +1353,6 @@ export function SettingsTab({
             (x): x is SidebarItemId =>
               x === "play" ||
               x === "settings" ||
-              x === "friends" ||
-              x === "rooms" ||
               x === "mods" ||
               x === "modpacks",
           );
@@ -2766,13 +2764,9 @@ export function SettingsTab({
                               ? "app.sidebar.play"
                               : id === "settings"
                                 ? "app.sidebar.settings"
-                                : id === "friends"
-                                  ? "app.sidebar.friends"
-                                  : id === "rooms"
-                                    ? "app.sidebar.rooms"
-                                    : id === "mods"
-                                      ? "app.sidebar.mods"
-                                      : "app.sidebar.modpacks",
+                                : id === "mods"
+                                  ? "app.sidebar.mods"
+                                  : "app.sidebar.modpacks",
                           )}
                         </span>
                         <div className="flex items-center gap-1">

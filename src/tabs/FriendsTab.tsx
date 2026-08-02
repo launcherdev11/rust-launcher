@@ -18,7 +18,8 @@ import {
 import { getStoredAccessToken } from "../api/client";
 import { ApiError } from "../api/client";
 import { useT, type Language } from "../i18n";
-import { buildInitialAvatarDataUrl, getElyAvatarByUsername } from "../lib/avatar";
+import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
+import { NicknameWithSponsor } from "../components/SponsorBadge";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -226,27 +227,30 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
 
   useEffect(() => {
     let isCancelled = false;
-    const elyNicknames = Array.from(
-      new Set(
-        [
-          ...friends.map((f) => f.ely_username ?? ""),
-          ...incomingRequests.map((r) => r.from_ely_username ?? ""),
-        ]
-          .map((nick) => nick.trim())
-          .filter((nick) => nick.length > 0),
-      ),
-    );
-    if (elyNicknames.length === 0) {
+    const targets = [
+      ...friends.map((f) => ({
+        nickname: f.nickname,
+        ely_username: f.ely_username,
+        mc_uuid: f.mc_uuid,
+      })),
+      ...incomingRequests.map((r) => ({
+        nickname: r.from_nickname,
+        ely_username: r.from_ely_username,
+        mc_uuid: r.from_mc_uuid,
+      })),
+    ].filter((t) => t.ely_username?.trim() || t.mc_uuid?.trim());
+
+    if (targets.length === 0) {
       setFriendAvatarByKey({});
       return;
     }
 
     void (async () => {
       const entries = await Promise.all(
-        elyNicknames.map(async (elyUsername) => {
-          const fallback = buildInitialAvatarDataUrl(elyUsername);
-          const src = await getElyAvatarByUsername(elyUsername, fallback, 64);
-          return [elyUsername.toLowerCase(), src] as const;
+        targets.map(async (target) => {
+          const key = userListAvatarCacheKey(target);
+          const src = await getUserListAvatarSrc(target, 64);
+          return [key, src] as const;
         }),
       );
       if (!isCancelled) {
@@ -277,9 +281,13 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     });
   }, [friends, presenceByUserId, searchQuery]);
 
-  const avatarFor = (elyUsername: string | null | undefined, nickname: string) =>
-    (elyUsername ? friendAvatarByKey[elyUsername.trim().toLowerCase()] : undefined) ??
-    buildInitialAvatarDataUrl(nickname);
+  const avatarFor = (input: {
+    nickname: string;
+    ely_username?: string | null;
+    mc_uuid?: string | null;
+  }) =>
+    friendAvatarByKey[userListAvatarCacheKey(input)] ??
+    buildInitialAvatarDataUrl(input.nickname);
 
   return (
     <div className="flex w-full max-w-2xl flex-col items-center gap-6 py-6">
@@ -333,15 +341,23 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <img
-                            src={avatarFor(r.from_ely_username, r.from_nickname)}
+                            src={avatarFor({
+                              nickname: r.from_nickname,
+                              ely_username: r.from_ely_username,
+                              mc_uuid: r.from_mc_uuid,
+                            })}
                             alt=""
-                            className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                            className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
                             draggable={false}
                             onError={(event) => {
                               event.currentTarget.src = buildInitialAvatarDataUrl(r.from_nickname);
                             }}
                           />
-                          <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
+                          <NicknameWithSponsor
+                            nickname={r.from_nickname}
+                            isSponsor={r.from_is_sponsor}
+                            sponsorTitle={tt("common.sponsor")}
+                          />
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -413,9 +429,13 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                           <div className="flex min-w-0 items-center gap-3">
                             <div className="relative shrink-0">
                               <img
-                                src={avatarFor(f.ely_username, f.nickname)}
+                                src={avatarFor({
+                                  nickname: f.nickname,
+                                  ely_username: f.ely_username,
+                                  mc_uuid: f.mc_uuid,
+                                })}
                                 alt=""
-                                className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20"
+                                className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
                                 draggable={false}
                                 onError={(event) => {
                                   event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
@@ -428,7 +448,11 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
                               />
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-white/90">{f.nickname}</p>
+                              <NicknameWithSponsor
+                                nickname={f.nickname}
+                                isSponsor={f.is_sponsor}
+                                sponsorTitle={tt("common.sponsor")}
+                              />
                               <p
                                 className={`text-xs ${
                                   online ? "text-emerald-300/80" : "text-white/40"

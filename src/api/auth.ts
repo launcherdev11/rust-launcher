@@ -18,6 +18,7 @@ export type PlatformUser = {
   id: string;
   nickname: string;
   email: string;
+  is_sponsor?: boolean;
 };
 
 export const API_AUTH_CHANGED_EVENT = "mc16launcher:api-auth-changed";
