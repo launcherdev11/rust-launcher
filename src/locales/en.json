@@ -12,6 +12,7 @@
     "add": "Add",
     "rename": "Rename",
     "browse": "Browse",
+    "sponsor": "Sponsor",
     "format": {
       "modsCount": "Mods: {{count}}",
       "playtimeHoursMinutes": "{{h}}h {{m}}m",
@@ -1022,6 +1023,7 @@
       "accountSettingsTitle": "Account settings",
       "editNickname": "Edit nickname",
       "nicknamePlaceholder": "Player",
+      "systemNicknameSignedOut": "Not signed in to 16Launcher",
       "signedInAsPrefix": "Signed in as: ",
       "hint": "Configure your profile and appearance after you sign in.",
       "microsoftSignIn": "Sign in with Microsoft",

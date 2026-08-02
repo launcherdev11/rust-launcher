@@ -4,14 +4,18 @@ import { ensureValidAccessToken } from "./auth";
 export type FriendRow = {
   user_id: string;
   nickname: string;
+  is_sponsor?: boolean;
   ely_username?: string | null;
+  mc_uuid?: string | null;
 };
 
 export type IncomingRequestRow = {
   request_id: string;
   from_user_id: string;
   from_nickname: string;
+  from_is_sponsor?: boolean;
   from_ely_username?: string | null;
+  from_mc_uuid?: string | null;
   created_at?: string;
 };
 

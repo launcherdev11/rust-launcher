@@ -314,17 +314,61 @@ export async function getAvatarSrc(
     }
   }
 
-  const elyKeyRaw = resolveAvatarKey(profile);
-  if (elyKeyRaw) {
-    const src = await getElyAvatarByUsername(elyKeyRaw, fallbackSrc, size);
+  const elyUsername = profile.ely_username?.trim();
+  if (elyUsername) {
+    const src = await getElyAvatarByUsername(elyUsername, fallbackSrc, size);
     if (src !== fallbackSrc) return src;
   }
 
   const mcUuid = profile.mc_uuid?.trim();
   if (mcUuid) {
+    const cacheKey = `mc:${normalizeCacheKey(mcUuid)}`;
+    const cached = getCachedAvatarSrc(cacheKey);
+    if (cached) return cached;
     const avatarSrc = await fetchMcAvatarViaBackend(mcUuid);
-    if (avatarSrc) return avatarSrc;
+    if (avatarSrc) {
+      putCache(cacheKey, avatarSrc);
+      return avatarSrc;
+    }
   }
 
   return fallbackSrc;
+}
+
+/** Avatar for friends / room members: Ely skin, then Microsoft head, else initials. */
+export async function getUserListAvatarSrc(
+  input: {
+    nickname: string;
+    ely_username?: string | null;
+    mc_uuid?: string | null;
+  },
+  size: number = 64,
+): Promise<string> {
+  const nickname = input.nickname.trim() || "?";
+  const fallback = buildInitialAvatarDataUrl(nickname);
+  const elyUsername = input.ely_username?.trim() || null;
+  const mcUuid = input.mc_uuid?.trim() || null;
+  if (!elyUsername && !mcUuid) return fallback;
+  return getAvatarSrc(
+    {
+      nickname,
+      ely_username: elyUsername,
+      ely_uuid: null,
+      mc_uuid: mcUuid,
+    },
+    fallback,
+    size,
+  );
+}
+
+export function userListAvatarCacheKey(input: {
+  ely_username?: string | null;
+  mc_uuid?: string | null;
+  nickname: string;
+}): string {
+  const ely = input.ely_username?.trim().toLowerCase();
+  if (ely) return `ely:${ely}`;
+  const mc = input.mc_uuid?.trim().toLowerCase().replace(/-/g, "");
+  if (mc) return `mc:${mc}`;
+  return `nick:${input.nickname.trim().toLowerCase() || "?"}`;
 }

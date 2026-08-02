@@ -23,10 +23,17 @@ import {
 import { WS_EVENT, type WsEvent } from "../api/ws";
 import { useRoomPeerSession } from "../hooks/useRoomPeerSession";
 import { useT, type Language } from "../i18n";
-import { buildInitialAvatarDataUrl } from "../lib/avatar";
+import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
+import { NicknameWithSponsor } from "../components/SponsorBadge";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
+
+type AvatarTarget = {
+  nickname: string;
+  ely_username?: string | null;
+  mc_uuid?: string | null;
+};
 
 type RoomsTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
@@ -59,7 +66,15 @@ function statusTone(status: string): string {
   return "bg-white/10 text-white/60 ring-white/15";
 }
 
-function MemberAvatars({ members, max = 4 }: { members: RoomMember[]; max?: number }) {
+function MemberAvatars({
+  members,
+  avatarSrcFor,
+  max = 4,
+}: {
+  members: RoomMember[];
+  avatarSrcFor: (member: AvatarTarget) => string;
+  max?: number;
+}) {
   const shown = members.slice(0, max);
   const extra = Math.max(0, members.length - shown.length);
   return (
@@ -67,12 +82,15 @@ function MemberAvatars({ members, max = 4 }: { members: RoomMember[]; max?: numb
       {shown.map((m, i) => (
         <img
           key={m.user_id}
-          src={buildInitialAvatarDataUrl(m.nickname)}
+          src={avatarSrcFor(m)}
           alt=""
-          title={m.nickname}
-          className="h-7 w-7 rounded-full object-cover ring-2 ring-black/70"
+          title={m.is_sponsor ? `${m.nickname} ★` : m.nickname}
+          className="h-7 w-7 rounded-full object-cover ring-2 ring-black/70 [image-rendering:pixelated]"
           style={{ marginLeft: i === 0 ? 0 : -8 }}
           draggable={false}
+          onError={(event) => {
+            event.currentTarget.src = buildInitialAvatarDataUrl(m.nickname);
+          }}
         />
       ))}
       {extra > 0 ? (
@@ -117,6 +135,7 @@ export function RoomsTab({
   const [joinRoomId, setJoinRoomId] = useState("");
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [inviteNickname, setInviteNickname] = useState("");
+  const [avatarByKey, setAvatarByKey] = useState<Record<string, string>>({});
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -477,6 +496,52 @@ export function RoomsTab({
     return friends.filter((f) => !memberIds.has(f.user_id));
   }, [friends, selectedRoom]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const targets: AvatarTarget[] = [];
+    const pushUnique = (target: AvatarTarget) => {
+      if (!target.ely_username?.trim() && !target.mc_uuid?.trim()) return;
+      const key = userListAvatarCacheKey(target);
+      if (targets.some((t) => userListAvatarCacheKey(t) === key)) return;
+      targets.push(target);
+    };
+
+    for (const room of [...rooms, ...friendsRooms]) {
+      for (const m of room.members ?? []) {
+        pushUnique(m);
+      }
+    }
+    for (const f of friends) {
+      pushUnique(f);
+    }
+
+    if (targets.length === 0) {
+      setAvatarByKey({});
+      return;
+    }
+
+    void (async () => {
+      const entries = await Promise.all(
+        targets.map(async (target) => {
+          const key = userListAvatarCacheKey(target);
+          const src = await getUserListAvatarSrc(target, 64);
+          return [key, src] as const;
+        }),
+      );
+      if (!cancelled) setAvatarByKey(Object.fromEntries(entries));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rooms, friendsRooms, friends]);
+
+  const avatarSrcFor = useCallback(
+    (target: AvatarTarget) =>
+      avatarByKey[userListAvatarCacheKey(target)] ?? buildInitialAvatarDataUrl(target.nickname),
+    [avatarByKey],
+  );
+
   const p2pReady = peerLink.status === "connected" && peerLink.channelOpen;
 
   const p2pStatusLabel = (() => {
@@ -533,7 +598,7 @@ export function RoomsTab({
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <MemberAvatars members={members} />
+          <MemberAvatars members={members} avatarSrcFor={avatarSrcFor} />
           <span
             className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
               owned
@@ -567,10 +632,17 @@ export function RoomsTab({
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <img
-              src={buildInitialAvatarDataUrl(ownerNick)}
+              src={avatarSrcFor({
+                nickname: ownerNick,
+                ely_username: owner?.ely_username,
+                mc_uuid: owner?.mc_uuid,
+              })}
               alt=""
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+              className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
               draggable={false}
+              onError={(event) => {
+                event.currentTarget.src = buildInitialAvatarDataUrl(ownerNick);
+              }}
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white/90">{ownerNick}</p>
@@ -587,7 +659,7 @@ export function RoomsTab({
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <MemberAvatars members={members} />
+          <MemberAvatars members={members} avatarSrcFor={avatarSrcFor} />
           <p className="text-xs text-white/45">
             {tt("rooms.players", { count: room.member_count, max: room.max_players })}
           </p>
@@ -781,13 +853,20 @@ export function RoomsTab({
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <img
-                        src={buildInitialAvatarDataUrl(m.nickname)}
+                        src={avatarSrcFor(m)}
                         alt=""
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
                         draggable={false}
+                        onError={(event) => {
+                          event.currentTarget.src = buildInitialAvatarDataUrl(m.nickname);
+                        }}
                       />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white/90">{m.nickname}</p>
+                        <NicknameWithSponsor
+                          nickname={m.nickname}
+                          isSponsor={m.is_sponsor}
+                          sponsorTitle={tt("common.sponsor")}
+                        />
                         <p className="text-xs text-white/45">
                           {m.role === "owner" ? tt("rooms.role.owner") : tt("rooms.role.member")}
                         </p>
@@ -823,14 +902,20 @@ export function RoomsTab({
                         >
                           <div className="flex min-w-0 items-center gap-2.5">
                             <img
-                              src={buildInitialAvatarDataUrl(f.nickname)}
+                              src={avatarSrcFor(f)}
                               alt=""
-                              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
                               draggable={false}
+                              onError={(event) => {
+                                event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+                              }}
                             />
-                            <span className="truncate text-sm font-semibold text-white/90">
-                              {f.nickname}
-                            </span>
+                            <NicknameWithSponsor
+                              nickname={f.nickname}
+                              isSponsor={f.is_sponsor}
+                              sponsorTitle={tt("common.sponsor")}
+                              as="span"
+                            />
                           </div>
                           <button
                             type="button"

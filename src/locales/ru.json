@@ -12,6 +12,7 @@
     "add": "Добавить",
     "rename": "Переименовать",
     "browse": "Обзор",
+    "sponsor": "Спонсор",
     "format": {
       "modsCount": "Модов: {{count}}",
       "playtimeHoursMinutes": "{{h}}ч {{m}}м",
@@ -1022,6 +1023,7 @@
       "accountSettingsTitle": "Настройки аккаунта",
       "editNickname": "Редактировать никнейм",
       "nicknamePlaceholder": "Игрок",
+      "systemNicknameSignedOut": "Не выполнен вход в 16Launcher",
       "signedInAsPrefix": "Вход: ",
       "hint": "Войдите в систему.",
       "microsoftSignIn": "Войти через Microsoft",

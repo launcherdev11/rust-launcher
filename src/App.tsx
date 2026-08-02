@@ -109,6 +109,7 @@ type Profile = {
   ely_uuid: string | null;
   ms_id_token: string | null;
   mc_uuid: string | null;
+  mc_username: string | null;
 };
 
 type LauncherAccountSummary = {
@@ -212,8 +213,8 @@ type InstanceProfileCard = InstanceProfileSummary & {
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
   settings: "/launcher-assets/settings.png",
-  friends: "/launcher-assets/favorite.png",
-  rooms: "/launcher-assets/move.png",
+  friends: "/launcher-assets/group.png",
+  rooms: "/launcher-assets/room.png",
   mods: "/launcher-assets/mods.png",
   modpacks: "/launcher-assets/modpack_icon.png",
 };
@@ -601,15 +602,18 @@ const REMOTE_NOTIFICATIONS_URLS = [
 const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
 const TELEGRAM_LINK = "https://t.me/of16launcher";
 
-const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "friends", "rooms", "mods", "modpacks"];
+const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
 
 const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
   { id: "play", labelKey: "app.sidebar.play" },
   { id: "settings", labelKey: "app.sidebar.settings" },
-  { id: "friends", labelKey: "app.sidebar.friends" },
-  { id: "rooms", labelKey: "app.sidebar.rooms" },
   { id: "mods", labelKey: "app.sidebar.mods" },
   { id: "modpacks", labelKey: "app.sidebar.modpacks" },
+];
+
+const BOTTOM_SIDEBAR_ITEMS: { id: SidebarItemId; labelKey: string }[] = [
+  { id: "rooms", labelKey: "app.sidebar.rooms" },
+  { id: "friends", labelKey: "app.sidebar.friends" },
 ];
 
 function PlayIcon() {
@@ -892,6 +896,7 @@ function App() {
     ely_uuid: null,
     ms_id_token: null,
     mc_uuid: null,
+    mc_username: null,
   });
   const [elyLoading, setElyLoading] = useState(false);
   const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
@@ -1305,11 +1310,13 @@ function App() {
       cancelled = true;
     };
   }, []);
-  const isAuthorized = !!profile.ms_id_token || !!profile.ely_username;
+  // Игровой ник: Ely/MS перекрывают офлайн-ник. Системный аккаунт 16Launcher на это не влияет.
+  const isAuthorized = !!profile.ely_username?.trim() || !!profile.mc_username?.trim();
   const displayedNickname =
-    profile.nickname.trim() !== ""
-      ? profile.nickname
-      : profile.ely_username ?? "";
+    profile.ely_username?.trim() ||
+    profile.mc_username?.trim() ||
+    profile.nickname.trim() ||
+    "";
   const activeAccountFromList = launcherAccounts.find((a) => a.is_active);
   const activeAccountId = activeAccountFromList?.id ?? null;
   const activeAccountLabel =
@@ -2924,7 +2931,7 @@ function App() {
 
   const loadProfile = useCallback(async () => {
     try {
-      const p = await invoke<Profile>("get_profile");
+      const p = await invoke<Profile & { mc_username?: string | null }>("get_profile");
       const nick = p.nickname ?? "";
       setProfile({
         nickname: nick,
@@ -2932,6 +2939,7 @@ function App() {
         ely_uuid: p.ely_uuid ?? null,
         ms_id_token: p.ms_id_token ?? null,
         mc_uuid: p.mc_uuid ?? null,
+        mc_username: p.mc_username ?? null,
       });
       lastPersistedNickNormRef.current = normalizeNicknameForSecretCheck(nick);
     } catch {
@@ -2941,6 +2949,7 @@ function App() {
         ely_uuid: null,
         ms_id_token: null,
         mc_uuid: null,
+        mc_username: null,
       });
       lastPersistedNickNormRef.current = "";
     }
@@ -3008,7 +3017,7 @@ function App() {
       unlistenFail?.();
     };
     try {
-      unlistenOk = await listen<Profile>("ely-login-complete", (e) => {
+      unlistenOk = await listen<Profile & { mc_username?: string | null }>("ely-login-complete", (e) => {
         const p = e.payload;
         setProfile({
           nickname: p.nickname ?? "",
@@ -3016,6 +3025,7 @@ function App() {
           ely_uuid: p.ely_uuid ?? null,
           ms_id_token: p.ms_id_token ?? null,
           mc_uuid: p.mc_uuid ?? null,
+          mc_username: p.mc_username ?? null,
         });
         void refreshLauncherAccounts();
         setElyLoading(false);
@@ -4854,10 +4864,42 @@ function App() {
           <div
             className={
               sidebarHorizontal
-                ? "flex shrink-0 items-center border-l border-white/10 pl-4"
-                : "border-t border-white/10 pt-4"
+                ? "flex shrink-0 items-center gap-3 border-l border-white/10 pl-4"
+                : "flex flex-col gap-3 border-t border-white/10 pt-4"
             }
           >
+            {BOTTOM_SIDEBAR_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveItemWithSound(item.id)}
+                title={tt(item.labelKey)}
+                ref={(el) => {
+                  sidebarButtonRefs.current[item.id] = el;
+                }}
+                className={`interactive-press group relative flex items-center justify-center ${
+                  sidebarHorizontal ? "" : "w-full"
+                }`}
+              >
+                <div
+                  className={`sidebar-icon flex items-center justify-center ${
+                    sidebarHorizontal ? "" : "ml-2"
+                  } ${
+                    activeItem === item.id
+                      ? "sidebar-icon-active"
+                      : "bg-black/40 hover:bg-black/70"
+                  }`}
+                >
+                  {SIDEBAR_ICON_PATHS[item.id] ? (
+                    <img
+                      src={SIDEBAR_ICON_PATHS[item.id]}
+                      alt=""
+                      className="h-7 w-7 object-contain"
+                    />
+                  ) : null}
+                </div>
+              </button>
+            ))}
             <button
               type="button"
               onClick={() => setActiveItemWithSound("accounts")}

@@ -15,12 +15,14 @@ import {
 } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
 import { useT, type Language } from "../i18n";
+import { NicknameWithSponsor } from "../components/SponsorBadge";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
 
 export type LauncherProfileLite = {
   launcher_nickname: string | null;
+  offline_nickname?: string | null;
   ely_username: string | null;
   microsoft_username: string | null;
   ely_uuid: string | null;
@@ -96,11 +98,12 @@ export function PlatformAccountPanel({
   const [linking, setLinking] = useState<null | "ely" | "minecraft">(null);
   const [linkedProviders, setLinkedProviders] = useState({ ely: false, minecraft: false });
 
-  const launcherNickname = launcherProfile.launcher_nickname?.trim() || platformUser?.nickname || "";
+  const launcherNickname = platformUser?.nickname?.trim() || launcherProfile.launcher_nickname?.trim() || "";
   const gameNickname =
     launcherProfile.ely_username?.trim() ||
     launcherProfile.microsoft_username?.trim() ||
-    launcherNickname;
+    launcherProfile.offline_nickname?.trim() ||
+    "";
 
   const syncFromStorage = () => {
     const token = getStoredAccessToken() ?? "";
@@ -514,9 +517,12 @@ export function PlatformAccountPanel({
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
                 {tt("platform.launcherNickname")}
               </p>
-              <p className="mt-0.5 truncate text-sm font-semibold text-emerald-100/95">
-                {launcherNickname || "—"}
-              </p>
+              <NicknameWithSponsor
+                nickname={launcherNickname || "—"}
+                isSponsor={platformUser?.is_sponsor}
+                sponsorTitle={tt("common.sponsor")}
+                className="mt-0.5 truncate text-sm font-semibold text-emerald-100/95"
+              />
               <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/45">
                 {tt("platform.inGameNickname")}
               </p>

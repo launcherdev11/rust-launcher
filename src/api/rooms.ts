@@ -5,6 +5,9 @@ export type RoomMember = {
   user_id: string;
   nickname: string;
   role: string;
+  is_sponsor?: boolean;
+  ely_username?: string | null;
+  mc_uuid?: string | null;
   joined_at?: string;
 };
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccountAvatar } from "../components/account_avatar";
 import { AccountSkinPreview } from "../components/account_skin_preview";
 import { DeleteIcon } from "../components/delete_icon";
@@ -7,6 +7,9 @@ import type { ProfileAvatarInput } from "../lib/avatar";
 import { PlatformAccountPanel } from "./PlatformAccountPanel";
 import { AchievementsPanel } from "../components/AchievementsPanel";
 import { PlatformNotificationsPanel } from "../components/PlatformNotificationsPanel";
+import { API_AUTH_CHANGED_EVENT, API_NICKNAME_KEY, fetchMe } from "../api/auth";
+import { NicknameWithSponsor } from "../components/SponsorBadge";
+import { getStoredAccessToken } from "../api/client";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -24,6 +27,7 @@ export type LauncherProfile = {
   ely_uuid: string | null;
   ms_id_token: string | null;
   mc_uuid: string | null;
+  mc_username: string | null;
 };
 
 type AccountsTabProps = {
@@ -145,6 +149,40 @@ export function AccountsTab({
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
   const [headerNicknameEditing, setHeaderNicknameEditing] = useState(false);
   const nicknameInputFocusedRef = useRef(false);
+  const [systemNickname, setSystemNickname] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(API_NICKNAME_KEY)?.trim() || "";
+  });
+  const [systemIsSponsor, setSystemIsSponsor] = useState(false);
+
+  useEffect(() => {
+    const syncSystemNickname = () => {
+      const token = getStoredAccessToken();
+      if (!token) {
+        setSystemIsSponsor(false);
+        setSystemNickname("");
+        return;
+      }
+      const cached = window.localStorage.getItem(API_NICKNAME_KEY)?.trim() || "";
+      if (cached) setSystemNickname(cached);
+      void fetchMe(token)
+        .then((me) => {
+          setSystemNickname(me.nickname?.trim() || "");
+          setSystemIsSponsor(!!me.is_sponsor);
+          if (me.nickname) window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
+        })
+        .catch(() => {
+          /* keep cached nick */
+        });
+    };
+    syncSystemNickname();
+    window.addEventListener(API_AUTH_CHANGED_EVENT, syncSystemNickname);
+    window.addEventListener("storage", syncSystemNickname);
+    return () => {
+      window.removeEventListener(API_AUTH_CHANGED_EVENT, syncSystemNickname);
+      window.removeEventListener("storage", syncSystemNickname);
+    };
+  }, []);
 
   const confirmRemoveAccount = async () => {
     const accountId = pendingRemoveAccountId;
@@ -163,6 +201,10 @@ export function AccountsTab({
     setProfile((p) => ({ ...p, nickname: trimmed }));
     if (trimmed !== prevNick) await onSaveNickname(trimmed);
   };
+
+  const offlineNickname = profile.nickname.trim();
+  const gameNicknameDisplay =
+    displayedNickname.trim() || tt("app.accounts.nicknamePlaceholder");
 
   return (
     <>
@@ -185,7 +227,26 @@ export function AccountsTab({
                 />
               </button>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
+                  {tt("platform.launcherNickname")}
+                </p>
+                {systemNickname ? (
+                  <NicknameWithSponsor
+                    nickname={systemNickname}
+                    isSponsor={systemIsSponsor}
+                    sponsorTitle={tt("common.sponsor")}
+                    className="mt-0.5 truncate text-xl font-semibold text-emerald-100/90"
+                    as="p"
+                  />
+                ) : (
+                  <p className="mt-0.5 truncate text-xl text-white/40">
+                    {tt("app.accounts.systemNicknameSignedOut")}
+                  </p>
+                )}
+                <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
+                  {tt("platform.inGameNickname")}
+                </p>
+                <div className="mt-0.5 flex items-center gap-2">
                   {headerNicknameEditing && !isAuthorized ? (
                     <input
                       type="text"
@@ -203,17 +264,18 @@ export function AccountsTab({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") e.currentTarget.blur();
                         if (e.key === "Escape") {
-                          setNicknameDraft(profile.nickname);
+                          setNicknameDraft(offlineNickname);
+                          setProfile((p) => ({ ...p, nickname: offlineNickname }));
                           setHeaderNicknameEditing(false);
                         }
                       }}
-                      className="min-w-0 flex-1 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none"
+                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none"
                       placeholder={tt("app.accounts.nicknamePlaceholder")}
                     />
                   ) : (
-                    <h1 className="truncate text-xl font-semibold text-white/95">
-                      {displayedNickname.trim() || tt("app.accounts.nicknamePlaceholder")}
-                    </h1>
+                    <p className="truncate text-sm font-semibold text-white/95">
+                      {gameNicknameDisplay}
+                    </p>
                   )}
                   {!isAuthorized && !headerNicknameEditing ? (
                     <button
@@ -226,9 +288,6 @@ export function AccountsTab({
                     </button>
                   ) : null}
                 </div>
-                {profile.ely_username && profile.ely_username !== displayedNickname ? (
-                  <p className="mt-0.5 truncate text-xs text-white/55">{profile.ely_username}</p>
-                ) : null}
               </div>
             </div>
 
@@ -474,9 +533,10 @@ export function AccountsTab({
                 showNotification={showNotification}
                 language={language}
                 launcherProfile={{
-                  launcher_nickname: profile.nickname?.trim() || null,
+                  launcher_nickname: null,
+                  offline_nickname: profile.nickname?.trim() || null,
                   ely_username: profile.ely_username,
-                  microsoft_username: profile.mc_uuid ? profile.nickname : null,
+                  microsoft_username: profile.mc_username,
                   ely_uuid: profile.ely_uuid,
                   mc_uuid: profile.mc_uuid,
                 }}

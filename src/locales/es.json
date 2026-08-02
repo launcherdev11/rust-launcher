@@ -12,6 +12,7 @@
     "add": "Agregar",
     "rename": "Rebautizar",
     "browse": "Navegar",
+    "sponsor": "Patrocinador",
     "format": {
       "modsCount": "Modificaciones: {{count}}",
       "playtimeHoursMinutes": "{{h}}h {{m}}m",
@@ -1042,6 +1043,7 @@
       "accountSettingsTitle": "Configuración de cuenta",
       "editNickname": "Editar apodo",
       "nicknamePlaceholder": "Jugador",
+      "systemNicknameSignedOut": "No has iniciado sesión en 16Launcher",
       "signedInAsPrefix": "Iniciado sesión como:",
       "hint": "Configure su perfil y apariencia después de iniciar sesión.",
       "microsoftSignIn": "Iniciar sesión con Microsoft",
