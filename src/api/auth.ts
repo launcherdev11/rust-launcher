@@ -28,10 +28,29 @@ export async function registerAccount(input: {
   nickname: string;
   email: string;
   password: string;
+  verification_code?: string;
 }): Promise<AuthTokens> {
   return apiFetch<AuthTokens>(
     "/auth/register",
     { method: "POST", body: JSON.stringify(input) },
+    null,
+  );
+}
+
+export async function fetchEmailVerificationStatus(): Promise<{
+  required: boolean;
+  ttl_secs: number;
+}> {
+  return apiFetch("/auth/email/status", { method: "GET" }, null);
+}
+
+export async function sendEmailVerificationCode(email: string): Promise<{
+  success: boolean;
+  ttl_secs: number;
+}> {
+  return apiFetch(
+    "/auth/email/send-code",
+    { method: "POST", body: JSON.stringify({ email }) },
     null,
   );
 }
@@ -119,6 +138,7 @@ export async function registerAndPersist(input: {
   nickname: string;
   email: string;
   password: string;
+  verification_code?: string;
 }): Promise<PlatformUser> {
   const tokens = await registerAccount(input);
   persistApiSession(tokens.access_token, tokens.refresh_token);
@@ -188,6 +208,21 @@ export function mapAuthErrorMessage(
   }
   if (lower.includes("nickname already taken")) {
     return t("platform.errors.nicknameTaken");
+  }
+  if (lower.includes("verification code required") || lower.includes("invalid verification code")) {
+    return t("platform.errors.invalidVerificationCode");
+  }
+  if (lower.includes("verification code expired")) {
+    return t("platform.errors.verificationCodeExpired");
+  }
+  if (lower.includes("too many verification attempts")) {
+    return t("platform.errors.tooManyVerificationAttempts");
+  }
+  if (lower.includes("rate limit exceeded")) {
+    return t("platform.errors.rateLimited");
+  }
+  if (lower.includes("failed to send verification email") || lower.includes("email verification is not configured")) {
+    return t("platform.errors.emailSendFailed");
   }
   if (mode === "signup" && lower.includes("password too short")) {
     return t("platform.errors.passwordTooShort");

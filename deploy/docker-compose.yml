@@ -43,6 +43,7 @@ services:
       redis:
         condition: service_healthy
     environment:
+      APP_ENV: ${APP_ENV:-development}
       API_LISTEN_ADDR: 0.0.0.0:8080
       # Required — no silent default to "launcher" (that masked .env/export mismatches).
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/.env}
@@ -60,8 +61,13 @@ services:
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:1420,http://127.0.0.1:1420,tauri://localhost,https://tauri.localhost}
       IDENTITY_REQUIRE_PROOF: ${IDENTITY_REQUIRE_PROOF:-true}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: "${RESEND_FROM_EMAIL:-16Launcher <noreply@16-launcher.ru>}"
+      EMAIL_VERIFICATION_TTL_SECS: ${EMAIL_VERIFICATION_TTL_SECS:-600}
     ports:
-      - "8080:8080"
+      # Loopback only — nginx/admin reach API via 127.0.0.1:8080
+      - "127.0.0.1:8080:8080"
 
   coturn:
     image: coturn/coturn:latest

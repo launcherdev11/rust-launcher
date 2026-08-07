@@ -956,6 +956,11 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "createAccount": "Create account",
+    "next": "Next",
+    "back": "Back",
+    "verificationStepLabel": "Step 2 of 2",
+    "verificationTitle": "Confirm your email",
+    "verificationHint": "We sent a code to {{email}}. Enter it below to finish registration.",
     "launcherNickname": "Launcher nickname",
     "inGameNickname": "In-game nickname",
     "newNicknamePlaceholder": "New nickname",
@@ -967,6 +972,10 @@
     "enterEmail": "Enter email",
     "enterNicknameOrEmail": "Enter nickname or email",
     "enterNickname": "Enter nickname",
+    "verificationCodeLabel": "Verification code",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Send code to email",
+    "resendVerificationCode": "Resend code",
     "linkMicrosoftTitle": "Sign in with Microsoft, then click Link again",
     "linkElyTitle": "Sign in with Ely.by, then click Link again",
     "toast": {
@@ -986,7 +995,9 @@
       "enterEmailSignup": "Enter email for registration.",
       "enterSignupNickname": "Enter a nickname for registration.",
       "enterPassword": "Enter password",
-      "passwordTooShort": "Password must be at least 8 characters."
+      "passwordTooShort": "Password must be at least 8 characters.",
+      "enterVerificationCode": "Enter the code from the email.",
+      "verificationCodeSent": "Verification code sent to your email."
     },
     "errors": {
       "connectionFailed": "Cannot connect to the 16Launcher server. Check VITE_API_BASE_URL, internet, and API availability.",
@@ -995,6 +1006,11 @@
       "passwordTooShort": "Password is too short. Minimum 8 characters.",
       "emailTaken": "This email is already registered.",
       "nicknameTaken": "This nickname is already taken.",
+      "invalidVerificationCode": "Invalid verification code.",
+      "verificationCodeExpired": "Verification code expired. Request a new one.",
+      "tooManyVerificationAttempts": "Too many attempts. Request a new code.",
+      "rateLimited": "Too many requests. Please wait a moment.",
+      "emailSendFailed": "Failed to send the verification email.",
       "identityAlreadyLinked": "{{provider}} is already linked to another 16Launcher account."
     }
   },
