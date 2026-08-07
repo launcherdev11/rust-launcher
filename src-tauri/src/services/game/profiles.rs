@@ -16,6 +16,11 @@ use crate::app::paths::{
     selected_profile_path,
 };
 use crate::services::game::cache as cache_service;
+use crate::services::game::options_txt::{
+    add_resource_pack_to_options, merge_resource_pack_order, read_resource_packs,
+    remove_resource_pack_from_options, resource_pack_enabled_in_options,
+    resource_pack_filename_from_options_id, write_resource_packs,
+};
 
 
 const PROFILE_ITEM_DISABLED_SUFFIX: &str = ".disabled";
@@ -824,6 +829,56 @@ pub fn rename_profile(id: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
+fn profile_options_path(profile_dir: &Path) -> PathBuf {
+    profile_dir.join("options.txt")
+}
+
+fn sort_resource_pack_items(
+    mut files: Vec<ProfileItemEntry>,
+    options_order: &[String],
+) -> Vec<ProfileItemEntry> {
+    if options_order.is_empty() {
+        files.sort_by(|a, b| a.name.cmp(&b.name));
+        return files;
+    }
+
+    let mut enabled: Vec<ProfileItemEntry> = Vec::new();
+    let mut disabled: Vec<ProfileItemEntry> = Vec::new();
+    for entry in files {
+        if entry.enabled {
+            enabled.push(entry);
+        } else {
+            disabled.push(entry);
+        }
+    }
+
+    enabled.sort_by(|a, b| {
+        let idx_a = options_order.iter().position(|id| {
+            resource_pack_filename_from_options_id(id)
+                .map(|name| name == a.name)
+                .unwrap_or(false)
+        });
+        let idx_b = options_order.iter().position(|id| {
+            resource_pack_filename_from_options_id(id)
+                .map(|name| name == b.name)
+                .unwrap_or(false)
+        });
+        match (idx_a, idx_b) {
+            (Some(a_idx), Some(b_idx)) => b_idx.cmp(&a_idx),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.name.cmp(&b.name),
+        }
+    });
+    disabled.sort_by(|a, b| a.name.cmp(&b.name));
+    enabled.extend(disabled);
+    enabled
+}
+
+fn sync_resource_packs_options(profile_dir: &Path, packs: &[String]) -> Result<(), String> {
+    write_resource_packs(&profile_options_path(profile_dir), packs)
+}
+
 #[command]
 pub fn delete_item(id: String, category: String, filename: String) -> Result<(), String> {
     let dir = instance_dir(&id)?;
@@ -835,7 +890,17 @@ pub fn delete_item(id: String, category: String, filename: String) -> Result<(),
     let Some(target) = resolve_profile_item_path(&content_dir, &filename) else {
         return Ok(());
     };
-    std::fs::remove_file(&target).map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))
+    std::fs::remove_file(&target).map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))?;
+
+    if subdir == "resourcepacks" {
+        let options_path = profile_options_path(&dir);
+        let current = read_resource_packs(&options_path)?;
+        let next = remove_resource_pack_from_options(&current, &filename);
+        if next != current {
+            sync_resource_packs_options(&dir, &next)?;
+        }
+    }
+    Ok(())
 }
 
 #[command]
@@ -849,21 +914,48 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileIte
     if !target_dir.exists() {
         return Ok(Vec::new());
     }
+
+    let is_resource_packs = subdir == "resourcepacks";
+    let options_path = profile_options_path(&dir);
+    let has_options_file = options_path.is_file();
+    let options_order = if is_resource_packs {
+        read_resource_packs(&options_path)?
+    } else {
+        Vec::new()
+    };
+
     let mut files = Vec::new();
     for entry in std::fs::read_dir(&target_dir).map_err(|e| format!("Ошибка чтения папки сборки: {e}"))? {
         let entry = entry.map_err(|e| format!("Ошибка чтения файла сборки: {e}"))?;
         let path = entry.path();
         if path.is_file() {
             if let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) {
+                let display_name = profile_item_display_name(stored_name);
+                let file_enabled = !profile_item_is_disabled(stored_name);
+                let enabled = if is_resource_packs {
+                    file_enabled
+                        && resource_pack_enabled_in_options(
+                            &options_order,
+                            &display_name,
+                            has_options_file,
+                        )
+                } else {
+                    file_enabled
+                };
                 files.push(ProfileItemEntry {
-                    name: profile_item_display_name(stored_name),
-                    enabled: !profile_item_is_disabled(stored_name),
+                    name: display_name,
+                    enabled,
                 });
             }
         }
     }
-    files.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(files)
+
+    if is_resource_packs {
+        Ok(sort_resource_pack_items(files, &options_order))
+    } else {
+        files.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(files)
+    }
 }
 
 #[command]
@@ -900,7 +992,57 @@ pub fn set_profile_item_enabled(
             if enabled { "включить" } else { "отключить" },
             from
         )
-    })
+    })?;
+
+    if subdir == "resourcepacks" {
+        let options_path = profile_options_path(&dir);
+        let current = read_resource_packs(&options_path)?;
+        let next = if enabled {
+            add_resource_pack_to_options(&current, &display_name)
+        } else {
+            remove_resource_pack_from_options(&current, &display_name)
+        };
+        sync_resource_packs_options(&dir, &next)?;
+    }
+
+    Ok(())
+}
+
+#[command]
+pub fn reorder_profile_resource_packs(
+    id: String,
+    ordered_names: Vec<String>,
+) -> Result<(), String> {
+    let dir = instance_dir(&id)?;
+    if !dir.exists() {
+        return Err("Папка сборки не найдена".to_string());
+    }
+    let content_dir = dir.join("resourcepacks");
+    if !content_dir.is_dir() {
+        return Err("Папка resourcepacks не найдена".to_string());
+    }
+
+    let mut seen = HashSet::new();
+    for name in &ordered_names {
+        if !seen.insert(name.clone()) {
+            return Err(format!("Повторяющийся ресурспак в порядке: {name}"));
+        }
+        let Some(path) = resolve_profile_item_path(&content_dir, name) else {
+            return Err(format!("Ресурспак не найден: {name}"));
+        };
+        if profile_item_is_disabled(
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(name),
+        ) {
+            return Err(format!("Нельзя менять порядок отключённого ресурспака: {name}"));
+        }
+    }
+
+    let options_path = profile_options_path(&dir);
+    let current = read_resource_packs(&options_path)?;
+    let next = merge_resource_pack_order(&current, &ordered_names);
+    sync_resource_packs_options(&dir, &next)
 }
 
 pub fn create_profile_impl(

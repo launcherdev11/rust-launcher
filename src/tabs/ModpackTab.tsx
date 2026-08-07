@@ -610,6 +610,13 @@ export function ModpackTab({
   const [multiSelectedProfileIds, setMultiSelectedProfileIds] = useState<Set<string>>(new Set());
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const profileDragIdsRef = useRef<string[]>([]);
+  const [isResourcePackReorderMode, setIsResourcePackReorderMode] = useState(false);
+  const [resourcePackDragIndex, setResourcePackDragIndex] = useState<number | null>(null);
+  const [resourcePackDragOverIndex, setResourcePackDragOverIndex] = useState<number | null>(null);
+  const resourcePackDragOverIndexRef = useRef<number | null>(null);
+  const resourcePackPointerDragRef = useRef<{ fromIndex: number; active: boolean } | null>(null);
+  const resourcePackReorderListenersRef = useRef<(() => void) | null>(null);
+  const resourcePackRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const groupProfilesDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
     null,
@@ -1797,6 +1804,35 @@ export function ModpackTab({
     }
   }, [selectedProfileId, contentTab, activeView]);
 
+  useEffect(() => {
+    setIsResourcePackReorderMode(false);
+    setResourcePackDragIndex(null);
+    setResourcePackDragOverIndex(null);
+    resourcePackDragOverIndexRef.current = null;
+    resourcePackPointerDragRef.current = null;
+    resourcePackReorderListenersRef.current?.();
+    resourcePackReorderListenersRef.current = null;
+  }, [selectedProfileId, contentTab, activeView]);
+
+  useEffect(() => {
+    return () => {
+      resourcePackReorderListenersRef.current?.();
+      resourcePackReorderListenersRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (itemsSearch.trim().length > 0 && isResourcePackReorderMode) {
+      setIsResourcePackReorderMode(false);
+      setResourcePackDragIndex(null);
+      setResourcePackDragOverIndex(null);
+      resourcePackDragOverIndexRef.current = null;
+      resourcePackPointerDragRef.current = null;
+      resourcePackReorderListenersRef.current?.();
+      resourcePackReorderListenersRef.current = null;
+    }
+  }, [itemsSearch, isResourcePackReorderMode]);
+
   const profileItemsKey = useMemo(
     () => items.map((item) => item.name).sort().join("\0"),
     [items],
@@ -2917,6 +2953,9 @@ export function ModpackTab({
           entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
         ),
       );
+      if (category === "resourcepacks") {
+        await refreshItems(selectedProfile.id, contentTab);
+      }
       if (category === "mods" && isProfileSettingsOpen) {
         setProfileConflictsRefreshToken((v) => v + 1);
       }
@@ -2926,6 +2965,115 @@ export function ModpackTab({
         "error",
         tt("modpacks.manage.toggleFailed"),
       );
+    }
+  }
+
+  function cleanupResourcePackReorderListeners() {
+    resourcePackReorderListenersRef.current?.();
+    resourcePackReorderListenersRef.current = null;
+  }
+
+  function resolveResourcePackDropIndex(clientY: number): number | null {
+    const enabledItems = items.filter((entry) => entry.enabled);
+    if (enabledItems.length === 0) return null;
+
+    for (let i = 0; i < enabledItems.length; i++) {
+      const el = resourcePackRowRefs.current.get(enabledItems[i].name);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (clientY >= rect.top && clientY <= rect.bottom) {
+        const mid = rect.top + rect.height / 2;
+        return clientY < mid ? i : Math.min(i + 1, enabledItems.length - 1);
+      }
+    }
+
+    const lastItem = enabledItems[enabledItems.length - 1];
+    const lastEl = resourcePackRowRefs.current.get(lastItem.name);
+    if (lastEl && clientY > lastEl.getBoundingClientRect().bottom) {
+      return enabledItems.length - 1;
+    }
+    const firstEl = resourcePackRowRefs.current.get(enabledItems[0].name);
+    if (firstEl && clientY < firstEl.getBoundingClientRect().top) {
+      return 0;
+    }
+    return null;
+  }
+
+  function handleResourcePackGripPointerDown(index: number, e: ReactPointerEvent<HTMLButtonElement>) {
+    if (!isResourcePackReorderMode || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cleanupResourcePackReorderListeners();
+
+    const pointerId = e.pointerId;
+    const startY = e.clientY;
+    resourcePackPointerDragRef.current = { fromIndex: index, active: false };
+    setResourcePackDragIndex(index);
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const drag = resourcePackPointerDragRef.current;
+      if (!drag) return;
+      if (!drag.active && Math.abs(ev.clientY - startY) > 4) {
+        drag.active = true;
+      }
+      if (!drag.active) return;
+
+      const overIndex = resolveResourcePackDropIndex(ev.clientY);
+      resourcePackDragOverIndexRef.current = overIndex;
+      setResourcePackDragOverIndex(overIndex);
+    };
+
+    const onEnd = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      cleanupResourcePackReorderListeners();
+      const drag = resourcePackPointerDragRef.current;
+      const toIndex = resourcePackDragOverIndexRef.current;
+      resourcePackPointerDragRef.current = null;
+      resourcePackDragOverIndexRef.current = null;
+      setResourcePackDragIndex(null);
+      setResourcePackDragOverIndex(null);
+      if (drag?.active && toIndex !== null && drag.fromIndex !== toIndex) {
+        void handleResourcePackReorder(drag.fromIndex, toIndex);
+      }
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    resourcePackReorderListenersRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+  }
+
+  async function handleResourcePackReorder(fromIndex: number, toIndex: number) {
+    if (!selectedProfile || fromIndex === toIndex) return;
+    const enabledItems = items.filter((entry) => entry.enabled);
+    const disabledItems = items.filter((entry) => !entry.enabled);
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= enabledItems.length ||
+      toIndex >= enabledItems.length
+    ) {
+      return;
+    }
+    const nextEnabled = [...enabledItems];
+    const [moved] = nextEnabled.splice(fromIndex, 1);
+    nextEnabled.splice(toIndex, 0, moved);
+    const orderedNames = nextEnabled.map((entry) => entry.name);
+    setItems([...nextEnabled, ...disabledItems]);
+    try {
+      await invoke("reorder_profile_resource_packs", {
+        id: selectedProfile.id,
+        orderedNames,
+      });
+    } catch (e) {
+      console.error(e);
+      await refreshItems(selectedProfile.id, "resourcepacks");
+      showNotification("error", tt("modpacks.manage.reorderFailed"));
     }
   }
 
@@ -4608,7 +4756,7 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <div
               ref={manageContentTabsContainerRef}
               className="relative inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-white/10 p-1"
@@ -4641,6 +4789,38 @@ export function ModpackTab({
                 },
               )}
             </div>
+            {contentTab === "resourcepacks" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResourcePackReorderMode((active) => {
+                    if (active) {
+                      setResourcePackDragIndex(null);
+                      setResourcePackDragOverIndex(null);
+                      resourcePackDragOverIndexRef.current = null;
+                      resourcePackPointerDragRef.current = null;
+                      cleanupResourcePackReorderListeners();
+                    }
+                    return !active;
+                  });
+                }}
+                disabled={itemsLoading || items.filter((item) => item.enabled).length < 2}
+                className={`interactive-press shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isResourcePackReorderMode
+                    ? "accent-bg text-white shadow-soft"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+                title={
+                  isResourcePackReorderMode
+                    ? tt("modpacks.manage.reorderResourcePacksDone")
+                    : tt("modpacks.manage.reorderResourcePacks")
+                }
+              >
+                {isResourcePackReorderMode
+                  ? tt("modpacks.manage.reorderResourcePacksDone")
+                  : tt("modpacks.manage.reorderResourcePacks")}
+              </button>
+            )}
           </div>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -4667,6 +4847,131 @@ export function ModpackTab({
                   </p>
                 </div>
               </div>
+            ) : contentTab === "resourcepacks" ? (
+              (() => {
+                const enabledItems = visibleItems.filter((item) => item.enabled);
+                const disabledItems = visibleItems.filter((item) => !item.enabled);
+                const canReorder = searchValue.length === 0 && isResourcePackReorderMode;
+
+                function renderResourcePackRow(
+                  item: ProfileItemEntry,
+                  index: number,
+                  reorderable: boolean,
+                ) {
+                  const isDragging = reorderable && resourcePackDragIndex === index;
+                  const isDropTarget =
+                    reorderable &&
+                    resourcePackDragOverIndex === index &&
+                    resourcePackDragIndex !== index;
+                  return (
+                    <div
+                      key={item.name}
+                      ref={(el) => {
+                        if (el && reorderable) {
+                          resourcePackRowRefs.current.set(item.name, el);
+                        } else {
+                          resourcePackRowRefs.current.delete(item.name);
+                        }
+                      }}
+                      className={`flex items-center justify-between gap-2 rounded-2xl bg-black/45 px-3 py-3 text-xs transition-opacity ${
+                        item.enabled ? "text-white/85" : "text-white/45 opacity-75"
+                      } ${isDragging ? "opacity-50" : ""} ${
+                        isDropTarget ? "ring-2 ring-purple-400/70 ring-inset" : ""
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        {reorderable && canReorder ? (
+                          <button
+                            type="button"
+                            onPointerDown={(e) => handleResourcePackGripPointerDown(index, e)}
+                            className="interactive-press shrink-0 cursor-grab touch-none rounded-md p-0.5 text-white/35 hover:bg-white/10 hover:text-white/60 active:cursor-grabbing"
+                            title={tt("modpacks.manage.dragToReorder")}
+                            aria-label={tt("modpacks.manage.dragToReorder")}
+                          >
+                            <span className="text-sm leading-none" aria-hidden="true">
+                              ⠿
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="w-5 shrink-0" aria-hidden="true" />
+                        )}
+                        <ProfileItemIcon
+                          contentTab={contentTab}
+                          metadata={itemMetadataByFilename[item.name]}
+                        />
+                        <div className="min-w-0">
+                          <span
+                            className="block max-w-[200px] truncate md:max-w-[320px]"
+                            title={
+                              itemMetadataByFilename[item.name]?.title?.trim() || item.name
+                            }
+                          >
+                            {itemMetadataByFilename[item.name]?.title?.trim() || item.name}
+                          </span>
+                          {itemMetadataByFilename[item.name]?.title?.trim() &&
+                            itemMetadataByFilename[item.name]?.title?.trim() !== item.name && (
+                              <span
+                                className="block max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[320px]"
+                                title={item.name}
+                              >
+                                {item.name}
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={item.enabled}
+                          onClick={() => void handleToggleItemEnabled(item)}
+                          className={`interactive-press relative h-6 w-10 rounded-full transition-colors ${
+                            item.enabled ? "bg-emerald-500/90" : "bg-white/20"
+                          }`}
+                          title={
+                            item.enabled
+                              ? tt("modpacks.manage.disableItem")
+                              : tt("modpacks.manage.enableItem")
+                          }
+                        >
+                          <span
+                            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${
+                              item.enabled ? "left-[1.125rem]" : "left-0.5"
+                            }`}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteItem(item)}
+                          className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
+                          title={tt("common.delete")}
+                        >
+                          <DeleteIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex flex-col gap-2.5">
+                    {canReorder && enabledItems.length > 0 && (
+                      <p className="px-1 text-[11px] text-white/45">
+                        {tt("modpacks.manage.resourcePackOrderHint")}
+                      </p>
+                    )}
+                    {enabledItems.map((item, index) => renderResourcePackRow(item, index, true))}
+                    {disabledItems.length > 0 && enabledItems.length > 0 && (
+                      <div className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                        {tt("modpacks.manage.disabledResourcePacks")}
+                      </div>
+                    )}
+                    {disabledItems.map((item, index) =>
+                      renderResourcePackRow(item, index, false),
+                    )}
+                  </div>
+                );
+              })()
             ) : (
               <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
                 {visibleItems.map((item) => (

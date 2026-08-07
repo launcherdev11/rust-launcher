@@ -44,8 +44,8 @@ services:
         condition: service_healthy
     environment:
       API_LISTEN_ADDR: 0.0.0.0:8080
-      # Prefer setting DATABASE_URL in deploy/.env when the password has URL-special chars.
-      DATABASE_URL: ${DATABASE_URL:-postgres://launcher:${POSTGRES_PASSWORD:-launcher}@postgres:5432/launcher}
+      # Required — no silent default to "launcher" (that masked .env/export mismatches).
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/.env}
       REDIS_URL: redis://redis:6379
       # Compose fails fast if JWT_SECRET is missing — no insecure defaults.
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env (see env.example)}

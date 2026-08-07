@@ -740,7 +740,13 @@
       "currentOutput": "Aktueller Ausgang",
       "clearOnlyLive": "Clear gilt nur für den aktuellen Ausgang",
       "consoleResizeHint": "Ziehen Sie die Leiste zwischen der Liste und der Konsole, um die Größe zu ändern – die Breite wird gespeichert. Protokolle bleiben bestehen; Vor einem erneuten Start wird die Ausgabe archiviert.",
-      "noVersionsForGame": "Keine Versionen für das ausgewählte Spiel"
+      "noVersionsForGame": "Keine Versionen für das ausgewählte Spiel",
+      "resourcePackOrderHint": "Pakete weiter oben überschreiben die darunter — wie im Spiel",
+      "reorderResourcePacks": "Reihenfolge ändern",
+      "reorderResourcePacksDone": "Fertig",
+      "dragToReorder": "Ziehen zum Sortieren",
+      "disabledResourcePacks": "Deaktiviert",
+      "reorderFailed": "Reihenfolge der Resource-Packs konnte nicht geändert werden."
     },
     "externalImport": {
       "title": "Von einem anderen Launcher importieren",

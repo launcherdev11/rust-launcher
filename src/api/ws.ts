@@ -1,5 +1,12 @@
-import { getApiBaseUrl, getStoredAccessToken } from "./client";
-import { API_AUTH_CHANGED_EVENT } from "./auth";
+import {
+  ApiError,
+  clearApiSession,
+  getApiBaseUrl,
+  getStoredAccessToken,
+  getStoredRefreshToken,
+  persistApiSession,
+} from "./client";
+import { API_AUTH_CHANGED_EVENT, refreshSession } from "./auth";
 
 export const WS_EVENT = "mc16launcher:ws-event";
 export const WS_STATUS_EVENT = "mc16launcher:ws-status";
@@ -126,6 +133,9 @@ let status: Status = "disconnected";
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let intentionalClose = false;
+/** WS closed before open — usually HTTP 401 on /ws upgrade. */
+let authRecoveryAttempts = 0;
+const MAX_AUTH_RECOVERY_ATTEMPTS = 2;
 
 const SIGNALING_MESSAGE_TYPES = new Set<WsClientMessage["type"]>([
   "offer",
@@ -215,6 +225,42 @@ export function sendWsMessage(message: WsClientMessage): boolean {
   }
 }
 
+/**
+ * After JWT_SECRET rotation (or deleted refresh sessions), a still-unexpired
+ * access token keeps failing /ws forever. Recover via refresh once, else clear.
+ */
+async function recoverAfterWsAuthFailure(): Promise<void> {
+  if (authRecoveryAttempts >= MAX_AUTH_RECOVERY_ATTEMPTS) {
+    clearApiSession();
+    authRecoveryAttempts = 0;
+    return;
+  }
+  authRecoveryAttempts += 1;
+
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) {
+    clearApiSession();
+    authRecoveryAttempts = 0;
+    return;
+  }
+
+  try {
+    const tokens = await refreshSession(refreshToken);
+    persistApiSession(tokens.access_token, tokens.refresh_token);
+    // persistApiSession emits auth-changed → reconnect with new access token
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
+      clearApiSession();
+      authRecoveryAttempts = 0;
+      return;
+    }
+    // Transient network error — retry later without wiping the session.
+    if (getStoredAccessToken()) {
+      scheduleReconnect();
+    }
+  }
+}
+
 export function connectPlatformWs(): void {
   if (typeof window === "undefined") return;
   const token = getStoredAccessToken();
@@ -229,6 +275,7 @@ export function connectPlatformWs(): void {
   intentionalClose = false;
   clearTimers();
   setStatus("connecting");
+  let opened = false;
 
   const url = `${wsBaseUrl()}/ws?token=${encodeURIComponent(token)}`;
   const ws = new WebSocket(url);
@@ -236,6 +283,8 @@ export function connectPlatformWs(): void {
 
   ws.onopen = () => {
     if (socket !== ws) return;
+    opened = true;
+    authRecoveryAttempts = 0;
     setStatus("connected");
     startHeartbeat();
     flushPendingSignalingMessages();
@@ -251,14 +300,21 @@ export function connectPlatformWs(): void {
   };
 
   ws.onerror = () => {
-    // onclose will handle reconnect
+    // onclose will handle reconnect / auth recovery
   };
 
   ws.onclose = () => {
     if (socket === ws) socket = null;
     clearTimers();
     setStatus("disconnected");
-    if (!intentionalClose && getStoredAccessToken()) {
+    if (intentionalClose) return;
+
+    if (!opened) {
+      void recoverAfterWsAuthFailure();
+      return;
+    }
+
+    if (getStoredAccessToken()) {
       scheduleReconnect();
     }
   };
