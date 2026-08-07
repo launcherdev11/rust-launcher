@@ -17,9 +17,10 @@ use crate::app::paths::{
 };
 use crate::services::game::cache as cache_service;
 use crate::services::game::options_txt::{
-    add_resource_pack_to_options, merge_resource_pack_order, read_resource_packs,
-    remove_resource_pack_from_options, resource_pack_enabled_in_options,
-    resource_pack_filename_from_options_id, write_resource_packs,
+    add_resource_pack_to_options, clear_shader_pack_if_matches, merge_resource_pack_order,
+    read_resource_packs, read_shader_pack_selection, remove_resource_pack_from_options,
+    resource_pack_enabled_in_options, resource_pack_filename_from_options_id,
+    write_resource_packs, write_shader_pack_selection, ShaderPackSelection,
 };
 
 
@@ -35,7 +36,7 @@ const PROFILE_CONTENT_DIRS: &[&str] = &[
     "server-resource-packs",
 ];
 
-const PROFILE_CONTENT_FILES: &[&str] = &["options.txt", "servers.dat"];
+const PROFILE_CONTENT_FILES: &[&str] = &["options.txt", "optionsshaders.txt", "servers.dat"];
 
 fn merge_dir_contents_non_destructive(from: &Path, to: &Path) -> Result<(), String> {
     if !from.is_dir() {
@@ -875,6 +876,15 @@ fn sort_resource_pack_items(
     enabled
 }
 
+fn sort_shader_pack_items(mut files: Vec<ProfileItemEntry>) -> Vec<ProfileItemEntry> {
+    files.sort_by(|a, b| match (a.enabled, b.enabled) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
+    });
+    files
+}
+
 fn sync_resource_packs_options(profile_dir: &Path, packs: &[String]) -> Result<(), String> {
     write_resource_packs(&profile_options_path(profile_dir), packs)
 }
@@ -899,6 +909,8 @@ pub fn delete_item(id: String, category: String, filename: String) -> Result<(),
         if next != current {
             sync_resource_packs_options(&dir, &next)?;
         }
+    } else if subdir == "shaderpacks" {
+        clear_shader_pack_if_matches(&dir, &filename)?;
     }
     Ok(())
 }
@@ -916,12 +928,18 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileIte
     }
 
     let is_resource_packs = subdir == "resourcepacks";
+    let is_shader_packs = subdir == "shaderpacks";
     let options_path = profile_options_path(&dir);
     let has_options_file = options_path.is_file();
     let options_order = if is_resource_packs {
         read_resource_packs(&options_path)?
     } else {
         Vec::new()
+    };
+    let shader_selection = if is_shader_packs {
+        read_shader_pack_selection(&dir)?
+    } else {
+        ShaderPackSelection::inactive()
     };
 
     let mut files = Vec::new();
@@ -939,6 +957,8 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileIte
                             &display_name,
                             has_options_file,
                         )
+                } else if is_shader_packs {
+                    file_enabled && shader_selection.is_active_pack(&display_name)
                 } else {
                     file_enabled
                 };
@@ -952,6 +972,8 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileIte
 
     if is_resource_packs {
         Ok(sort_resource_pack_items(files, &options_order))
+    } else if is_shader_packs {
+        Ok(sort_shader_pack_items(files))
     } else {
         files.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(files)
@@ -979,6 +1001,35 @@ pub fn set_profile_item_enabled(
             .and_then(|n| n.to_str())
             .unwrap_or(&filename),
     );
+
+    if subdir == "shaderpacks" {
+        // Toggle controls the active shader in Iris/OptiFine config, not .disabled rename.
+        if enabled {
+            let to = content_dir.join(profile_item_stored_name(&display_name, true));
+            if from != to {
+                if to.exists() {
+                    return Err("Файл с таким именем уже существует".to_string());
+                }
+                std::fs::rename(&from, &to).map_err(|e| {
+                    format!("Не удалось включить файл {:?}: {e}", from)
+                })?;
+            }
+            write_shader_pack_selection(&dir, &ShaderPackSelection::active(&display_name))?;
+        } else {
+            let current = read_shader_pack_selection(&dir)?;
+            if current.name.as_deref() == Some(display_name.as_str()) {
+                write_shader_pack_selection(
+                    &dir,
+                    &ShaderPackSelection {
+                        name: current.name,
+                        enabled: false,
+                    },
+                )?;
+            }
+        }
+        return Ok(());
+    }
+
     let to = content_dir.join(profile_item_stored_name(&display_name, enabled));
     if from == to {
         return Ok(());

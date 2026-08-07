@@ -716,7 +716,11 @@
       "reorderResourcePacksDone": "Готово",
       "dragToReorder": "Перетащите для изменения порядка",
       "disabledResourcePacks": "Отключённые",
-      "reorderFailed": "Не удалось изменить порядок ресурспаков."
+      "reorderFailed": "Не удалось изменить порядок ресурспаков.",
+      "shaderPackActiveHint": "Одновременно может быть активен только один шейдер (Iris / OptiFine).",
+      "enableShader": "Сделать активным",
+      "disableShader": "Отключить шейдеры",
+      "inactiveShaders": "Неактивные"
     },
     "externalImport": {
       "title": "Импорт из другого лаунчера",
