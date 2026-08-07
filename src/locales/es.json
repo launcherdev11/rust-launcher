@@ -740,7 +740,13 @@
       "currentOutput": "Salida actual",
       "clearOnlyLive": "Borrar solo se aplica a la salida actual",
       "consoleResizeHint": "Arrastre la barra entre la lista y la consola para cambiar el tamaño; se guarda el ancho. Los registros persisten; antes de un nuevo lanzamiento, el resultado se archiva.",
-      "noVersionsForGame": "No hay versiones para el juego seleccionado."
+      "noVersionsForGame": "No hay versiones para el juego seleccionado.",
+      "resourcePackOrderHint": "Los paquetes más arriba sobrescriben los de abajo, como en el juego",
+      "reorderResourcePacks": "Cambiar orden",
+      "reorderResourcePacksDone": "Listo",
+      "dragToReorder": "Arrastra para reordenar",
+      "disabledResourcePacks": "Desactivados",
+      "reorderFailed": "No se pudo cambiar el orden de los paquetes de recursos."
     },
     "externalImport": {
       "title": "Importar desde otro lanzador",

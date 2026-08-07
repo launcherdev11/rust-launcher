@@ -710,7 +710,13 @@
       "currentOutput": "Текущий вывод",
       "clearOnlyLive": "Очистка только для текущего вывода",
       "consoleResizeHint": "Между списком и консолью можно тянуть разделитель — ширина сохраняется. Лог хранится между перезапусками; перед новым запуском вывод уходит в «Архив».",
-      "noVersionsForGame": "Нет версий для выбранной игры"
+      "noVersionsForGame": "Нет версий для выбранной игры",
+      "resourcePackOrderHint": "Пак выше перекрывает паки ниже — как в игре",
+      "reorderResourcePacks": "Изменить порядок",
+      "reorderResourcePacksDone": "Готово",
+      "dragToReorder": "Перетащите для изменения порядка",
+      "disabledResourcePacks": "Отключённые",
+      "reorderFailed": "Не удалось изменить порядок ресурспаков."
     },
     "externalImport": {
       "title": "Импорт из другого лаунчера",

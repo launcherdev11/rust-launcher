@@ -710,7 +710,13 @@
       "currentOutput": "Current output",
       "clearOnlyLive": "Clear only applies to current output",
       "consoleResizeHint": "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived.",
-      "noVersionsForGame": "No versions for the selected game"
+      "noVersionsForGame": "No versions for the selected game",
+      "resourcePackOrderHint": "Packs higher in the list override those below — same as in-game",
+      "reorderResourcePacks": "Reorder",
+      "reorderResourcePacksDone": "Done",
+      "dragToReorder": "Drag to reorder",
+      "disabledResourcePacks": "Disabled",
+      "reorderFailed": "Failed to reorder resource packs."
     },
     "externalImport": {
       "title": "Import from another launcher",
