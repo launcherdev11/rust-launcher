@@ -2953,7 +2953,7 @@ export function ModpackTab({
           entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
         ),
       );
-      if (category === "resourcepacks") {
+      if (category === "resourcepacks" || category === "shaderpacks") {
         await refreshItems(selectedProfile.id, contentTab);
       }
       if (category === "mods" && isProfileSettingsOpen) {
@@ -4847,13 +4847,17 @@ export function ModpackTab({
                   </p>
                 </div>
               </div>
-            ) : contentTab === "resourcepacks" ? (
+            ) : contentTab === "resourcepacks" || contentTab === "shaderpacks" ? (
               (() => {
                 const enabledItems = visibleItems.filter((item) => item.enabled);
                 const disabledItems = visibleItems.filter((item) => !item.enabled);
-                const canReorder = searchValue.length === 0 && isResourcePackReorderMode;
+                const canReorder =
+                  contentTab === "resourcepacks" &&
+                  searchValue.length === 0 &&
+                  isResourcePackReorderMode;
+                const isShaders = contentTab === "shaderpacks";
 
-                function renderResourcePackRow(
+                function renderPackRow(
                   item: ProfileItemEntry,
                   index: number,
                   reorderable: boolean,
@@ -4930,8 +4934,12 @@ export function ModpackTab({
                           }`}
                           title={
                             item.enabled
-                              ? tt("modpacks.manage.disableItem")
-                              : tt("modpacks.manage.enableItem")
+                              ? isShaders
+                                ? tt("modpacks.manage.disableShader")
+                                : tt("modpacks.manage.disableItem")
+                              : isShaders
+                                ? tt("modpacks.manage.enableShader")
+                                : tt("modpacks.manage.enableItem")
                           }
                         >
                           <span
@@ -4955,19 +4963,26 @@ export function ModpackTab({
 
                 return (
                   <div className="flex flex-col gap-2.5">
+                    {isShaders && visibleItems.length > 0 && (
+                      <p className="px-1 text-[11px] text-white/45">
+                        {tt("modpacks.manage.shaderPackActiveHint")}
+                      </p>
+                    )}
                     {canReorder && enabledItems.length > 0 && (
                       <p className="px-1 text-[11px] text-white/45">
                         {tt("modpacks.manage.resourcePackOrderHint")}
                       </p>
                     )}
-                    {enabledItems.map((item, index) => renderResourcePackRow(item, index, true))}
+                    {enabledItems.map((item, index) => renderPackRow(item, index, !isShaders))}
                     {disabledItems.length > 0 && enabledItems.length > 0 && (
                       <div className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                        {tt("modpacks.manage.disabledResourcePacks")}
+                        {isShaders
+                          ? tt("modpacks.manage.inactiveShaders")
+                          : tt("modpacks.manage.disabledResourcePacks")}
                       </div>
                     )}
                     {disabledItems.map((item, index) =>
-                      renderResourcePackRow(item, index, false),
+                      renderPackRow(item, index, false),
                     )}
                   </div>
                 );

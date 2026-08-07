@@ -746,7 +746,11 @@
       "reorderResourcePacksDone": "Listo",
       "dragToReorder": "Arrastra para reordenar",
       "disabledResourcePacks": "Desactivados",
-      "reorderFailed": "No se pudo cambiar el orden de los paquetes de recursos."
+      "reorderFailed": "No se pudo cambiar el orden de los paquetes de recursos.",
+      "shaderPackActiveHint": "Solo puede haber un paquete de shaders activo a la vez (Iris / OptiFine).",
+      "enableShader": "Establecer como activo",
+      "disableShader": "Desactivar shaders",
+      "inactiveShaders": "Inactivos"
     },
     "externalImport": {
       "title": "Importar desde otro lanzador",
