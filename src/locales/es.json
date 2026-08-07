@@ -976,6 +976,11 @@
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "createAccount": "Crear una cuenta",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "verificationStepLabel": "Paso 2 de 2",
+    "verificationTitle": "Confirma tu correo",
+    "verificationHint": "Enviamos un código a {{email}}. Introdúcelo abajo para terminar el registro.",
     "launcherNickname": "Apodo del lanzador",
     "inGameNickname": "Apodo en el juego",
     "newNicknamePlaceholder": "Nuevo apodo",
@@ -987,6 +992,10 @@
     "enterEmail": "Ingrese el correo electrónico",
     "enterNicknameOrEmail": "Introduzca apodo o correo electrónico",
     "enterNickname": "Introduce el apodo",
+    "verificationCodeLabel": "Código de verificación",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Enviar código al correo",
+    "resendVerificationCode": "Reenviar código",
     "linkMicrosoftTitle": "Inicie sesión con Microsoft y luego haga clic en Vincular nuevamente",
     "linkElyTitle": "Inicie sesión con Ely.by y luego haga clic en Vincular nuevamente",
     "toast": {
@@ -1006,7 +1015,9 @@
       "enterEmailSignup": "Ingrese el correo electrónico para registrarse.",
       "enterSignupNickname": "Ingrese un apodo para registrarse.",
       "enterPassword": "Introduce la contraseña",
-      "passwordTooShort": "La contraseña debe tener al menos 8 caracteres."
+      "passwordTooShort": "La contraseña debe tener al menos 8 caracteres.",
+      "enterVerificationCode": "Introduce el código del correo.",
+      "verificationCodeSent": "Código de verificación enviado al correo."
     },
     "errors": {
       "connectionFailed": "No se puede conectar al servidor 16Launcher. Verifique VITE_API_BASE_URL, internet y disponibilidad del API.",
@@ -1015,6 +1026,11 @@
       "passwordTooShort": "La contraseña es demasiado corta. Mínimo 8 caracteres.",
       "emailTaken": "Este correo electrónico ya está registrado.",
       "nicknameTaken": "Este apodo ya está en uso.",
+      "invalidVerificationCode": "Código de verificación no válido.",
+      "verificationCodeExpired": "El código expiró. Solicita uno nuevo.",
+      "tooManyVerificationAttempts": "Demasiados intentos. Solicita un nuevo código.",
+      "rateLimited": "Demasiadas solicitudes. Espera un momento.",
+      "emailSendFailed": "No se pudo enviar el correo de verificación.",
       "identityAlreadyLinked": "{{provider}} ya está vinculado a otra cuenta de 16Launcher."
     }
   },

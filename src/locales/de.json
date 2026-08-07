@@ -976,6 +976,11 @@
     "showPassword": "Passwort anzeigen",
     "hidePassword": "Passwort verbergen",
     "createAccount": "Benutzerkonto erstellen",
+    "next": "Weiter",
+    "back": "Zurück",
+    "verificationStepLabel": "Schritt 2 von 2",
+    "verificationTitle": "E-Mail bestätigen",
+    "verificationHint": "Wir haben einen Code an {{email}} gesendet. Geben Sie ihn unten ein, um die Registrierung abzuschließen.",
     "launcherNickname": "Spitzname des Launchers",
     "inGameNickname": "Spitzname im Spiel",
     "newNicknamePlaceholder": "Neuer Spitzname",
@@ -987,6 +992,10 @@
     "enterEmail": "E-Mail eingeben",
     "enterNicknameOrEmail": "Spitzname oder E-Mail eingeben",
     "enterNickname": "Spitznamen eingeben",
+    "verificationCodeLabel": "Bestätigungscode",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Code per E-Mail senden",
+    "resendVerificationCode": "Code erneut senden",
     "linkMicrosoftTitle": "Melden Sie sich bei Microsoft an und klicken Sie dann erneut auf „Verknüpfen“.",
     "linkElyTitle": "Melden Sie sich bei Ely.by an und klicken Sie dann erneut auf „Verknüpfen“.",
     "toast": {
@@ -1006,7 +1015,9 @@
       "enterEmailSignup": "Geben Sie Ihre E-Mail-Adresse für die Registrierung ein.",
       "enterSignupNickname": "Geben Sie einen Spitznamen für die Registrierung ein.",
       "enterPassword": "Passwort eingeben",
-      "passwordTooShort": "Das Passwort muss mindestens 8 Zeichen lang sein."
+      "passwordTooShort": "Das Passwort muss mindestens 8 Zeichen lang sein.",
+      "enterVerificationCode": "Geben Sie den Code aus der E-Mail ein.",
+      "verificationCodeSent": "Bestätigungscode wurde per E-Mail gesendet."
     },
     "errors": {
       "connectionFailed": "Es kann keine Verbindung zum 16Launcher-Server hergestellt werden. Überprüfen Sie VITE_API_BASE_URL, Internet und API-Verfügbarkeit.",
@@ -1015,6 +1026,11 @@
       "passwordTooShort": "Das Passwort ist zu kurz. Mindestens 8 Zeichen.",
       "emailTaken": "Diese E-Mail ist bereits registriert.",
       "nicknameTaken": "Dieser Spitzname ist bereits vergeben.",
+      "invalidVerificationCode": "Ungültiger Bestätigungscode.",
+      "verificationCodeExpired": "Bestätigungscode abgelaufen. Fordern Sie einen neuen an.",
+      "tooManyVerificationAttempts": "Zu viele Versuche. Fordern Sie einen neuen Code an.",
+      "rateLimited": "Zu viele Anfragen. Bitte warten Sie einen Moment.",
+      "emailSendFailed": "Bestätigungs-E-Mail konnte nicht gesendet werden.",
       "identityAlreadyLinked": "{{provider}} ist bereits mit einem anderen 16Launcher-Konto verknüpft."
     }
   },

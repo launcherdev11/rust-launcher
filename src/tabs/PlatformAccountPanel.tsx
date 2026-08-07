@@ -4,12 +4,14 @@ import {
   API_AUTH_CHANGED_EVENT,
   API_NICKNAME_KEY,
   ensureValidAccessToken,
+  fetchEmailVerificationStatus,
   fetchMe,
   linkIdentity,
   loginAndPersist,
   logoutAccount,
   mapAuthErrorMessage,
   registerAndPersist,
+  sendEmailVerificationCode,
   updateNickname,
   type PlatformUser,
 } from "../api/auth";
@@ -95,8 +97,14 @@ export function PlatformAccountPanel({
   const [authPassword, setAuthPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [signupStep, setSignupStep] = useState<"form" | "verify">("form");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [linking, setLinking] = useState<null | "ely" | "minecraft">(null);
   const [linkedProviders, setLinkedProviders] = useState({ ely: false, minecraft: false });
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
   const launcherNickname = platformUser?.nickname?.trim() || launcherProfile.launcher_nickname?.trim() || "";
   const gameNickname =
@@ -136,6 +144,24 @@ export function PlatformAccountPanel({
   }, []);
 
   useEffect(() => {
+    void fetchEmailVerificationStatus()
+      .then((status) => setEmailVerificationRequired(Boolean(status.required)))
+      .catch(() => setEmailVerificationRequired(false));
+  }, []);
+
+  useEffect(() => {
+    setVerificationCode("");
+    setCodeSent(false);
+    setSignupStep("form");
+  }, [mode]);
+
+  useEffect(() => {
+    if (signupStep !== "verify") return;
+    const id = window.setTimeout(() => codeInputRef.current?.focus(), 50);
+    return () => window.clearTimeout(id);
+  }, [signupStep]);
+
+  useEffect(() => {
     if (!accessToken) return;
     if (!isTokenExpiringSoon(accessToken)) return;
     void ensureValidAccessToken().then((token) => {
@@ -152,22 +178,85 @@ export function PlatformAccountPanel({
     setNicknameDraft(platformUser?.nickname ?? "");
   }, [platformUser?.nickname]);
 
-  const handleAuth = async () => {
-    if (!authIdentifier.trim()) {
-      return showNotification(
-        "warning",
-        mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail"),
-      );
+  const validateSignupForm = (): boolean => {
+    if (!authIdentifier.trim() || !authIdentifier.includes("@")) {
+      showNotification("warning", tt("platform.toast.enterEmailSignup"));
+      return false;
     }
-    if (mode === "signup" && !authIdentifier.includes("@")) {
-      return showNotification("warning", tt("platform.toast.enterEmailSignup"));
+    if (!signupNickname.trim()) {
+      showNotification("warning", tt("platform.toast.enterSignupNickname"));
+      return false;
     }
-    if (mode === "signup" && !signupNickname.trim()) {
-      return showNotification("warning", tt("platform.toast.enterSignupNickname"));
+    if (!authPassword) {
+      showNotification("warning", tt("platform.toast.enterPassword"));
+      return false;
     }
-    if (!authPassword) return showNotification("warning", tt("platform.toast.enterPassword"));
     if (authPassword.length < 8) {
-      return showNotification("warning", tt("platform.toast.passwordTooShort"));
+      showNotification("warning", tt("platform.toast.passwordTooShort"));
+      return false;
+    }
+    return true;
+  };
+
+  const handleSendVerificationCode = async (opts?: { silentSuccess?: boolean }) => {
+    if (!authIdentifier.trim() || !authIdentifier.includes("@")) {
+      showNotification("warning", tt("platform.toast.enterEmailSignup"));
+      return false;
+    }
+    setSendingCode(true);
+    try {
+      await sendEmailVerificationCode(authIdentifier.trim());
+      setCodeSent(true);
+      if (!opts?.silentSuccess) {
+        showNotification("success", tt("platform.toast.verificationCodeSent"));
+      }
+      return true;
+    } catch (e) {
+      const rawMessage = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
+      showNotification("error", mapAuthErrorMessage(rawMessage, "signup", tt));
+      return false;
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleSignupNext = async () => {
+    if (!validateSignupForm()) return;
+
+    if (!emailVerificationRequired) {
+      await handleAuth();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const sent = await handleSendVerificationCode({ silentSuccess: true });
+      if (!sent) return;
+      setVerificationCode("");
+      setSignupStep("verify");
+      showNotification("success", tt("platform.toast.verificationCodeSent"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuth = async () => {
+    if (mode === "login") {
+      if (!authIdentifier.trim()) {
+        return showNotification("warning", tt("platform.enterNicknameOrEmail"));
+      }
+      if (!authPassword) return showNotification("warning", tt("platform.toast.enterPassword"));
+      if (authPassword.length < 8) {
+        return showNotification("warning", tt("platform.toast.passwordTooShort"));
+      }
+    } else {
+      if (!validateSignupForm()) return;
+      if (emailVerificationRequired && !verificationCode.trim()) {
+        return showNotification("warning", tt("platform.toast.enterVerificationCode"));
+      }
+      if (emailVerificationRequired && verificationCode.trim().length !== 6) {
+        return showNotification("warning", tt("platform.toast.enterVerificationCode"));
+      }
     }
 
     setLoading(true);
@@ -178,11 +267,16 @@ export function PlatformAccountPanel({
               nickname: signupNickname.trim(),
               email: authIdentifier.trim(),
               password: authPassword,
+              verification_code: emailVerificationRequired
+                ? verificationCode.trim()
+                : undefined,
             })
           : await loginAndPersist({ login: authIdentifier.trim(), password: authPassword });
 
       setPlatformUser(me);
       setAccessToken(getStoredAccessToken() ?? "");
+      setSignupStep("form");
+      setVerificationCode("");
       showNotification(
         "success",
         mode === "signup" ? tt("platform.toast.accountCreated") : tt("platform.toast.signedIn"),
@@ -419,96 +513,195 @@ export function PlatformAccountPanel({
 
       {!accessToken ? (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-center gap-3">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => setMode("login")}
-              className={`interactive-press rounded-xl border px-4 py-2 text-sm font-semibold ${
-                mode === "login"
-                  ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
-                  : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
-              }`}
-            >
-              {tt("platform.signIn")}
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => setMode("signup")}
-              className={`interactive-press rounded-xl border px-4 py-2 text-sm font-semibold ${
-                mode === "signup"
-                  ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
-                  : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
-              }`}
-            >
-              {tt("platform.signUp")}
-            </button>
-          </div>
+          {mode === "signup" && signupStep === "verify" ? (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-500/10 to-black/20 px-5 py-6 text-center shadow-inner">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
+                  {tt("platform.verificationStepLabel")}
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-white">
+                  {tt("platform.verificationTitle")}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-white/65">
+                  {tt("platform.verificationHint", { email: authIdentifier.trim() })}
+                </p>
 
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-            {mode === "signup" ? tt("platform.emailLabel") : tt("platform.emailOrNicknameLabel")}
-            <input
-              type="text"
-              value={authIdentifier}
-              onChange={(e) => setAuthIdentifier(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-              placeholder={
-                mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail")
-              }
-            />
-          </label>
+                <div className="mx-auto mt-5 max-w-[280px]">
+                  <label className="sr-only" htmlFor="signup-verification-code">
+                    {tt("platform.verificationCodeLabel")}
+                  </label>
+                  <input
+                    id="signup-verification-code"
+                    ref={codeInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={verificationCode}
+                    onChange={(e) =>
+                      setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && verificationCode.length === 6) {
+                        void handleAuth();
+                      }
+                    }}
+                    className="h-14 w-full rounded-2xl border border-emerald-400/25 bg-black/45 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:border-emerald-400/50 focus:bg-black/55"
+                    placeholder="••••••"
+                    maxLength={6}
+                  />
+                  <div className="mt-3 flex justify-center gap-1.5">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`h-1.5 w-6 rounded-full transition ${
+                          verificationCode.length > i ? "bg-emerald-400" : "bg-white/15"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
 
-          {mode === "signup" ? (
-            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-              {tt("platform.nicknameLabel")}
-              <input
-                type="text"
-                value={signupNickname}
-                onChange={(e) => setSignupNickname(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-                placeholder={tt("platform.enterNickname")}
-              />
-            </label>
-          ) : null}
+                <button
+                  type="button"
+                  disabled={loading || sendingCode}
+                  onClick={() => void handleSendVerificationCode()}
+                  className="interactive-press mt-4 text-xs font-semibold text-emerald-200/80 underline-offset-2 hover:text-emerald-100 hover:underline disabled:opacity-60"
+                >
+                  {sendingCode
+                    ? tt("common.loading")
+                    : codeSent
+                      ? tt("platform.resendVerificationCode")
+                      : tt("platform.sendVerificationCode")}
+                </button>
+              </div>
 
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-            {tt("platform.passwordLabel")}
-            <div className="relative flex items-center">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 pr-11 text-sm text-white outline-none focus:border-emerald-400/30"
-                placeholder={tt("platform.passwordPlaceholder")}
-              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={loading || sendingCode}
+                  onClick={() => {
+                    setSignupStep("form");
+                    setVerificationCode("");
+                  }}
+                  className="interactive-press flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+                >
+                  {tt("platform.back")}
+                </button>
+                <button
+                  type="button"
+                  disabled={loading || sendingCode || verificationCode.length !== 6}
+                  onClick={() => void handleAuth()}
+                  className="interactive-press flex-[1.4] rounded-xl bg-[#2d7d46] px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+                >
+                  {loading ? tt("common.loading") : tt("platform.createAccount")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  disabled={loading || sendingCode}
+                  onClick={() => {
+                    setMode("login");
+                    setSignupStep("form");
+                  }}
+                  className={`interactive-press rounded-xl border px-4 py-2 text-sm font-semibold ${
+                    mode === "login"
+                      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
+                      : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
+                  }`}
+                >
+                  {tt("platform.signIn")}
+                </button>
+                <button
+                  type="button"
+                  disabled={loading || sendingCode}
+                  onClick={() => {
+                    setMode("signup");
+                    setSignupStep("form");
+                  }}
+                  className={`interactive-press rounded-xl border px-4 py-2 text-sm font-semibold ${
+                    mode === "signup"
+                      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
+                      : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
+                  }`}
+                >
+                  {tt("platform.signUp")}
+                </button>
+              </div>
+
+              <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
+                {mode === "signup" ? tt("platform.emailLabel") : tt("platform.emailOrNicknameLabel")}
+                <input
+                  type="text"
+                  value={authIdentifier}
+                  onChange={(e) => setAuthIdentifier(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                  placeholder={
+                    mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail")
+                  }
+                />
+              </label>
+
+              {mode === "signup" ? (
+                <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
+                  {tt("platform.nicknameLabel")}
+                  <input
+                    type="text"
+                    value={signupNickname}
+                    onChange={(e) => setSignupNickname(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                    placeholder={tt("platform.enterNickname")}
+                  />
+                </label>
+              ) : null}
+
+              <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
+                {tt("platform.passwordLabel")}
+                <div className="relative flex items-center">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 pr-11 text-sm text-white outline-none focus:border-emerald-400/30"
+                    placeholder={tt("platform.passwordPlaceholder")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="interactive-press absolute inset-y-0 right-2 my-auto flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/10"
+                    aria-label={showPassword ? tt("platform.hidePassword") : tt("platform.showPassword")}
+                  >
+                    <img
+                      src={showPassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
+                      alt=""
+                      className="h-4 w-4 object-contain opacity-80"
+                    />
+                  </button>
+                </div>
+              </label>
+
               <button
                 type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="interactive-press absolute inset-y-0 right-2 my-auto flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/10"
-                aria-label={showPassword ? tt("platform.hidePassword") : tt("platform.showPassword")}
+                disabled={loading || sendingCode}
+                onClick={() => {
+                  if (mode === "signup") void handleSignupNext();
+                  else void handleAuth();
+                }}
+                className="interactive-press w-full rounded-xl bg-[#2d7d46] px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
               >
-                <img
-                  src={showPassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
-                  alt=""
-                  className="h-4 w-4 object-contain opacity-80"
-                />
+                {loading || sendingCode
+                  ? tt("common.loading")
+                  : mode === "login"
+                    ? tt("platform.signIn")
+                    : emailVerificationRequired
+                      ? tt("platform.next")
+                      : tt("platform.createAccount")}
               </button>
-            </div>
-          </label>
-
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void handleAuth()}
-            className="interactive-press w-full rounded-xl bg-[#2d7d46] px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
-          >
-            {loading
-              ? tt("common.loading")
-              : mode === "login"
-                ? tt("platform.signIn")
-                : tt("platform.createAccount")}
-          </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-4">

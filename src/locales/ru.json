@@ -956,6 +956,11 @@
     "showPassword": "Показать пароль",
     "hidePassword": "Скрыть пароль",
     "createAccount": "Создать аккаунт",
+    "next": "Далее",
+    "back": "Назад",
+    "verificationStepLabel": "Шаг 2 из 2",
+    "verificationTitle": "Подтвердите email",
+    "verificationHint": "Мы отправили код на {{email}}. Введите его ниже, чтобы завершить регистрацию.",
     "launcherNickname": "Ник лаунчера",
     "inGameNickname": "Игровой ник",
     "newNicknamePlaceholder": "Новый никнейм",
@@ -967,6 +972,10 @@
     "enterEmail": "Введите email",
     "enterNicknameOrEmail": "Введите никнейм или почту",
     "enterNickname": "Введите никнейм",
+    "verificationCodeLabel": "Код подтверждения",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Отправить код на email",
+    "resendVerificationCode": "Отправить код ещё раз",
     "linkMicrosoftTitle": "Нажмите для входа через Microsoft и повторите привязку",
     "linkElyTitle": "Нажмите для входа через Ely.by и повторите привязку",
     "toast": {
@@ -986,7 +995,9 @@
       "enterEmailSignup": "Для регистрации укажите email.",
       "enterSignupNickname": "Введите никнейм для регистрации.",
       "enterPassword": "Введите пароль",
-      "passwordTooShort": "Пароль должен содержать минимум 8 символов."
+      "passwordTooShort": "Пароль должен содержать минимум 8 символов.",
+      "enterVerificationCode": "Введите код из письма.",
+      "verificationCodeSent": "Код подтверждения отправлен на email."
     },
     "errors": {
       "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте VITE_API_BASE_URL, интернет и доступность API.",
@@ -995,6 +1006,11 @@
       "passwordTooShort": "Пароль слишком короткий. Минимум 8 символов.",
       "emailTaken": "Этот email уже зарегистрирован.",
       "nicknameTaken": "Этот никнейм уже занят.",
+      "invalidVerificationCode": "Неверный код подтверждения.",
+      "verificationCodeExpired": "Код подтверждения истёк. Запросите новый.",
+      "tooManyVerificationAttempts": "Слишком много попыток. Запросите новый код.",
+      "rateLimited": "Слишком много запросов. Подождите немного.",
+      "emailSendFailed": "Не удалось отправить письмо с кодом.",
       "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16Launcher."
     }
   },
