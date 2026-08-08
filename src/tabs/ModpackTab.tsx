@@ -261,11 +261,49 @@ type FileNode = {
   children?: FileNode[] | null;
 };
 
-type PreviewFile = { path: string; size: number };
-type PreviewResult = { files: PreviewFile[]; total_bytes: number };
+type PreviewFile = { path: string; size: number; source?: string };
+type PreviewResult = {
+  files: PreviewFile[];
+  total_bytes: number;
+  download_bytes?: number;
+  resolved_count?: number;
+  override_count?: number;
+};
 type ExportProgressPayload = { bytes_written: number; total_bytes: number; current_file: string };
-type ExportFinishedPayload = { path: string; skipped_files: string[] };
+type ExportFinishedPayload = {
+  path: string;
+  skipped_files: string[];
+  resolved_count?: number;
+  override_count?: number;
+};
 type ExportErrorPayload = { message: string };
+
+const DEFAULT_EXPORT_IGNORES = [
+  "logs/",
+  "crash-reports/",
+  "screenshots/",
+  "saves/",
+  ".cache/",
+  "cache/",
+  "*.log",
+  "config.json",
+  "settings.json",
+].join("\n");
+
+const RECOMMENDED_EXPORT_TOP = new Set([
+  "mods",
+  "config",
+  "resourcepacks",
+  "shaderpacks",
+  "datapacks",
+  "options.txt",
+  "optionsof.txt",
+  "optionsshaders.txt",
+  "servers.dat",
+  "servers.dat_old",
+]);
+
+const MINIMAL_EXPORT_TOP = new Set(["mods", "config", "options.txt"]);
 type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
 type LastPlayedUpdatedPayload = { profile_id: string; last_played_at: number };
 
@@ -657,15 +695,17 @@ export function ModpackTab({
   const [profileInfoProfile, setProfileInfoProfile] = useState<ProfileInfoData | null>(null);
   const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
   const [exportTree, setExportTree] = useState<FileNode[] | null>(null);
+  const [exportTreeProfileId, setExportTreeProfileId] = useState<string | null>(null);
   const [exportTreeLoading, setExportTreeLoading] = useState(false);
   const [selectedExportPaths, setSelectedExportPaths] = useState<Set<string>>(new Set());
-  const [ignorePatternsText, setIgnorePatternsText] = useState("");
+  const [ignorePatternsText, setIgnorePatternsText] = useState(DEFAULT_EXPORT_IGNORES);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgressPayload | null>(null);
   const [exportResultPath, setExportResultPath] = useState<string | null>(null);
   const [exportSkippedFiles, setExportSkippedFiles] = useState<string[]>([]);
+  const [exportResolvedCount, setExportResolvedCount] = useState(0);
   const [exportSpeedLabel, setExportSpeedLabel] = useState<string>("");
   const [collapsedExportPaths, setCollapsedExportPaths] = useState<Set<string>>(new Set());
   const lastProgressRef = useRef<{ t: number; bytes: number } | null>(null);
@@ -1245,13 +1285,143 @@ export function ModpackTab({
     return out;
   }
 
+  function collectFilePaths(node: FileNode): string[] {
+    if (!node.is_dir) return [node.path];
+    const out: string[] = [];
+    for (const c of node.children ?? []) {
+      out.push(...collectFilePaths(c));
+    }
+    return out;
+  }
+
+  function pathHasSelectedAncestor(path: string, selected: Set<string>): boolean {
+    let cur = path;
+    while (true) {
+      const idx = cur.lastIndexOf("/");
+      if (idx < 0) break;
+      cur = cur.slice(0, idx);
+      if (selected.has(cur)) return true;
+    }
+    return false;
+  }
+
+  function isExportPathSelected(path: string): boolean {
+    if (selectedExportPaths.has(path)) return true;
+    return pathHasSelectedAncestor(path, selectedExportPaths);
+  }
+
+  function findNodeByPath(nodes: FileNode[] | null, path: string): FileNode | null {
+    if (!nodes) return null;
+    for (const n of nodes) {
+      if (n.path === path) return n;
+      const nested = findNodeByPath(n.children ?? null, path);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  function getFolderCheckState(node: FileNode): "all" | "some" | "none" {
+    const files = collectFilePaths(node);
+    if (files.length === 0) {
+      return isExportPathSelected(node.path) ? "all" : "none";
+    }
+    let selected = 0;
+    for (const f of files) {
+      if (isExportPathSelected(f)) selected += 1;
+    }
+    if (selected === 0) return "none";
+    if (selected === files.length) return "all";
+    return "some";
+  }
+
+  function setExportNodeChecked(node: FileNode, checked: boolean) {
+    setSelectedExportPaths((prev) => {
+      const next = new Set(prev);
+
+      const expandAncestorIfNeeded = () => {
+        const parts = node.path.split("/");
+        for (let i = parts.length - 1; i >= 1; i -= 1) {
+          const ancestorPath = parts.slice(0, i).join("/");
+          if (!next.has(ancestorPath)) continue;
+          const ancestor = findNodeByPath(exportTree, ancestorPath);
+          if (!ancestor) continue;
+          next.delete(ancestorPath);
+          for (const f of collectFilePaths(ancestor)) {
+            if (f === node.path || f.startsWith(`${node.path}/`)) continue;
+            next.add(f);
+          }
+        }
+      };
+
+      if (checked) {
+        expandAncestorIfNeeded();
+        if (node.is_dir) {
+          for (const f of collectFilePaths(node)) next.delete(f);
+          for (const p of flattenTreePaths(node.children ?? null)) next.delete(p);
+          next.add(node.path);
+        } else {
+          next.add(node.path);
+        }
+      } else {
+        expandAncestorIfNeeded();
+        next.delete(node.path);
+        if (node.is_dir) {
+          for (const f of collectFilePaths(node)) next.delete(f);
+          for (const p of flattenTreePaths(node.children ?? null)) next.delete(p);
+        }
+      }
+      return next;
+    });
+  }
+
   function getDefaultSelectedPaths(tree: FileNode[] | null): Set<string> {
     const next = new Set<string>();
     if (!tree) return next;
     for (const n of tree) {
-      next.add(n.path);
+      if (RECOMMENDED_EXPORT_TOP.has(n.name)) next.add(n.path);
+    }
+    if (next.size === 0) {
+      for (const n of tree) {
+        if (!["saves", "logs", "crash-reports", "screenshots"].includes(n.name)) {
+          next.add(n.path);
+        }
+      }
     }
     return next;
+  }
+
+  function applyExportPreset(preset: "recommended" | "minimal" | "full") {
+    if (!exportTree) return;
+    if (preset === "full") {
+      setSelectedExportPaths(new Set(exportTree.map((n) => n.path)));
+      return;
+    }
+    const allow = preset === "minimal" ? MINIMAL_EXPORT_TOP : RECOMMENDED_EXPORT_TOP;
+    const next = new Set<string>();
+    for (const n of exportTree) {
+      if (allow.has(n.name)) next.add(n.path);
+    }
+    setSelectedExportPaths(next);
+  }
+
+  async function loadExportTree(profileId: string, force = false) {
+    if (!force && exportTree && exportTreeProfileId === profileId) return;
+    setExportTreeLoading(true);
+    try {
+      const tree = await invoke<FileNode[]>("list_build_files", { buildId: profileId });
+      setExportTree(tree);
+      setExportTreeProfileId(profileId);
+      setSelectedExportPaths(getDefaultSelectedPaths(tree));
+      setCollapsedExportPaths(new Set());
+      setIgnorePatternsText(DEFAULT_EXPORT_IGNORES);
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.export.readFilesFailed"));
+      setExportTree(null);
+      setExportTreeProfileId(null);
+    } finally {
+      setExportTreeLoading(false);
+    }
   }
 
   async function openExportModal() {
@@ -1260,25 +1430,11 @@ export function ModpackTab({
     setExportResultPath(null);
     setExportProgress(null);
     setExportSkippedFiles([]);
+    setExportResolvedCount(0);
     setExportSpeedLabel("");
     lastProgressRef.current = null;
     setPreviewResult(null);
-    if (exportTree || exportTreeLoading) return;
-    setExportTreeLoading(true);
-    try {
-      const tree = await invoke<FileNode[]>("list_build_files", { buildId: selectedProfile.id });
-      setExportTree(tree);
-      setSelectedExportPaths(getDefaultSelectedPaths(tree));
-    } catch (e) {
-      console.error(e);
-      showNotification(
-        "error",
-        tt("modpacks.export.readFilesFailed"),
-      );
-      setExportTree(null);
-    } finally {
-      setExportTreeLoading(false);
-    }
+    await loadExportTree(selectedProfile.id, exportTreeProfileId !== selectedProfile.id);
   }
 
   async function handlePreviewExport() {
@@ -1298,6 +1454,7 @@ export function ModpackTab({
         buildId: selectedProfile.id,
         selected,
         ignores: parseIgnorePatterns(ignorePatternsText),
+        format: exportFormat,
       });
       setPreviewResult(res);
     } catch (e) {
@@ -1346,6 +1503,7 @@ export function ModpackTab({
     setExportProgress({ bytes_written: 0, total_bytes: 0, current_file: "" });
     setExportResultPath(null);
     setExportSkippedFiles([]);
+    setExportResolvedCount(0);
     setExportSpeedLabel("");
     lastProgressRef.current = null;
 
@@ -1403,6 +1561,9 @@ export function ModpackTab({
           const p = event.payload;
           setExportResultPath(p.path);
           setExportSkippedFiles(Array.isArray(p.skipped_files) ? p.skipped_files : []);
+          setExportResolvedCount(
+            typeof p.resolved_count === "number" ? p.resolved_count : 0,
+          );
           setExportBusy(false);
           setExportProgress(null);
           showNotification(
@@ -6367,14 +6528,44 @@ export function ModpackTab({
                 </div>
 
                 <div className="mt-4 text-xs font-semibold text-white/80">
+                  {tt("modpacks.exportModal.presets")}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={exportBusy || !exportTree}
+                    onClick={() => applyExportPreset("recommended")}
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {tt("modpacks.exportModal.presetRecommended")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportBusy || !exportTree}
+                    onClick={() => applyExportPreset("minimal")}
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {tt("modpacks.exportModal.presetMinimal")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportBusy || !exportTree}
+                    onClick={() => applyExportPreset("full")}
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {tt("modpacks.exportModal.presetFull")}
+                  </button>
+                </div>
+
+                <div className="mt-4 text-xs font-semibold text-white/80">
                   {tt("modpacks.exportModal.ignorePatterns")}
                 </div>
                 <textarea
                   value={ignorePatternsText}
                   disabled={exportBusy}
                   onChange={(e) => setIgnorePatternsText(e.target.value)}
-                  placeholder={"*.log\ncache/\n!important.log"}
-                  className="custom-scrollbar mt-2 h-32 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
+                  placeholder={"*.log\ncache/\nsaves/"}
+                  className="custom-scrollbar mt-2 h-28 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
                 />
                 <div className="mt-2 text-[11px] text-white/55">
                   {tt("modpacks.exportModal.ignoreHint")}
@@ -6389,8 +6580,18 @@ export function ModpackTab({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={exportBusy || exportTreeLoading || !selectedProfile}
+                      onClick={() =>
+                        selectedProfile && void loadExportTree(selectedProfile.id, true)
+                      }
+                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                    >
+                      {tt("modpacks.exportModal.refresh")}
+                    </button>
+                    <button
+                      type="button"
                       disabled={exportBusy || exportTreeLoading || !exportTree}
-                      onClick={() => setSelectedExportPaths(new Set(flattenTreePaths(exportTree)))}
+                      onClick={() => applyExportPreset("full")}
                       className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
                     >
                       {tt("modpacks.exportModal.selectAll")}
@@ -6423,7 +6624,10 @@ export function ModpackTab({
                     <div className="flex flex-col gap-1">
                       {(function renderNodes(nodes: FileNode[], depth: number): ReactNode[] {
                         return nodes.flatMap((n) => {
-                          const checked = selectedExportPaths.has(n.path);
+                          const folderState = n.is_dir ? getFolderCheckState(n) : null;
+                          const checked = n.is_dir
+                            ? folderState === "all"
+                            : isExportPathSelected(n.path);
                           const isCollapsed = collapsedExportPaths.has(n.path);
                           const row = (
                             <label
@@ -6456,15 +6660,19 @@ export function ModpackTab({
                                 ) : (
                                   <span className="mr-0.5 h-4 w-4" />
                                 )}
-                                  <input
+                                <input
                                   type="checkbox"
                                   checked={checked}
+                                  ref={
+                                    n.is_dir
+                                      ? (el) => {
+                                          if (el) el.indeterminate = folderState === "some";
+                                        }
+                                      : undefined
+                                  }
                                   disabled={exportBusy}
                                   onChange={(e) => {
-                                    const next = new Set(selectedExportPaths);
-                                    if (e.target.checked) next.add(n.path);
-                                    else next.delete(n.path);
-                                    setSelectedExportPaths(next);
+                                    setExportNodeChecked(n, e.target.checked);
                                   }}
                                   className="accent-checkbox"
                                 />
@@ -6501,7 +6709,9 @@ export function ModpackTab({
                     onClick={() => void handlePreviewExport()}
                     className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
                   >
-                    {tt("modpacks.exportModal.preview")}
+                    {previewLoading
+                      ? tt("modpacks.exportModal.previewing")
+                      : tt("modpacks.exportModal.preview")}
                   </button>
                   <button
                     type="button"
@@ -6558,15 +6768,32 @@ export function ModpackTab({
 
                 {previewResult && (
                   <div className="mt-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-white/80">
                         {tt("modpacks.exportModal.finalContents")}
                       </div>
-                      <div className="text-xs text-white/70">
-                        {tt("modpacks.exportModal.size")}{" "}
-                        <span className="font-semibold text-white/90">
-                          {formatByteSize(language, previewResult.total_bytes)}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
+                        {exportFormat === "mrpack" && (previewResult.resolved_count ?? 0) > 0 && (
+                          <span>
+                            {tt("modpacks.exportModal.linkedMods", {
+                              count: String(previewResult.resolved_count ?? 0),
+                            })}
+                          </span>
+                        )}
+                        <span>
+                          {tt("modpacks.exportModal.packSize")}{" "}
+                          <span className="font-semibold text-white/90">
+                            {formatByteSize(language, previewResult.total_bytes)}
+                          </span>
                         </span>
+                        {exportFormat === "mrpack" && (previewResult.download_bytes ?? 0) > 0 && (
+                          <span>
+                            {tt("modpacks.exportModal.downloadSize")}{" "}
+                            <span className="font-semibold text-white/90">
+                              {formatByteSize(language, previewResult.download_bytes ?? 0)}
+                            </span>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2 text-[11px] text-white/75">
@@ -6577,8 +6804,15 @@ export function ModpackTab({
                       ) : (
                         <div className="flex flex-col gap-1">
                           {previewResult.files.slice(0, 400).map((f) => (
-                            <div key={f.path} className="flex items-center justify-between gap-3 px-2 py-0.5">
-                              <span className="min-w-0 truncate">{f.path}</span>
+                            <div key={`${f.source ?? "x"}:${f.path}`} className="flex items-center justify-between gap-3 px-2 py-0.5">
+                              <span className="min-w-0 truncate">
+                                {f.source === "modrinth" ? (
+                                  <span className="mr-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
+                                    CDN
+                                  </span>
+                                ) : null}
+                                {f.path}
+                              </span>
                               <span className="shrink-0 text-white/50">
                                 {formatByteSize(language, f.size)}
                               </span>
@@ -6600,6 +6834,11 @@ export function ModpackTab({
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-emerald-200">
                         {tt("modpacks.exportModal.done")}
+                        {exportResolvedCount > 0
+                          ? ` · ${tt("modpacks.exportModal.linkedMods", {
+                              count: String(exportResolvedCount),
+                            })}`
+                          : ""}
                       </div>
                       <button
                         type="button"

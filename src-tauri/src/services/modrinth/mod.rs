@@ -1,8 +1,8 @@
-mod client;
+pub(crate) mod client;
 mod content_metadata;
 mod dependencies;
 mod installed;
-mod types;
+pub(crate) mod types;
 mod updates;
 
 pub use types::ModrinthDownloadTarget;
