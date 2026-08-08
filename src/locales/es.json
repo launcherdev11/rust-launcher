@@ -79,7 +79,55 @@
     "downloadFailed": "No se pudo descargar el archivo.",
     "downloadFailedModrinth": "No se pudo descargar el archivo Modrinth.",
     "downloadFailedCurseforge": "No se pudo descargar el archivo CurseForge.",
-    "curseforgeModpackHint": "Modpack de CurseForge guardado como archivo. La importación automática de .mrpack solo está disponible para Modrinth."
+    "curseforgeModpackHint": "Modpack de CurseForge guardado como archivo. La importación automática de .mrpack solo está disponible para Modrinth.",
+    "quickInstall": "Instalar",
+    "source": {
+      "catalog": "Catálogo",
+      "favorites": "Favoritos",
+      "recent": "Recientes"
+    },
+    "sort": {
+      "relevance": "Relevancia",
+      "downloads": "Descargas",
+      "popularity": "Popularidad",
+      "updated": "Actualizados",
+      "newest": "Novedades"
+    },
+    "filters": {
+      "title": "Filtros",
+      "sort": "Orden",
+      "categories": "Categorías",
+      "client": "Cliente",
+      "server": "Servidor",
+      "installedOnly": "Solo instalados",
+      "reset": "Restablecer"
+    },
+    "environment": {
+      "any": "Cualquiera",
+      "required": "Requerido",
+      "optional": "Opcional",
+      "unsupported": "No compatible"
+    },
+    "favorites": {
+      "add": "Favorito",
+      "remove": "Quitar",
+      "empty": "Aún no hay favoritos."
+    },
+    "recent": {
+      "empty": "Aún no hay proyectos recientes.",
+      "clear": "Vaciar"
+    },
+    "detail": {
+      "loading": "Cargando página del proyecto…",
+      "loadFailed": "No se pudo cargar la página del proyecto.",
+      "gallery": "Galería",
+      "description": "Descripción",
+      "versions": "Versiones",
+      "wiki": "Wiki",
+      "issues": "Issues",
+      "source": "Código",
+      "discord": "Discord"
+    }
   },
   "settings": {
     "common": {

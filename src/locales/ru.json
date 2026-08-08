@@ -79,7 +79,55 @@
     "downloadFailed": "Не удалось скачать файл.",
     "downloadFailedModrinth": "Не удалось скачать файл Modrinth.",
     "downloadFailedCurseforge": "Не удалось скачать файл CurseForge.",
-    "curseforgeModpackHint": "Сборка CurseForge сохранена как архив. Автоимпорт .mrpack доступен только для Modrinth."
+    "curseforgeModpackHint": "Сборка CurseForge сохранена как архив. Автоимпорт .mrpack доступен только для Modrinth.",
+    "quickInstall": "Установить",
+    "source": {
+      "catalog": "Каталог",
+      "favorites": "Избранное",
+      "recent": "Недавние"
+    },
+    "sort": {
+      "relevance": "Релевантность",
+      "downloads": "Загрузки",
+      "popularity": "Популярность",
+      "updated": "Обновления",
+      "newest": "Новизна"
+    },
+    "filters": {
+      "title": "Фильтры",
+      "sort": "Сортировка",
+      "categories": "Категории",
+      "client": "Клиент",
+      "server": "Сервер",
+      "installedOnly": "Только установленные",
+      "reset": "Сбросить"
+    },
+    "environment": {
+      "any": "Любой",
+      "required": "Обязательно",
+      "optional": "Опционально",
+      "unsupported": "Нет"
+    },
+    "favorites": {
+      "add": "В избранное",
+      "remove": "Из избранного",
+      "empty": "В избранном пока пусто."
+    },
+    "recent": {
+      "empty": "Недавних проектов пока нет.",
+      "clear": "Очистить"
+    },
+    "detail": {
+      "loading": "Загрузка страницы проекта…",
+      "loadFailed": "Не удалось загрузить страницу проекта.",
+      "gallery": "Галерея",
+      "description": "Описание",
+      "versions": "Версии",
+      "wiki": "Вики",
+      "issues": "Issues",
+      "source": "Исходники",
+      "discord": "Discord"
+    }
   },
   "settings": {
     "common": {
