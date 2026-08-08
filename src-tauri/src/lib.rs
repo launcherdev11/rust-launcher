@@ -47,9 +47,8 @@ use services::auth::{
     start_ely_oauth, start_ms_oauth,
 };
 use services::curseforge::{
-    curseforge_get_mod, curseforge_get_mod_files, curseforge_list_minecraft_versions,
-    curseforge_search_mods,
-    download_curseforge_file,
+    curseforge_get_mod, curseforge_get_mod_files, curseforge_list_categories,
+    curseforge_list_minecraft_versions, curseforge_search_mods, download_curseforge_file,
 };
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
@@ -229,6 +228,7 @@ pub fn run() {
             curseforge_search_mods,
             curseforge_get_mod,
             curseforge_get_mod_files,
+            curseforge_list_categories,
             curseforge_list_minecraft_versions,
             download_curseforge_file,
             import_mrpack,

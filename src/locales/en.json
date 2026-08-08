@@ -79,7 +79,55 @@
     "downloadFailed": "Failed to download file.",
     "downloadFailedModrinth": "Failed to download Modrinth file.",
     "downloadFailedCurseforge": "Failed to download CurseForge file.",
-    "curseforgeModpackHint": "CurseForge modpack saved as an archive. Automatic .mrpack import is only available for Modrinth."
+    "curseforgeModpackHint": "CurseForge modpack saved as an archive. Automatic .mrpack import is only available for Modrinth.",
+    "quickInstall": "Install",
+    "source": {
+      "catalog": "Catalog",
+      "favorites": "Favorites",
+      "recent": "Recent"
+    },
+    "sort": {
+      "relevance": "Relevance",
+      "downloads": "Downloads",
+      "popularity": "Popularity",
+      "updated": "Updated",
+      "newest": "Newest"
+    },
+    "filters": {
+      "title": "Filters",
+      "sort": "Sort",
+      "categories": "Categories",
+      "client": "Client",
+      "server": "Server",
+      "installedOnly": "Installed only",
+      "reset": "Reset"
+    },
+    "environment": {
+      "any": "Any",
+      "required": "Required",
+      "optional": "Optional",
+      "unsupported": "Unsupported"
+    },
+    "favorites": {
+      "add": "Favorite",
+      "remove": "Unfavorite",
+      "empty": "No favorites yet."
+    },
+    "recent": {
+      "empty": "No recently viewed projects yet.",
+      "clear": "Clear"
+    },
+    "detail": {
+      "loading": "Loading project page…",
+      "loadFailed": "Failed to load project page.",
+      "gallery": "Gallery",
+      "description": "Description",
+      "versions": "Versions",
+      "wiki": "Wiki",
+      "issues": "Issues",
+      "source": "Source",
+      "discord": "Discord"
+    }
   },
   "settings": {
     "common": {

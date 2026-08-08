@@ -30,6 +30,22 @@ pub struct CurseforgeSearchResult {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct CurseforgeCategoryHit {
+    pub id: u32,
+    pub name: String,
+    pub slug: String,
+    pub icon_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CurseforgeScreenshot {
+    pub url: String,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CurseforgeModDetails {
     pub id: u32,
     pub name: String,
@@ -42,6 +58,8 @@ pub struct CurseforgeModDetails {
     pub wiki_url: Option<String>,
     pub issues_url: Option<String>,
     pub source_url: Option<String>,
+    pub categories: Vec<CurseforgeCategoryHit>,
+    pub screenshots: Vec<CurseforgeScreenshot>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -93,6 +111,38 @@ struct CfMod {
     authors: Vec<CfAuthor>,
     logo: Option<CfLogo>,
     links: Option<CfModLinks>,
+    #[serde(default)]
+    categories: Vec<CfCategory>,
+    #[serde(default)]
+    screenshots: Vec<CfScreenshot>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CfCategory {
+    id: u32,
+    name: String,
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    icon_url: Option<String>,
+    #[serde(default)]
+    class_id: Option<u32>,
+    #[serde(default)]
+    parent_category_id: Option<u32>,
+    #[serde(default)]
+    is_class: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CfScreenshot {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -273,6 +323,45 @@ pub async fn curseforge_list_minecraft_versions() -> Result<Vec<String>, String>
     Ok(versions)
 }
 
+fn normalize_cf_sort_field(sort_field: Option<u8>) -> u8 {
+    match sort_field {
+        Some(v @ (1 | 2 | 3 | 6 | 11)) => v,
+        _ => 6,
+    }
+}
+
+#[tauri::command]
+pub async fn curseforge_list_categories(
+    content_type: String,
+) -> Result<Vec<CurseforgeCategoryHit>, String> {
+    let class_id = class_id_for_content_type(&content_type)?;
+    let path = format!("/categories?gameId={MINECRAFT_GAME_ID}&classId={class_id}");
+    let client = cf_client()?;
+    let body: CfApiResponse<Vec<CfCategory>> = cf_get_json(&client, &path).await?;
+
+    let mut categories: Vec<CurseforgeCategoryHit> = body
+        .data
+        .into_iter()
+        .filter(|c| c.is_class != Some(true))
+        .filter(|c| c.id != class_id)
+        .filter(|c| {
+            c.class_id == Some(class_id)
+                || c.parent_category_id == Some(class_id)
+                || c.parent_category_id.is_none()
+        })
+        .map(|c| CurseforgeCategoryHit {
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            icon_url: c.icon_url,
+        })
+        .collect();
+
+    categories.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    categories.dedup_by_key(|c| c.id);
+    Ok(categories)
+}
+
 #[tauri::command]
 pub async fn curseforge_search_mods(
     content_type: String,
@@ -281,16 +370,19 @@ pub async fn curseforge_search_mods(
     loader: String,
     index: u32,
     page_size: u32,
+    sort_field: Option<u8>,
+    category_id: Option<u32>,
 ) -> Result<CurseforgeSearchResult, String> {
     let class_id = class_id_for_content_type(&content_type)?;
     let page_size = page_size.clamp(1, 50);
+    let sort_field = normalize_cf_sort_field(sort_field);
 
     let mut query = vec![
         format!("gameId={MINECRAFT_GAME_ID}"),
         format!("classId={class_id}"),
         format!("index={index}"),
         format!("pageSize={page_size}"),
-        "sortField=6".to_string(),
+        format!("sortField={sort_field}"),
         "sortOrder=desc".to_string(),
     ];
 
@@ -303,6 +395,11 @@ pub async fn curseforge_search_mods(
             "gameVersion={}",
             urlencoding::encode(game_version.trim())
         ));
+    }
+    if let Some(cat_id) = category_id {
+        if cat_id > 0 {
+            query.push(format!("categoryId={cat_id}"));
+        }
     }
     if content_type == "mod" {
         if let Some(loader_type) = mod_loader_type(&loader) {
@@ -371,6 +468,32 @@ pub async fn curseforge_get_mod(mod_id: u32) -> Result<CurseforgeModDetails, Str
         issues_url: None,
         source_url: None,
     });
+    let categories = m
+        .categories
+        .into_iter()
+        .map(|c| CurseforgeCategoryHit {
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            icon_url: c.icon_url,
+        })
+        .collect();
+    let screenshots = m
+        .screenshots
+        .into_iter()
+        .filter_map(|s| {
+            let url = s.url.or(s.thumbnail_url)?.trim().to_string();
+            if url.is_empty() {
+                None
+            } else {
+                Some(CurseforgeScreenshot {
+                    url,
+                    title: s.title,
+                })
+            }
+        })
+        .collect();
+
     Ok(CurseforgeModDetails {
         id: m.id,
         name: m.name,
@@ -383,6 +506,8 @@ pub async fn curseforge_get_mod(mod_id: u32) -> Result<CurseforgeModDetails, Str
         wiki_url: links.wiki_url,
         issues_url: links.issues_url,
         source_url: links.source_url,
+        categories,
+        screenshots,
     })
 }
 
