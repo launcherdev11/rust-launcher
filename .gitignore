@@ -14,8 +14,9 @@ node_modules/
 dist/
 dist-ssr/
 *.local
-# Backend is deployed/copied separately — not versioned in this repo.
+# Backend/deploy are managed separately — not versioned in this repo.
 backend/
+deploy/
 src-tauri/target/
 .tauri/
 
