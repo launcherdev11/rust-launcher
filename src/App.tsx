@@ -80,7 +80,14 @@ import {
   resetGameConsoleFilter,
 } from "./lib/gameConsoleFilter";
 import { INSTALL_CONSOLE_PROFILE_ID } from "./lib/gameConsoleWindow";
-import { useT, t, isLanguage, readStoredLanguage, type Language } from "./i18n";
+import {
+  useT,
+  t,
+  isLanguage,
+  readStoredLanguage,
+  languageStoredAtLaunch,
+  type Language,
+} from "./i18n";
 import {
   OnboardingFlow,
   ONBOARDING_COMPLETED_STORAGE_KEY,
@@ -2151,17 +2158,18 @@ function App() {
         return;
       }
 
+      // Only skip for users who already had a language before this session.
+      // Hydration writes launcher_language on first run — that must not count as legacy.
       const legacyMigrated =
         window.localStorage.getItem(ONBOARDING_LEGACY_MIGRATED_KEY) === "1";
-      const storedLang = readStoredLanguage();
-      if (!legacyMigrated && storedLang) {
+      if (!legacyMigrated && languageStoredAtLaunch) {
         window.localStorage.setItem(ONBOARDING_LEGACY_MIGRATED_KEY, "1");
         window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
         void invoke("set_settings", {
           settings: {
             ...settings,
             onboarding_completed: true,
-            interface_language: storedLang,
+            interface_language: languageStoredAtLaunch,
           },
         }).catch(() => {});
         setOnboardingVisible(false);
