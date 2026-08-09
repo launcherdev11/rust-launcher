@@ -187,6 +187,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_API_BASE_URL: https://api.16-launcher.ru
           ELY_CLIENT_SECRET: ${{ secrets.ELY_CLIENT_SECRET }}
           PROXY_HOST: ${{ secrets.PROXY_HOST }}
           PROXY_HOSTS: ${{ secrets.PROXY_HOSTS }}
