@@ -1215,9 +1215,10 @@ function App() {
   }, []);
 
   const handleSidebarTabPointerDown = useCallback(
-    (tab: SplittableTabId, e: ReactPointerEvent<HTMLDivElement>) => {
+    (tab: SplittableTabId, e: ReactPointerEvent<HTMLButtonElement>) => {
       if (!splitViewEnabled || e.button !== 0) return;
-      e.preventDefault();
+      // Don't preventDefault on pointerdown — on Linux/WebKit that blocks click.
+      // Drag activation still works via move threshold below.
       cleanupSidebarTabDragListeners();
 
       const pointerId = e.pointerId;
@@ -4749,10 +4750,10 @@ function App() {
           ref={sidebarRef}
           className={
             sidebarHorizontal
-              ? `relative mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 rounded-3xl bg-black/40 px-4 py-3 backdrop-blur-lg ${
+              ? `relative z-40 mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 overflow-visible rounded-3xl bg-black/55 px-4 py-3 backdrop-blur-lg ${
                   sidebarPosition === "top" ? "mt-3 w-[calc(100%-1.5rem)]" : "mb-3 w-[calc(100%-1.5rem)]"
                 }`
-              : "relative m-3 flex w-20 shrink-0 flex-col justify-between rounded-3xl bg-black/40 px-3 py-6 backdrop-blur-lg"
+              : "relative z-40 m-3 flex w-20 shrink-0 flex-col justify-between overflow-visible rounded-3xl bg-black/55 px-3 py-6 backdrop-blur-lg"
           }
         >
           <span
@@ -4783,17 +4784,27 @@ function App() {
           />
           <div
             className={
-              sidebarHorizontal ? "flex flex-row items-center gap-3" : "flex flex-col gap-3"
+              sidebarHorizontal
+                ? "flex flex-row items-center gap-3"
+                : "flex flex-col items-center gap-3"
             }
           >
             {orderedSidebarItems.map((item) => {
               const tabId = item.id as SplittableTabId;
               const splitRole =
                 effectiveTabSplit && tabPaneRole(tabId, effectiveTabSplit);
+              const tooltipSide =
+                sidebarHorizontal
+                  ? sidebarPosition === "bottom"
+                    ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
+                    : "top-full left-1/2 mt-2 -translate-x-1/2"
+                  : sidebarPosition === "right"
+                    ? "right-full top-1/2 mr-2 -translate-y-1/2"
+                    : "left-full top-1/2 ml-2 -translate-y-1/2";
               return (
               <div
                 key={item.id}
-                className="interactive-press group relative flex items-center"
+                className="group relative flex h-10 w-10 shrink-0 items-center justify-center"
               >
                 <button
                   type="button"
@@ -4815,17 +4826,15 @@ function App() {
                     }
                     activateSidebarTab(tabId);
                   }}
-                  title={tt(item.labelKey)}
+                  aria-label={tt(item.labelKey)}
                   ref={(el) => {
                     sidebarButtonRefs.current[item.id] = el;
                   }}
-                  className="relative flex items-center"
+                  className="interactive-press relative flex h-10 w-10 shrink-0 items-center justify-center"
+                  onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
                 >
                   <div
-                    className={`sidebar-icon flex items-center justify-center ${
-                      sidebarHorizontal ? "" : "ml-2"
-                    } ${sidebarIconClass(tabId)}`}
-                    onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
+                    className={`sidebar-icon flex items-center justify-center ${sidebarIconClass(tabId)}`}
                   >
                     {SIDEBAR_ICON_PATHS[item.id] ? (
                       <img
@@ -4843,6 +4852,7 @@ function App() {
                     )}
                   </div>
                 </button>
+                <span className={`sidebar-tooltip ${tooltipSide}`}>{tt(item.labelKey)}</span>
                 {splitRole ? (
                   <button
                     type="button"
@@ -4930,26 +4940,31 @@ function App() {
             className={
               sidebarHorizontal
                 ? "flex shrink-0 items-center gap-3 border-l border-white/10 pl-4"
-                : "flex flex-col gap-3 border-t border-white/10 pt-4"
+                : "flex flex-col items-center gap-3 border-t border-white/10 pt-4"
             }
           >
-            {BOTTOM_SIDEBAR_ITEMS.map((item) => (
+            {BOTTOM_SIDEBAR_ITEMS.map((item) => {
+              const tooltipSide =
+                sidebarHorizontal
+                  ? sidebarPosition === "bottom"
+                    ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
+                    : "top-full left-1/2 mt-2 -translate-x-1/2"
+                  : sidebarPosition === "right"
+                    ? "right-full top-1/2 mr-2 -translate-y-1/2"
+                    : "left-full top-1/2 ml-2 -translate-y-1/2";
+              return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItemWithSound(item.id)}
-                title={tt(item.labelKey)}
+                aria-label={tt(item.labelKey)}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
                 }}
-                className={`interactive-press group relative flex items-center justify-center ${
-                  sidebarHorizontal ? "" : "w-full"
-                }`}
+                className="interactive-press group relative flex h-10 w-10 shrink-0 items-center justify-center"
               >
                 <div
                   className={`sidebar-icon flex items-center justify-center ${
-                    sidebarHorizontal ? "" : "ml-2"
-                  } ${
                     activeItem === item.id
                       ? "sidebar-icon-active"
                       : "bg-black/40 hover:bg-black/70"
@@ -4963,35 +4978,46 @@ function App() {
                     />
                   ) : null}
                 </div>
+                <span className={`sidebar-tooltip ${tooltipSide}`}>{tt(item.labelKey)}</span>
               </button>
-            ))}
+              );
+            })}
             <button
               type="button"
               onClick={() => setActiveItemWithSound("accounts")}
-              title={tt("app.accounts.sidebarTooltip")}
+              aria-label={tt("app.accounts.sidebarTooltip")}
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
               }}
-              className={`interactive-press group relative flex items-center justify-center ${
-                sidebarHorizontal ? "" : "w-full"
-              }`}
+              className="interactive-press group relative flex h-10 w-10 shrink-0 items-center justify-center"
             >
               <div
                 className={`sidebar-icon flex items-center justify-center rounded-full ${
-                  sidebarHorizontal ? "" : "ml-2"
-                } ${
                   activeItem === "accounts" ? "sidebar-icon-active" : "bg-black/40 hover:bg-black/70"
                 }`}
               >
                 <ProfileIcon />
               </div>
+              <span
+                className={`sidebar-tooltip ${
+                  sidebarHorizontal
+                    ? sidebarPosition === "bottom"
+                      ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
+                      : "top-full left-1/2 mt-2 -translate-x-1/2"
+                    : sidebarPosition === "right"
+                      ? "right-full top-1/2 mr-2 -translate-y-1/2"
+                      : "left-full top-1/2 ml-2 -translate-y-1/2"
+                }`}
+              >
+                {tt("app.accounts.sidebarTooltip")}
+              </span>
             </button>
           </div>
         </aside>
 
         <main
           ref={mainSplitRef}
-          className={`relative flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
+          className={`relative z-0 flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
             tabDrag ? "select-none" : ""
           }`}
         >

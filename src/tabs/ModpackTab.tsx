@@ -600,6 +600,10 @@ export function ModpackTab({
   >([]);
   const [externalImportSearch, setExternalImportSearch] = useState("");
   const [externalImportSort, setExternalImportSort] = useState<"name" | "date" | "size">("name");
+  const [isExternalLauncherDropdownOpen, setIsExternalLauncherDropdownOpen] = useState(false);
+  const [isExternalSortDropdownOpen, setIsExternalSortDropdownOpen] = useState(false);
+  const externalLauncherDropdownRef = useRef<HTMLDivElement | null>(null);
+  const externalSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [itemsSearch, setItemsSearch] = useState("");
   const [contentUpdates, setContentUpdates] = useState<ProfileContentUpdate[]>([]);
@@ -867,6 +871,39 @@ export function ModpackTab({
   useEffect(() => {
     setSelectedLogSessionId("live");
   }, [selectedProfileId]);
+
+  useEffect(() => {
+    if (!isExternalLauncherDropdownOpen && !isExternalSortDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (
+        isExternalLauncherDropdownOpen &&
+        externalLauncherDropdownRef.current &&
+        !externalLauncherDropdownRef.current.contains(target)
+      ) {
+        setIsExternalLauncherDropdownOpen(false);
+      }
+      if (
+        isExternalSortDropdownOpen &&
+        externalSortDropdownRef.current &&
+        !externalSortDropdownRef.current.contains(target)
+      ) {
+        setIsExternalSortDropdownOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsExternalLauncherDropdownOpen(false);
+        setIsExternalSortDropdownOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isExternalLauncherDropdownOpen, isExternalSortDropdownOpen]);
 
   useEffect(() => {
     if (selectedLogSessionId === "live") return;
@@ -4482,26 +4519,75 @@ export function ModpackTab({
               <label className="mb-1 block text-[11px] font-semibold text-white/70">
                 {tt("modpacks.externalImport.launcher")}
               </label>
-              <select
-                value={externalImportLauncher}
-                onChange={(e) => {
-                  const v = e.target.value as ExternalLauncherType;
-                  setExternalImportLauncher(v);
-                  setExternalImportInstances([]);
-                  setExternalImportScanError(null);
-                  setExternalImportSearch("");
-                  setExternalImportSort("name");
-                  setTimeout(() => void ensureExternalImportPathDefault(), 0);
-                }}
-                className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
-              >
-                <option value="auto">{tt("modpacks.externalImport.auto")}</option>
-                <option value="multimc">MultiMC</option>
-                <option value="prism_launcher">PrismLauncher</option>
-                <option value="atlauncher">ATLauncher</option>
-                <option value="gdlauncher">GDLauncher</option>
-                <option value="curseforge">CurseForge</option>
-              </select>
+              <div ref={externalLauncherDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExternalLauncherDropdownOpen((v) => !v);
+                    setIsExternalSortDropdownOpen(false);
+                  }}
+                  className="interactive-press flex w-full items-center justify-between gap-2 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-left text-xs text-white hover:border-white/35 focus:outline-none"
+                >
+                  <span className="truncate">
+                    {externalImportLauncher === "auto"
+                      ? tt("modpacks.externalImport.auto")
+                      : externalImportLauncher === "multimc"
+                        ? "MultiMC"
+                        : externalImportLauncher === "prism_launcher"
+                          ? "PrismLauncher"
+                          : externalImportLauncher === "atlauncher"
+                            ? "ATLauncher"
+                            : externalImportLauncher === "gdlauncher"
+                              ? "GDLauncher"
+                              : externalImportLauncher === "curseforge"
+                                ? "CurseForge"
+                                : tt("modpacks.externalImport.auto")}
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 text-white/50 transition-transform ${
+                      isExternalLauncherDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {isExternalLauncherDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full z-[120] mt-1 overflow-hidden rounded-2xl border border-white/12 bg-black/95 p-1 text-xs shadow-soft">
+                    {(
+                      [
+                        { id: "auto", label: tt("modpacks.externalImport.auto") },
+                        { id: "multimc", label: "MultiMC" },
+                        { id: "prism_launcher", label: "PrismLauncher" },
+                        { id: "atlauncher", label: "ATLauncher" },
+                        { id: "gdlauncher", label: "GDLauncher" },
+                        { id: "curseforge", label: "CurseForge" },
+                      ] as { id: ExternalLauncherType; label: string }[]
+                    ).map((opt) => {
+                      const active = externalImportLauncher === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setExternalImportLauncher(opt.id);
+                            setExternalImportInstances([]);
+                            setExternalImportScanError(null);
+                            setExternalImportSearch("");
+                            setExternalImportSort("name");
+                            setIsExternalLauncherDropdownOpen(false);
+                            setTimeout(() => void ensureExternalImportPathDefault(), 0);
+                          }}
+                          className={`interactive-press flex w-full items-center rounded-xl px-3 py-1.5 text-left transition-colors ${
+                            active
+                              ? "bg-white/90 font-semibold text-black"
+                              : "text-white/80 hover:bg-white/10"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="sm:col-span-2">
@@ -4557,17 +4643,59 @@ export function ModpackTab({
                   <span className="text-[11px] font-semibold text-white/60">
                     {tt("modpacks.externalImport.sort")}
                   </span>
-                  <select
-                    value={externalImportSort}
-                    onChange={(e) =>
-                      setExternalImportSort(e.target.value as "name" | "date" | "size")
-                    }
-                    className="rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
-                  >
-                    <option value="name">{tt("modpacks.externalImport.sortName")}</option>
-                    <option value="date">{tt("modpacks.externalImport.sortDate")}</option>
-                    <option value="size">{tt("modpacks.externalImport.sortSize")}</option>
-                  </select>
+                  <div ref={externalSortDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsExternalSortDropdownOpen((v) => !v);
+                        setIsExternalLauncherDropdownOpen(false);
+                      }}
+                      className="interactive-press flex min-w-[7.5rem] items-center justify-between gap-2 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-left text-xs text-white hover:border-white/35 focus:outline-none"
+                    >
+                      <span className="truncate">
+                        {externalImportSort === "name"
+                          ? tt("modpacks.externalImport.sortName")
+                          : externalImportSort === "date"
+                            ? tt("modpacks.externalImport.sortDate")
+                            : tt("modpacks.externalImport.sortSize")}
+                      </span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 shrink-0 text-white/50 transition-transform ${
+                          isExternalSortDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {isExternalSortDropdownOpen && (
+                      <div className="absolute right-0 top-full z-[120] mt-1 min-w-full overflow-hidden rounded-2xl border border-white/12 bg-black/95 p-1 text-xs shadow-soft">
+                        {(
+                          [
+                            { id: "name", key: "modpacks.externalImport.sortName" },
+                            { id: "date", key: "modpacks.externalImport.sortDate" },
+                            { id: "size", key: "modpacks.externalImport.sortSize" },
+                          ] as { id: "name" | "date" | "size"; key: string }[]
+                        ).map((opt) => {
+                          const active = externalImportSort === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setExternalImportSort(opt.id);
+                                setIsExternalSortDropdownOpen(false);
+                              }}
+                              className={`interactive-press flex w-full items-center rounded-xl px-3 py-1.5 text-left transition-colors ${
+                                active
+                                  ? "bg-white/90 font-semibold text-black"
+                                  : "text-white/80 hover:bg-white/10"
+                              }`}
+                            >
+                              {tt(opt.key)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

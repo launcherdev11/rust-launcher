@@ -1024,6 +1024,10 @@
     "newNicknamePlaceholder": "New nickname",
     "changeNickname": "Change nickname",
     "logout": "Log out",
+    "dangerZone": "Danger zone",
+    "deleteAccount": "Delete account",
+    "deleteAccountConfirm": "Delete permanently",
+    "deleteAccountHint": "Your 16Launcher account and related server data will be permanently deleted. Your current password is required.",
     "linked": "Linked",
     "linking": "Linking…",
     "link": "Link",
@@ -1055,7 +1059,8 @@
       "enterPassword": "Enter password",
       "passwordTooShort": "Password must be at least 8 characters.",
       "enterVerificationCode": "Enter the code from the email.",
-      "verificationCodeSent": "Verification code sent to your email."
+      "verificationCodeSent": "Verification code sent to your email.",
+      "accountDeleted": "Account deleted."
     },
     "errors": {
       "connectionFailed": "Cannot connect to the 16Launcher server. Check your internet connection and API availability.",

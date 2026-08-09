@@ -1044,6 +1044,10 @@
     "newNicknamePlaceholder": "Nuevo apodo",
     "changeNickname": "Cambiar apodo",
     "logout": "Cerrar sesión",
+    "dangerZone": "Zona de peligro",
+    "deleteAccount": "Eliminar cuenta",
+    "deleteAccountConfirm": "Eliminar permanentemente",
+    "deleteAccountHint": "Tu cuenta de 16Launcher y los datos relacionados en el servidor se eliminarán de forma permanente. Se requiere tu contraseña actual.",
     "linked": "Vinculado",
     "linking": "Vinculando…",
     "link": "Vincular",
@@ -1075,7 +1079,8 @@
       "enterPassword": "Introduce la contraseña",
       "passwordTooShort": "La contraseña debe tener al menos 8 caracteres.",
       "enterVerificationCode": "Introduce el código del correo.",
-      "verificationCodeSent": "Código de verificación enviado al correo."
+      "verificationCodeSent": "Código de verificación enviado al correo.",
+      "accountDeleted": "Cuenta eliminada."
     },
     "errors": {
       "connectionFailed": "No se puede conectar al servidor 16Launcher. Verifique internet y disponibilidad del API.",
