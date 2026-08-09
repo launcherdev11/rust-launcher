@@ -3,11 +3,12 @@
 //! Guest: listens on 127.0.0.1:0 → MC client connects → bytes go to UI/DC.
 //! Host: connects to 127.0.0.1:{lan_port} when guest opens a session.
 //!
+//! Multiple sessions (keyed by peer user id) let the host serve up to N guests.
 //! The guest listener MUST stay alive for the whole join session: Minecraft may
 //! probe/reconnect, and closing the Tauri process kills the port (connection refused).
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::collections::VecDeque;
 use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
@@ -23,18 +24,20 @@ pub const EVENT_LAN_BRIDGE_STATUS: &str = "lan-bridge-status";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LanBridgeDataPayload {
+    pub session_id: String,
     /// Base64-encoded TCP chunk from the local Minecraft socket.
     pub data_b64: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LanBridgeStatusPayload {
+    pub session_id: String,
     pub state: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
 
-struct BridgeInner {
+struct BridgeSession {
     write_tx: Option<mpsc::Sender<Vec<u8>>>,
     /// Signal all bridge tasks to stop (`true` = running).
     run_tx: Option<watch::Sender<bool>>,
@@ -45,7 +48,7 @@ struct BridgeInner {
     pending_bytes: usize,
 }
 
-impl BridgeInner {
+impl BridgeSession {
     fn idle() -> Self {
         Self {
             write_tx: None,
@@ -61,41 +64,54 @@ impl BridgeInner {
 const PENDING_CHUNKS_MAX: usize = 512;
 const PENDING_BYTES_MAX: usize = 4 * 1024 * 1024;
 
-static BRIDGE: OnceCell<Arc<Mutex<BridgeInner>>> = OnceCell::new();
+static BRIDGES: OnceCell<Arc<Mutex<HashMap<String, BridgeSession>>>> = OnceCell::new();
 
-fn bridge_state() -> Arc<Mutex<BridgeInner>> {
-    BRIDGE
-        .get_or_init(|| Arc::new(Mutex::new(BridgeInner::idle())))
+fn bridges_state() -> Arc<Mutex<HashMap<String, BridgeSession>>> {
+    BRIDGES
+        .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
         .clone()
 }
 
-async fn emit_status(app: &AppHandle, state: &str, detail: Option<String>) {
+fn normalize_session_id(session_id: &str) -> String {
+    let trimmed = session_id.trim();
+    if trimmed.is_empty() {
+        "default".into()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+async fn emit_status(app: &AppHandle, session_id: &str, state: &str, detail: Option<String>) {
     let _ = app.emit(
         EVENT_LAN_BRIDGE_STATUS,
         LanBridgeStatusPayload {
+            session_id: session_id.to_string(),
             state: state.into(),
             detail,
         },
     );
 }
 
-async fn stop_locked(inner: &mut BridgeInner) {
-    if let Some(tx) = inner.run_tx.take() {
+async fn stop_session(session: &mut BridgeSession) {
+    if let Some(tx) = session.run_tx.take() {
         let _ = tx.send(false);
     }
-    inner.write_tx = None;
-    inner.role = None;
-    inner.guest_port = None;
-    inner.pending_chunks.clear();
-    inner.pending_bytes = 0;
+    session.write_tx = None;
+    session.role = None;
+    session.guest_port = None;
+    session.pending_chunks.clear();
+    session.pending_bytes = 0;
 }
 
 /// Guest side: bind localhost and keep accepting until stopped.
 #[tauri::command]
-pub async fn lan_bridge_start_guest(app: AppHandle) -> Result<u16, String> {
-    let state = bridge_state();
-    let mut guard = state.lock().await;
-    stop_locked(&mut guard).await;
+pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Result<u16, String> {
+    let sid = normalize_session_id(&session_id);
+    let state = bridges_state();
+    let mut map = state.lock().await;
+    if let Some(existing) = map.get_mut(&sid) {
+        stop_session(existing).await;
+    }
 
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -106,24 +122,27 @@ pub async fn lan_bridge_start_guest(app: AppHandle) -> Result<u16, String> {
         .port();
 
     let (run_tx, run_rx) = watch::channel(true);
-    // Writer appears after accept(); until then we queue inbound peer chunks.
-    guard.write_tx = None;
-    guard.run_tx = Some(run_tx);
-    guard.role = Some("guest");
-    guard.guest_port = Some(port);
-    guard.pending_chunks.clear();
-    guard.pending_bytes = 0;
-    drop(guard);
+    let session = BridgeSession {
+        write_tx: None,
+        run_tx: Some(run_tx),
+        role: Some("guest"),
+        guest_port: Some(port),
+        pending_chunks: VecDeque::new(),
+        pending_bytes: 0,
+    };
+    map.insert(sid.clone(), session);
+    drop(map);
 
     let app2 = app.clone();
     let state2 = state.clone();
+    let sid2 = sid.clone();
     tokio::spawn(async move {
-        emit_status(&app2, "listening", Some(format!("127.0.0.1:{port}"))).await;
-        eprintln!("[LanBridge] guest listening on 127.0.0.1:{port}");
+        emit_status(&app2, &sid2, "listening", Some(format!("127.0.0.1:{port}"))).await;
+        eprintln!("[LanBridge:{sid2}] guest listening on 127.0.0.1:{port}");
 
         loop {
             if !*run_rx.borrow() {
-                emit_status(&app2, "stopped", None).await;
+                emit_status(&app2, &sid2, "stopped", None).await;
                 break;
             }
 
@@ -132,63 +151,66 @@ pub async fn lan_bridge_start_guest(app: AppHandle) -> Result<u16, String> {
                 accept = listener.accept() => {
                     match accept {
                         Ok((stream, peer)) => {
-                            eprintln!("[LanBridge] guest accepted from {peer}");
-                            emit_status(&app2, "connected", Some(peer.to_string())).await;
+                            eprintln!("[LanBridge:{sid2}] guest accepted from {peer}");
+                            emit_status(&app2, &sid2, "connected", Some(peer.to_string())).await;
 
                             let (conn_tx, mut conn_rx) = mpsc::channel::<Vec<u8>>(1024);
                             let pending = {
                                 let mut g = state2.lock().await;
-                                if g.role != Some("guest") {
+                                let Some(session) = g.get_mut(&sid2) else { break; };
+                                if session.role != Some("guest") {
                                     break;
                                 }
-                                g.write_tx = Some(conn_tx.clone());
-                                let drained = g.pending_chunks.drain(..).collect::<Vec<_>>();
-                                g.pending_bytes = 0;
+                                session.write_tx = Some(conn_tx.clone());
+                                let drained = session.pending_chunks.drain(..).collect::<Vec<_>>();
+                                session.pending_bytes = 0;
                                 drained
                             };
                             {
                                 if !pending.is_empty() {
                                     eprintln!(
-                                        "[LanBridge] guest flushing {} buffered chunks after accept",
+                                        "[LanBridge:{sid2}] guest flushing {} buffered chunks after accept",
                                         pending.len()
                                     );
                                 }
                                 for chunk in pending {
                                     if conn_tx.send(chunk).await.is_err() {
-                                        eprintln!("[LanBridge] guest failed to flush buffered chunk");
+                                        eprintln!("[LanBridge:{sid2}] guest failed to flush buffered chunk");
                                         break;
                                     }
                                 }
                             }
 
-                            run_stream_loop(app2.clone(), stream, &mut conn_rx, run_rx.clone()).await;
+                            run_stream_loop(app2.clone(), sid2.clone(), stream, &mut conn_rx, run_rx.clone()).await;
 
                             {
                                 let mut g = state2.lock().await;
-                                if g.role == Some("guest") {
-                                    // Keep port advertised; drop writer until next accept.
-                                    g.write_tx = None;
-                                    emit_status(
-                                        &app2,
-                                        "listening",
-                                        Some(format!("127.0.0.1:{port}")),
-                                    )
-                                    .await;
-                                    eprintln!(
-                                        "[LanBridge] guest TCP closed; still listening on {port}"
-                                    );
+                                if let Some(session) = g.get_mut(&sid2) {
+                                    if session.role == Some("guest") {
+                                        session.write_tx = None;
+                                        emit_status(
+                                            &app2,
+                                            &sid2,
+                                            "listening",
+                                            Some(format!("127.0.0.1:{port}")),
+                                        )
+                                        .await;
+                                        eprintln!(
+                                            "[LanBridge:{sid2}] guest TCP closed; still listening on {port}"
+                                        );
+                                    }
                                 }
                             }
                         }
                         Err(e) => {
-                            emit_status(&app2, "error", Some(e.to_string())).await;
+                            emit_status(&app2, &sid2, "error", Some(e.to_string())).await;
                             break;
                         }
                     }
                 }
                 _ = run_rx_accept.changed() => {
                     if !*run_rx_accept.borrow() {
-                        emit_status(&app2, "stopped", None).await;
+                        emit_status(&app2, &sid2, "stopped", None).await;
                         break;
                     }
                 }
@@ -196,10 +218,12 @@ pub async fn lan_bridge_start_guest(app: AppHandle) -> Result<u16, String> {
         }
 
         let mut g = state2.lock().await;
-        if g.role == Some("guest") {
-            *g = BridgeInner::idle();
+        if let Some(session) = g.get_mut(&sid2) {
+            if session.role == Some("guest") {
+                *session = BridgeSession::idle();
+            }
         }
-        eprintln!("[LanBridge] guest task exited");
+        eprintln!("[LanBridge:{sid2}] guest task exited");
     });
 
     Ok(port)
@@ -207,54 +231,73 @@ pub async fn lan_bridge_start_guest(app: AppHandle) -> Result<u16, String> {
 
 /// Host side: connect to local Open-to-LAN Minecraft port.
 #[tauri::command]
-pub async fn lan_bridge_start_host(app: AppHandle, lan_port: u16) -> Result<(), String> {
+pub async fn lan_bridge_start_host(
+    app: AppHandle,
+    session_id: String,
+    lan_port: u16,
+) -> Result<(), String> {
     if lan_port == 0 {
         return Err("invalid lan port".into());
     }
 
-    let state = bridge_state();
-    let mut guard = state.lock().await;
-    stop_locked(&mut guard).await;
+    let sid = normalize_session_id(&session_id);
+    let state = bridges_state();
+    let mut map = state.lock().await;
+    if let Some(existing) = map.get_mut(&sid) {
+        stop_session(existing).await;
+    }
 
     let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(1024);
     let (run_tx, run_rx) = watch::channel(true);
-    guard.write_tx = Some(write_tx);
-    guard.run_tx = Some(run_tx);
-    guard.role = Some("host");
-    drop(guard);
+    map.insert(
+        sid.clone(),
+        BridgeSession {
+            write_tx: Some(write_tx),
+            run_tx: Some(run_tx),
+            role: Some("host"),
+            guest_port: None,
+            pending_chunks: VecDeque::new(),
+            pending_bytes: 0,
+        },
+    );
+    drop(map);
 
     let app2 = app.clone();
+    let state2 = state.clone();
+    let sid2 = sid.clone();
     tokio::spawn(async move {
         let target = format!("127.0.0.1:{lan_port}");
         let mut attempt: u32 = 0;
         loop {
             if !*run_rx.borrow() {
-                emit_status(&app2, "stopped", None).await;
+                emit_status(&app2, &sid2, "stopped", None).await;
                 break;
             }
             attempt = attempt.saturating_add(1);
             emit_status(
                 &app2,
+                &sid2,
                 "connecting",
                 Some(format!("{target} attempt={attempt}")),
             )
             .await;
-            eprintln!("[LanBridge] host connect attempt #{attempt} to {target}");
+            eprintln!("[LanBridge:{sid2}] host connect attempt #{attempt} to {target}");
 
             match TcpStream::connect(("127.0.0.1", lan_port)).await {
                 Ok(stream) => {
-                    emit_status(&app2, "connected", Some(format!("attempt={attempt}"))).await;
-                    eprintln!("[LanBridge] host connected to {target} on attempt {attempt}");
-                    run_stream_loop(app2.clone(), stream, &mut write_rx, run_rx.clone()).await;
+                    emit_status(&app2, &sid2, "connected", Some(format!("attempt={attempt}"))).await;
+                    eprintln!("[LanBridge:{sid2}] host connected to {target} on attempt {attempt}");
+                    run_stream_loop(app2.clone(), sid2.clone(), stream, &mut write_rx, run_rx.clone()).await;
                     if !*run_rx.borrow() {
                         break;
                     }
-                    emit_status(&app2, "reconnecting", Some(target.clone())).await;
-                    eprintln!("[LanBridge] host stream ended, reconnecting to {target}");
+                    emit_status(&app2, &sid2, "reconnecting", Some(target.clone())).await;
+                    eprintln!("[LanBridge:{sid2}] host stream ended, reconnecting to {target}");
                 }
                 Err(e) => {
                     emit_status(
                         &app2,
+                        &sid2,
                         "retrying",
                         Some(format!("{target} attempt={attempt} err={e}")),
                     )
@@ -265,12 +308,13 @@ pub async fn lan_bridge_start_host(app: AppHandle, lan_port: u16) -> Result<(), 
             }
         }
 
-        let state = bridge_state();
-        let mut g = state.lock().await;
-        if g.role == Some("host") {
-            *g = BridgeInner::idle();
+        let mut g = state2.lock().await;
+        if let Some(session) = g.get_mut(&sid2) {
+            if session.role == Some("host") {
+                *session = BridgeSession::idle();
+            }
         }
-        eprintln!("[LanBridge] host task exited");
+        eprintln!("[LanBridge:{sid2}] host task exited");
     });
 
     Ok(())
@@ -278,17 +322,21 @@ pub async fn lan_bridge_start_host(app: AppHandle, lan_port: u16) -> Result<(), 
 
 /// Bytes arriving from the WebRTC peer → write into the local TCP socket.
 #[tauri::command]
-pub async fn lan_bridge_write(data_b64: String) -> Result<(), String> {
+pub async fn lan_bridge_write(session_id: String, data_b64: String) -> Result<(), String> {
+    let sid = normalize_session_id(&session_id);
     let bytes = B64
         .decode(data_b64.as_bytes())
         .map_err(|e| format!("invalid bridge payload: {e}"))?;
     if bytes.is_empty() {
         return Ok(());
     }
-    let state = bridge_state();
+    let state = bridges_state();
     let (tx_opt, should_buffer_guest) = {
         let guard = state.lock().await;
-        (guard.write_tx.clone(), guard.role == Some("guest"))
+        match guard.get(&sid) {
+            Some(session) => (session.write_tx.clone(), session.role == Some("guest")),
+            None => (None, false),
+        }
     };
     if let Some(tx) = tx_opt {
         tx.send(bytes)
@@ -298,49 +346,74 @@ pub async fn lan_bridge_write(data_b64: String) -> Result<(), String> {
     }
     if should_buffer_guest {
         let mut guard = state.lock().await;
+        let Some(session) = guard.get_mut(&sid) else {
+            return Err("lan bridge is not running".into());
+        };
         let len = bytes.len();
-        if guard.pending_chunks.len() >= PENDING_CHUNKS_MAX || guard.pending_bytes + len > PENDING_BYTES_MAX {
-            while guard.pending_chunks.len() >= PENDING_CHUNKS_MAX
-                || guard.pending_bytes + len > PENDING_BYTES_MAX
+        if session.pending_chunks.len() >= PENDING_CHUNKS_MAX
+            || session.pending_bytes + len > PENDING_BYTES_MAX
+        {
+            while session.pending_chunks.len() >= PENDING_CHUNKS_MAX
+                || session.pending_bytes + len > PENDING_BYTES_MAX
             {
-                if let Some(old) = guard.pending_chunks.pop_front() {
-                    guard.pending_bytes = guard.pending_bytes.saturating_sub(old.len());
+                if let Some(old) = session.pending_chunks.pop_front() {
+                    session.pending_bytes = session.pending_bytes.saturating_sub(old.len());
                 } else {
                     break;
                 }
             }
         }
-        guard.pending_bytes = guard.pending_bytes.saturating_add(len);
-        guard.pending_chunks.push_back(bytes);
-        if guard.pending_chunks.len() == 1 {
-            eprintln!("[LanBridge] guest buffering peer data until local TCP accept");
+        session.pending_bytes = session.pending_bytes.saturating_add(len);
+        session.pending_chunks.push_back(bytes);
+        if session.pending_chunks.len() == 1 {
+            eprintln!("[LanBridge:{sid}] guest buffering peer data until local TCP accept");
         }
         return Ok(());
     }
-    Err("lan bridge is not running".into())
+    Err(format!("lan bridge is not running ({sid})"))
 }
 
 #[tauri::command]
-pub async fn lan_bridge_stop() -> Result<(), String> {
-    let state = bridge_state();
-    let mut guard = state.lock().await;
-    eprintln!(
-        "[LanBridge] stop requested (role={:?}, port={:?})",
-        guard.role, guard.guest_port
-    );
-    stop_locked(&mut guard).await;
+pub async fn lan_bridge_stop(session_id: Option<String>) -> Result<(), String> {
+    let state = bridges_state();
+    let mut map = state.lock().await;
+    match session_id {
+        Some(raw) => {
+            let sid = normalize_session_id(&raw);
+            if let Some(session) = map.get_mut(&sid) {
+                eprintln!(
+                    "[LanBridge:{sid}] stop requested (role={:?}, port={:?})",
+                    session.role, session.guest_port
+                );
+                stop_session(session).await;
+                map.remove(&sid);
+            }
+        }
+        None => {
+            let keys: Vec<String> = map.keys().cloned().collect();
+            eprintln!("[LanBridge] stop all requested ({} sessions)", keys.len());
+            for sid in keys {
+                if let Some(session) = map.get_mut(&sid) {
+                    stop_session(session).await;
+                }
+                map.remove(&sid);
+            }
+        }
+    }
     Ok(())
 }
 
 #[tauri::command]
-pub async fn lan_bridge_guest_port() -> Result<Option<u16>, String> {
-    let state = bridge_state();
-    let guard = state.lock().await;
-    Ok(guard.guest_port)
+pub async fn lan_bridge_guest_port(session_id: Option<String>) -> Result<Option<u16>, String> {
+    let state = bridges_state();
+    let map = state.lock().await;
+    let sid = normalize_session_id(session_id.as_deref().unwrap_or("default"));
+    Ok(map.get(&sid).and_then(|s| s.guest_port))
 }
 
 async fn run_stream_loop(
     app: AppHandle,
+    session_id: String,
     stream: TcpStream,
     write_rx: &mut mpsc::Receiver<Vec<u8>>,
     mut run_rx: watch::Receiver<bool>,
@@ -352,7 +425,7 @@ async fn run_stream_loop(
 
     loop {
         if !*run_rx.borrow() {
-            emit_status(&app, "stopped", None).await;
+            emit_status(&app, &session_id, "stopped", None).await;
             break;
         }
 
@@ -360,19 +433,20 @@ async fn run_stream_loop(
             read = reader.read(&mut buf) => {
                 match read {
                     Ok(0) => {
-                        emit_status(&app, "closed", Some("tcp eof".into())).await;
+                        emit_status(&app, &session_id, "closed", Some("tcp eof".into())).await;
                         break;
                     }
                     Ok(n) => {
                         let _ = app.emit(
                             EVENT_LAN_BRIDGE_DATA,
                             LanBridgeDataPayload {
+                                session_id: session_id.clone(),
                                 data_b64: B64.encode(&buf[..n]),
                             },
                         );
                     }
                     Err(e) => {
-                        emit_status(&app, "error", Some(e.to_string())).await;
+                        emit_status(&app, &session_id, "error", Some(e.to_string())).await;
                         break;
                     }
                 }
@@ -381,11 +455,11 @@ async fn run_stream_loop(
                 match chunk {
                     Some(data) => {
                         if let Err(e) = writer.write_all(&data).await {
-                            emit_status(&app, "error", Some(e.to_string())).await;
+                            emit_status(&app, &session_id, "error", Some(e.to_string())).await;
                             break;
                         }
                         if let Err(e) = writer.flush().await {
-                            emit_status(&app, "error", Some(e.to_string())).await;
+                            emit_status(&app, &session_id, "error", Some(e.to_string())).await;
                             break;
                         }
                     }
@@ -394,7 +468,7 @@ async fn run_stream_loop(
             }
             _ = run_rx.changed() => {
                 if !*run_rx.borrow() {
-                    emit_status(&app, "stopped", None).await;
+                    emit_status(&app, &session_id, "stopped", None).await;
                     break;
                 }
             }

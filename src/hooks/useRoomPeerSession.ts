@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Room } from "../api/rooms";
 import {
   startPeerSignaling,
@@ -15,41 +15,116 @@ const IDLE: PeerLinkState = {
 };
 
 const MAX_RECONNECT_DELAY_MS = 12_000;
-const CONNECTING_TIMEOUT_MS = 12_000;
+const CONNECTING_TIMEOUT_MS = 25_000;
+
+type PeerHandle = {
+  dispose: () => void;
+  peerUserId: string;
+};
+
+function remotePeerIdsFor(room: Room | null, localUserId: string): string[] {
+  if (!room || !localUserId) return [];
+  const members = room.members ?? [];
+  if (members.length === 0) return [];
+
+  if (localUserId === room.owner_user_id) {
+    return members
+      .filter((m) => m.user_id !== localUserId)
+      .map((m) => m.user_id)
+      .sort();
+  }
+
+  const amMember = members.some((m) => m.user_id === localUserId);
+  if (!amMember) return [];
+  return [room.owner_user_id];
+}
+
+function aggregateLink(peers: Record<string, PeerLinkState>, expectedIds: string[]): PeerLinkState {
+  if (expectedIds.length === 0) return IDLE;
+
+  const links = expectedIds.map((id) => peers[id]).filter(Boolean) as PeerLinkState[];
+  if (links.length === 0) {
+    return { ...IDLE, status: "preparing", peerUserId: expectedIds[0] ?? null };
+  }
+
+  const open = links.filter((l) => l.channelOpen && l.status === "connected");
+  if (open.length > 0) {
+    const preferred = open.find((l) => l.connectionType === "direct") ?? open[0]!;
+    return {
+      status: "connected",
+      connectionType: preferred.connectionType,
+      peerUserId: preferred.peerUserId,
+      channelOpen: true,
+    };
+  }
+
+  if (links.some((l) => l.status === "connecting" || l.status === "preparing")) {
+    return {
+      status: "connecting",
+      connectionType: null,
+      peerUserId: links[0]?.peerUserId ?? expectedIds[0] ?? null,
+      channelOpen: false,
+    };
+  }
+
+  if (links.every((l) => l.status === "failed" || l.status === "closed")) {
+    return {
+      status: "failed",
+      connectionType: null,
+      peerUserId: links[0]?.peerUserId ?? null,
+      channelOpen: false,
+    };
+  }
+
+  return {
+    status: links[0]?.status ?? "connecting",
+    connectionType: null,
+    peerUserId: links[0]?.peerUserId ?? expectedIds[0] ?? null,
+    channelOpen: false,
+  };
+}
 
 export function useRoomPeerSession(
   room: Room | null,
   localUserId: string,
   callbacks?: {
-    onTunnelOpen?: () => void;
+    onTunnelOpen?: (fromPeerUserId: string) => void;
     onSessionReset?: () => void;
+    onPeerChannelOpen?: (peerUserId: string, session: RoomPeerSession) => void;
   },
-): { link: PeerLinkState; session: RoomPeerSession | null } {
-  const [link, setLink] = useState<PeerLinkState>(IDLE);
-  const [session, setSession] = useState<RoomPeerSession | null>(null);
+): {
+  link: PeerLinkState;
+  session: RoomPeerSession | null;
+  sessions: Record<string, RoomPeerSession>;
+  peerLinks: Record<string, PeerLinkState>;
+  expectedPeerIds: string[];
+  connectedPeerIds: string[];
+} {
+  const [peerLinks, setPeerLinks] = useState<Record<string, PeerLinkState>>({});
+  const [sessions, setSessions] = useState<Record<string, RoomPeerSession>>({});
   const [wsStatus, setWsStatus] = useState(getWsStatus);
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const disposeRef = useRef<(() => void) | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const identityRef = useRef<string | null>(null);
+  const [reconnectTick, setReconnectTick] = useState(0);
+
+  const handlesRef = useRef<Map<string, PeerHandle>>(new Map());
+  const reconnectAttemptRef = useRef<Map<string, number>>(new Map());
+  const reconnectTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const connectingTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const channelOpenRef = useRef<Map<string, boolean>>(new Map());
+  const sessionsByPeerRef = useRef<Record<string, RoomPeerSession>>({});
   const roomRef = useRef(room);
-  const channelOpenRef = useRef(false);
   const onTunnelOpenRef = useRef(callbacks?.onTunnelOpen);
   const onSessionResetRef = useRef(callbacks?.onSessionReset);
+  const onPeerChannelOpenRef = useRef(callbacks?.onPeerChannelOpen);
   roomRef.current = room;
   onTunnelOpenRef.current = callbacks?.onTunnelOpen;
   onSessionResetRef.current = callbacks?.onSessionReset;
+  onPeerChannelOpenRef.current = callbacks?.onPeerChannelOpen;
 
-  const requestRestartRef = useRef(() => {
-    if (channelOpenRef.current) return;
-    disposeRef.current?.();
-    disposeRef.current = null;
-    channelOpenRef.current = false;
-    setLink((prev) => ({ ...prev, status: "failed", channelOpen: false }));
-    setSession(null);
-    setReconnectAttempt((n) => n + 1);
-  });
+  const expectedPeerIds = useMemo(
+    () => remotePeerIdsFor(room, localUserId),
+    [room, localUserId],
+  );
+  const expectedKey = expectedPeerIds.join(",");
 
   useEffect(() => {
     const onStatus = (ev: Event) => {
@@ -62,43 +137,78 @@ export function useRoomPeerSession(
     return () => window.removeEventListener(WS_STATUS_EVENT, onStatus);
   }, []);
 
-  const members = room?.members ?? [];
-  const peerUserId =
-    members
-      .filter((m) => m.user_id !== localUserId)
-      .map((m) => m.user_id)
-      .sort()
-      .join(",") || null;
+  const clearPeerTimers = (peerId: string) => {
+    const c = connectingTimerRef.current.get(peerId);
+    if (c) {
+      clearTimeout(c);
+      connectingTimerRef.current.delete(peerId);
+    }
+    const r = reconnectTimerRef.current.get(peerId);
+    if (r) {
+      clearTimeout(r);
+      reconnectTimerRef.current.delete(peerId);
+    }
+  };
 
-  const identity =
-    room && localUserId && peerUserId && (room.member_count ?? 0) >= 2
-      ? `${room.id}:${room.owner_user_id}:${localUserId}:${peerUserId}`
-      : null;
+  const disposePeer = (peerId: string) => {
+    clearPeerTimers(peerId);
+    handlesRef.current.get(peerId)?.dispose();
+    handlesRef.current.delete(peerId);
+    channelOpenRef.current.delete(peerId);
+    delete sessionsByPeerRef.current[peerId];
+    setPeerLinks((prev) => {
+      if (!(peerId in prev)) return prev;
+      const next = { ...prev };
+      delete next[peerId];
+      return next;
+    });
+    setSessions((prev) => {
+      if (!(peerId in prev)) return prev;
+      const next = { ...prev };
+      delete next[peerId];
+      return next;
+    });
+  };
+
+  const requestRestart = (peerId: string) => {
+    if (channelOpenRef.current.get(peerId)) return;
+    disposePeer(peerId);
+    setPeerLinks((prev) => ({
+      ...prev,
+      [peerId]: {
+        status: "failed",
+        connectionType: null,
+        peerUserId: peerId,
+        channelOpen: false,
+      },
+    }));
+    reconnectAttemptRef.current.set(
+      peerId,
+      (reconnectAttemptRef.current.get(peerId) ?? 0) + 1,
+    );
+    setReconnectTick((n) => n + 1);
+  };
 
   useEffect(() => {
-    const identityChanged = identityRef.current !== identity;
-    if (identityChanged) {
-      if (identityRef.current != null) {
-        onSessionResetRef.current?.();
+    const currentIds = new Set(expectedPeerIds);
+    let removed = false;
+    for (const peerId of [...handlesRef.current.keys()]) {
+      if (!currentIds.has(peerId)) {
+        disposePeer(peerId);
+        reconnectAttemptRef.current.delete(peerId);
+        removed = true;
       }
-      identityRef.current = identity;
-      setReconnectAttempt(0);
-      channelOpenRef.current = false;
-      disposeRef.current?.();
-      disposeRef.current = null;
-      setLink(IDLE);
-      setSession(null);
+    }
+    if (removed) {
+      onSessionResetRef.current?.();
     }
 
-    if (!identity) {
-      disposeRef.current?.();
-      disposeRef.current = null;
-      setLink(IDLE);
-      setSession(null);
-      return;
-    }
-
-    if (channelOpenRef.current && disposeRef.current) {
+    if (!room || !localUserId || expectedPeerIds.length === 0) {
+      for (const peerId of [...handlesRef.current.keys()]) {
+        disposePeer(peerId);
+      }
+      setPeerLinks({});
+      setSessions({});
       return;
     }
 
@@ -106,103 +216,146 @@ export function useRoomPeerSession(
       return;
     }
 
-    if (disposeRef.current && !identityChanged) {
-      return;
+    const currentRoom = roomRef.current;
+    if (!currentRoom) return;
+
+    for (const peerUserId of expectedPeerIds) {
+      if (handlesRef.current.has(peerUserId)) continue;
+      if (channelOpenRef.current.get(peerUserId)) continue;
+
+      const handle = startPeerSignaling({
+        roomId: currentRoom.id,
+        localUserId,
+        hostUserId: currentRoom.owner_user_id,
+        peerUserId,
+        onState: (state) => {
+          const wasOpen = channelOpenRef.current.get(peerUserId) === true;
+          channelOpenRef.current.set(peerUserId, state.channelOpen);
+          setPeerLinks((prev) => ({ ...prev, [peerUserId]: state }));
+          if (state.channelOpen) {
+            reconnectAttemptRef.current.set(peerUserId, 0);
+            clearPeerTimers(peerUserId);
+            if (!wasOpen) {
+              const session = sessionsByPeerRef.current[peerUserId];
+              if (session) onPeerChannelOpenRef.current?.(peerUserId, session);
+            }
+          }
+        },
+        onSession: (session) => {
+          if (!session) {
+            delete sessionsByPeerRef.current[peerUserId];
+          } else {
+            sessionsByPeerRef.current[peerUserId] = session;
+          }
+          setSessions((prev) => {
+            if (!session) {
+              if (!(peerUserId in prev)) return prev;
+              const next = { ...prev };
+              delete next[peerUserId];
+              return next;
+            }
+            return { ...prev, [peerUserId]: session };
+          });
+        },
+        onTunnelOpen: () => onTunnelOpenRef.current?.(peerUserId),
+        onRequestRestart: () => requestRestart(peerUserId),
+      });
+
+      handlesRef.current.set(peerUserId, {
+        dispose: handle.dispose,
+        peerUserId,
+      });
     }
-
-    const current = roomRef.current;
-    if (!current) return;
-
-    const peer = (current.members ?? [])
-      .filter((m) => m.user_id !== localUserId)
-      .sort((a, b) => a.user_id.localeCompare(b.user_id))[0];
-    if (!peer) return;
-
-    disposeRef.current?.();
-    const handle = startPeerSignaling({
-      roomId: current.id,
-      localUserId,
-      hostUserId: current.owner_user_id,
-      peerUserId: peer.user_id,
-      onState: (state) => {
-        channelOpenRef.current = state.channelOpen;
-        setLink(state);
-      },
-      onSession: setSession,
-      onTunnelOpen: () => onTunnelOpenRef.current?.(),
-      onRequestRestart: () => requestRestartRef.current(),
-    });
-    disposeRef.current = handle.dispose;
-
-    return () => {
-    };
-  }, [identity, localUserId, wsStatus, reconnectAttempt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional peer set sync
+  }, [expectedKey, localUserId, wsStatus, reconnectTick, room?.id, room?.owner_user_id]);
 
   useEffect(() => {
     return () => {
-      disposeRef.current?.();
-      disposeRef.current = null;
-      if (connectingTimerRef.current) {
-        clearTimeout(connectingTimerRef.current);
-        connectingTimerRef.current = null;
+      for (const peerId of [...handlesRef.current.keys()]) {
+        disposePeer(peerId);
       }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
+      reconnectAttemptRef.current.clear();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Connecting watchdog per peer
   useEffect(() => {
-    if (link.status === "connected" && link.channelOpen) {
-      setReconnectAttempt(0);
+    if (wsStatus !== "connected") return;
+
+    for (const peerId of expectedPeerIds) {
+      const link = peerLinks[peerId];
+      clearTimeout(connectingTimerRef.current.get(peerId));
+      connectingTimerRef.current.delete(peerId);
+
+      if (!link || link.channelOpen) continue;
+      if (link.status !== "preparing" && link.status !== "connecting") continue;
+
+      connectingTimerRef.current.set(
+        peerId,
+        setTimeout(() => requestRestart(peerId), CONNECTING_TIMEOUT_MS),
+      );
     }
-  }, [link.status, link.channelOpen]);
-
-  useEffect(() => {
-    if (connectingTimerRef.current) {
-      clearTimeout(connectingTimerRef.current);
-      connectingTimerRef.current = null;
-    }
-
-    if (!identity || wsStatus !== "connected") return;
-    if (link.channelOpen) return;
-    if (link.status !== "preparing" && link.status !== "connecting") return;
-
-    connectingTimerRef.current = setTimeout(() => {
-      requestRestartRef.current();
-    }, CONNECTING_TIMEOUT_MS);
 
     return () => {
-      if (connectingTimerRef.current) {
-        clearTimeout(connectingTimerRef.current);
-        connectingTimerRef.current = null;
+      for (const peerId of expectedPeerIds) {
+        const t = connectingTimerRef.current.get(peerId);
+        if (t) clearTimeout(t);
       }
     };
-  }, [link.status, link.channelOpen, identity, wsStatus, reconnectAttempt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peerLinks, expectedKey, wsStatus, reconnectTick]);
 
+  // Reconnect backoff per peer
   useEffect(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
+    if (wsStatus !== "connected") return;
+
+    for (const peerId of expectedPeerIds) {
+      const link = peerLinks[peerId];
+      const existing = reconnectTimerRef.current.get(peerId);
+      if (existing) {
+        clearTimeout(existing);
+        reconnectTimerRef.current.delete(peerId);
+      }
+
+      if (!link || link.channelOpen) continue;
+      if (link.status !== "failed" && link.status !== "closed") continue;
+      if (handlesRef.current.has(peerId)) continue;
+
+      const attempt = reconnectAttemptRef.current.get(peerId) ?? 0;
+      const delay = Math.min(1500 * (attempt + 1), MAX_RECONNECT_DELAY_MS);
+      reconnectTimerRef.current.set(
+        peerId,
+        setTimeout(() => {
+          setReconnectTick((n) => n + 1);
+        }, delay),
+      );
     }
 
-    if (!identity || wsStatus !== "connected") return;
-    if (link.channelOpen) return;
-    if (link.status !== "failed" && link.status !== "closed") return;
-
-    const delay = Math.min(1500 * (reconnectAttempt + 1), MAX_RECONNECT_DELAY_MS);
-    reconnectTimerRef.current = setTimeout(() => {
-      requestRestartRef.current();
-    }, delay);
-
     return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
+      for (const t of reconnectTimerRef.current.values()) clearTimeout(t);
+      reconnectTimerRef.current.clear();
     };
-  }, [link.status, link.channelOpen, identity, wsStatus, reconnectAttempt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peerLinks, expectedKey, wsStatus]);
 
-  return { link, session };
+  const link = aggregateLink(peerLinks, expectedPeerIds);
+  const connectedPeerIds = expectedPeerIds.filter(
+    (id) => peerLinks[id]?.channelOpen && peerLinks[id]?.status === "connected",
+  );
+
+  const session =
+    (link.peerUserId && sessions[link.peerUserId]) ||
+    sessions[connectedPeerIds[0] ?? ""] ||
+    sessions[expectedPeerIds[0] ?? ""] ||
+    null;
+
+  return {
+    link,
+    session,
+    sessions,
+    peerLinks,
+    expectedPeerIds,
+    connectedPeerIds,
+  };
 }

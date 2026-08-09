@@ -19,8 +19,15 @@ export type PeerSessionCallbacks = {
   onTunnelOpen?: () => void;
 };
 
+function hasTurnUrl(urls: string | string[]): boolean {
+  const list = Array.isArray(urls) ? urls : [urls];
+  return list.some((u) => u.startsWith("turn:"));
+}
+
 async function buildIceServers(): Promise<RTCIceServer[]> {
   const servers: RTCIceServer[] = [];
+  let turnOk = false;
+
   try {
     const turn = await fetchTurnCredentials();
     servers.push({
@@ -28,23 +35,15 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
       username: turn.username,
       credential: turn.password,
     });
+    turnOk = true;
   } catch {
+    // TURN optional — STUN / host candidates still tried below.
   }
 
   try {
     const ice = await fetchIceServers();
     for (const s of ice.ice_servers) {
-      const isTurn = s.urls.some((u) => u.startsWith("turn:"));
-      if (
-        isTurn &&
-        servers.some((x) =>
-          Array.isArray(x.urls)
-            ? (x.urls as string[]).some((u) => u.startsWith("turn:"))
-            : String(x.urls).startsWith("turn:"),
-        )
-      ) {
-        continue;
-      }
+      if (turnOk && hasTurnUrl(s.urls)) continue;
       servers.push({
         urls: s.urls,
         username: s.username ?? undefined,
@@ -52,7 +51,23 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
       });
     }
   } catch {
-    servers.push({ urls: "stun:stun.l.google.com:19302" });
+    // ignore — fallbacks added below
+  }
+
+  if (servers.length === 0) {
+    servers.push(
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    );
+  } else if (!servers.some((s) => !hasTurnUrl(s.urls))) {
+    // TURN-only list still needs STUN for faster local/direct paths.
+    servers.unshift({ urls: "stun:stun.l.google.com:19302" });
+  }
+
+  if (!turnOk) {
+    console.warn(
+      "[webrtc] TURN credentials unavailable — P2P may fail across NATs (check TURN_HOST / coturn)",
+    );
   }
 
   return servers;
@@ -199,7 +214,18 @@ export class RoomPeerSession {
   async renegotiateOffer(): Promise<"resent" | "restart" | "noop"> {
     if (!this.isHost || this.closed || !this.pc) return "noop";
     if (this.channel?.readyState === "open") return "noop";
-    if (this.pc.remoteDescription) return "restart";
+
+    const conn = this.pc.connectionState;
+    // Do NOT tear down while ICE is still working — peer_ready spam used to
+    // restart every ~2.5s and leave the UI stuck on «подключение…».
+    if (conn === "connecting" || conn === "connected") return "noop";
+    if (this.pc.remoteDescription) {
+      if (conn === "failed" || conn === "disconnected" || conn === "closed") {
+        return "restart";
+      }
+      return "noop";
+    }
+
     try {
       await this.createAndSendOffer();
       return "resent";

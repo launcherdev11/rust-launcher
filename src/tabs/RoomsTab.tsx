@@ -231,78 +231,113 @@ export function RoomsTab({
   const [bridgeStatus, setBridgeStatus] = useState<string>("idle");
   const [tunnelBusy, setTunnelBusy] = useState(false);
   const [hostReady, setHostReady] = useState(false);
-  const tunnelDisposeRef = useRef<(() => void) | null>(null);
+  const tunnelDisposeByPeerRef = useRef<Map<string, () => void>>(new Map());
+  const hostBridgeStartedByPeerRef = useRef<Set<string>>(new Set());
   const pendingLanPortRef = useRef<number | null>(null);
-  const guestTunnelOpenPendingRef = useRef(false);
-  const hostBridgeStartedRef = useRef(false);
-  const peerSessionRef = useRef<ReturnType<typeof useRoomPeerSession>["session"]>(null);
+  const pendingGuestPeersRef = useRef<Set<string>>(new Set());
+  const sessionsRef = useRef<Record<string, import("../api/webrtc/session").RoomPeerSession>>({});
 
   const resetTunnelState = useCallback(() => {
-    tunnelDisposeRef.current?.();
-    tunnelDisposeRef.current = null;
+    for (const dispose of tunnelDisposeByPeerRef.current.values()) {
+      try {
+        dispose();
+      } catch {
+      }
+    }
+    tunnelDisposeByPeerRef.current.clear();
+    hostBridgeStartedByPeerRef.current.clear();
     pendingLanPortRef.current = null;
-    guestTunnelOpenPendingRef.current = false;
-    hostBridgeStartedRef.current = false;
+    pendingGuestPeersRef.current.clear();
     setHostReady(false);
     setBridgeStatus("idle");
     void stopBridge();
   }, []);
 
-  const startHostBridgeIfReady = useCallback(
-    async (port: number) => {
-      if (hostBridgeStartedRef.current) return;
-      hostBridgeStartedRef.current = true;
+  const ensureTunnelAttachedForPeer = useCallback(
+    async (peerUserId: string) => {
+      const session = sessionsRef.current[peerUserId];
+      if (!session?.channelOpen) {
+        throw new Error("P2P DataChannel is not open yet");
+      }
+      if (tunnelDisposeByPeerRef.current.has(peerUserId)) return;
+
+      const dispose = await attachLanTunnel({
+        sessionId: peerUserId,
+        sendBinary: (data) => session.sendBinary(data),
+        canSend: () => session.canSendBinary,
+        onRemoteBinary: (handler) => session.onRemoteBinary(handler),
+        onStatus: (s: LanBridgeStatus) => {
+          setBridgeStatus(s.state);
+          if (s.state === "connected" && !isOwner) {
+            session.signalTunnelOpen();
+          }
+        },
+      });
+      tunnelDisposeByPeerRef.current.set(peerUserId, dispose);
+    },
+    [isOwner],
+  );
+
+  const startHostBridgeForPeer = useCallback(
+    async (peerUserId: string, port: number) => {
+      if (hostBridgeStartedByPeerRef.current.has(peerUserId)) return;
+      hostBridgeStartedByPeerRef.current.add(peerUserId);
       try {
-        await startHostBridge(port);
+        await ensureTunnelAttachedForPeer(peerUserId);
+        await startHostBridge(peerUserId, port);
         setBridgeStatus("connecting");
       } catch (e) {
-        hostBridgeStartedRef.current = false;
+        hostBridgeStartedByPeerRef.current.delete(peerUserId);
         showNotification("error", e instanceof Error ? e.message : String(e));
       }
     },
-    [showNotification],
+    [ensureTunnelAttachedForPeer, showNotification],
   );
 
-  const onTunnelOpen = useCallback(() => {
-    const port = pendingLanPortRef.current;
-    if (port == null) {
-      guestTunnelOpenPendingRef.current = true;
-      return;
-    }
-    void startHostBridgeIfReady(port);
-  }, [startHostBridgeIfReady]);
+  const onTunnelOpen = useCallback(
+    (fromPeerUserId: string) => {
+      const port = pendingLanPortRef.current;
+      if (port == null) {
+        pendingGuestPeersRef.current.add(fromPeerUserId);
+        return;
+      }
+      void startHostBridgeForPeer(fromPeerUserId, port);
+    },
+    [startHostBridgeForPeer],
+  );
 
-  const { link: peerLink, session: peerSession } = useRoomPeerSession(selectedRoom, userId, {
+  const onPeerChannelOpen = useCallback(
+    (peerUserId: string) => {
+      const port = pendingLanPortRef.current;
+      if (!isOwner || port == null || !hostReady) return;
+      void startHostBridgeForPeer(peerUserId, port);
+    },
+    [hostReady, isOwner, startHostBridgeForPeer],
+  );
+
+  const {
+    link: peerLink,
+    sessions,
+    expectedPeerIds,
+    connectedPeerIds,
+  } = useRoomPeerSession(selectedRoom, userId, {
     onTunnelOpen: isOwner ? onTunnelOpen : undefined,
     onSessionReset: resetTunnelState,
+    onPeerChannelOpen: isOwner ? onPeerChannelOpen : undefined,
   });
-  peerSessionRef.current = peerSession;
+  sessionsRef.current = sessions;
 
   useEffect(() => {
     return () => {
-      tunnelDisposeRef.current?.();
-      tunnelDisposeRef.current = null;
+      for (const dispose of tunnelDisposeByPeerRef.current.values()) {
+        try {
+          dispose();
+        } catch {
+        }
+      }
+      tunnelDisposeByPeerRef.current.clear();
     };
   }, []);
-
-  const ensureTunnelAttached = useCallback(async () => {
-    const session = peerSessionRef.current;
-    if (!session?.channelOpen) {
-      throw new Error("P2P DataChannel is not open yet");
-    }
-    if (tunnelDisposeRef.current) return;
-    tunnelDisposeRef.current = await attachLanTunnel({
-      sendBinary: (data) => session.sendBinary(data),
-      canSend: () => session.canSendBinary,
-      onRemoteBinary: (handler) => session.onRemoteBinary(handler),
-      onStatus: (s: LanBridgeStatus) => {
-        setBridgeStatus(s.state);
-        if (s.state === "connected" && !isOwner) {
-          session.signalTunnelOpen();
-        }
-      },
-    });
-  }, [isOwner]);
 
   const handleHostShareWorld = async () => {
     const port = Number.parseInt(lanPortInput.trim(), 10);
@@ -310,20 +345,22 @@ export function RoomsTab({
       showNotification("warning", "Укажите порт Open to LAN (1–65535)");
       return;
     }
-    if (peerLink.status !== "connected" || !peerLink.channelOpen) {
+    if (connectedPeerIds.length === 0) {
       showNotification("warning", tt("rooms.needP2p"));
       return;
     }
     setTunnelBusy(true);
     try {
       pendingLanPortRef.current = port;
-      await ensureTunnelAttached();
       setHostReady(true);
-      await startHostBridgeIfReady(port);
-      if (guestTunnelOpenPendingRef.current) guestTunnelOpenPendingRef.current = false;
+      const peers = [...new Set([...connectedPeerIds, ...pendingGuestPeersRef.current])];
+      pendingGuestPeersRef.current.clear();
+      for (const peerId of peers) {
+        await startHostBridgeForPeer(peerId, port);
+      }
       showNotification(
         "success",
-        "Мир готов к подключению. Гость может нажать «Войти в мир».",
+        "Мир готов к подключению. Гости могут нажать «Войти в мир».",
       );
     } catch (e) {
       showNotification("error", e instanceof Error ? e.message : String(e));
@@ -337,6 +374,11 @@ export function RoomsTab({
       showNotification("warning", tt("rooms.needP2p"));
       return;
     }
+    const hostPeerId = selectedRoom?.owner_user_id;
+    if (!hostPeerId) {
+      showNotification("error", "Не найден хост комнаты");
+      return;
+    }
     if (!mcAuthOnline) {
       showNotification(
         "error",
@@ -346,12 +388,12 @@ export function RoomsTab({
     }
     setTunnelBusy(true);
     try {
-      await ensureTunnelAttached();
-      const localPort = await startGuestBridge();
-      if (!peerSessionRef.current?.channelOpen) {
+      await ensureTunnelAttachedForPeer(hostPeerId);
+      const localPort = await startGuestBridge(hostPeerId);
+      if (!sessionsRef.current[hostPeerId]?.channelOpen) {
         throw new Error("P2P канал закрылся до запуска игры — дождитесь channel open и попробуйте снова");
       }
-      console.info("[Rooms] guest bridge listening", { localPort, bridgeStatus });
+      console.info("[Rooms] guest bridge listening", { localPort, bridgeStatus, hostPeerId });
       showNotification(
         "info",
         `Туннель 127.0.0.1:${localPort} — запускаю игру…`,
@@ -539,10 +581,21 @@ export function RoomsTab({
   );
 
   const p2pReady = peerLink.status === "connected" && peerLink.channelOpen;
+  const expectedPeers = expectedPeerIds.length;
+  const connectedPeers = connectedPeerIds.length;
 
   const p2pStatusLabel = (() => {
     if (selectedRoom && selectedRoom.member_count < 2) return tt("rooms.p2pWaiting");
-    if (p2pReady) return tt("rooms.p2pReady");
+    if (p2pReady) {
+      if (expectedPeers > 1) {
+        return `${tt("rooms.p2pReady")} (${connectedPeers}/${expectedPeers})`;
+      }
+      return tt("rooms.p2pReady");
+    }
+    if (expectedPeers === 0) return tt("rooms.p2pWaiting");
+    if (connectedPeers > 0 && expectedPeers > 1) {
+      return `${tt("rooms.p2pConnecting")} (${connectedPeers}/${expectedPeers})`;
+    }
     return tt("rooms.p2pConnecting");
   })();
 
