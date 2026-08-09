@@ -44,13 +44,17 @@ export function startPeerSignaling(opts: Options): {
     if (partial.status === "closed" || partial.status === "failed") {
       channelOpen = false;
     }
-    opts.onState({
-      status: partial.status ?? "idle",
-      connectionType: partial.connectionType ?? null,
+    const next: PeerLinkState = {
+      status: "idle",
+      connectionType: null,
       peerUserId: opts.peerUserId,
-      channelOpen: partial.channelOpen ?? session?.channelOpen ?? false,
+      channelOpen: session?.channelOpen ?? channelOpen,
       ...partial,
-    });
+    };
+    if (partial.channelOpen === true && next.status === "idle") {
+      next.status = "connected";
+    }
+    opts.onState(next);
   };
 
   const announceReady = () => {

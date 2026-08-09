@@ -5,11 +5,13 @@ export const LAN_BRIDGE_DATA = "lan-bridge-data";
 export const LAN_BRIDGE_STATUS = "lan-bridge-status";
 
 export type LanBridgeStatus = {
+  session_id?: string;
   state: string;
   detail?: string | null;
 };
 
 export type LanBridgeData = {
+  session_id?: string;
   data_b64: string;
 };
 
@@ -27,29 +29,48 @@ function bytesFromB64(b64: string): Uint8Array {
   return out;
 }
 
+function normalizeSessionId(sessionId?: string | null): string {
+  const trimmed = (sessionId ?? "").trim();
+  return trimmed || "default";
+}
+
 /** Start guest TCP listener; returns local port for Minecraft quick-play join. */
-export async function startGuestBridge(): Promise<number> {
-  return invoke<number>("lan_bridge_start_guest");
+export async function startGuestBridge(sessionId: string): Promise<number> {
+  return invoke<number>("lan_bridge_start_guest", {
+    sessionId: normalizeSessionId(sessionId),
+  });
 }
 
-/** Host: connect bridge to local Open-to-LAN Minecraft port. */
-export async function startHostBridge(lanPort: number): Promise<void> {
-  await invoke("lan_bridge_start_host", { lanPort });
+/** Host: connect bridge to local Open-to-LAN Minecraft port (one session per guest). */
+export async function startHostBridge(sessionId: string, lanPort: number): Promise<void> {
+  await invoke("lan_bridge_start_host", {
+    sessionId: normalizeSessionId(sessionId),
+    lanPort,
+  });
 }
 
-export async function writeBridgeBytes(data: ArrayBuffer | Uint8Array): Promise<void> {
-  await invoke("lan_bridge_write", { dataB64: b64FromBytes(data) });
+export async function writeBridgeBytes(
+  sessionId: string,
+  data: ArrayBuffer | Uint8Array,
+): Promise<void> {
+  await invoke("lan_bridge_write", {
+    sessionId: normalizeSessionId(sessionId),
+    dataB64: b64FromBytes(data),
+  });
 }
 
-export async function stopBridge(): Promise<void> {
-  await invoke("lan_bridge_stop");
+/** Stop one session, or all sessions when sessionId is omitted. */
+export async function stopBridge(sessionId?: string | null): Promise<void> {
+  await invoke("lan_bridge_stop", {
+    sessionId: sessionId == null ? null : normalizeSessionId(sessionId),
+  });
 }
 
 const OUTBOUND_QUEUE_WARN = 256;
 const BACKPRESSURE_POLL_MS = 8;
 
 /**
- * Wire Tauri TCP bridge ↔ WebRTC DataChannel.
+ * Wire Tauri TCP bridge ↔ WebRTC DataChannel for a single peer session.
  * Returns dispose() — detaches listeners only. Does NOT stop the Rust bridge
  * (stopping mid-join causes Minecraft "connection refused").
  *
@@ -58,11 +79,13 @@ const BACKPRESSURE_POLL_MS = 8;
  * and surface as zlib `incorrect header check` after world join.
  */
 export async function attachLanTunnel(opts: {
+  sessionId: string;
   sendBinary: (data: ArrayBuffer) => boolean;
   canSend?: () => boolean;
   onRemoteBinary: (handler: (data: ArrayBuffer) => void) => () => void;
   onStatus?: (status: LanBridgeStatus) => void;
 }): Promise<() => void> {
+  const sessionId = normalizeSessionId(opts.sessionId);
   const unsubs: UnlistenFn[] = [];
   let disposed = false;
 
@@ -100,9 +123,14 @@ export async function attachLanTunnel(opts: {
   unsubs.push(
     await listen<LanBridgeData>(LAN_BRIDGE_DATA, (ev) => {
       if (disposed) return;
+      const payloadSession = normalizeSessionId(ev.payload.session_id);
+      if (payloadSession !== sessionId) return;
       try {
         const bytes = bytesFromB64(ev.payload.data_b64);
-        const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        const ab = bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ) as ArrayBuffer;
         if (outboundQueue.length === OUTBOUND_QUEUE_WARN) {
           console.warn(
             "[lan-bridge] outbound queue growing under DataChannel backpressure",
@@ -118,6 +146,8 @@ export async function attachLanTunnel(opts: {
 
   unsubs.push(
     await listen<LanBridgeStatus>(LAN_BRIDGE_STATUS, (ev) => {
+      const payloadSession = normalizeSessionId(ev.payload.session_id);
+      if (payloadSession !== sessionId) return;
       opts.onStatus?.(ev.payload);
     }),
   );
@@ -128,7 +158,7 @@ export async function attachLanTunnel(opts: {
     inboundWriteChain = inboundWriteChain
       .then(() => {
         if (disposed) return;
-        return writeBridgeBytes(copy);
+        return writeBridgeBytes(sessionId, copy);
       })
       .catch((err) => {
         console.warn("[lan-bridge] writeBridgeBytes failed", err);
