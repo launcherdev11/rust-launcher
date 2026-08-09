@@ -15,9 +15,7 @@ export type PeerSessionCallbacks = {
   onLocalAnswer: (sdp: string) => void;
   onStatus: (status: PeerSessionStatus) => void;
   onConnectionType?: (type: ConnectionType) => void;
-  /** Fired when the reliable DataChannel is open (game tunnel may start). */
   onChannelOpen?: () => void;
-  /** Guest accepted a local Minecraft TCP client — host should connect to LAN. */
   onTunnelOpen?: () => void;
 };
 
@@ -134,6 +132,7 @@ export class RoomPeerSession {
     if (this.closed) return;
     this.callbacks.onStatus("preparing");
     const iceServers = await buildIceServers();
+    if (this.closed) return;
     const pc = new RTCPeerConnection({ iceServers });
     this.pc = pc;
 
@@ -158,16 +157,15 @@ export class RoomPeerSession {
         this.callbacks.onStatus("connecting");
       } else if (state === "closed") {
         if (!this.closed) this.callbacks.onStatus("closed");
+      } else if (state === "disconnected") {
+        this.callbacks.onStatus("connecting");
       }
     };
 
     if (this.isHost) {
       this.channel = pc.createDataChannel("mc16", { ordered: true });
       this.wireChannel(this.channel);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      if (offer.sdp) this.callbacks.onLocalOffer(offer.sdp);
-      this.callbacks.onStatus("connecting");
+      await this.createAndSendOffer();
     } else {
       pc.ondatachannel = (ev) => {
         this.channel = ev.channel;
@@ -186,6 +184,27 @@ export class RoomPeerSession {
       for (const candidate of pendingIce) {
         await this.handleRemoteIce(candidate);
       }
+    }
+  }
+
+  private async createAndSendOffer(): Promise<void> {
+    if (!this.pc || this.closed || !this.isHost) return;
+    const offer = await this.pc.createOffer();
+    if (this.closed || !this.pc) return;
+    await this.pc.setLocalDescription(offer);
+    if (offer.sdp) this.callbacks.onLocalOffer(offer.sdp);
+    this.callbacks.onStatus("connecting");
+  }
+
+  async renegotiateOffer(): Promise<"resent" | "restart" | "noop"> {
+    if (!this.isHost || this.closed || !this.pc) return "noop";
+    if (this.channel?.readyState === "open") return "noop";
+    if (this.pc.remoteDescription) return "restart";
+    try {
+      await this.createAndSendOffer();
+      return "resent";
+    } catch {
+      return "restart";
     }
   }
 
@@ -217,7 +236,6 @@ export class RoomPeerSession {
     };
   }
 
-  /** Ask host to connect its local Open-to-LAN TCP socket. */
   signalTunnelOpen(): boolean {
     if (!this.channel || this.channel.readyState !== "open") return false;
     try {
@@ -228,10 +246,6 @@ export class RoomPeerSession {
     }
   }
 
-  /**
-   * Soft cap on DataChannel send buffer. Above this, sendBinary returns false
-   * so the tunnel can pause instead of dropping Minecraft TCP bytes.
-   */
   static readonly BUFFERED_AMOUNT_HIGH = 2 * 1024 * 1024;
 
   get bufferedAmount(): number {
@@ -246,7 +260,6 @@ export class RoomPeerSession {
     );
   }
 
-  /** Send Minecraft TCP chunk to peer. Returns false if channel closed or backpressured. */
   sendBinary(data: ArrayBuffer): boolean {
     if (!this.canSendBinary || !this.channel) return false;
     try {
@@ -285,18 +298,29 @@ export class RoomPeerSession {
       this.pendingRemoteOffer = sdp;
       return;
     }
-    await this.pc.setRemoteDescription({ type: "offer", sdp });
-    await this.drainPendingIce();
-    const answer = await this.pc.createAnswer();
-    await this.pc.setLocalDescription(answer);
-    if (answer.sdp) this.callbacks.onLocalAnswer(answer.sdp);
-    this.callbacks.onStatus("connecting");
+    if (this.channel?.readyState === "open") return;
+    try {
+      await this.pc.setRemoteDescription({ type: "offer", sdp });
+      await this.drainPendingIce();
+      const answer = await this.pc.createAnswer();
+      await this.pc.setLocalDescription(answer);
+      if (answer.sdp) this.callbacks.onLocalAnswer(answer.sdp);
+      this.callbacks.onStatus("connecting");
+    } catch {
+      this.callbacks.onStatus("failed");
+    }
   }
 
   async handleRemoteAnswer(sdp: string): Promise<void> {
     if (!this.pc || !this.isHost) return;
-    await this.pc.setRemoteDescription({ type: "answer", sdp });
-    await this.drainPendingIce();
+    if (this.channel?.readyState === "open") return;
+    try {
+      if (this.pc.signalingState !== "have-local-offer") return;
+      await this.pc.setRemoteDescription({ type: "answer", sdp });
+      await this.drainPendingIce();
+    } catch {
+      this.callbacks.onStatus("failed");
+    }
   }
 
   async handleRemoteIce(candidate: IceCandidateDto): Promise<void> {

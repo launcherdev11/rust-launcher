@@ -17,31 +17,56 @@ export type PeerLinkState = {
 type Options = {
   roomId: string;
   localUserId: string;
-  /** Room owner creates the offer. */
   hostUserId: string;
   peerUserId: string;
   onState: (state: PeerLinkState) => void;
   onSession?: (session: RoomPeerSession | null) => void;
-  /** Host-only: guest signaled that Minecraft connected to the tunnel. */
   onTunnelOpen?: () => void;
+  onRequestRestart?: () => void;
 };
 
-/**
- * Bind platform WS signaling to a single RoomPeerSession.
- * Caller must dispose() when the room is left or peer leaves.
- */
-export function startPeerSignaling(opts: Options): { dispose: () => void; getSession: () => RoomPeerSession | null } {
+const PEER_READY_INTERVAL_MS = 2_500;
+const RENEGOTIATE_DEBOUNCE_MS = 1_200;
+
+export function startPeerSignaling(opts: Options): {
+  dispose: () => void;
+  getSession: () => RoomPeerSession | null;
+} {
   const isHost = opts.localUserId === opts.hostUserId;
   let session: RoomPeerSession | null = null;
   let disposed = false;
+  let channelOpen = false;
+  let lastRenegotiateAt = 0;
+  let peerReadyTimer: ReturnType<typeof setInterval> | null = null;
 
   const emit = (partial: Partial<PeerLinkState>) => {
+    if (partial.channelOpen === true) channelOpen = true;
+    if (partial.status === "closed" || partial.status === "failed") {
+      channelOpen = false;
+    }
     opts.onState({
       status: partial.status ?? "idle",
       connectionType: partial.connectionType ?? null,
       peerUserId: opts.peerUserId,
       channelOpen: partial.channelOpen ?? session?.channelOpen ?? false,
       ...partial,
+    });
+  };
+
+  const announceReady = () => {
+    if (disposed || channelOpen) return;
+    sendWsMessage({ type: "peer_ready", payload: { room_id: opts.roomId } });
+  };
+
+  const renegotiateFromPeerReady = () => {
+    if (disposed || !isHost || channelOpen || !session) return;
+    const now = Date.now();
+    if (now - lastRenegotiateAt < RENEGOTIATE_DEBOUNCE_MS) return;
+    lastRenegotiateAt = now;
+    void session.renegotiateOffer().then((result) => {
+      if (result === "restart" && !disposed && !channelOpen) {
+        opts.onRequestRestart?.();
+      }
     });
   };
 
@@ -84,6 +109,11 @@ export function startPeerSignaling(opts: Options): { dispose: () => void; getSes
         });
       },
       onChannelOpen: () => {
+        channelOpen = true;
+        if (peerReadyTimer) {
+          clearInterval(peerReadyTimer);
+          peerReadyTimer = null;
+        }
         emit({ channelOpen: true, status: "connected" });
       },
       onTunnelOpen: () => {
@@ -114,7 +144,35 @@ export function startPeerSignaling(opts: Options): { dispose: () => void; getSes
       if (p.room_id !== opts.roomId || p.from_user_id !== opts.peerUserId) return;
       if (p.to_user_id !== opts.localUserId) return;
       void session?.handleRemoteIce(p.candidate);
+    } else if (detail.type === "peer_ready") {
+      const p = detail.payload;
+      if (p.room_id !== opts.roomId) return;
+      if (p.user_id && p.user_id !== opts.peerUserId) return;
+      if (channelOpen) return;
+      if (isHost) {
+        renegotiateFromPeerReady();
+      } else {
+        announceReady();
+      }
+    } else if (detail.type === "peer_join") {
+      const p = detail.payload;
+      if (p.room_id !== opts.roomId || p.user_id !== opts.peerUserId) return;
+      if (channelOpen) return;
+      announceReady();
+      if (isHost) renegotiateFromPeerReady();
+    } else if (detail.type === "room_member_joined") {
+      const p = detail.payload;
+      if (p.room_id !== opts.roomId || p.user_id !== opts.peerUserId) return;
+      if (channelOpen) return;
+      announceReady();
+      if (isHost) renegotiateFromPeerReady();
     } else if (detail.type === "peer_leave") {
+      const p = detail.payload;
+      if (p.room_id === opts.roomId && p.user_id === opts.peerUserId) {
+        session?.close();
+        emit({ status: "closed", channelOpen: false });
+        opts.onSession?.(null);
+      }
     } else if (detail.type === "room_member_left") {
       const p = detail.payload;
       if (p.room_id === opts.roomId && p.user_id === opts.peerUserId) {
@@ -131,12 +189,17 @@ export function startPeerSignaling(opts: Options): { dispose: () => void; getSes
     emit({ status: "failed" });
   });
 
-  sendWsMessage({ type: "peer_ready", payload: { room_id: opts.roomId } });
+  announceReady();
+  peerReadyTimer = setInterval(announceReady, PEER_READY_INTERVAL_MS);
 
   return {
     getSession: () => session,
     dispose: () => {
       disposed = true;
+      if (peerReadyTimer) {
+        clearInterval(peerReadyTimer);
+        peerReadyTimer = null;
+      }
       window.removeEventListener(WS_EVENT, onWs);
       session?.close();
       session = null;

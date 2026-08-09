@@ -15,20 +15,13 @@ const IDLE: PeerLinkState = {
 };
 
 const MAX_RECONNECT_DELAY_MS = 12_000;
+const CONNECTING_TIMEOUT_MS = 12_000;
 
-/**
- * Starts a WebRTC peer session when the selected room has ≥2 members
- * and the platform WebSocket is connected.
- *
- * After DataChannel is open, the session is FROZEN: WS reconnect must NOT
- * tear it down — the game tunnel no longer needs signaling.
- */
 export function useRoomPeerSession(
   room: Room | null,
   localUserId: string,
   callbacks?: {
     onTunnelOpen?: () => void;
-    /** Called when room/peer identity changes (NOT on P2P reconnect). */
     onSessionReset?: () => void;
   },
 ): { link: PeerLinkState; session: RoomPeerSession | null } {
@@ -38,15 +31,25 @@ export function useRoomPeerSession(
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const disposeRef = useRef<(() => void) | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const identityRef = useRef<string | null>(null);
   const roomRef = useRef(room);
   const channelOpenRef = useRef(false);
-  const linkStatusRef = useRef<PeerLinkState["status"]>("idle");
   const onTunnelOpenRef = useRef(callbacks?.onTunnelOpen);
   const onSessionResetRef = useRef(callbacks?.onSessionReset);
   roomRef.current = room;
   onTunnelOpenRef.current = callbacks?.onTunnelOpen;
   onSessionResetRef.current = callbacks?.onSessionReset;
+
+  const requestRestartRef = useRef(() => {
+    if (channelOpenRef.current) return;
+    disposeRef.current?.();
+    disposeRef.current = null;
+    channelOpenRef.current = false;
+    setLink((prev) => ({ ...prev, status: "failed", channelOpen: false }));
+    setSession(null);
+    setReconnectAttempt((n) => n + 1);
+  });
 
   useEffect(() => {
     const onStatus = (ev: Event) => {
@@ -123,11 +126,11 @@ export function useRoomPeerSession(
       peerUserId: peer.user_id,
       onState: (state) => {
         channelOpenRef.current = state.channelOpen;
-        linkStatusRef.current = state.status;
         setLink(state);
       },
       onSession: setSession,
       onTunnelOpen: () => onTunnelOpenRef.current?.(),
+      onRequestRestart: () => requestRestartRef.current(),
     });
     disposeRef.current = handle.dispose;
 
@@ -139,6 +142,14 @@ export function useRoomPeerSession(
     return () => {
       disposeRef.current?.();
       disposeRef.current = null;
+      if (connectingTimerRef.current) {
+        clearTimeout(connectingTimerRef.current);
+        connectingTimerRef.current = null;
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -149,21 +160,40 @@ export function useRoomPeerSession(
   }, [link.status, link.channelOpen]);
 
   useEffect(() => {
+    if (connectingTimerRef.current) {
+      clearTimeout(connectingTimerRef.current);
+      connectingTimerRef.current = null;
+    }
+
+    if (!identity || wsStatus !== "connected") return;
+    if (link.channelOpen) return;
+    if (link.status !== "preparing" && link.status !== "connecting") return;
+
+    connectingTimerRef.current = setTimeout(() => {
+      requestRestartRef.current();
+    }, CONNECTING_TIMEOUT_MS);
+
+    return () => {
+      if (connectingTimerRef.current) {
+        clearTimeout(connectingTimerRef.current);
+        connectingTimerRef.current = null;
+      }
+    };
+  }, [link.status, link.channelOpen, identity, wsStatus, reconnectAttempt]);
+
+  useEffect(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
 
     if (!identity || wsStatus !== "connected") return;
-    if (channelOpenRef.current) return;
+    if (link.channelOpen) return;
     if (link.status !== "failed" && link.status !== "closed") return;
 
     const delay = Math.min(1500 * (reconnectAttempt + 1), MAX_RECONNECT_DELAY_MS);
     reconnectTimerRef.current = setTimeout(() => {
-      disposeRef.current?.();
-      disposeRef.current = null;
-      channelOpenRef.current = false;
-      setReconnectAttempt((n) => n + 1);
+      requestRestartRef.current();
     }, delay);
 
     return () => {
@@ -172,7 +202,7 @@ export function useRoomPeerSession(
         reconnectTimerRef.current = null;
       }
     };
-  }, [link.status, identity, wsStatus, reconnectAttempt]);
+  }, [link.status, link.channelOpen, identity, wsStatus, reconnectAttempt]);
 
   return { link, session };
 }
