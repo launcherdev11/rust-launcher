@@ -1005,7 +1005,7 @@ export function SettingsTab({
           try {
             unlisten();
           } catch {
-            // ignore
+            //ignore
           }
         });
       }
@@ -1048,7 +1048,7 @@ export function SettingsTab({
         try {
           unlisten();
         } catch {
-          // ignore
+          //ignore
         }
       }
     };
@@ -1269,7 +1269,7 @@ export function SettingsTab({
       });
       selectedLoaderVersion = details.loaderVersions[0] ?? "";
     } catch {
-      // ignore
+      //ignore
     }
     setReinstallDialog({ version, gameVersion, selectedLoaderVersion });
     setIsReinstallLoaderDropdownOpen(false);
@@ -1395,7 +1395,7 @@ export function SettingsTab({
     try {
       window.localStorage.setItem("skip_version_repair_prompt", value ? "1" : "0");
     } catch {
-      // ignore
+      //ignore
     }
   };
 
@@ -1506,7 +1506,7 @@ export function SettingsTab({
       try {
         window.localStorage.removeItem("sidebar_order");
       } catch {
-        // ignore
+        //ignore
       }
       showNotification(
         "success",
@@ -1610,7 +1610,7 @@ export function SettingsTab({
     try {
       window.localStorage.setItem("sidebar_order", JSON.stringify(next));
     } catch {
-      // ignore
+      //ignore
     }
   };
 
@@ -1655,8 +1655,6 @@ export function SettingsTab({
     if (!hasOnCurrentTab) {
       setSettingsTab(firstMatch.tab);
     }
-    // Only re-run when the search query changes — avoid fighting manual tab switches.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsSearchQuery]);
 
   return (

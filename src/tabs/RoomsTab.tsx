@@ -278,9 +278,6 @@ export function RoomsTab({
   });
   peerSessionRef.current = peerSession;
 
-  // Detach UI listeners on unmount, but NEVER stop the Rust TCP bridge here.
-  // Switching away from the Rooms tab unmounts this component; Minecraft still
-  // needs 127.0.0.1:{guestPort}. Bridge stops only via resetTunnelState (room/peer change).
   useEffect(() => {
     return () => {
       tunnelDisposeRef.current?.();
@@ -322,7 +319,6 @@ export function RoomsTab({
       pendingLanPortRef.current = port;
       await ensureTunnelAttached();
       setHostReady(true);
-      // Start host bridge immediately; guest may connect before tunnel-open signal roundtrip.
       await startHostBridgeIfReady(port);
       if (guestTunnelOpenPendingRef.current) guestTunnelOpenPendingRef.current = false;
       showNotification(

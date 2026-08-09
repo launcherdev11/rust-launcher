@@ -119,7 +119,6 @@ function persistNickname(nickname: string) {
   try {
     window.localStorage.setItem(API_NICKNAME_KEY, nickname);
   } catch {
-    // Non-fatal: tokens already saved; UI can refetch /me.
   }
 }
 

@@ -18,7 +18,6 @@ export function readStoredLanguage(): Language | null {
   return null;
 }
 
-/** Language already in localStorage before this session (before hydration writes). */
 export const languageStoredAtLaunch: Language | null =
   typeof window !== "undefined" ? readStoredLanguage() : null;
 

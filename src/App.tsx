@@ -47,6 +47,10 @@ import {
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
+import {
+  SessionNotificationsBell,
+  type SessionNotification,
+} from "./components/SessionNotificationsBell";
 import { readDataCache, writeDataCache } from "./lib/launcherDataCache";
 
 const ModpackTab = lazy(() =>
@@ -421,6 +425,7 @@ type GameStatus = "idle" | "running" | "stopped" | "crashed";
 type NotificationKind = "info" | "success" | "error" | "warning";
 
 const MAX_VISIBLE_NOTIFICATIONS = 2;
+const MAX_SESSION_NOTIFICATIONS = 80;
 const NOTIFICATION_EXIT_MS = 200;
 
 type Notification = {
@@ -914,6 +919,10 @@ function App() {
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
+  const [sessionNotificationsOpen, setSessionNotificationsOpen] = useState(false);
+  const sessionNotificationsRef = useRef<HTMLDivElement | null>(null);
+  const sessionNotificationsOpenRef = useRef(false);
+  const [sessionNotifications, setSessionNotifications] = useState<SessionNotification[]>([]);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const nicknameInputFocusedRef = useRef(false);
   const prevActiveAccountIdRef = useRef<string | null>(null);
@@ -1003,6 +1012,28 @@ function App() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [accountSwitcherOpen]);
+
+  useEffect(() => {
+    if (!sessionNotificationsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = sessionNotificationsRef.current;
+      if (el && !el.contains(e.target as Node)) setSessionNotificationsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [sessionNotificationsOpen]);
+
+  useEffect(() => {
+    sessionNotificationsOpenRef.current = sessionNotificationsOpen;
+  }, [sessionNotificationsOpen]);
+
+  useEffect(() => {
+    if (!sessionNotificationsOpen) return;
+    setSessionNotifications((prev) => {
+      if (prev.every((n) => n.seen)) return prev;
+      return prev.map((n) => (n.seen ? n : { ...n, seen: true }));
+    });
+  }, [sessionNotificationsOpen]);
 
   const accountKindShortLabel = useCallback(
     (kind: string) => {
@@ -1317,7 +1348,6 @@ function App() {
       cancelled = true;
     };
   }, []);
-  // Игровой ник: Ely/MS перекрывают офлайн-ник. Системный аккаунт 16Launcher на это не влияет.
   const isAuthorized = !!profile.ely_username?.trim() || !!profile.mc_username?.trim();
   const displayedNickname =
     profile.ely_username?.trim() ||
@@ -1902,7 +1932,6 @@ function App() {
       try {
         writeConsole(consoleByProfile);
       } catch {
-        // Quota: drop old sessions / trim lines, then give up cleanly.
         try {
           const pruned: Record<string, ProfileConsoleData> = {};
           for (const [profileId, data] of Object.entries(consoleByProfile)) {
@@ -1920,7 +1949,7 @@ function App() {
             window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY);
             window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY_V1);
           } catch {
-            // ignore
+            //ignore
           }
         }
       }
@@ -1996,6 +2025,25 @@ function App() {
       let targetId = 0;
       let merged = false;
       const autoDismissIds: number[] = [];
+      const sessionId = Date.now() + Math.random();
+
+      setSessionNotifications((prev) => {
+        const next: SessionNotification[] = [
+          {
+            id: sessionId,
+            kind: entry.kind,
+            message: entry.message,
+            colorMsg: entry.colorMsg,
+            iconMsg: entry.iconMsg,
+            at: Date.now(),
+            seen: sessionNotificationsOpenRef.current,
+          },
+          ...prev,
+        ];
+        return next.length > MAX_SESSION_NOTIFICATIONS
+          ? next.slice(0, MAX_SESSION_NOTIFICATIONS)
+          : next;
+      });
 
       flushSync(() => {
         setNotifications((prev) => {
@@ -2158,8 +2206,6 @@ function App() {
         return;
       }
 
-      // Only skip for users who already had a language before this session.
-      // Hydration writes launcher_language on first run — that must not count as legacy.
       const legacyMigrated =
         window.localStorage.getItem(ONBOARDING_LEGACY_MIGRATED_KEY) === "1";
       if (!legacyMigrated && languageStoredAtLaunch) {
@@ -2506,7 +2552,7 @@ function App() {
               try {
                 localStorage.setItem(key, update.version);
               } catch {
-                // ignore
+                //ignore
               }
             }
           } else if (shouldNotifyManual) {
@@ -2581,7 +2627,7 @@ function App() {
           });
         }
       } catch {
-        // ignore
+        //ignore
       }
     })();
   }, []);
@@ -2630,7 +2676,7 @@ function App() {
           pendingProfileLaunchIdRef.current = pending.trim();
         }
       } catch {
-        // ignore
+        //ignore
       }
       try {
         unlisten = await listen<{ profile_id: string }>("profile-launch-request", (event) => {
@@ -2638,7 +2684,7 @@ function App() {
           if (id) pendingProfileLaunchIdRef.current = id;
         });
       } catch {
-        // ignore
+        //ignore
       }
     })();
     return () => {
@@ -2657,7 +2703,7 @@ function App() {
           setOpenedMrpackPath(p);
         }
       } catch {
-        // ignore
+        //ignore
       }
 
       try {
@@ -2668,7 +2714,7 @@ function App() {
           setOpenedMrpackPath(p);
         });
       } catch {
-        // ignore
+        //ignore
       }
     })();
 
@@ -2933,7 +2979,7 @@ function App() {
       audio.volume = Math.min(1, Math.max(0, NECO_ARC_SECRET_SOUND_VOLUME));
       void audio.play().catch(() => {});
     } catch {
-      // ignore
+      //ignore
     }
   }, []);
 
@@ -3629,7 +3675,6 @@ function App() {
     await runVersionInstall();
   };
 
-  /** Guest join friend-world: same Play version, but connect to local tunnel. */
   const handleLaunchToServer = useCallback(
     async (serverAddress: string) => {
       if (!selectedVersion) {
@@ -4555,11 +4600,23 @@ function App() {
           </div>
         ) : null}
         <div className="flex items-center gap-2">
+          <SessionNotificationsBell
+            language={language}
+            open={sessionNotificationsOpen}
+            items={sessionNotifications}
+            panelRef={sessionNotificationsRef}
+            onToggle={() => {
+              setAccountSwitcherOpen(false);
+              setSessionNotificationsOpen((o) => !o);
+            }}
+            onClear={() => setSessionNotifications([])}
+          />
           <div className="relative mr-1" ref={accountSwitcherRef} data-no-drag>
             <button
               type="button"
               onClick={() => {
                 void refreshLauncherAccounts();
+                setSessionNotificationsOpen(false);
                 setAccountSwitcherOpen((o) => !o);
               }}
               className="interactive-press relative flex max-w-[200px] items-center gap-2 overflow-hidden rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
@@ -4579,7 +4636,7 @@ function App() {
               />
             </button>
             {accountSwitcherOpen ? (
-              <div className="absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/15 bg-[#14141c]/96 py-1 shadow-2xl backdrop-blur-lg">
+              <div className="absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/12 bg-[#14141c] py-1 shadow-2xl">
                 <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
                   {tt("app.accounts.switcherHeading")}
                 </p>

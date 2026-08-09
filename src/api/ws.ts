@@ -247,14 +247,12 @@ async function recoverAfterWsAuthFailure(): Promise<void> {
   try {
     const tokens = await refreshSession(refreshToken);
     persistApiSession(tokens.access_token, tokens.refresh_token);
-    // persistApiSession emits auth-changed → reconnect with new access token
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
       clearApiSession();
       authRecoveryAttempts = 0;
       return;
     }
-    // Transient network error — retry later without wiping the session.
     if (getStoredAccessToken()) {
       scheduleReconnect();
     }
@@ -295,12 +293,10 @@ export function connectPlatformWs(): void {
       const data = JSON.parse(String(ev.data)) as WsEvent;
       window.dispatchEvent(new CustomEvent(WS_EVENT, { detail: data }));
     } catch {
-      // ignore malformed
     }
   };
 
   ws.onerror = () => {
-    // onclose will handle reconnect / auth recovery
   };
 
   ws.onclose = () => {
@@ -328,7 +324,6 @@ export function disconnectPlatformWs(): void {
     try {
       socket.close();
     } catch {
-      // ignore
     }
     socket = null;
   }

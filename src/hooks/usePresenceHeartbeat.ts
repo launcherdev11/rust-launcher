@@ -40,7 +40,6 @@ export function usePresenceHeartbeat() {
         await sendPresenceHeartbeat();
         onlineRef.current = true;
       } catch {
-        // ignore transient errors; next tick retries
       }
     };
 
