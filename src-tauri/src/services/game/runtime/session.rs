@@ -2,8 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::services::game::accounts::read_profile_from_disk;
 use crate::infra::http::http_client;
+use crate::services::auth::microsoft::refresh_ms_oauth_tokens;
+use crate::services::game::accounts::{read_profile_from_disk, save_full_profile};
+
 #[derive(Debug, Serialize)]
 pub(crate) struct XblUserAuthProperties {
     #[serde(rename = "AuthMethod")]
@@ -81,14 +83,7 @@ pub(crate) struct McProfile {
     name: String,
 }
 
-
-pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)>, String> {
-    let profile = read_profile_from_disk().unwrap_or_default();
-    let msa_token = match profile.ms_access_token.clone() {
-        Some(t) if !t.is_empty() => t,
-        _ => return Ok(None),
-    };
-
+async fn xbl_authenticate(msa_token: &str) -> Result<(String, String), String> {
     let client = http_client(false);
 
     let xbl_req = XblUserAuthRequest {
@@ -125,13 +120,53 @@ pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, Stri
         .await
         .map_err(|e| format!("Ошибка разбора ответа Xbox Live user/authenticate: {e}"))?;
 
-    let xbl_token = xbl_body.Token;
     let uhs = xbl_body
         .DisplayClaims
         .xui
         .get(0)
         .map(|x| x.uhs.clone())
         .ok_or_else(|| "Xbox Live ответ не содержит DisplayClaims.xui[0].uhs".to_string())?;
+
+    Ok((xbl_body.Token, uhs))
+}
+
+pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)>, String> {
+    let profile = read_profile_from_disk().unwrap_or_default();
+    let has_refresh = profile
+        .ms_refresh_token
+        .as_deref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    let stored_access = profile
+        .ms_access_token
+        .clone()
+        .filter(|t| !t.is_empty());
+
+    if !has_refresh && stored_access.is_none() {
+        return Ok(None);
+    }
+
+    let mut msa_token = if has_refresh {
+        match refresh_ms_oauth_tokens().await {
+            Ok(t) => t,
+            Err(e) => {
+                stored_access.clone().ok_or(e)?
+            }
+        }
+    } else {
+        stored_access.clone().unwrap()
+    };
+
+    let (xbl_token, uhs) = match xbl_authenticate(&msa_token).await {
+        Ok(v) => v,
+        Err(e) if has_refresh && e.contains("401") => {
+            msa_token = refresh_ms_oauth_tokens().await.map_err(|_| e.clone())?;
+            xbl_authenticate(&msa_token).await.map_err(|_| e)?
+        }
+        Err(e) => return Err(e),
+    };
+
+    let client = http_client(false);
 
     let xsts_req = XstsAuthRequest {
         relying_party: "rp://api.minecraftservices.com/".to_string(),
@@ -166,7 +201,9 @@ pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, Stri
     let xsts_token = xsts_body.Token;
 
     let identity_token = format!("XBL3.0 x={};{}", uhs, xsts_token);
-    let mc_login_req = McLoginWithXboxRequest { identityToken: identity_token };
+    let mc_login_req = McLoginWithXboxRequest {
+        identityToken: identity_token,
+    };
 
     let mc_login_resp = client
         .post("https://api.minecraftservices.com/authentication/login_with_xbox")
@@ -218,5 +255,16 @@ pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, Stri
         .await
         .map_err(|e| format!("Ошибка разбора ответа Minecraft profile: {e}"))?;
 
-    Ok(Some((mc_profile.name, mc_profile.id, mc_access_token)))
+    if let Ok(mut p) = read_profile_from_disk() {
+        p.mc_username = Some(mc_profile.name.clone());
+        p.mc_uuid = Some(mc_profile.id.clone());
+        p.mc_access_token = Some(mc_access_token.clone());
+        let _ = save_full_profile(&p);
+    }
+
+    Ok(Some((
+        mc_profile.name,
+        mc_profile.id,
+        mc_access_token,
+    )))
 }

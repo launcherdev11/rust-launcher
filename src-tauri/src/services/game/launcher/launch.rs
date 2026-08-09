@@ -574,12 +574,18 @@ pub async fn launch_game(
             .as_deref()
             .map(|s| !s.is_empty())
             .unwrap_or(false);
+        let has_ms_refresh = profile
+            .ms_refresh_token
+            .as_deref()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
         let has_cached_mc = profile
             .mc_access_token
             .as_deref()
             .map(|s| !s.is_empty())
             .unwrap_or(false);
-        let should_refresh_ms = has_ms_token && (is_friend_world_join || !has_cached_mc);
+        let should_refresh_ms =
+            (has_ms_token || has_ms_refresh) && (is_friend_world_join || !has_cached_mc);
 
         if should_refresh_ms {
             match ensure_ms_minecraft_session().await {
@@ -605,6 +611,7 @@ pub async fn launch_game(
                 }
                 Ok(None) => {}
                 Err(e) => {
+                    eprintln!("[Launch] ensure_ms_minecraft_session: {e}");
                     if is_friend_world_join {
                         write_launch_auth_dump(
                             &game_dir,
@@ -614,13 +621,9 @@ pub async fn launch_game(
                             "msa",
                             false,
                             false,
-                            "blocked_friend_world_ms_refresh_failed",
+                            "friend_world_ms_refresh_failed_try_cache",
                         );
-                        return Err(format!(
-                            "Не удалось обновить сессию Microsoft для входа в мир друга: {e}"
-                        ));
                     }
-                    eprintln!("[Launch] ensure_ms_minecraft_session: {e}");
                 }
             }
         }
@@ -646,6 +649,24 @@ pub async fn launch_game(
                     );
                 }
             }
+        }
+
+        if is_friend_world_join && !auth_is_mojang && should_refresh_ms {
+            write_launch_auth_dump(
+                &game_dir,
+                &version_id,
+                &server_address,
+                "microsoft",
+                "msa",
+                false,
+                false,
+                "blocked_friend_world_ms_refresh_failed",
+            );
+            return Err(
+                "Не удалось обновить сессию Microsoft для входа в мир друга. \
+                 Войдите снова через Microsoft на вкладке Аккаунты."
+                    .to_string(),
+            );
         }
     }
 
