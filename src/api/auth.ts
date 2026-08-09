@@ -2,6 +2,7 @@ import {
   ApiError,
   apiFetch,
   clearApiSession,
+  getApiBaseUrl,
   getStoredAccessToken,
   getStoredRefreshToken,
   persistApiSession,
@@ -183,7 +184,7 @@ function decodeJwtExpMs(token: string): number | null {
 
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8080"}/health`);
+    const res = await fetch(`${getApiBaseUrl()}/health`);
     return res.ok;
   } catch {
     return false;
