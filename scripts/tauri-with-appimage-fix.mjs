@@ -1,8 +1,3 @@
-#!/usr/bin/env node
-/**
- * Cross-platform wrapper: run `tauri`, then on Linux after `build`
- * patch AppImages (strip bundled Wayland + inject AppRun hook).
- */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

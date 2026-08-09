@@ -59,7 +59,7 @@ services:
       TURN_REALM: ${TURN_REALM:-16launcher.local}
       TURN_TTL_SECS: ${TURN_TTL_SECS:-600}
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:1420,http://127.0.0.1:1420,tauri://localhost,https://tauri.localhost}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
       IDENTITY_REQUIRE_PROOF: ${IDENTITY_REQUIRE_PROOF:-true}
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

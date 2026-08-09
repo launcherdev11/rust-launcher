@@ -1,3 +1,5 @@
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+
 export type ApiErrorBody = {
   error: string;
 };
@@ -12,15 +14,22 @@ export class ApiError extends Error {
   }
 }
 
-const DEFAULT_DEV_API_BASE_URL = "http://127.0.0.1:8080";
-const DEFAULT_PROD_API_BASE_URL = "https://api.16-launcher.ru";
+const DEFAULT_API_BASE_URL = "https://api.16-launcher.ru";
+
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export function apiRequest(input: string, init?: RequestInit): Promise<Response> {
+  if (isTauriRuntime()) {
+    return tauriFetch(input, init);
+  }
+  return fetch(input, init);
+}
 
 export function getApiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  const fallback = import.meta.env.DEV
-    ? DEFAULT_DEV_API_BASE_URL
-    : DEFAULT_PROD_API_BASE_URL;
-  return (raw?.trim() || fallback).replace(/\/+$/, "");
+  return (raw?.trim() || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 }
 
 export function getStoredAccessToken(): string | null {
@@ -118,11 +127,11 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${getApiBaseUrl()}${path}`, { ...init, headers });
+  const res = await apiRequest(`${getApiBaseUrl()}${path}`, { ...init, headers });
   if (res.status === 401 && token && accessToken === undefined) {
     const refreshToken = getStoredRefreshToken();
     if (refreshToken) {
-      const refreshRes = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+      const refreshRes = await apiRequest(`${getApiBaseUrl()}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),

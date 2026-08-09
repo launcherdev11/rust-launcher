@@ -1078,7 +1078,7 @@
       "verificationCodeSent": "Código de verificación enviado al correo."
     },
     "errors": {
-      "connectionFailed": "No se puede conectar al servidor 16Launcher. Verifique VITE_API_BASE_URL, internet y disponibilidad del API.",
+      "connectionFailed": "No se puede conectar al servidor 16Launcher. Verifique internet y disponibilidad del API.",
       "invalidCredentials": "Inicio de sesión o contraseña no válidos.",
       "invalidPassword": "Contraseña no válida.",
       "passwordTooShort": "La contraseña es demasiado corta. Mínimo 8 caracteres.",

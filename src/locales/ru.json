@@ -1058,7 +1058,7 @@
       "verificationCodeSent": "Код подтверждения отправлен на email."
     },
     "errors": {
-      "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте VITE_API_BASE_URL, интернет и доступность API.",
+      "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте интернет и доступность API.",
       "invalidCredentials": "Неверный логин или пароль.",
       "invalidPassword": "Неверный пароль.",
       "passwordTooShort": "Пароль слишком короткий. Минимум 8 символов.",
