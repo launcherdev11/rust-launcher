@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   API_AUTH_CHANGED_EVENT,
   API_NICKNAME_KEY,
+  deleteAccount,
   ensureValidAccessToken,
   fetchEmailVerificationStatus,
   fetchMe,
@@ -104,6 +105,10 @@ export function PlatformAccountPanel({
   const [codeSent, setCodeSent] = useState(false);
   const [linking, setLinking] = useState<null | "ely" | "minecraft">(null);
   const [linkedProviders, setLinkedProviders] = useState({ ely: false, minecraft: false });
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   const launcherNickname = platformUser?.nickname?.trim() || launcherProfile.launcher_nickname?.trim() || "";
@@ -296,8 +301,39 @@ export function PlatformAccountPanel({
     } finally {
       setAccessToken("");
       setPlatformUser(null);
+      setDeleteOpen(false);
+      setDeletePassword("");
       setLoading(false);
       showNotification("info", tt("platform.toast.loggedOut"));
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      showNotification("warning", tt("platform.toast.enterPassword"));
+      return;
+    }
+    if (deletePassword.length < 8) {
+      showNotification("warning", tt("platform.toast.passwordTooShort"));
+      return;
+    }
+    setDeletingAccount(true);
+    try {
+      await deleteAccount(deletePassword, accessToken || undefined);
+      setPlatformUser(null);
+      setAccessToken("");
+      setDeleteOpen(false);
+      setDeletePassword("");
+      showNotification("success", tt("platform.toast.accountDeleted"));
+    } catch (e) {
+      const rawMessage = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
+      if (e instanceof ApiError && e.status === 401) {
+        showNotification("error", tt("platform.errors.invalidPassword"));
+      } else {
+        showNotification("error", mapAuthErrorMessage(rawMessage, "login", tt));
+      }
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -488,16 +524,49 @@ export function PlatformAccountPanel({
             >
               {tt("platform.changeNickname")}
             </button>
+              <button
+                type="button"
+                disabled={loading || linking !== null || providerLoginBusy}
+                onClick={() => void handleLogout()}
+                className="interactive-press rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+              >
+                {tt("platform.logout")}
+              </button>
+            </div>
             <button
               type="button"
-              disabled={loading || linking !== null || providerLoginBusy}
-              onClick={() => void handleLogout()}
-              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+              disabled={loading || deletingAccount || linking !== null || providerLoginBusy}
+              onClick={() => {
+                setDeleteOpen((prev) => !prev);
+                setDeletePassword("");
+              }}
+              className="interactive-press mt-2 w-full rounded-xl border border-rose-500/30 bg-rose-600/10 px-3 py-2 text-xs font-semibold text-rose-100 hover:bg-rose-600/20 disabled:opacity-60"
             >
-              {tt("platform.logout")}
+              {tt("platform.deleteAccount")}
             </button>
+            {deleteOpen ? (
+              <div className="mt-2 space-y-2 rounded-xl border border-rose-500/20 bg-rose-950/30 p-2">
+                <p className="text-[11px] leading-relaxed text-rose-100/80">
+                  {tt("platform.deleteAccountHint")}
+                </p>
+                <input
+                  type={showDeletePassword ? "text" : "password"}
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm text-white outline-none focus:border-rose-400/40"
+                  placeholder={tt("platform.passwordPlaceholder")}
+                />
+                <button
+                  type="button"
+                  disabled={deletingAccount || loading}
+                  onClick={() => void handleDeleteAccount()}
+                  className="interactive-press w-full rounded-lg bg-rose-600/80 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-600 disabled:opacity-60"
+                >
+                  {deletingAccount ? tt("common.loading") : tt("platform.deleteAccountConfirm")}
+                </button>
+              </div>
+            ) : null}
           </div>
-        </div>
         {renderProviderButtons(true)}
       </div>
     );
@@ -760,6 +829,72 @@ export function PlatformAccountPanel({
               >
                 {tt("platform.logout")}
               </button>
+            </div>
+            <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-950/25 px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-rose-200/70">
+                {tt("platform.dangerZone")}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-white/55">
+                {tt("platform.deleteAccountHint")}
+              </p>
+              {!deleteOpen ? (
+                <button
+                  type="button"
+                  disabled={loading || deletingAccount || linking !== null || providerLoginBusy}
+                  onClick={() => setDeleteOpen(true)}
+                  className="interactive-press mt-3 rounded-xl border border-rose-500/35 bg-rose-600/15 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-600/25 disabled:opacity-60"
+                >
+                  {tt("platform.deleteAccount")}
+                </button>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <div className="relative flex items-center">
+                    <input
+                      type={showDeletePassword ? "text" : "password"}
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 pr-11 text-sm text-white outline-none focus:border-rose-400/40"
+                      placeholder={tt("platform.passwordPlaceholder")}
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeletePassword((prev) => !prev)}
+                      className="interactive-press absolute inset-y-0 right-2 my-auto flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/10"
+                      aria-label={
+                        showDeletePassword ? tt("platform.hidePassword") : tt("platform.showPassword")
+                      }
+                    >
+                      <img
+                        src={showDeletePassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
+                        alt=""
+                        className="h-4 w-4 object-contain opacity-80"
+                      />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={deletingAccount || loading}
+                      onClick={() => void handleDeleteAccount()}
+                      className="interactive-press rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+                    >
+                      {deletingAccount ? tt("common.loading") : tt("platform.deleteAccountConfirm")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingAccount}
+                      onClick={() => {
+                        setDeleteOpen(false);
+                        setDeletePassword("");
+                      }}
+                      className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
+                    >
+                      {tt("platform.back")}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

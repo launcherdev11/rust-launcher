@@ -1024,6 +1024,10 @@
     "newNicknamePlaceholder": "Новый никнейм",
     "changeNickname": "Сменить ник",
     "logout": "Выйти",
+    "dangerZone": "Опасная зона",
+    "deleteAccount": "Удалить аккаунт",
+    "deleteAccountConfirm": "Удалить навсегда",
+    "deleteAccountHint": "Аккаунт 16Launcher и связанные данные на сервере будут удалены безвозвратно. Нужен текущий пароль.",
     "linked": "Привязан",
     "linking": "Привязка…",
     "link": "Привязать",
@@ -1055,7 +1059,8 @@
       "enterPassword": "Введите пароль",
       "passwordTooShort": "Пароль должен содержать минимум 8 символов.",
       "enterVerificationCode": "Введите код из письма.",
-      "verificationCodeSent": "Код подтверждения отправлен на email."
+      "verificationCodeSent": "Код подтверждения отправлен на email.",
+      "accountDeleted": "Аккаунт удалён."
     },
     "errors": {
       "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте интернет и доступность API.",

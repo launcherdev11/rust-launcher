@@ -49,11 +49,37 @@ body {
 }
 
 .sidebar-icon {
-  @apply flex h-10 w-10 items-center justify-center rounded-2xl text-gray-300 transition-colors;
+  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-gray-300 transition-colors;
+  contain: layout paint;
 }
 
 .sidebar-icon-active {
   @apply text-accentGreen;
+}
+
+.sidebar-tooltip {
+  pointer-events: none;
+  position: absolute;
+  z-index: 100;
+  white-space: nowrap;
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.92);
+  padding: 0.35rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.group:hover > .sidebar-tooltip,
+.group:focus-visible > .sidebar-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .interactive-press {
@@ -76,6 +102,38 @@ body {
 
 .interactive-press.no-shift:hover {
   transform: none;
+}
+
+/* Linux / WebKitGTK: backdrop-filter dirty regions inflate during tab transitions. */
+html.launcher-linux .glass-panel,
+html.launcher-linux .glass-chip {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(16, 18, 24, 0.94);
+}
+
+html.launcher-linux .backdrop-blur,
+html.launcher-linux .backdrop-blur-sm,
+html.launcher-linux .backdrop-blur-md,
+html.launcher-linux .backdrop-blur-lg,
+html.launcher-linux .backdrop-blur-xl,
+html.launcher-linux .backdrop-blur-2xl,
+html.launcher-linux .backdrop-blur-3xl {
+  --tw-backdrop-blur: blur(0) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.launcher-linux .interactive-press:hover,
+html.launcher-linux .interactive-press:active {
+  transform: none;
+}
+
+html.launcher-linux aside,
+html.launcher-linux .glass-panel,
+html.launcher-linux .tab-animate {
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 @keyframes tab-fade-in {

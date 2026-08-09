@@ -104,6 +104,23 @@ export async function updateNickname(
   );
 }
 
+export async function deleteAccount(
+  password: string,
+  accessToken?: string,
+): Promise<void> {
+  const token = accessToken ?? getStoredAccessToken();
+  try {
+    await apiFetch(
+      "/auth/delete-account",
+      { method: "POST", body: JSON.stringify({ password }) },
+      token,
+    );
+  } finally {
+    clearApiSession();
+  }
+}
+
+
 export async function linkIdentity(input: {
   provider: "ely" | "minecraft";
   provider_uuid: string;
@@ -203,6 +220,9 @@ export function mapAuthErrorMessage(
   }
   if (lower.includes("unauthorized") || lower.includes("invalid login")) {
     return t("platform.errors.invalidCredentials");
+  }
+  if (lower.includes("invalid password") || lower === "unauthorized") {
+    return t("platform.errors.invalidPassword");
   }
   if (lower.includes("email already registered")) {
     return t("platform.errors.emailTaken");
