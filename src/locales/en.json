@@ -1058,7 +1058,7 @@
       "verificationCodeSent": "Verification code sent to your email."
     },
     "errors": {
-      "connectionFailed": "Cannot connect to the 16Launcher server. Check VITE_API_BASE_URL, internet, and API availability.",
+      "connectionFailed": "Cannot connect to the 16Launcher server. Check your internet connection and API availability.",
       "invalidCredentials": "Invalid login or password.",
       "invalidPassword": "Invalid password.",
       "passwordTooShort": "Password is too short. Minimum 8 characters.",

@@ -1078,7 +1078,7 @@
       "verificationCodeSent": "Bestätigungscode wurde per E-Mail gesendet."
     },
     "errors": {
-      "connectionFailed": "Es kann keine Verbindung zum 16Launcher-Server hergestellt werden. Überprüfen Sie VITE_API_BASE_URL, Internet und API-Verfügbarkeit.",
+      "connectionFailed": "Es kann keine Verbindung zum 16Launcher-Server hergestellt werden. Überprüfen Sie Internet und API-Verfügbarkeit.",
       "invalidCredentials": "Ungültiger Benutzername oder Passwort.",
       "invalidPassword": "Ungültiges Passwort.",
       "passwordTooShort": "Das Passwort ist zu kurz. Mindestens 8 Zeichen.",

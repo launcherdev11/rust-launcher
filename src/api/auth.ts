@@ -1,6 +1,7 @@
 import {
   ApiError,
   apiFetch,
+  apiRequest,
   clearApiSession,
   getApiBaseUrl,
   getStoredAccessToken,
@@ -184,7 +185,7 @@ function decodeJwtExpMs(token: string): number | null {
 
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${getApiBaseUrl()}/health`);
+    const res = await apiRequest(`${getApiBaseUrl()}/health`);
     return res.ok;
   } catch {
     return false;
