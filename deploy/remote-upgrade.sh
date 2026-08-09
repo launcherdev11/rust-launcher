@@ -1,6 +1,3 @@
-#!/usr/bin/env bash
-# Run on VPS after launcher-api.tar.gz is in /tmp/
-# Usage: bash /tmp/remote-upgrade.sh
 set -euo pipefail
 
 ARCHIVE="${1:-/tmp/launcher-api.tar.gz}"
