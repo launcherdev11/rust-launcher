@@ -12,9 +12,15 @@ export class ApiError extends Error {
   }
 }
 
+const DEFAULT_DEV_API_BASE_URL = "http://127.0.0.1:8080";
+const DEFAULT_PROD_API_BASE_URL = "https://api.16-launcher.ru";
+
 export function getApiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  return (raw ?? "http://127.0.0.1:8080").replace(/\/+$/, "");
+  const fallback = import.meta.env.DEV
+    ? DEFAULT_DEV_API_BASE_URL
+    : DEFAULT_PROD_API_BASE_URL;
+  return (raw?.trim() || fallback).replace(/\/+$/, "");
 }
 
 export function getStoredAccessToken(): string | null {
