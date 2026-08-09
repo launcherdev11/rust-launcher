@@ -81,7 +81,6 @@ export function useRoomPeerSession(
       identityRef.current = identity;
       setReconnectAttempt(0);
       channelOpenRef.current = false;
-      // New peer/room — drop any previous session.
       disposeRef.current?.();
       disposeRef.current = null;
       setLink(IDLE);
@@ -96,19 +95,14 @@ export function useRoomPeerSession(
       return;
     }
 
-    // DataChannel already open: keep the live tunnel. Signaling WS flaps must
-    // not recreate RTCPeerConnection (that caused guest "Disconnected").
     if (channelOpenRef.current && disposeRef.current) {
       return;
     }
 
-    // Still negotiating and WS dropped — wait for WS; don't kill mid-handshake
-    // if we somehow still have a handle without channel yet on transient blips.
     if (wsStatus !== "connected") {
       return;
     }
 
-    // Already have an active handle for this identity — don't restart.
     if (disposeRef.current && !identityChanged) {
       return;
     }
@@ -138,12 +132,9 @@ export function useRoomPeerSession(
     disposeRef.current = handle.dispose;
 
     return () => {
-      // Only dispose on identity change / unmount — handled when identity becomes null
-      // or changes above. Avoid disposing on wsStatus-only re-runs.
     };
   }, [identity, localUserId, wsStatus, reconnectAttempt]);
 
-  // Unmount / leave: always clean WebRTC.
   useEffect(() => {
     return () => {
       disposeRef.current?.();
@@ -164,13 +155,11 @@ export function useRoomPeerSession(
     }
 
     if (!identity || wsStatus !== "connected") return;
-    // Never auto-reconnect while the game tunnel DataChannel is healthy.
     if (channelOpenRef.current) return;
     if (link.status !== "failed" && link.status !== "closed") return;
 
     const delay = Math.min(1500 * (reconnectAttempt + 1), MAX_RECONNECT_DELAY_MS);
     reconnectTimerRef.current = setTimeout(() => {
-      // Force a fresh startPeerSignaling by clearing the handle first.
       disposeRef.current?.();
       disposeRef.current = null;
       channelOpenRef.current = false;

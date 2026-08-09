@@ -45,7 +45,6 @@ const ELY_AUTHLIB_INJECTOR_TARGET: &str = "ely.by";
 
 const FRIEND_WORLD_OFFLINE_ERR: &str = "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.";
 
-/// Redact secrets in argv dumps / logs (never write accessToken values).
 fn format_game_args_for_dump(args: &[String]) -> String {
     let mut lines = Vec::with_capacity(args.len());
     let mut i = 0usize;
@@ -145,7 +144,6 @@ fn split_server_address(addr: &str) -> (String, String) {
     (addr.to_string(), "25565".to_string())
 }
 
-/// Mojang added multiplayer quick-play in 1.20. Older clients only honor --server/--port.
 fn version_supports_quick_play_multiplayer(version_id: &str, jar_version: &str) -> bool {
     fn major_minor(v: &str) -> Option<(u32, u32)> {
         let mut parts = v.trim().split('.');
@@ -154,7 +152,6 @@ fn version_supports_quick_play_multiplayer(version_id: &str, jar_version: &str) 
         Some((major, minor))
     }
     for candidate in [jar_version, version_id] {
-        // fabric/forge ids like "1.12-forge-..." or "1.20.1"
         let head = candidate.split('-').next().unwrap_or(candidate);
         if let Some((major, minor)) = major_minor(head) {
             return major > 1 || (major == 1 && minor >= 20);
@@ -298,8 +295,6 @@ pub async fn launch_game(
         server_address, join_address
     );
 
-    // Mojang 1.20+ gates quick-play args behind specific feature keys.
-    // Older clients (1.12 etc.) must not get has_quick_plays_support.
     let features = if join_address.is_some()
         && version_supports_quick_play_multiplayer(&version_id, &effective_jar_version)
     {
@@ -503,8 +498,6 @@ pub async fn launch_game(
     }
 
     let profile = get_profile().unwrap_or_default();
-    // Friend-world join (LAN bridge): host Open-to-LAN usually runs online-mode.
-    // Offline guest → Invalid session inside Minecraft; block before spawn.
     let is_friend_world_join = server_address
         .as_ref()
         .map(|s| !s.trim().is_empty())
@@ -586,8 +579,6 @@ pub async fn launch_game(
             .as_deref()
             .map(|s| !s.is_empty())
             .unwrap_or(false);
-        // Friend-world: always refresh MS session (cached MC token may be expired → Invalid session).
-        // Singleplayer: refresh only when MC token is missing.
         let should_refresh_ms = has_ms_token && (is_friend_world_join || !has_cached_mc);
 
         if should_refresh_ms {
@@ -681,8 +672,6 @@ pub async fn launch_game(
         return Err(FRIEND_WORLD_OFFLINE_ERR.to_string());
     }
 
-    // Resolve authlib-injector early so friend-world can fail before JVM spawn,
-    // and dump can report authlib_injector=true/false without secrets.
     let mut authlib_injector_path: Option<std::path::PathBuf> = None;
     if has_access_token && !auth_is_mojang {
         match ensure_authlib_injector().await {
@@ -904,17 +893,10 @@ pub async fn launch_game(
     if !features.is_demo_user {
         game_args.retain(|a| a != "--demo");
     }
-
-    // Safety net: strip every quick-play / legacy server flag, then inject exactly
-    // what we need. Feature rules should already exclude SP/realms, but unresolved
-    // ${quickPlaySingleplayer} must never reach Minecraft.
     game_args = strip_quick_play_game_args(game_args);
     game_args = strip_legacy_server_args(game_args);
 
     if let Some(addr) = &join_address {
-        // Minecraft < 1.20 does not support --quickPlay*; only --server/--port.
-        // Passing quickPlay on 1.12 is ignored for join, but modern clients need
-        // multiplayer quick-play (legacy --server was removed).
         let use_quick_play = version_supports_quick_play_multiplayer(&version_id, &effective_jar_version);
         if use_quick_play {
             game_args.push("--quickPlayPath".to_string());
@@ -966,8 +948,7 @@ pub async fn launch_game(
             features.is_quick_play_singleplayer,
             format_game_args_for_dump(&game_args),
         );
-        // Always write to a stable launcher path so the dump is findable even when
-        // game_dir is an instance folder (or the user looks in the wrong place).
+
         let mut dump_paths = vec![game_dir.join("mc16-last-launch-args.txt")];
         if let Ok(data) = launcher_data_dir() {
             dump_paths.push(data.join("mc16-last-launch-args.txt"));
@@ -1255,7 +1236,6 @@ pub async fn launch_game(
         }
     });
 
-    // LAN guest join keeps the TCP bridge inside this process — never exit.
     if settings.close_launcher_on_game_start && join_address.is_none() {
         app.exit(0);
     }

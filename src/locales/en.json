@@ -1092,6 +1092,19 @@
       "closePane": "Remove this pane"
     },
     "launcherVersionTitle": "Launcher version {{version}}",
+    "sessionNotifications": {
+      "title": "Launcher notifications",
+      "heading": "Notifications",
+      "empty": "No notifications this session yet",
+      "clear": "Clear",
+      "kindInfo": "Info",
+      "kindSuccess": "Success",
+      "kindError": "Error",
+      "kindWarning": "Warning",
+      "kindSystem": "System",
+      "groupBadge": "×{{count}}",
+      "groupHint": "Repeated {{count}} times — grouped"
+    },
     "accounts": {
       "managerTitle": "Account manager",
       "managerSubtitle": "",

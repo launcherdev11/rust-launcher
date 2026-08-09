@@ -31,7 +31,6 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
       credential: turn.password,
     });
   } catch {
-    // TURN may be disabled — fall back to STUN via ice-servers.
   }
 
   try {
@@ -88,7 +87,6 @@ async function detectConnectionType(pc: RTCPeerConnection): Promise<ConnectionTy
       if (candidateType === "relay") return "relay";
     }
   } catch {
-    // ignore stats failures
   }
   return "direct";
 }
@@ -161,7 +159,6 @@ export class RoomPeerSession {
       } else if (state === "closed") {
         if (!this.closed) this.callbacks.onStatus("closed");
       }
-      // "disconnected" is often transient — do not tear down the session.
     };
 
     if (this.isHost) {
@@ -199,7 +196,6 @@ export class RoomPeerSession {
       try {
         channel.send(`ping:${this.localUserId}`);
       } catch {
-        // ignore
       }
       this.callbacks.onChannelOpen?.();
     };
@@ -279,7 +275,6 @@ export class RoomPeerSession {
           sdpMLineIndex: candidate.sdp_m_line_index ?? undefined,
         });
       } catch {
-        // Stale or duplicate candidates are safe to ignore.
       }
     }
   }
@@ -316,7 +311,6 @@ export class RoomPeerSession {
         sdpMLineIndex: candidate.sdp_m_line_index ?? undefined,
       });
     } catch {
-      // Stale or duplicate candidates are safe to ignore.
     }
   }
 
@@ -326,12 +320,10 @@ export class RoomPeerSession {
     try {
       this.channel?.close();
     } catch {
-      // ignore
     }
     try {
       this.pc?.close();
     } catch {
-      // ignore
     }
     this.pc = null;
     this.channel = null;

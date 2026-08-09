@@ -1112,6 +1112,19 @@
       "closePane": "Quitar este panel"
     },
     "launcherVersionTitle": "Versión del iniciador {{version}}",
+    "sessionNotifications": {
+      "title": "Notificaciones del launcher",
+      "heading": "Notificaciones",
+      "empty": "Aún no hay notificaciones en esta sesión",
+      "clear": "Borrar",
+      "kindInfo": "Info",
+      "kindSuccess": "Éxito",
+      "kindError": "Error",
+      "kindWarning": "Aviso",
+      "kindSystem": "Sistema",
+      "groupBadge": "×{{count}}",
+      "groupHint": "Se repitió {{count}} veces — agrupado"
+    },
     "accounts": {
       "managerTitle": "Gerente de cuentas",
       "managerSubtitle": "",

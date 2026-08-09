@@ -31,7 +31,7 @@ export function ConsoleApp() {
         });
         await requestGameConsoleSync();
       } catch {
-        // ignore
+        //ignore
       }
     })();
 

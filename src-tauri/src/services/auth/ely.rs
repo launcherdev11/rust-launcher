@@ -58,7 +58,6 @@ async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
 static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 fn get_client_secret() -> Result<String, String> {
-    // Ensure .env is loaded even if cwd/exe differ from project root (e.g. Sandbox).
     crate::app::env::load_dotenv_files();
     crate::services::game::runtime::load_project_env_for_runtime();
 

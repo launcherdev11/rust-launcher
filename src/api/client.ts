@@ -50,7 +50,7 @@ function freeDisposableLocalStorage() {
     window.localStorage.removeItem("game_console_persist_v2");
     window.localStorage.removeItem("game_console_persist_v1");
   } catch {
-    // ignore
+    //ignore
   }
   try {
     const keys: string[] = [];
@@ -62,7 +62,7 @@ function freeDisposableLocalStorage() {
       window.localStorage.removeItem(key);
     }
   } catch {
-    // ignore
+    //ignore
   }
 }
 

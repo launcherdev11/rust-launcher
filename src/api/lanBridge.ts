@@ -66,10 +66,8 @@ export async function attachLanTunnel(opts: {
   const unsubs: UnlistenFn[] = [];
   let disposed = false;
 
-  // Serialize DC → TCP writes so async Tauri invokes cannot reorder bytes.
   let inboundWriteChain: Promise<void> = Promise.resolve();
 
-  // Queue TCP → DC chunks; retry when DataChannel is backpressured instead of dropping.
   const outboundQueue: ArrayBuffer[] = [];
   let flushingOutbound = false;
 
@@ -105,7 +103,6 @@ export async function attachLanTunnel(opts: {
       try {
         const bytes = bytesFromB64(ev.payload.data_b64);
         const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-        // Never drop TCP bytes — Minecraft's stream desyncs into zlib DecoderException.
         if (outboundQueue.length === OUTBOUND_QUEUE_WARN) {
           console.warn(
             "[lan-bridge] outbound queue growing under DataChannel backpressure",
@@ -115,7 +112,6 @@ export async function attachLanTunnel(opts: {
         outboundQueue.push(ab);
         void flushOutbound();
       } catch {
-        // ignore malformed
       }
     }),
   );
@@ -128,7 +124,6 @@ export async function attachLanTunnel(opts: {
 
   const detachRemote = opts.onRemoteBinary((data) => {
     if (disposed) return;
-    // Copy immediately: ArrayBuffer may be reused by the browser after the handler returns.
     const copy = data.slice(0);
     inboundWriteChain = inboundWriteChain
       .then(() => {
@@ -148,7 +143,6 @@ export async function attachLanTunnel(opts: {
       try {
         void u();
       } catch {
-        // ignore
       }
     }
   };

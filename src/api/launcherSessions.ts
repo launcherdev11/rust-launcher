@@ -27,7 +27,7 @@ function storeSessionId(id: string | null) {
     if (id) window.localStorage.setItem(SESSION_ID_KEY, id);
     else window.localStorage.removeItem(SESSION_ID_KEY);
   } catch {
-    // ignore
+    //ignore
   }
 }
 

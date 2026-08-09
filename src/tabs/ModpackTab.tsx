@@ -1612,7 +1612,7 @@ export function ModpackTab({
     try {
       void invoke("set_selected_profile", { id: profileId });
     } catch {
-      // ignore
+      //ignore
     }
     try {
       const totalGb = await invoke<number>("get_system_memory_gb");
@@ -1941,7 +1941,7 @@ export function ModpackTab({
         window.localStorage.removeItem("modpacks_selected_profile_id");
       }
     } catch {
-      // ignore
+      //ignore
     }
   }, [selectedProfileId]);
 
@@ -3857,7 +3857,7 @@ export function ModpackTab({
                       window.localStorage.setItem("modpacks_profiles_layout", "list");
                     }
                   } catch {
-                    // ignore
+                    //ignore
                   }
                 }}
                 className={`interactive-press rounded-xl p-1.5 ${
@@ -3885,7 +3885,7 @@ export function ModpackTab({
                       window.localStorage.setItem("modpacks_profiles_layout", "grid");
                     }
                   } catch {
-                    // ignore
+                    //ignore
                   }
                 }}
                 className={`interactive-press rounded-xl p-1.5 ${

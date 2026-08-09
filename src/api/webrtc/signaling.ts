@@ -115,7 +115,6 @@ export function startPeerSignaling(opts: Options): { dispose: () => void; getSes
       if (p.to_user_id !== opts.localUserId) return;
       void session?.handleRemoteIce(p.candidate);
     } else if (detail.type === "peer_leave") {
-      // WS disconnect ≠ room leave — keep the WebRTC session alive.
     } else if (detail.type === "room_member_left") {
       const p = detail.payload;
       if (p.room_id === opts.roomId && p.user_id === opts.peerUserId) {

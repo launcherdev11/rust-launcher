@@ -63,11 +63,9 @@ export function useLauncherSession() {
           const id = sessionIdRef.current;
           if (!id || !getStoredAccessToken()) return;
           void pingLauncherSession(id).catch(() => {
-            // session may have expired — recreate next auth cycle
           });
         }, PING_INTERVAL_MS);
       } catch {
-        // ignore until next auth change
       }
     };
 

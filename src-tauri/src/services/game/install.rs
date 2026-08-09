@@ -1149,7 +1149,7 @@ async fn install_version_from_json(
         ),
     );
 
-    // jar
+    //jar
     let client_jar = root.join(format!("{version_id}.jar"));
     log_to_console(
         &app,

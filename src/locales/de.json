@@ -1112,6 +1112,19 @@
       "closePane": "Entfernen Sie diesen Bereich"
     },
     "launcherVersionTitle": "Launcher-Version {{version}}",
+    "sessionNotifications": {
+      "title": "Launcher-Benachrichtigungen",
+      "heading": "Benachrichtigungen",
+      "empty": "Noch keine Benachrichtigungen in dieser Sitzung",
+      "clear": "Leeren",
+      "kindInfo": "Info",
+      "kindSuccess": "Erfolg",
+      "kindError": "Fehler",
+      "kindWarning": "Warnung",
+      "kindSystem": "System",
+      "groupBadge": "×{{count}}",
+      "groupHint": "{{count}}-mal wiederholt — gruppiert"
+    },
     "accounts": {
       "managerTitle": "Account-Manager",
       "managerSubtitle": "",

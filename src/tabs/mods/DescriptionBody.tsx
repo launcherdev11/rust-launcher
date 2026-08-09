@@ -105,7 +105,6 @@ function protectHtmlBlocks(md: string): { text: string; slots: string[] } {
 
   let text = md.replace(/\r\n/g, "\n");
 
-  // Markdown image-link with raw HTML img: [<img ...>](url)
   text = text.replace(
     /\[<img\b([^>]*)\/?>\]\((https?:[^)\s]+)\)/gi,
     (_m, attrs: string, href: string) => {
@@ -118,7 +117,6 @@ function protectHtmlBlocks(md: string): { text: string; slots: string[] } {
     },
   );
 
-  // Block wrappers first (nested <a>/<img> stay inside one fragment)
   text = text.replace(
     /<(p|div|center|span)\b[^>]*>[\s\S]*?<\/\1>/gi,
     (m) => park(m),

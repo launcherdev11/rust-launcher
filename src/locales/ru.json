@@ -1092,6 +1092,19 @@
       "closePane": "Убрать эту панель"
     },
     "launcherVersionTitle": "Версия лаунчера {{version}}",
+    "sessionNotifications": {
+      "title": "Уведомления лаунчера",
+      "heading": "Уведомления",
+      "empty": "Пока нет уведомлений за эту сессию",
+      "clear": "Очистить",
+      "kindInfo": "Инфо",
+      "kindSuccess": "Успех",
+      "kindError": "Ошибка",
+      "kindWarning": "Внимание",
+      "kindSystem": "Система",
+      "groupBadge": "×{{count}}",
+      "groupHint": "Повторялось {{count}} раз — собрано в группу"
+    },
     "accounts": {
       "managerTitle": "Менеджер аккаунтов",
       "managerSubtitle": "",
