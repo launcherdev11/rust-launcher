@@ -1,8 +1,3 @@
-#!/usr/bin/env bash
-# Post-process Tauri AppImages:
-# 1) strip bundled libwayland-*.so* (incompatible with newer host Mesa)
-# 2) inject AppRun hook that LD_PRELOADs system libwayland-client
-# 3) re-sign updater artifacts when TAURI_SIGNING_PRIVATE_KEY is set
 set -euo pipefail
 
 readonly APPIMAGETOOL_VERSION="1.9.1"
