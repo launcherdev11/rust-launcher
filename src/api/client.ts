@@ -128,23 +128,14 @@ export async function apiFetch<T>(
   }
 
   const res = await apiRequest(`${getApiBaseUrl()}${path}`, { ...init, headers });
+  // Shared single-flight refresh (auth.ts) — do not POST /auth/refresh here again.
   if (res.status === 401 && token && accessToken === undefined) {
-    const refreshToken = getStoredRefreshToken();
-    if (refreshToken) {
-      const refreshRes = await apiRequest(`${getApiBaseUrl()}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-      if (refreshRes.ok) {
-        const tokens = (await refreshRes.json()) as {
-          access_token: string;
-          refresh_token: string;
-        };
-        persistApiSession(tokens.access_token, tokens.refresh_token);
-        return apiFetch<T>(path, init, tokens.access_token);
+    if (getStoredRefreshToken()) {
+      const { ensureValidAccessToken } = await import("./auth");
+      const newToken = await ensureValidAccessToken({ force: true });
+      if (newToken) {
+        return apiFetch<T>(path, init, newToken);
       }
-      clearApiSession();
     }
   }
 
