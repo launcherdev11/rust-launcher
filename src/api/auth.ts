@@ -165,26 +165,67 @@ export async function registerAndPersist(input: {
   return me;
 }
 
-export async function ensureValidAccessToken(): Promise<string | null> {
+/** Single in-flight refresh — parallel heartbeats must not rotate the same RT twice. */
+let refreshInFlight: Promise<string | null> | null = null;
+let refreshForcePending = false;
+
+export async function ensureValidAccessToken(options?: {
+  force?: boolean;
+}): Promise<string | null> {
   const accessToken = getStoredAccessToken();
   const refreshToken = getStoredRefreshToken();
   if (!accessToken || !refreshToken) return null;
 
-  const expMs = decodeJwtExpMs(accessToken);
-  if (expMs && Date.now() + 60_000 < expMs) {
-    return accessToken;
+  if (!options?.force) {
+    const expMs = decodeJwtExpMs(accessToken);
+    if (expMs && Date.now() + 60_000 < expMs) {
+      return accessToken;
+    }
+  } else {
+    refreshForcePending = true;
   }
 
-  try {
-    const tokens = await refreshSession(refreshToken);
-    persistApiSession(tokens.access_token, tokens.refresh_token);
-    return tokens.access_token;
-  } catch (e) {
-    if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
-      clearApiSession();
-    }
-    return null;
+  if (refreshInFlight) {
+    return refreshInFlight;
   }
+
+  refreshInFlight = (async () => {
+    try {
+      const currentRefresh = getStoredRefreshToken();
+      if (!currentRefresh) return null;
+
+      const force = refreshForcePending;
+      const currentAccess = getStoredAccessToken();
+      if (!force && currentAccess) {
+        const expMs = decodeJwtExpMs(currentAccess);
+        if (expMs && Date.now() + 60_000 < expMs) {
+          return currentAccess;
+        }
+      }
+
+      try {
+        const tokens = await refreshSession(currentRefresh);
+        persistApiSession(tokens.access_token, tokens.refresh_token);
+        return tokens.access_token;
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
+          // Another path may have already rotated tokens while this request failed.
+          const latestRefresh = getStoredRefreshToken();
+          if (latestRefresh && latestRefresh !== currentRefresh) {
+            return getStoredAccessToken();
+          }
+          clearApiSession();
+        }
+        return null;
+      }
+    } finally {
+      refreshForcePending = false;
+    }
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+
+  return refreshInFlight;
 }
 
 function decodeJwtExpMs(token: string): number | null {

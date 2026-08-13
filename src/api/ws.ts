@@ -1,12 +1,10 @@
 import {
-  ApiError,
   clearApiSession,
   getApiBaseUrl,
   getStoredAccessToken,
   getStoredRefreshToken,
-  persistApiSession,
 } from "./client";
-import { API_AUTH_CHANGED_EVENT, ensureValidAccessToken, refreshSession } from "./auth";
+import { API_AUTH_CHANGED_EVENT, ensureValidAccessToken } from "./auth";
 
 export const WS_EVENT = "mc16launcher:ws-event";
 export const WS_STATUS_EVENT = "mc16launcher:ws-status";
@@ -241,27 +239,22 @@ async function recoverAfterWsAuthFailure(): Promise<void> {
   }
   authRecoveryAttempts += 1;
 
-  const refreshToken = getStoredRefreshToken();
-  if (!refreshToken) {
+  if (!getStoredRefreshToken()) {
     clearApiSession();
     authRecoveryAttempts = 0;
     return;
   }
 
-  try {
-    const tokens = await refreshSession(refreshToken);
-    persistApiSession(tokens.access_token, tokens.refresh_token);
+  const newToken = await ensureValidAccessToken({ force: true });
+  if (newToken) {
     // Explicit reconnect — don't rely only on the auth-changed listener.
     connectPlatformWs();
-  } catch (e) {
-    if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
-      clearApiSession();
-      authRecoveryAttempts = 0;
-      return;
-    }
-    if (getStoredAccessToken()) {
-      scheduleReconnect();
-    }
+    return;
+  }
+  if (getStoredAccessToken()) {
+    scheduleReconnect();
+  } else {
+    authRecoveryAttempts = 0;
   }
 }
 

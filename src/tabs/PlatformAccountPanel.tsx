@@ -125,15 +125,20 @@ export function PlatformAccountPanel({
       setPlatformUser(null);
       return;
     }
-    void fetchMe(token)
+    // No explicit token — let apiFetch refresh on 401 instead of looking logged out.
+    void fetchMe()
       .then((me) => {
         setPlatformUser(me);
         setNicknameDraft(me.nickname);
         window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
+        const fresh = getStoredAccessToken() ?? token;
+        if (fresh !== token) setAccessToken(fresh);
       })
       .catch(() => {
-        setPlatformUser(null);
-        setAccessToken("");
+        if (!getStoredAccessToken()) {
+          setPlatformUser(null);
+          setAccessToken("");
+        }
       });
   };
 
