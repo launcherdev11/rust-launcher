@@ -303,6 +303,29 @@
       "backgroundBlur": {
         "label": "Background blur:"
       },
+      "customThemes": {
+        "label": "Custom theme:",
+        "default": "Default",
+        "loading": "Loading themes…",
+        "importZip": "Import ZIP",
+        "create": "Create theme",
+        "createPrompt": "Theme name:",
+        "openFolder": "Open themes folder",
+        "editCss": "Edit CSS",
+        "delete": "Delete theme",
+        "deleteConfirm": "Delete theme «{{name}}»?",
+        "zipFilterName": "Theme archive",
+        "byAuthor": "By {{author}}",
+        "imported": "Theme «{{name}}» imported.",
+        "importFailed": "Failed to import theme.",
+        "created": "Theme «{{name}}» created.",
+        "createFailed": "Failed to create theme.",
+        "deleted": "Theme «{{name}}» deleted.",
+        "deleteFailed": "Failed to delete theme.",
+        "openFolderFailed": "Failed to open themes folder.",
+        "editCssFailed": "Failed to open style.css.",
+        "hint": "Themes are CSS overrides stored in the launcher data folder. Each theme needs theme.json and style.css. You can also drop a theme folder into the themes directory manually."
+      },
       "cache": {
         "label": "Launcher cache:",
         "description": "Ely avatars and temporary downloads.",
@@ -1014,6 +1037,9 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "createAccount": "Create account",
+    "privacyPolicyLink": "Privacy Policy",
+    "privacyConsent": "I have read the {{link}} and consent to the processing of personal data.",
+    "privacyLoginNotice": "By signing in, you confirm that you have read the {{link}}.",
     "next": "Next",
     "back": "Back",
     "verificationStepLabel": "Step 2 of 2",
@@ -1060,7 +1086,8 @@
       "passwordTooShort": "Password must be at least 8 characters.",
       "enterVerificationCode": "Enter the code from the email.",
       "verificationCodeSent": "Verification code sent to your email.",
-      "accountDeleted": "Account deleted."
+      "accountDeleted": "Account deleted.",
+      "acceptPrivacy": "To create an account, please accept the Privacy Policy."
     },
     "errors": {
       "connectionFailed": "Cannot connect to the 16Launcher server. Check your internet connection and API availability.",
@@ -1074,6 +1101,7 @@
       "tooManyVerificationAttempts": "Too many attempts. Request a new code.",
       "rateLimited": "Too many requests. Please wait a moment.",
       "emailSendFailed": "Failed to send the verification email.",
+      "deleteNotAvailable": "Account deletion is not available on the server yet. API deploy is required.",
       "identityAlreadyLinked": "{{provider}} is already linked to another 16Launcher account."
     }
   },
@@ -1146,6 +1174,22 @@
       "elyWaiting": "Waiting for login…",
       "elyDialogTitle": "If the page in your browser is loading forever:",
       "elyDialogTip": "It is better to open it in a new tab of the same browser. In another browser Ely.by may show “Invalid request”.",
+      "cape": {
+        "title": "Cape",
+        "none": "No cape",
+        "empty": "You have no capes on this account.",
+        "loading": "Loading capes…",
+        "error": "Failed to load capes."
+      },
+      "skinByUsername": {
+        "title": "Skin by username",
+        "placeholder": "Steve",
+        "apply": "Apply",
+        "reset": "Reset",
+        "loading": "Loading skin…",
+        "error": "Failed to load skin.",
+        "notFound": "Player not found."
+      },
       "toast": {
         "nicknameSaved": "Changes saved!",
         "nicknameSaveFailed": "Failed to save nickname.",

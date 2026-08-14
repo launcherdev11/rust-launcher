@@ -40,6 +40,7 @@ type SettingSearchId =
   | "launcher.accentColor"
   | "launcher.backgroundImage"
   | "launcher.backgroundBlur"
+  | "launcher.customThemes"
   | "launcher.sidebarPosition"
   | "launcher.sidebarOrder"
   | "launcher.resetSettings"
@@ -199,6 +200,20 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     keys: ["settings.launcher.backgroundBlur.label"],
   },
   {
+    id: "launcher.customThemes",
+    tab: "launcher",
+    keys: [
+      "settings.launcher.customThemes.label",
+      "settings.launcher.customThemes.hint",
+      "settings.launcher.customThemes.default",
+      "settings.launcher.customThemes.importZip",
+      "settings.launcher.customThemes.create",
+      "settings.launcher.customThemes.openFolder",
+      "settings.launcher.customThemes.editCss",
+      "settings.launcher.customThemes.delete",
+    ],
+  },
+  {
     id: "launcher.sidebarPosition",
     tab: "launcher",
     keys: ["settings.launcher.sidebarPosition.label"],
@@ -260,6 +275,15 @@ type Settings = {
   background_blur_enabled: boolean;
   split_view_enabled: boolean;
   sidebar_position?: string;
+  custom_theme_id?: string | null;
+};
+
+type ThemeInfo = {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  version: string;
 };
 
 const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
@@ -511,6 +535,8 @@ export function SettingsTab({
 }: SettingsTabProps) {
   const tt = useT(language);
   const [settingsSearch, setSettingsSearch] = useState("");
+  const [installedThemes, setInstalledThemes] = useState<ThemeInfo[]>([]);
+  const [themesLoading, setThemesLoading] = useState(false);
   const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
   const [isRamEditing, setIsRamEditing] = useState(false);
   const [ramInputMb, setRamInputMb] = useState("");
@@ -727,6 +753,30 @@ export function SettingsTab({
     const current = settings?.background_accent_color ?? "#0b1530";
     setAccentInput(current);
   }, [settings?.background_accent_color]);
+
+  const refreshThemes = useCallback(async () => {
+    setThemesLoading(true);
+    try {
+      const list = await invoke<ThemeInfo[]>("list_themes");
+      setInstalledThemes(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setThemesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (settingsTab === "launcher") {
+      void refreshThemes();
+    }
+  }, [settingsTab, refreshThemes]);
+
+  const activeThemeId = settings?.custom_theme_id ?? null;
+  const activeTheme = useMemo(
+    () => installedThemes.find((theme) => theme.id === activeThemeId) ?? null,
+    [installedThemes, activeThemeId],
+  );
 
   const accentColorHsv = useMemo(() => {
     const c = settings?.background_accent_color ?? "#0b1530";
@@ -2722,6 +2772,7 @@ export function SettingsTab({
                 showSetting("launcher.accentColor") ||
                 showSetting("launcher.backgroundImage") ||
                 showSetting("launcher.backgroundBlur") ||
+                showSetting("launcher.customThemes") ||
                 showSetting("launcher.sidebarPosition") ||
                 showSetting("launcher.sidebarOrder") ||
                 showSetting("launcher.resetSettings")
@@ -3078,6 +3129,218 @@ export function SettingsTab({
                     onChange={(v) => updateSettings({ background_blur_enabled: v })}
                   />
                   )}
+                </div>
+                )}
+                {showSetting("launcher.customThemes") && (
+                <div className="space-y-3">
+                  <label className="text-sm text-white/90">
+                    {tt("settings.launcher.customThemes.label")}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ custom_theme_id: null })}
+                      className={`interactive-press rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                        !activeThemeId
+                          ? "border-white/40 bg-white/15 text-white"
+                          : "border-white/15 bg-black/30 text-white/75 hover:border-white/30 hover:bg-black/45"
+                      }`}
+                    >
+                      {tt("settings.launcher.customThemes.default")}
+                    </button>
+                    {installedThemes.map((theme) => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => updateSettings({ custom_theme_id: theme.id })}
+                        className={`interactive-press rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                          activeThemeId === theme.id
+                            ? "border-white/40 bg-white/15 text-white"
+                            : "border-white/15 bg-black/30 text-white/75 hover:border-white/30 hover:bg-black/45"
+                        }`}
+                        title={
+                          theme.description ||
+                          (theme.author
+                            ? tt("settings.launcher.customThemes.byAuthor", {
+                                author: theme.author,
+                              })
+                            : undefined)
+                        }
+                      >
+                        {theme.name}
+                      </button>
+                    ))}
+                    {themesLoading && installedThemes.length === 0 && (
+                      <span className="self-center text-xs text-white/45">
+                        {tt("settings.launcher.customThemes.loading")}
+                      </span>
+                    )}
+                  </div>
+                  {activeTheme && (
+                    <p className="text-[11px] text-white/45">
+                      {activeTheme.description ||
+                        (activeTheme.author
+                          ? tt("settings.launcher.customThemes.byAuthor", {
+                              author: activeTheme.author,
+                            })
+                          : "")}
+                      {activeTheme.version
+                        ? ` · v${activeTheme.version}`
+                        : ""}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const path = await openFile({
+                            multiple: false,
+                            directory: false,
+                            filters: [
+                              {
+                                name: tt("settings.launcher.customThemes.zipFilterName"),
+                                extensions: ["zip"],
+                              },
+                            ],
+                          });
+                          if (!path) return;
+                          const imported = await invoke<ThemeInfo>("import_theme_zip", {
+                            sourcePath: path,
+                          });
+                          await refreshThemes();
+                          updateSettings({ custom_theme_id: imported.id });
+                          showNotification(
+                            "success",
+                            tt("settings.launcher.customThemes.imported", {
+                              name: imported.name,
+                            }),
+                          );
+                        } catch (e) {
+                          console.error(e);
+                          showNotification(
+                            "error",
+                            e instanceof Error
+                              ? e.message
+                              : tt("settings.launcher.customThemes.importFailed"),
+                          );
+                        }
+                      }}
+                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/40 hover:bg-black/60"
+                    >
+                      {tt("settings.launcher.customThemes.importZip")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const name = window.prompt(
+                          tt("settings.launcher.customThemes.createPrompt"),
+                        );
+                        if (!name?.trim()) return;
+                        try {
+                          const created = await invoke<ThemeInfo>("create_empty_theme", {
+                            name: name.trim(),
+                          });
+                          await refreshThemes();
+                          updateSettings({ custom_theme_id: created.id });
+                          showNotification(
+                            "success",
+                            tt("settings.launcher.customThemes.created", {
+                              name: created.name,
+                            }),
+                          );
+                        } catch (e) {
+                          console.error(e);
+                          showNotification(
+                            "error",
+                            e instanceof Error
+                              ? e.message
+                              : tt("settings.launcher.customThemes.createFailed"),
+                          );
+                        }
+                      }}
+                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/40 hover:bg-black/60"
+                    >
+                      {tt("settings.launcher.customThemes.create")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await invoke("open_themes_folder");
+                        } catch (e) {
+                          console.error(e);
+                          showNotification(
+                            "error",
+                            tt("settings.launcher.customThemes.openFolderFailed"),
+                          );
+                        }
+                      }}
+                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/40 hover:bg-black/60"
+                    >
+                      {tt("settings.launcher.customThemes.openFolder")}
+                    </button>
+                    {activeThemeId && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await invoke("open_theme_css_file", {
+                                themeId: activeThemeId,
+                              });
+                            } catch (e) {
+                              console.error(e);
+                              showNotification(
+                                "error",
+                                tt("settings.launcher.customThemes.editCssFailed"),
+                              );
+                            }
+                          }}
+                          className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/40 hover:bg-black/60"
+                        >
+                          {tt("settings.launcher.customThemes.editCss")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const themeName = activeTheme?.name ?? activeThemeId;
+                            const ok = window.confirm(
+                              tt("settings.launcher.customThemes.deleteConfirm", {
+                                name: themeName,
+                              }),
+                            );
+                            if (!ok) return;
+                            try {
+                              await invoke("delete_theme", { themeId: activeThemeId });
+                              await refreshThemes();
+                              updateSettings({ custom_theme_id: null });
+                              showNotification(
+                                "success",
+                                tt("settings.launcher.customThemes.deleted", {
+                                  name: themeName,
+                                }),
+                              );
+                            } catch (e) {
+                              console.error(e);
+                              showNotification(
+                                "error",
+                                e instanceof Error
+                                  ? e.message
+                                  : tt("settings.launcher.customThemes.deleteFailed"),
+                              );
+                            }
+                          }}
+                          className="interactive-press rounded-xl bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/30"
+                        >
+                          {tt("settings.launcher.customThemes.delete")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-white/45">
+                    {tt("settings.launcher.customThemes.hint")}
+                  </p>
                 </div>
                 )}
                 {showSetting("launcher.sidebarPosition") && (

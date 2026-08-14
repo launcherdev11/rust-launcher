@@ -24,7 +24,6 @@ use crate::services::modrinth::types::{ModrinthVersion, ModrinthVersionFile, MOD
 
 const VERSION_FILES_BATCH: usize = 96;
 
-/// Paths that are never useful in a shared pack (launcher metadata / runtime junk).
 const BUILTIN_MRPACK_IGNORES: &[&str] = &[
     "config.json",
     "settings.json",
@@ -52,16 +51,13 @@ pub struct FileNode {
 pub struct PreviewFile {
     pub path: String,
     pub size: u64,
-    /// "modrinth" | "override"
     pub source: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PreviewResult {
     pub files: Vec<PreviewFile>,
-    /// Approximate size of the .mrpack/.zip itself (embedded overrides + index).
     pub total_bytes: u64,
-    /// Size of files referenced via Modrinth downloads (not embedded).
     pub download_bytes: u64,
     pub resolved_count: u32,
     pub override_count: u32,
@@ -250,7 +246,6 @@ fn is_resolvable_pack_file(rel: &str) -> bool {
         return false;
     };
     let name = rel.rsplit('/').next().unwrap_or(rel).to_ascii_lowercase();
-    // Skip nested junk inside content dirs.
     if name.starts_with('.') {
         return false;
     }
@@ -302,7 +297,6 @@ fn file_for_sha1<'a>(version: &'a ModrinthVersion, sha1: &str) -> Option<&'a Mod
         .iter()
         .find(|f| f.sha1_hex().as_deref() == Some(want.as_str()))
         .or_else(|| {
-            // Some API responses key the map by hash but only attach primary file metadata.
             version.primary_file().filter(|f| {
                 f.sha1_hex()
                     .map(|h| h == want)
@@ -439,7 +433,6 @@ async fn resolve_modrinth_entries(
             let sha512 = match &sha512 {
                 Some(s) => s.clone(),
                 None => {
-                    // Fallback: hash local file (same bytes as Modrinth file).
                     let abs = files
                         .iter()
                         .find(|(_, r, _)| r == &rel)
@@ -885,9 +878,10 @@ fn render_skin_head_png(skin_png: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out.into_inner())
 }
 
-async fn fetch_ely_skin(username: &str) -> Result<Vec<u8>, String> {
+async fn fetch_ely_texture(kind: &str, username: &str) -> Result<Vec<u8>, String> {
     let url = format!(
-        "https://skinsystem.ely.by/skins/{}.png",
+        "https://skinsystem.ely.by/{}/{}.png",
+        kind,
         urlencoding::encode(username)
     );
     let client = reqwest::Client::builder()
@@ -903,16 +897,54 @@ async fn fetch_ely_skin(username: &str) -> Result<Vec<u8>, String> {
 
     let status = resp.status();
     if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::NO_CONTENT {
-        return Err(format!("Ely skin unavailable: HTTP {status}"));
+        return Err(format!("Ely {kind} unavailable: HTTP {status}"));
     }
     if !status.is_success() {
-        return Err(format!("Ely skin bad response: HTTP {status}"));
+        return Err(format!("Ely {kind} bad response: HTTP {status}"));
     }
 
     resp.bytes()
         .await
         .map(|b| b.to_vec())
-        .map_err(|e| format!("Failed to read Ely skin body: {e}"))
+        .map_err(|e| format!("Failed to read Ely {kind} body: {e}"))
+}
+
+async fn fetch_ely_skin(username: &str) -> Result<Vec<u8>, String> {
+    fetch_ely_texture("skins", username).await
+}
+
+async fn fetch_ely_cape(username: &str) -> Result<Vec<u8>, String> {
+    fetch_ely_texture("cloaks", username).await
+}
+
+async fn fetch_optifine_cape(username: &str) -> Result<Vec<u8>, String> {
+    let url = format!(
+        "http://s.optifine.net/capes/{}.png",
+        urlencoding::encode(username)
+    );
+    let client = reqwest::Client::builder()
+        .user_agent("mc16launcher/2.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("OptiFine cape request failed: {e}"))?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::NO_CONTENT {
+        return Err(format!("OptiFine cape unavailable: HTTP {status}"));
+    }
+    if !status.is_success() {
+        return Err(format!("OptiFine cape bad response: HTTP {status}"));
+    }
+
+    resp.bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("Failed to read OptiFine cape body: {e}"))
 }
 
 fn png_data_url(png_bytes: &[u8]) -> String {
@@ -938,6 +970,45 @@ pub async fn get_ely_skin(username: String) -> Result<Option<String>, String> {
     };
 
     Ok(Some(png_data_url(&skin_png)))
+}
+
+#[tauri::command]
+pub async fn get_ely_cape(username: String) -> Result<Option<String>, String> {
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let cape_png = match fetch_ely_cape(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[cape] failed to fetch Ely cape for '{}': {}", trimmed, error);
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&cape_png)))
+}
+
+#[tauri::command]
+pub async fn get_optifine_cape(username: String) -> Result<Option<String>, String> {
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let cape_png = match fetch_optifine_cape(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!(
+                "[cape] failed to fetch OptiFine cape for '{}': {}",
+                trimmed, error
+            );
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&cape_png)))
 }
 
 #[tauri::command]
@@ -979,6 +1050,11 @@ pub async fn get_ely_avatar(username: String) -> Result<Option<String>, String> 
 }
 
 #[derive(Debug, Deserialize)]
+struct McUsernameLookup {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct McSessionProperty {
     name: String,
     value: String,
@@ -999,12 +1075,22 @@ struct McTexturesPayload {
 #[derive(Debug, Deserialize, Default)]
 struct McTexturesMap {
     #[serde(default, rename = "SKIN")]
-    skin: Option<McSkinTexture>,
+    skin: Option<McTextureUrl>,
+    #[serde(default, rename = "CAPE")]
+    cape: Option<McTextureUrl>,
 }
 
 #[derive(Debug, Deserialize)]
-struct McSkinTexture {
+struct McTextureMeta {
+    #[serde(default)]
+    model: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct McTextureUrl {
     url: String,
+    #[serde(default)]
+    metadata: Option<McTextureMeta>,
 }
 
 fn normalize_mc_uuid_cache_key(uuid: &str) -> Result<String, String> {
@@ -1021,33 +1107,53 @@ fn mc_avatar_cache_file_path(uuid: &str) -> Result<PathBuf, String> {
     Ok(cache::avatars_mc_cache_dir()?.join(format!("{key}.png")))
 }
 
-async fn fetch_mc_skin_png(uuid: &str) -> Result<Vec<u8>, String> {
+async fn resolve_mc_uuid_by_username(username: &str) -> Result<String, String> {
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Err("Username is empty".to_string());
+    }
+
+    let encoded = urlencoding::encode(trimmed);
+    let services_url = format!(
+        "https://api.minecraftservices.com/minecraft/profile/lookup/name/{encoded}"
+    );
+
+    match http_get_bytes_with_retries(&services_url, "Mojang username lookup", 2).await {
+        Ok(body) => {
+            let profile: McUsernameLookup = serde_json::from_slice(&body)
+                .map_err(|e| format!("Failed to parse Mojang username lookup: {e}"))?;
+            return Ok(profile.id);
+        }
+        Err(services_err) => {
+            eprintln!(
+                "[skin] Mojang services username lookup failed for '{trimmed}': {services_err}; trying legacy API"
+            );
+        }
+    }
+
+    let legacy_url = format!(
+        "https://api.mojang.com/users/profiles/minecraft/{encoded}"
+    );
+    let body = http_get_bytes_with_retries(&legacy_url, "Mojang legacy username lookup", 2)
+        .await?;
+    let profiles: Vec<McUsernameLookup> = serde_json::from_slice(&body)
+        .map_err(|e| format!("Failed to parse Mojang legacy username lookup: {e}"))?;
+    profiles
+        .into_iter()
+        .next()
+        .map(|p| p.id)
+        .ok_or_else(|| format!("Player '{trimmed}' was not found"))
+}
+
+async fn fetch_mc_textures_map(uuid: &str) -> Result<McTexturesMap, String> {
     let key = normalize_mc_uuid_cache_key(uuid)?;
     let profile_url = format!(
         "https://sessionserver.mojang.com/session/minecraft/profile/{key}"
     );
-    let client = reqwest::Client::builder()
-        .user_agent("16Launcher/1.0")
-        .build()
-        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 
-    let profile_resp = client
-        .get(&profile_url)
-        .send()
-        .await
-        .map_err(|e| format!("Mojang profile request failed: {e}"))?;
+    let body = http_get_bytes_with_retries(&profile_url, "Mojang profile", 3).await?;
 
-    let status = profile_resp.status();
-    if status == reqwest::StatusCode::NO_CONTENT || status == reqwest::StatusCode::NOT_FOUND {
-        return Err(format!("Mojang profile unavailable: HTTP {status}"));
-    }
-    if !status.is_success() {
-        return Err(format!("Mojang profile bad response: HTTP {status}"));
-    }
-
-    let profile: McSessionProfile = profile_resp
-        .json()
-        .await
+    let profile: McSessionProfile = serde_json::from_slice(&body)
         .map_err(|e| format!("Failed to parse Mojang profile: {e}"))?;
 
     let textures_value = profile
@@ -1063,28 +1169,99 @@ async fn fetch_mc_skin_png(uuid: &str) -> Result<Vec<u8>, String> {
     let payload: McTexturesPayload = serde_json::from_slice(&decoded)
         .map_err(|e| format!("Failed to parse Mojang textures JSON: {e}"))?;
 
-    let skin_url = payload
-        .textures
+    Ok(payload.textures)
+}
+
+fn is_retryable_http_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status == reqwest::StatusCode::BAD_GATEWAY
+        || status == reqwest::StatusCode::SERVICE_UNAVAILABLE
+        || status == reqwest::StatusCode::GATEWAY_TIMEOUT
+}
+
+async fn http_get_bytes_with_retries(
+    url: &str,
+    label: &str,
+    max_attempts: u32,
+) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("16Launcher/1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let mut last_err = format!("{label} request failed");
+    for attempt in 0..max_attempts {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(450 * u64::from(attempt))).await;
+        }
+
+        let resp = match client.get(url).send().await {
+            Ok(v) => v,
+            Err(e) => {
+                last_err = format!("{label} request failed: {e}");
+                continue;
+            }
+        };
+
+        let status = resp.status();
+        if status == reqwest::StatusCode::NO_CONTENT || status == reqwest::StatusCode::NOT_FOUND {
+            return Err(format!("{label} unavailable: HTTP {status}"));
+        }
+        if status.is_success() {
+            return resp
+                .bytes()
+                .await
+                .map(|b| b.to_vec())
+                .map_err(|e| format!("Failed to read {label} body: {e}"));
+        }
+
+        last_err = format!("{label} bad response: HTTP {status}");
+        if !is_retryable_http_status(status) {
+            break;
+        }
+    }
+
+    Err(last_err)
+}
+
+async fn download_texture_png(url: &str, label: &str) -> Result<Vec<u8>, String> {
+    http_get_bytes_with_retries(url, &format!("Mojang {label}"), 3).await
+}
+
+async fn fetch_mc_skin_png_mojang(uuid: &str) -> Result<Vec<u8>, String> {
+    let textures = fetch_mc_textures_map(uuid).await?;
+    let skin_url = textures
         .skin
         .ok_or_else(|| "Mojang profile has no skin texture".to_string())?
         .url;
+    download_texture_png(&skin_url, "skin").await
+}
 
-    let skin_resp = client
-        .get(&skin_url)
-        .send()
-        .await
-        .map_err(|e| format!("Mojang skin request failed: {e}"))?;
+async fn fetch_vzge_skin_png(uuid: &str) -> Result<Vec<u8>, String> {
+    let key = normalize_mc_uuid_cache_key(uuid)?;
+    let url = format!("https://vzge.me/full/512/{key}.png");
+    http_get_bytes_with_retries(&url, "vzge.me skin", 2).await
+}
 
-    let skin_status = skin_resp.status();
-    if !skin_status.is_success() {
-        return Err(format!("Mojang skin bad response: HTTP {skin_status}"));
+async fn fetch_mc_skin_png(uuid: &str) -> Result<Vec<u8>, String> {
+    match fetch_mc_skin_png_mojang(uuid).await {
+        Ok(v) => Ok(v),
+        Err(mojang_err) => {
+            eprintln!(
+                "[skin] Mojang skin fetch failed for '{uuid}': {mojang_err}; trying vzge.me"
+            );
+            fetch_vzge_skin_png(uuid).await
+        }
     }
+}
 
-    skin_resp
-        .bytes()
-        .await
-        .map(|b| b.to_vec())
-        .map_err(|e| format!("Failed to read Mojang skin body: {e}"))
+async fn fetch_mc_cape_png(uuid: &str) -> Result<Vec<u8>, String> {
+    let textures = fetch_mc_textures_map(uuid).await?;
+    let cape_url = textures
+        .cape
+        .ok_or_else(|| "Mojang profile has no cape texture".to_string())?
+        .url;
+    download_texture_png(&cape_url, "cape").await
 }
 
 #[tauri::command]
@@ -1103,6 +1280,185 @@ pub async fn get_mc_skin(uuid: String) -> Result<Option<String>, String> {
     };
 
     Ok(Some(png_data_url(&skin_png)))
+}
+
+#[tauri::command]
+pub async fn get_mc_skin_by_username(username: String) -> Result<Option<String>, String> {
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let uuid = match resolve_mc_uuid_by_username(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[skin] failed to resolve Mojang username '{trimmed}': {error}");
+            return Ok(None);
+        }
+    };
+
+    let skin_png = match fetch_mc_skin_png(&uuid).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!(
+                "[skin] failed to fetch Mojang skin for username '{trimmed}' ({uuid}): {error}"
+            );
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&skin_png)))
+}
+
+fn mc_skin_variant_from_textures(textures: &McTexturesMap) -> &'static str {
+    textures
+        .skin
+        .as_ref()
+        .and_then(|skin| skin.metadata.as_ref())
+        .and_then(|meta| meta.model.as_deref())
+        .map(|model| {
+            if model.eq_ignore_ascii_case("slim") {
+                "slim"
+            } else {
+                "classic"
+            }
+        })
+        .unwrap_or("classic")
+}
+
+fn clear_mc_avatar_cache(uuid: &str) {
+    if let Ok(path) = mc_avatar_cache_file_path(uuid) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+async fn post_mc_skin_from_url(
+    access_token: &str,
+    skin_url: &str,
+    variant: &str,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("16Launcher/1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let resp = client
+        .post("https://api.minecraftservices.com/minecraft/profile/skins")
+        .bearer_auth(access_token)
+        .json(&serde_json::json!({
+            "variant": variant,
+            "url": skin_url
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Minecraft skin change request failed: {e}"))?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("MC_TOKEN_EXPIRED".to_string());
+    }
+    if !status.is_success() {
+        let body = resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "<empty>".to_string());
+        return Err(format!("Minecraft skin change failed: HTTP {status}: {body}"));
+    }
+
+    Ok(())
+}
+
+async fn apply_mc_skin_from_username(username: &str) -> Result<Vec<u8>, String> {
+    use crate::services::game::accounts::{get_profile, save_full_profile};
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Err("Username is empty".to_string());
+    }
+
+    let source_uuid = resolve_mc_uuid_by_username(trimmed).await?;
+    let textures = fetch_mc_textures_map(&source_uuid).await?;
+    let skin_url = textures
+        .skin
+        .as_ref()
+        .ok_or_else(|| format!("Player '{trimmed}' has no skin"))?
+        .url
+        .clone();
+    let variant = mc_skin_variant_from_textures(&textures);
+
+    let mut access_token = resolve_mc_access_token().await?;
+    let mut retried = false;
+    loop {
+        match post_mc_skin_from_url(&access_token, &skin_url, variant).await {
+            Ok(()) => break,
+            Err(e) if e == "MC_TOKEN_EXPIRED" && !retried => {
+                retried = true;
+                match ensure_ms_minecraft_session().await? {
+                    Some((_name, _uuid, new_token)) => {
+                        if let Ok(mut p) = get_profile() {
+                            p.mc_access_token = Some(new_token.clone());
+                            let _ = save_full_profile(&p);
+                        }
+                        access_token = new_token;
+                        continue;
+                    }
+                    None => {
+                        return Err(
+                            "Сессия Minecraft истекла. Войдите снова через Microsoft.".to_string(),
+                        );
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    if let Ok(profile) = get_profile() {
+        if let Some(uuid) = profile.mc_uuid.as_ref().filter(|s| !s.trim().is_empty()) {
+            clear_mc_avatar_cache(uuid);
+        }
+    }
+
+    fetch_mc_skin_png(&source_uuid).await
+}
+
+#[tauri::command]
+pub async fn apply_mc_skin_by_username(username: String) -> Result<Option<String>, String> {
+    let trimmed = username.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let skin_png = match apply_mc_skin_from_username(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            if error.contains("was not found") || error.contains("no skin") {
+                return Ok(None);
+            }
+            return Err(error);
+        }
+    };
+
+    Ok(Some(png_data_url(&skin_png)))
+}
+
+#[tauri::command]
+pub async fn get_mc_cape(uuid: String) -> Result<Option<String>, String> {
+    let trimmed = uuid.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let cape_png = match fetch_mc_cape_png(trimmed).await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[cape] failed to fetch Mojang cape for '{trimmed}': {error}");
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&cape_png)))
 }
 
 #[tauri::command]
@@ -1125,6 +1481,12 @@ pub async fn get_mc_avatar(uuid: String) -> Result<Option<String>, String> {
         Ok(v) => v,
         Err(error) => {
             eprintln!("[avatar] failed to fetch Mojang skin for '{trimmed}': {error}");
+            if let Ok(bytes) = std::fs::read(&cache_path) {
+                if !bytes.is_empty() {
+                    eprintln!("[avatar] using stale cache for '{trimmed}'");
+                    return Ok(Some(png_data_url(&bytes)));
+                }
+            }
             return Ok(None);
         }
     };
@@ -1142,4 +1504,191 @@ pub async fn get_mc_avatar(uuid: String) -> Result<Option<String>, String> {
     }
 
     Ok(Some(png_data_url(&avatar_png)))
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct McCapeInfo {
+    pub id: String,
+    pub alias: String,
+    pub url: String,
+    pub state: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct McAuthCape {
+    id: String,
+    #[serde(default)]
+    alias: String,
+    url: String,
+    #[serde(default)]
+    state: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct McAuthProfile {
+    #[serde(default)]
+    capes: Vec<McAuthCape>,
+}
+
+async fn resolve_mc_access_token() -> Result<String, String> {
+    use crate::services::game::accounts::get_profile;
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let profile = get_profile()?;
+    if let Some(token) = profile
+        .mc_access_token
+        .as_ref()
+        .filter(|t| !t.trim().is_empty())
+    {
+        return Ok(token.clone());
+    }
+
+    match ensure_ms_minecraft_session().await? {
+        Some((_name, _uuid, token)) => Ok(token),
+        None => Err(
+            "Нет активной сессии Minecraft. Войдите через Microsoft на вкладке «Аккаунты».".to_string(),
+        ),
+    }
+}
+
+async fn fetch_mc_auth_profile(access_token: &str) -> Result<McAuthProfile, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("16Launcher/1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let resp = client
+        .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Minecraft profile request failed: {e}"))?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("MC_TOKEN_EXPIRED".to_string());
+    }
+    if !status.is_success() {
+        return Err(format!("Minecraft profile bad response: HTTP {status}"));
+    }
+
+    resp.json()
+        .await
+        .map_err(|e| format!("Failed to parse Minecraft profile: {e}"))
+}
+
+async fn fetch_mc_capes_with_token(access_token: &str) -> Result<Vec<McCapeInfo>, String> {
+    let profile = fetch_mc_auth_profile(access_token).await?;
+    Ok(profile
+        .capes
+        .into_iter()
+        .map(|c| McCapeInfo {
+            id: c.id,
+            alias: if c.alias.trim().is_empty() {
+                "Cape".to_string()
+            } else {
+                c.alias
+            },
+            url: c.url,
+            state: if c.state.eq_ignore_ascii_case("ACTIVE") {
+                "ACTIVE".to_string()
+            } else {
+                "INACTIVE".to_string()
+            },
+        })
+        .collect())
+}
+
+async fn fetch_mc_capes_resilient() -> Result<Vec<McCapeInfo>, String> {
+    use crate::services::game::accounts::{get_profile, save_full_profile};
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let token = resolve_mc_access_token().await?;
+    match fetch_mc_capes_with_token(&token).await {
+        Ok(capes) => Ok(capes),
+        Err(e) if e == "MC_TOKEN_EXPIRED" => {
+            match ensure_ms_minecraft_session().await? {
+                Some((_name, _uuid, new_token)) => {
+                    if let Ok(mut p) = get_profile() {
+                        p.mc_access_token = Some(new_token.clone());
+                        let _ = save_full_profile(&p);
+                    }
+                    fetch_mc_capes_with_token(&new_token).await
+                }
+                None => Err(
+                    "Сессия Minecraft истекла. Войдите снова через Microsoft.".to_string(),
+                ),
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn list_mc_capes() -> Result<Vec<McCapeInfo>, String> {
+    fetch_mc_capes_resilient().await
+}
+
+#[tauri::command]
+pub async fn set_mc_active_cape(cape_id: Option<String>) -> Result<Vec<McCapeInfo>, String> {
+    use crate::services::game::accounts::{get_profile, save_full_profile};
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let mut access_token = resolve_mc_access_token().await?;
+    let client = reqwest::Client::builder()
+        .user_agent("16Launcher/1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let mut retried = false;
+    loop {
+        let resp = if let Some(id) = cape_id.as_ref().filter(|s| !s.trim().is_empty()) {
+            client
+                .put("https://api.minecraftservices.com/minecraft/profile/capes/active")
+                .bearer_auth(&access_token)
+                .json(&serde_json::json!({ "capeId": id.trim() }))
+                .send()
+                .await
+                .map_err(|e| format!("Minecraft cape activate request failed: {e}"))?
+        } else {
+            client
+                .delete("https://api.minecraftservices.com/minecraft/profile/capes/active")
+                .bearer_auth(&access_token)
+                .send()
+                .await
+                .map_err(|e| format!("Minecraft cape hide request failed: {e}"))?
+        };
+
+        let status = resp.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED && !retried {
+            retried = true;
+            match ensure_ms_minecraft_session().await? {
+                Some((_name, _uuid, new_token)) => {
+                    if let Ok(mut p) = get_profile() {
+                        p.mc_access_token = Some(new_token.clone());
+                        let _ = save_full_profile(&p);
+                    }
+                    access_token = new_token;
+                    continue;
+                }
+                None => {
+                    return Err(
+                        "Сессия Minecraft истекла. Войдите снова через Microsoft.".to_string(),
+                    );
+                }
+            }
+        }
+        if !status.is_success() {
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "<empty>".to_string());
+            return Err(format!(
+                "Minecraft cape update failed: HTTP {status}: {body}"
+            ));
+        }
+        break;
+    }
+
+    fetch_mc_capes_resilient().await
 }

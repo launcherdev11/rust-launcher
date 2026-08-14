@@ -8,6 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 hs_err_pid*.log
 replay_pid*.log
+*.hprof
+*.mdmp
+*.dmp
 
 #dependencies/build
 node_modules/
@@ -18,7 +21,18 @@ dist-ssr/
 backend/
 deploy/
 src-tauri/target/
+**/target/
 .tauri/
+
+#tauri generated / installer outputs
+src-tauri/gen/
+src-tauri/WixTools/
+*.msi
+*.nsis.zip
+*.AppImage
+*.deb
+*.rpm
+*.dmg
 
 #env/secrets (keep examples tracked)
 .env
@@ -75,5 +89,8 @@ backend-*.tar.gz
 .vite/
 *.tsbuildinfo
 
-#rust backups
+#rust backups / windows build leftovers
 **/*.rs.bk
+*.pdb
+*.ilk
+*.rcgu.o

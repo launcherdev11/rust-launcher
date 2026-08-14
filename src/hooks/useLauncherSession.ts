@@ -11,7 +11,6 @@ import {
 
 const PING_INTERVAL_MS = 25_000;
 
-/** Creates a launcher session on sign-in and keeps it alive via ping. */
 export function useLauncherSession() {
   const sessionIdRef = useRef<string | null>(getStoredLauncherSessionId());
 

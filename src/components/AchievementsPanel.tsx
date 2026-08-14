@@ -11,7 +11,6 @@ import { useT, type Language } from "../i18n";
 type AchievementsPanelProps = {
   language: Language;
   compact?: boolean;
-  /** When set, loads that user's achievements (friend/self). Otherwise loads own. */
   userId?: string | null;
   className?: string;
 };

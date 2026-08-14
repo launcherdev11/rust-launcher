@@ -37,7 +37,6 @@ function formatNotificationMessage(
   return t(language, "notifications.system");
 }
 
-/** Show launcher toasts for platform notification WS events. */
 export function usePlatformNotificationToasts(
   showNotification: ShowNotification,
   language: Language,

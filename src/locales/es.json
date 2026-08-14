@@ -329,6 +329,29 @@
       "backgroundBlur": {
         "label": "Fondo borroso:"
       },
+      "customThemes": {
+        "label": "Tema personalizado:",
+        "default": "Predeterminado",
+        "loading": "Cargando temas…",
+        "importZip": "Importar ZIP",
+        "create": "Crear tema",
+        "createPrompt": "Nombre del tema:",
+        "openFolder": "Abrir carpeta de temas",
+        "editCss": "Editar CSS",
+        "delete": "Eliminar tema",
+        "deleteConfirm": "¿Eliminar el tema «{{name}}»?",
+        "zipFilterName": "Archivo de tema",
+        "byAuthor": "Por {{author}}",
+        "imported": "Tema «{{name}}» importado.",
+        "importFailed": "No se pudo importar el tema.",
+        "created": "Tema «{{name}}» creado.",
+        "createFailed": "No se pudo crear el tema.",
+        "deleted": "Tema «{{name}}» eliminado.",
+        "deleteFailed": "No se pudo eliminar el tema.",
+        "openFolderFailed": "No se pudo abrir la carpeta de temas.",
+        "editCssFailed": "No se pudo abrir style.css.",
+        "hint": "Los temas son anulaciones CSS en la carpeta de datos del launcher. Cada tema necesita theme.json y style.css. También puede copiar manualmente una carpeta de tema al directorio themes."
+      },
       "cache": {
         "label": "Caché del iniciador:",
         "description": "Avatares de Ely y descargas temporales.",
@@ -1034,6 +1057,9 @@
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "createAccount": "Crear una cuenta",
+    "privacyPolicyLink": "Política de privacidad",
+    "privacyConsent": "He leído la {{link}} y doy mi consentimiento para el tratamiento de datos personales.",
+    "privacyLoginNotice": "Al iniciar sesión, confirma que ha leído la {{link}}.",
     "next": "Siguiente",
     "back": "Atrás",
     "verificationStepLabel": "Paso 2 de 2",
@@ -1080,7 +1106,8 @@
       "passwordTooShort": "La contraseña debe tener al menos 8 caracteres.",
       "enterVerificationCode": "Introduce el código del correo.",
       "verificationCodeSent": "Código de verificación enviado al correo.",
-      "accountDeleted": "Cuenta eliminada."
+      "accountDeleted": "Cuenta eliminada.",
+      "acceptPrivacy": "Para crear una cuenta, acepte la Política de privacidad."
     },
     "errors": {
       "connectionFailed": "No se puede conectar al servidor 16Launcher. Verifique internet y disponibilidad del API.",
@@ -1094,6 +1121,7 @@
       "tooManyVerificationAttempts": "Demasiados intentos. Solicita un nuevo código.",
       "rateLimited": "Demasiadas solicitudes. Espera un momento.",
       "emailSendFailed": "No se pudo enviar el correo de verificación.",
+      "deleteNotAvailable": "La eliminación de cuenta aún no está disponible en el servidor. Hace falta desplegar la API.",
       "identityAlreadyLinked": "{{provider}} ya está vinculado a otra cuenta de 16Launcher."
     }
   },
@@ -1166,6 +1194,22 @@
       "elyWaiting": "Esperando iniciar sesión…",
       "elyDialogTitle": "Si la página en su navegador se carga eternamente:",
       "elyDialogTip": "Es mejor abrirlo en una nueva pestaña del mismo navegador. En otro navegador, Ely.by puede mostrar \"Solicitud no válida\".",
+      "cape": {
+        "title": "Capa",
+        "none": "Sin capa",
+        "empty": "No tienes capas en esta cuenta.",
+        "loading": "Cargando capas…",
+        "error": "No se pudieron cargar las capas."
+      },
+      "skinByUsername": {
+        "title": "Skin por nombre",
+        "placeholder": "Steve",
+        "apply": "Aplicar",
+        "reset": "Restablecer",
+        "loading": "Cargando skin…",
+        "error": "No se pudo cargar el skin.",
+        "notFound": "Jugador no encontrado."
+      },
       "toast": {
         "nicknameSaved": "¡Cambios guardados!",
         "nicknameSaveFailed": "No se pudo guardar el apodo.",

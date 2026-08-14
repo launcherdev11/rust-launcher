@@ -38,7 +38,6 @@ function sanitizeAnchor(openAttrs: string, inner: string): string {
   return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer noopener" class="mods-desc-link">${sanitizeFragment(inner)}</a>`;
 }
 
-/** Keep a small allowlist of HTML that Modrinth authors embed in markdown. */
 function sanitizeFragment(html: string): string {
   let out = html;
   out = out.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");

@@ -3,7 +3,6 @@ import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { getStoredAccessToken } from "../api/client";
 import { sendPresenceHeartbeat, sendPresenceOffline } from "../api/presence";
 
-/** Keep platform presence alive while the launcher is open and signed in. */
 const HEARTBEAT_INTERVAL_MS = 25_000;
 
 export function usePresenceHeartbeat() {

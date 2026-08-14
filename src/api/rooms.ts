@@ -27,7 +27,6 @@ export async function listRooms(): Promise<Room[]> {
   return data.rooms ?? [];
 }
 
-/** Open rooms owned by friends that you have not joined yet. */
 export async function listFriendsRooms(): Promise<Room[]> {
   await ensureValidAccessToken();
   const data = await apiFetch<{ rooms: Room[] }>("/rooms/friends");
