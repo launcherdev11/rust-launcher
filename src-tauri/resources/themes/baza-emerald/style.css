@@ -1,0 +1,47 @@
+/* BAZA Emerald — тестовая кастомная тема для 16Launcher */
+
+:root {
+  --accent-color: #0d9488 !important;
+}
+
+.glass-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(6, 55, 48, 0.78),
+    rgba(4, 28, 32, 0.88)
+  ) !important;
+  border-color: rgba(45, 212, 191, 0.28) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+}
+
+.glass-chip {
+  background: rgba(13, 148, 136, 0.35) !important;
+  border-color: rgba(94, 234, 212, 0.25) !important;
+  color: #ecfdf5 !important;
+}
+
+.interactive-press {
+  border-radius: 18px !important;
+}
+
+.accent-bg {
+  background: linear-gradient(135deg, #2dd4bf, #0f766e) !important;
+  color: #042f2e !important;
+}
+
+.accent-border {
+  border-color: rgba(45, 212, 191, 0.6) !important;
+}
+
+.accent-chip {
+  background: color-mix(in srgb, #0d9488 75%, #022c22 25%) !important;
+}
+
+.sidebar-icon-active {
+  color: #5eead4 !important;
+}
+
+.accent-checkbox:checked {
+  border-color: #2dd4bf !important;
+  background-color: #0d9488 !important;
+}

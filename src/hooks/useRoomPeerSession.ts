@@ -4,7 +4,7 @@ import {
   startPeerSignaling,
   type PeerLinkState,
 } from "../api/webrtc/signaling";
-import type { RoomPeerSession } from "../api/webrtc/session";
+import { lastTurnAvailable, type RoomPeerSession } from "../api/webrtc/session";
 import { WS_STATUS_EVENT, getWsStatus } from "../api/ws";
 
 const IDLE: PeerLinkState = {
@@ -15,7 +15,8 @@ const IDLE: PeerLinkState = {
 };
 
 const MAX_RECONNECT_DELAY_MS = 12_000;
-const CONNECTING_TIMEOUT_MS = 25_000;
+const CONNECTING_TIMEOUT_MS = 12_000;
+const RELAY_CONNECTING_TIMEOUT_MS = 20_000;
 
 type PeerHandle = {
   dispose: () => void;
@@ -109,6 +110,7 @@ export function useRoomPeerSession(
   const reconnectAttemptRef = useRef<Map<string, number>>(new Map());
   const reconnectTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const connectingTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const forceRelayRef = useRef<Set<string>>(new Set());
   const channelOpenRef = useRef<Map<string, boolean>>(new Map());
   const sessionsByPeerRef = useRef<Record<string, RoomPeerSession>>({});
   const roomRef = useRef(room);
@@ -189,6 +191,14 @@ export function useRoomPeerSession(
     setReconnectTick((n) => n + 1);
   };
 
+  const requestRestartPreferRelay = (peerId: string) => {
+    if (lastTurnAvailable() && !forceRelayRef.current.has(peerId)) {
+      forceRelayRef.current.add(peerId);
+      console.info("[webrtc] retry via TURN relay", { peerId });
+    }
+    requestRestart(peerId);
+  };
+
   useEffect(() => {
     const currentIds = new Set(expectedPeerIds);
     let removed = false;
@@ -196,6 +206,7 @@ export function useRoomPeerSession(
       if (!currentIds.has(peerId)) {
         disposePeer(peerId);
         reconnectAttemptRef.current.delete(peerId);
+        forceRelayRef.current.delete(peerId);
         removed = true;
       }
     }
@@ -228,12 +239,14 @@ export function useRoomPeerSession(
         localUserId,
         hostUserId: currentRoom.owner_user_id,
         peerUserId,
+        iceTransportPolicy: forceRelayRef.current.has(peerUserId) ? "relay" : "all",
         onState: (state) => {
           const wasOpen = channelOpenRef.current.get(peerUserId) === true;
           channelOpenRef.current.set(peerUserId, state.channelOpen);
           setPeerLinks((prev) => ({ ...prev, [peerUserId]: state }));
           if (state.channelOpen) {
             reconnectAttemptRef.current.set(peerUserId, 0);
+            forceRelayRef.current.delete(peerUserId);
             clearPeerTimers(peerUserId);
             if (!wasOpen) {
               const session = sessionsByPeerRef.current[peerUserId];
@@ -258,7 +271,7 @@ export function useRoomPeerSession(
           });
         },
         onTunnelOpen: () => onTunnelOpenRef.current?.(peerUserId),
-        onRequestRestart: () => requestRestart(peerUserId),
+        onRequestRestart: () => requestRestartPreferRelay(peerUserId),
       });
 
       handlesRef.current.set(peerUserId, {
@@ -274,6 +287,7 @@ export function useRoomPeerSession(
         disposePeer(peerId);
       }
       reconnectAttemptRef.current.clear();
+      forceRelayRef.current.clear();
     };
   }, []);
 
@@ -288,9 +302,12 @@ export function useRoomPeerSession(
       if (!link || link.channelOpen) continue;
       if (link.status !== "preparing" && link.status !== "connecting") continue;
 
+      const timeoutMs = forceRelayRef.current.has(peerId)
+        ? RELAY_CONNECTING_TIMEOUT_MS
+        : CONNECTING_TIMEOUT_MS;
       connectingTimerRef.current.set(
         peerId,
-        setTimeout(() => requestRestart(peerId), CONNECTING_TIMEOUT_MS),
+        setTimeout(() => requestRestartPreferRelay(peerId), timeoutMs),
       );
     }
 

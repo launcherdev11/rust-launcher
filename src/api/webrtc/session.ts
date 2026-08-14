@@ -19,24 +19,45 @@ export type PeerSessionCallbacks = {
   onTunnelOpen?: () => void;
 };
 
-function hasTurnUrl(urls: string | string[]): boolean {
-  const list = Array.isArray(urls) ? urls : [urls];
-  return list.some((u) => u.startsWith("turn:"));
+function urlList(urls: string | string[]): string[] {
+  return Array.isArray(urls) ? urls : [urls];
 }
 
-async function buildIceServers(): Promise<RTCIceServer[]> {
+function hasTurnUrl(urls: string | string[]): boolean {
+  return urlList(urls).some((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+}
+
+function hasStunUrl(urls: string | string[]): boolean {
+  return urlList(urls).some((u) => u.startsWith("stun:"));
+}
+
+const ICE_CACHE_MS = 60_000;
+let iceCache: { servers: RTCIceServer[]; turnOk: boolean; at: number } | null = null;
+
+export function lastTurnAvailable(): boolean {
+  return iceCache?.turnOk === true;
+}
+
+async function buildIceServers(): Promise<{ servers: RTCIceServer[]; turnOk: boolean }> {
+  if (iceCache && Date.now() - iceCache.at < ICE_CACHE_MS) {
+    return iceCache;
+  }
+
   const servers: RTCIceServer[] = [];
   let turnOk = false;
 
   try {
     const turn = await fetchTurnCredentials();
-    servers.push({
-      urls: turn.urls,
-      username: turn.username,
-      credential: turn.password,
-    });
-    turnOk = true;
-  } catch {
+    if (turn.urls?.length) {
+      servers.push({
+        urls: turn.urls,
+        username: turn.username,
+        credential: turn.password,
+      });
+      turnOk = hasTurnUrl(turn.urls);
+    }
+  } catch (err) {
+    console.warn("[webrtc] GET /network/turn failed", err);
   }
 
   try {
@@ -48,8 +69,10 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
         username: s.username ?? undefined,
         credential: s.credential ?? undefined,
       });
+      if (!turnOk && hasTurnUrl(s.urls) && s.credential) turnOk = true;
     }
-  } catch {
+  } catch (err) {
+    console.warn("[webrtc] GET /rtc/ice-servers failed", err);
   }
 
   if (servers.length === 0) {
@@ -57,17 +80,24 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
     );
-  } else if (!servers.some((s) => !hasTurnUrl(s.urls))) {
+  } else if (!servers.some((s) => hasStunUrl(s.urls))) {
     servers.unshift({ urls: "stun:stun.l.google.com:19302" });
   }
 
   if (!turnOk) {
     console.warn(
-      "[webrtc] TURN credentials unavailable — P2P may fail across NATs (check TURN_HOST / coturn)",
+      "[webrtc] TURN credentials unavailable — CGNAT/symmetric NAT will stay on connecting (set TURN_HOST + start coturn)",
     );
+  } else {
+    console.info("[webrtc] TURN ready", {
+      urls: servers.flatMap((s) => urlList(s.urls)).filter((u) => hasTurnUrl(u)),
+    });
   }
 
-  return servers;
+  if (turnOk) {
+    iceCache = { servers, turnOk, at: Date.now() };
+  }
+  return { servers, turnOk };
 }
 
 async function detectConnectionType(pc: RTCPeerConnection): Promise<ConnectionType> {
@@ -108,6 +138,7 @@ export class RoomPeerSession {
   private readonly localUserId: string;
   private readonly remoteUserId: string;
   private readonly isHost: boolean;
+  private readonly iceTransportPolicy: RTCIceTransportPolicy;
   private readonly callbacks: PeerSessionCallbacks;
   private closed = false;
   private remoteBinaryHandlers = new Set<(data: ArrayBuffer) => void>();
@@ -119,12 +150,14 @@ export class RoomPeerSession {
     localUserId: string;
     remoteUserId: string;
     isHost: boolean;
+    iceTransportPolicy?: RTCIceTransportPolicy;
     callbacks: PeerSessionCallbacks;
   }) {
     this.roomId = opts.roomId;
     this.localUserId = opts.localUserId;
     this.remoteUserId = opts.remoteUserId;
     this.isHost = opts.isHost;
+    this.iceTransportPolicy = opts.iceTransportPolicy ?? "all";
     this.callbacks = opts.callbacks;
   }
 
@@ -143,13 +176,34 @@ export class RoomPeerSession {
   async start(): Promise<void> {
     if (this.closed) return;
     this.callbacks.onStatus("preparing");
-    const iceServers = await buildIceServers();
+    const { servers: iceServers, turnOk } = await buildIceServers();
     if (this.closed) return;
-    const pc = new RTCPeerConnection({ iceServers });
+    const policy =
+      this.iceTransportPolicy === "relay" && turnOk ? "relay" : "all";
+    if (this.iceTransportPolicy === "relay" && !turnOk) {
+      console.warn("[webrtc] relay requested but TURN is unavailable");
+    }
+    console.info("[webrtc] start", {
+      peer: this.remoteUserId,
+      iceTransportPolicy: policy,
+      turn: turnOk,
+    });
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceTransportPolicy: policy,
+      iceCandidatePoolSize: turnOk ? 2 : 0,
+    });
     this.pc = pc;
 
     pc.onicecandidate = (ev) => {
-      if (!ev.candidate) return;
+      if (!ev.candidate) {
+        console.info("[webrtc] ice gathering complete", { peer: this.remoteUserId });
+        return;
+      }
+      const typ = ev.candidate.type;
+      if (typ === "relay") {
+        console.info("[webrtc] relay candidate", { peer: this.remoteUserId, protocol: ev.candidate.protocol });
+      }
       this.callbacks.onLocalIce({
         candidate: ev.candidate.candidate,
         sdp_mid: ev.candidate.sdpMid,

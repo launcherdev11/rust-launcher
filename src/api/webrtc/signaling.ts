@@ -19,6 +19,7 @@ type Options = {
   localUserId: string;
   hostUserId: string;
   peerUserId: string;
+  iceTransportPolicy?: RTCIceTransportPolicy;
   onState: (state: PeerLinkState) => void;
   onSession?: (session: RoomPeerSession | null) => void;
   onTunnelOpen?: () => void;
@@ -79,6 +80,7 @@ export function startPeerSignaling(opts: Options): {
     localUserId: opts.localUserId,
     remoteUserId: opts.peerUserId,
     isHost,
+    iceTransportPolicy: opts.iceTransportPolicy,
     callbacks: {
       onLocalIce: (candidate: IceCandidateDto) => {
         sendWsMessage({

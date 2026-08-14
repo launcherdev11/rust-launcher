@@ -1,0 +1,31 @@
+/* Example custom theme — edit style.css to change the launcher look */
+
+.glass-panel {
+  background: linear-gradient(
+    135deg,
+    rgba(40, 20, 60, 0.72),
+    rgba(20, 10, 40, 0.85)
+  ) !important;
+  border-color: rgba(180, 120, 255, 0.25) !important;
+}
+
+.glass-chip {
+  background: rgba(60, 30, 90, 0.55) !important;
+  border-color: rgba(180, 120, 255, 0.2) !important;
+}
+
+.interactive-press {
+  border-radius: 14px !important;
+}
+
+.accent-bg {
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+}
+
+.accent-border {
+  border-color: rgba(167, 139, 250, 0.55) !important;
+}
+
+.sidebar-icon-active {
+  color: #c4b5fd !important;
+}
