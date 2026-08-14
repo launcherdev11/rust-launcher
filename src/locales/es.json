@@ -498,6 +498,7 @@
       "loadFailedHint": "Verifica tu conexión a Internet o acceso a GitHub.",
       "defaultAlt": "Bandera del lanzador",
       "learnMore": "Más información",
+      "play": "Jugar",
       "empty": "Banner de noticias y juegos del lanzador"
     },
     "version": {
@@ -938,6 +939,8 @@
     "offline": "Desconectado",
     "profileTitle": "Perfil",
     "viewProfile": "Ver perfil",
+    "addFriend": "Añadir amigo",
+    "alreadyFriends": "Ya sois amigos",
     "toast": {
       "requestAccepted": "Solicitud aceptada",
       "requestRejected": "Solicitud rechazada",
@@ -1042,7 +1045,57 @@
     "empty": "Aún no hay logros.",
     "locked": "Bloqueado",
     "progress": "{{unlocked}} / {{total}} desbloqueados",
-    "unlockedAt": "Desbloqueado el {{date}}"
+    "unlockedAt": "Desbloqueado el {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Bienvenido a bordo",
+        "description": "Crea tu cuenta de 16Launcher."
+      },
+      "identity_linked": {
+        "title": "Identidad confirmada",
+        "description": "Vincula una cuenta de Ely.by o Microsoft."
+      },
+      "first_friend": {
+        "title": "Haciendo amigos",
+        "description": "Añade a tu primer amigo."
+      },
+      "first_launch": {
+        "title": "Al mundo",
+        "description": "Inicia Minecraft desde 16Launcher por primera vez."
+      },
+      "ten_launches": {
+        "title": "Habitual",
+        "description": "Inicia el juego 10 veces."
+      },
+      "fifty_launches": {
+        "title": "Imparable",
+        "description": "Inicia el juego 50 veces."
+      },
+      "hour_played": {
+        "title": "El tiempo vuela",
+        "description": "Juega un total de 1 hora."
+      },
+      "ten_hours": {
+        "title": "Dedicado",
+        "description": "Juega un total de 10 horas."
+      },
+      "first_room": {
+        "title": "Anfitrión",
+        "description": "Crea tu primera sala."
+      },
+      "first_join": {
+        "title": "Invitado",
+        "description": "Únete a la sala de otra persona."
+      },
+      "room_invite": {
+        "title": "Pasa",
+        "description": "Invita a un amigo a una sala."
+      },
+      "theme_submit": {
+        "title": "Estilista",
+        "description": "Envía un tema personalizado del launcher."
+      }
+    }
   },
   "platform": {
     "accountTitle": "Cuenta 16Launcher",
@@ -1278,7 +1331,10 @@
       "stopError": "Error de detención: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Primero seleccione un perfil y luego haga clic en \"Reproducir\"."
+      "selectProfileFirst": "Primero seleccione un perfil y luego haga clic en \"Reproducir\".",
+      "needMinecraftVersion": "Primero seleccione una versión de Minecraft en la pestaña Play.",
+      "needInstalledVersion": "Primero instale la versión seleccionada en la pestaña Play.",
+      "closeGameFirst": "Primero cierre el juego que ya está en ejecución."
     },
     "discord": {
       "play": "En el menú principal",

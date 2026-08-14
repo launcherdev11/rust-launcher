@@ -498,6 +498,7 @@
       "loadFailedHint": "Überprüfen Sie Ihre Internetverbindung oder Ihren Zugriff auf GitHub.",
       "defaultAlt": "Launcher-Banner",
       "learnMore": "Erfahren Sie mehr",
+      "play": "Spielen",
       "empty": "Launcher-Neuigkeiten und Spielebanner"
     },
     "version": {
@@ -938,6 +939,8 @@
     "offline": "Offline",
     "profileTitle": "Profil",
     "viewProfile": "Profil ansehen",
+    "addFriend": "Als Freund hinzufügen",
+    "alreadyFriends": "Bereits befreundet",
     "toast": {
       "requestAccepted": "Anfrage angenommen",
       "requestRejected": "Anfrage abgelehnt",
@@ -1042,7 +1045,57 @@
     "empty": "Noch keine Erfolge.",
     "locked": "Gesperrt",
     "progress": "{{unlocked}} / {{total}} freigeschaltet",
-    "unlockedAt": "Freigeschaltet am {{date}}"
+    "unlockedAt": "Freigeschaltet am {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Willkommen an Bord",
+        "description": "Erstelle dein 16Launcher-Konto."
+      },
+      "identity_linked": {
+        "title": "Identität bestätigt",
+        "description": "Verknüpfe ein Ely.by- oder Microsoft-Konto."
+      },
+      "first_friend": {
+        "title": "Freundschaft schließen",
+        "description": "Füge deinen ersten Freund hinzu."
+      },
+      "first_launch": {
+        "title": "In die Welt",
+        "description": "Starte Minecraft zum ersten Mal über 16Launcher."
+      },
+      "ten_launches": {
+        "title": "Stammgast",
+        "description": "Starte das Spiel 10 Mal."
+      },
+      "fifty_launches": {
+        "title": "Nicht zu stoppen",
+        "description": "Starte das Spiel 50 Mal."
+      },
+      "hour_played": {
+        "title": "Die Zeit vergeht",
+        "description": "Spiele insgesamt 1 Stunde."
+      },
+      "ten_hours": {
+        "title": "Hingabe",
+        "description": "Spiele insgesamt 10 Stunden."
+      },
+      "first_room": {
+        "title": "Gastgeber",
+        "description": "Erstelle deinen ersten Raum."
+      },
+      "first_join": {
+        "title": "Gast",
+        "description": "Tritt dem Raum eines anderen bei."
+      },
+      "room_invite": {
+        "title": "Komm vorbei",
+        "description": "Lade einen Freund in einen Raum ein."
+      },
+      "theme_submit": {
+        "title": "Stylist",
+        "description": "Reiche ein eigenes Launcher-Theme ein."
+      }
+    }
   },
   "platform": {
     "accountTitle": "16Launcher-Konto",
@@ -1281,7 +1334,10 @@
       "stopError": "Stoppfehler: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Wählen Sie zunächst ein Profil aus und klicken Sie dann auf „Abspielen“."
+      "selectProfileFirst": "Wählen Sie zunächst ein Profil aus und klicken Sie dann auf „Abspielen“.",
+      "needMinecraftVersion": "Wählen Sie zuerst eine Minecraft-Version auf der Play-Registerkarte.",
+      "needInstalledVersion": "Installieren Sie zuerst die ausgewählte Version auf der Play-Registerkarte.",
+      "closeGameFirst": "Schließen Sie zuerst das bereits laufende Spiel."
     },
     "discord": {
       "play": "Im Hauptmenü",

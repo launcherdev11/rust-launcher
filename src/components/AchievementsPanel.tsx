@@ -6,7 +6,7 @@ import {
 } from "../api/achievements";
 import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
-import { useT, type Language } from "../i18n";
+import { t, useT, type Language } from "../i18n";
 
 type AchievementsPanelProps = {
   language: Language;
@@ -14,6 +14,19 @@ type AchievementsPanelProps = {
   userId?: string | null;
   className?: string;
 };
+
+const HIDDEN_ACHIEVEMENT_CODES = new Set(["five_friends"]);
+
+export function localizedAchievementField(
+  language: Language,
+  code: string,
+  field: "title" | "description",
+  fallback: string,
+): string {
+  const key = `achievements.items.${code}.${field}`;
+  const value = t(language, key);
+  return value === key ? fallback : value;
+}
 
 const ACHIEVEMENTS_ICON_SRC = "/launcher-assets/achivements.png";
 
@@ -56,7 +69,7 @@ export function AchievementsPanel({
       const rows = userId
         ? await listUserAchievements(userId)
         : await listAchievements();
-      setAchievements(rows);
+      setAchievements(rows.filter((row) => !HIDDEN_ACHIEVEMENT_CODES.has(row.code)));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -153,8 +166,22 @@ export function AchievementsPanel({
                   <AchievementIcon className="h-4 w-4 object-contain" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white/90">{achievement.title}</p>
-                  <p className="mt-0.5 text-xs leading-snug text-white/55">{achievement.description}</p>
+                  <p className="text-sm font-semibold text-white/90">
+                    {localizedAchievementField(
+                      language,
+                      achievement.code,
+                      "title",
+                      achievement.title,
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-snug text-white/55">
+                    {localizedAchievementField(
+                      language,
+                      achievement.code,
+                      "description",
+                      achievement.description,
+                    )}
+                  </p>
                   {achievement.unlocked && achievement.unlocked_at ? (
                     <p className="mt-1 text-[10px] text-amber-200/70">
                       {tt("achievements.unlockedAt", {

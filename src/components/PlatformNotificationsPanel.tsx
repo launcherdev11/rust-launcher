@@ -9,6 +9,7 @@ import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
 import { WS_EVENT, type WsEvent } from "../api/ws";
 import { useT, type Language } from "../i18n";
+import { localizedAchievementField } from "./AchievementsPanel";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 
@@ -93,9 +94,14 @@ export function PlatformNotificationsPanel({ showNotification, language }: Props
       });
     }
     if (n.type === "achievement") {
-      return tt("notifications.achievement", {
-        title: String(p.title ?? p.code ?? ""),
-      });
+      const code = String(p.code ?? "");
+      const title = localizedAchievementField(
+        language,
+        code,
+        "title",
+        String(p.title ?? code),
+      );
+      return tt("notifications.achievement", { title });
     }
     return tt("notifications.system");
   };

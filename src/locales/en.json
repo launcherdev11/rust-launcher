@@ -468,6 +468,7 @@
       "loadFailedHint": "Check your internet connection or access to GitHub.",
       "defaultAlt": "Launcher banner",
       "learnMore": "Learn more",
+      "play": "Play",
       "empty": "Launcher news and game banner"
     },
     "version": {
@@ -918,6 +919,8 @@
     "offline": "Offline",
     "profileTitle": "Profile",
     "viewProfile": "View profile",
+    "addFriend": "Add friend",
+    "alreadyFriends": "Already friends",
     "toast": {
       "requestAccepted": "Request accepted",
       "requestRejected": "Request declined",
@@ -1022,7 +1025,57 @@
     "empty": "No achievements yet.",
     "locked": "Locked",
     "progress": "{{unlocked}} / {{total}} unlocked",
-    "unlockedAt": "Unlocked {{date}}"
+    "unlockedAt": "Unlocked {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Welcome aboard",
+        "description": "Create your 16Launcher platform account."
+      },
+      "identity_linked": {
+        "title": "Identity confirmed",
+        "description": "Link an Ely.by or Microsoft Minecraft account."
+      },
+      "first_friend": {
+        "title": "Making friends",
+        "description": "Add your first friend on 16Launcher."
+      },
+      "first_launch": {
+        "title": "Into the world",
+        "description": "Launch Minecraft from 16Launcher for the first time."
+      },
+      "ten_launches": {
+        "title": "Regular",
+        "description": "Launch the game 10 times."
+      },
+      "fifty_launches": {
+        "title": "Can't stop",
+        "description": "Launch the game 50 times."
+      },
+      "hour_played": {
+        "title": "Time flies",
+        "description": "Play for a total of 1 hour."
+      },
+      "ten_hours": {
+        "title": "Dedicated",
+        "description": "Play for a total of 10 hours."
+      },
+      "first_room": {
+        "title": "Host",
+        "description": "Create your first room."
+      },
+      "first_join": {
+        "title": "Guest",
+        "description": "Join someone else's room."
+      },
+      "room_invite": {
+        "title": "Come over",
+        "description": "Invite a friend to a room."
+      },
+      "theme_submit": {
+        "title": "Stylist",
+        "description": "Submit a custom launcher theme."
+      }
+    }
   },
   "platform": {
     "accountTitle": "16Launcher account",
@@ -1258,7 +1311,10 @@
       "stopError": "Stop error: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Select a profile first, then click “Play”."
+      "selectProfileFirst": "Select a profile first, then click “Play”.",
+      "needMinecraftVersion": "Select a Minecraft version on the Play tab first.",
+      "needInstalledVersion": "Install the selected version on the Play tab first.",
+      "closeGameFirst": "Close the running game first."
     },
     "discord": {
       "play": "In the main menu",

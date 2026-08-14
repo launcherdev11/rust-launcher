@@ -468,6 +468,7 @@
       "loadFailedHint": "Проверь подключение к интернету или доступ к GitHub.",
       "defaultAlt": "Баннер лаунчера",
       "learnMore": "Подробнее",
+      "play": "Играть",
       "empty": "Новости лаунчера и баннер игры"
     },
     "version": {
@@ -918,6 +919,8 @@
     "offline": "Не в сети",
     "profileTitle": "Профиль",
     "viewProfile": "Открыть профиль",
+    "addFriend": "Добавить в друзья",
+    "alreadyFriends": "Уже в друзьях",
     "toast": {
       "requestAccepted": "Заявка принята",
       "requestRejected": "Заявка отклонена",
@@ -1022,7 +1025,57 @@
     "empty": "Достижений пока нет.",
     "locked": "Заблокировано",
     "progress": "{{unlocked}} / {{total}} открыто",
-    "unlockedAt": "Получено {{date}}"
+    "unlockedAt": "Получено {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Добро пожаловать!",
+        "description": "Создайте аккаунт 16Launcher."
+      },
+      "identity_linked": {
+        "title": "Подтверждение личности",
+        "description": "Привяжите Ely.by или Microsoft аккаунт."
+      },
+      "first_friend": {
+        "title": "Дружелюбство",
+        "description": "Добавьте своего первого друга."
+      },
+      "first_launch": {
+        "title": "В игру",
+        "description": "Запустите Minecraft из 16Launcher."
+      },
+      "ten_launches": {
+        "title": "По привычке",
+        "description": "Запустите игру 10 раз."
+      },
+      "fifty_launches": {
+        "title": "Не остановиться",
+        "description": "Запустите игру 50 раз."
+      },
+      "hour_played": {
+        "title": "Время летит",
+        "description": "Наиграйте суммарно 1 час."
+      },
+      "ten_hours": {
+        "title": "Преданность",
+        "description": "Наиграйте суммарно 10 часов."
+      },
+      "first_room": {
+        "title": "Хозяин",
+        "description": "Создайте свою первую комнату."
+      },
+      "first_join": {
+        "title": "Гость",
+        "description": "Зайдите в чужую комнату."
+      },
+      "room_invite": {
+        "title": "Заходи",
+        "description": "Пригласите друга в комнату."
+      },
+      "theme_submit": {
+        "title": "Стилист",
+        "description": "Отправьте свою тему лаунчера."
+      }
+    }
   },
   "platform": {
     "accountTitle": "16Launcher аккаунт",
@@ -1258,7 +1311,10 @@
       "stopError": "Ошибка остановки: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Сначала выберите сборку, затем нажмите «Играть»."
+      "selectProfileFirst": "Сначала выберите сборку, затем нажмите «Играть».",
+      "needMinecraftVersion": "Сначала выберите версию Minecraft на вкладке Play.",
+      "needInstalledVersion": "Сначала установите выбранную версию на вкладке Play.",
+      "closeGameFirst": "Сначала закройте уже запущенную игру."
     },
     "discord": {
       "play": "В главном меню",
