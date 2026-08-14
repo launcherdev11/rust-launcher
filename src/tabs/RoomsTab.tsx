@@ -10,9 +10,10 @@ import {
   type Room,
   type RoomMember,
 } from "../api/rooms";
-import { listFriends, type FriendRow } from "../api/friends";
+import { listFriends, sendFriendRequest, type FriendRow } from "../api/friends";
 import { API_AUTH_CHANGED_EVENT, API_NICKNAME_KEY } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
+import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 import {
   attachLanTunnel,
   startGuestBridge,
@@ -39,7 +40,10 @@ type RoomsTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
   language: Language;
   minecraftAccountKind: "microsoft" | "ely" | "offline" | string;
-  onLaunchToServer: (serverAddress: string) => Promise<void>;
+  onLaunchToServer: (
+    serverAddress: string,
+    options?: { requireOnlineAccount?: boolean },
+  ) => Promise<void>;
 };
 
 function decodeJwtSub(token: string): string {
@@ -134,6 +138,7 @@ export function RoomsTab({
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [inviteNickname, setInviteNickname] = useState("");
   const [avatarByKey, setAvatarByKey] = useState<Record<string, string>>({});
+  const [viewingProfile, setViewingProfile] = useState<UserProfileSeed | null>(null);
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -396,7 +401,9 @@ export function RoomsTab({
         "info",
         `Туннель 127.0.0.1:${localPort} — запускаю игру…`,
       );
-      await onLaunchToServer(`127.0.0.1:${localPort}`);
+      await onLaunchToServer(`127.0.0.1:${localPort}`, {
+        requireOnlineAccount: true,
+      });
       showNotification(
         "success",
         `Игра → 127.0.0.1:${localPort}. Не закрывайте лаунчер — туннель внутри него.`,
@@ -531,6 +538,36 @@ export function RoomsTab({
     const memberIds = new Set((selectedRoom.members ?? []).map((m) => m.user_id));
     return friends.filter((f) => !memberIds.has(f.user_id));
   }, [friends, selectedRoom]);
+
+  const friendIds = useMemo(() => new Set(friends.map((f) => f.user_id)), [friends]);
+
+  const openMemberProfile = (member: RoomMember) => {
+    setViewingProfile({
+      user_id: member.user_id,
+      nickname: member.nickname,
+      is_sponsor: member.is_sponsor,
+      ely_username: member.ely_username,
+      mc_uuid: member.mc_uuid,
+    });
+  };
+
+  const handleAddFriendFromRoom = async (member: RoomMember) => {
+    if (!accessToken || member.user_id === userId) return;
+    setLoading(true);
+    try {
+      const result = await sendFriendRequest(member.nickname.trim());
+      if (result.already_exists) {
+        showNotification("info", tt("friends.toast.requestExists"));
+      } else {
+        showNotification("success", tt("friends.toast.requestSent"));
+      }
+      await reloadRooms();
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -727,11 +764,15 @@ export function RoomsTab({
   if (managing && selectedRoom) {
     const members = selectedRoom.members ?? [];
     return (
+      <>
       <div className="flex w-full max-w-4xl flex-col gap-5 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => setManaging(false)}
+            onClick={() => {
+              setViewingProfile(null);
+              setManaging(false);
+            }}
             className="interactive-press rounded-xl border border-white/12 bg-black/30 px-3 py-2 text-sm font-semibold text-white/70 hover:bg-black/50"
           >
             ← {tt("rooms.backToList")}
@@ -896,9 +937,14 @@ export function RoomsTab({
                 {members.map((m) => (
                   <li
                     key={m.user_id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 transition hover:border-white/20 hover:bg-black/40"
                   >
-                    <div className="flex min-w-0 items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => openMemberProfile(m)}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left transition hover:opacity-95"
+                      title={tt("friends.viewProfile")}
+                    >
                       <img
                         src={avatarSrcFor(m)}
                         alt=""
@@ -918,17 +964,29 @@ export function RoomsTab({
                           {m.role === "owner" ? tt("rooms.role.owner") : tt("rooms.role.member")}
                         </p>
                       </div>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {m.user_id !== userId && !friendIds.has(m.user_id) ? (
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => void handleAddFriendFromRoom(m)}
+                          className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+                        >
+                          {tt("friends.add")}
+                        </button>
+                      ) : null}
+                      {isOwner && m.role !== "owner" ? (
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => void handleKick(m.user_id)}
+                          className="interactive-press rounded-lg border border-white/20 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
+                        >
+                          {tt("rooms.kick")}
+                        </button>
+                      ) : null}
                     </div>
-                    {isOwner && m.role !== "owner" ? (
-                      <button
-                        type="button"
-                        disabled={loading}
-                        onClick={() => void handleKick(m.user_id)}
-                        className="interactive-press rounded-lg border border-white/20 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
-                      >
-                        {tt("rooms.kick")}
-                      </button>
-                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -1007,6 +1065,20 @@ export function RoomsTab({
           </div>
         </div>
       </div>
+      {viewingProfile ? (
+        <UserProfileModal
+          language={language}
+          seed={viewingProfile}
+          currentUserId={userId}
+          isFriend={friendIds.has(viewingProfile.user_id)}
+          onClose={() => setViewingProfile(null)}
+          onNotify={showNotification}
+          onFriendRequestSent={() => {
+            void reloadRooms().catch(() => {});
+          }}
+        />
+      ) : null}
+      </>
     );
   }
 

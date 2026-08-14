@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchUserProfile, type UserPublicProfile } from "../api/users";
+import { sendFriendRequest } from "../api/friends";
 import { ApiError } from "../api/client";
 import { AchievementsPanel } from "./AchievementsPanel";
 import { AccountSkinPreview } from "./account_skin_preview";
@@ -16,10 +17,16 @@ export type UserProfileSeed = {
   online?: boolean | null;
 };
 
+type NotificationKind = "info" | "success" | "error" | "warning";
+
 type UserProfileModalProps = {
   language: Language;
   seed: UserProfileSeed;
   onClose: () => void;
+  currentUserId?: string;
+  isFriend?: boolean;
+  onNotify?: (kind: NotificationKind, message: string) => void;
+  onFriendRequestSent?: () => void;
 };
 
 function CloseIcon() {
@@ -30,17 +37,55 @@ function CloseIcon() {
   );
 }
 
-export function UserProfileModal({ language, seed, onClose }: UserProfileModalProps) {
+export function UserProfileModal({
+  language,
+  seed,
+  onClose,
+  currentUserId,
+  isFriend = false,
+  onNotify,
+  onFriendRequestSent,
+}: UserProfileModalProps) {
   const tt = useT(language);
   const [profile, setProfile] = useState<UserPublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [avatarSrc, setAvatarSrc] = useState(() => buildInitialAvatarDataUrl(seed.nickname));
+  const [addingFriend, setAddingFriend] = useState(false);
+  const [friendStatus, setFriendStatus] = useState<"none" | "pending" | "friend">(
+    isFriend ? "friend" : "none",
+  );
 
   const nickname = profile?.nickname ?? seed.nickname;
   const isSponsor = profile?.is_sponsor ?? seed.is_sponsor;
   const elyUsername = profile?.ely_username ?? seed.ely_username ?? null;
   const mcUuid = profile?.mc_uuid ?? seed.mc_uuid ?? null;
+  const isSelf = Boolean(currentUserId && currentUserId === seed.user_id);
+  const canAddFriend = Boolean(currentUserId) && !isSelf;
+
+  useEffect(() => {
+    setFriendStatus(isFriend ? "friend" : "none");
+  }, [isFriend, seed.user_id]);
+
+  const handleAddFriend = async () => {
+    if (!canAddFriend || friendStatus !== "none" || addingFriend) return;
+    setAddingFriend(true);
+    try {
+      const result = await sendFriendRequest(nickname.trim());
+      if (result.already_exists) {
+        setFriendStatus("pending");
+        onNotify?.("info", tt("friends.toast.requestExists"));
+      } else {
+        setFriendStatus("pending");
+        onNotify?.("success", tt("friends.toast.requestSent"));
+      }
+      onFriendRequestSent?.();
+    } catch (e) {
+      onNotify?.("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setAddingFriend(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +215,27 @@ export function UserProfileModal({ language, seed, onClose }: UserProfileModalPr
                   />
                 </div>
               </div>
+
+              {canAddFriend ? (
+                friendStatus === "friend" ? (
+                  <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-center text-sm font-semibold text-emerald-200/90">
+                    {tt("friends.alreadyFriends")}
+                  </p>
+                ) : friendStatus === "pending" ? (
+                  <p className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center text-sm font-semibold text-white/70">
+                    {tt("friends.toast.requestSent")}
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={addingFriend}
+                    onClick={() => void handleAddFriend()}
+                    className="interactive-press rounded-xl border border-emerald-500/40 bg-emerald-600/25 px-4 py-2.5 text-sm font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
+                  >
+                    {tt("friends.addFriend")}
+                  </button>
+                )
+              ) : null}
             </div>
 
             <AchievementsPanel

@@ -3679,17 +3679,17 @@ function App() {
   };
 
   const handleLaunchToServer = useCallback(
-    async (serverAddress: string) => {
+    async (serverAddress: string, options?: { requireOnlineAccount?: boolean }) => {
       if (!selectedVersion) {
-        throw new Error("Сначала выберите версию Minecraft на вкладке Play");
+        throw new Error(tt("app.warnings.needMinecraftVersion"));
       }
       if (!isInstalled) {
-        throw new Error("Сначала установите выбранную версию на вкладке Play");
+        throw new Error(tt("app.warnings.needInstalledVersion"));
       }
       if (gameStatus === "running" || isLaunching) {
-        throw new Error("Сначала закройте уже запущенную игру");
+        throw new Error(tt("app.warnings.closeGameFirst"));
       }
-      if (activeAccountKind === "offline") {
+      if (options?.requireOnlineAccount && activeAccountKind === "offline") {
         throw new Error(
           "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.",
         );
@@ -3758,7 +3758,20 @@ function App() {
       resolveLaunchConsoleProfileId,
       archiveCurrentConsoleAndClear,
       settings?.show_console_on_launch,
+      tt,
     ],
+  );
+
+  const handleBannerPlay = useCallback(
+    async (serverAddress: string) => {
+      try {
+        await handleLaunchToServer(serverAddress);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        showNotification("error", tt("app.errors.launchError", { msg }));
+      }
+    },
+    [handleLaunchToServer, showNotification, tt],
   );
 
   const accentColor = settings?.background_accent_color ?? "#0b1530";
@@ -4043,6 +4056,7 @@ function App() {
               showSnapshots={settings?.show_snapshots ?? false}
               isConsoleDetached={isConsoleDetached}
               onToggleConsoleDetached={toggleConsoleDetached}
+              onPlayServer={handleBannerPlay}
             />
             </div>
           );
@@ -4063,6 +4077,7 @@ function App() {
       prepareInstallConsole,
       registerModpackHotkeys,
       registerPlayConsoleHotkeys,
+      handleBannerPlay,
       handleOpenGameFolder,
       handlePauseInstall,
       handlePrimaryClick,

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { WS_EVENT, type WsEvent } from "../api/ws";
+import { localizedAchievementField } from "../components/AchievementsPanel";
 import { t, type Language } from "../i18n";
 
 type ShowNotification = (
@@ -30,9 +31,14 @@ function formatNotificationMessage(
     });
   }
   if (nType === "achievement") {
-    return t(language, "notifications.achievement", {
-      title: String(p.title ?? p.code ?? ""),
-    });
+    const code = String(p.code ?? "");
+    const title = localizedAchievementField(
+      language,
+      code,
+      "title",
+      String(p.title ?? code),
+    );
+    return t(language, "notifications.achievement", { title });
   }
   return t(language, "notifications.system");
 }
