@@ -5098,7 +5098,11 @@ function App() {
           ) : null}
           {activeItem === "friends" ? (
             <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
-              <FriendsTab showNotification={showNotification} language={language} />
+              <FriendsTab
+                showNotification={showNotification}
+                language={language}
+                onOpenRooms={() => setActiveItemWithSound("rooms")}
+              />
             </div>
           ) : activeItem === "rooms" ? (
             <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
