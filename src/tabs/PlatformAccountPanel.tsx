@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   API_AUTH_CHANGED_EVENT,
   API_NICKNAME_KEY,
@@ -19,6 +20,7 @@ import {
 import { ApiError, getStoredAccessToken } from "../api/client";
 import { useT, type Language } from "../i18n";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
+import { PRIVACY_POLICY_URL } from "../lib/legal";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -77,6 +79,41 @@ function normalizeProviderUuid(raw: string): string {
   return raw.trim().toLowerCase().replace(/-/g, "");
 }
 
+function PrivacyPolicyLink({ language }: { language: Language }) {
+  const tt = useT(language);
+  return (
+    <button
+      type="button"
+      className="text-emerald-200/90 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-100 hover:decoration-emerald-300/70"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void openUrl(PRIVACY_POLICY_URL);
+      }}
+    >
+      {tt("platform.privacyPolicyLink")}
+    </button>
+  );
+}
+
+function PrivacyInlineText({
+  language,
+  messageKey,
+}: {
+  language: Language;
+  messageKey: "platform.privacyConsent" | "platform.privacyLoginNotice";
+}) {
+  const tt = useT(language);
+  const [before, after] = tt(messageKey).split("{{link}}");
+  return (
+    <span>
+      {before}
+      <PrivacyPolicyLink language={language} />
+      {after ?? ""}
+    </span>
+  );
+}
+
 export function PlatformAccountPanel({
   showNotification,
   language,
@@ -98,6 +135,7 @@ export function PlatformAccountPanel({
   const [authPassword, setAuthPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [signupStep, setSignupStep] = useState<"form" | "verify">("form");
   const [verificationCode, setVerificationCode] = useState("");
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
@@ -125,7 +163,6 @@ export function PlatformAccountPanel({
       setPlatformUser(null);
       return;
     }
-    // No explicit token — let apiFetch refresh on 401 instead of looking logged out.
     void fetchMe()
       .then((me) => {
         setPlatformUser(me);
@@ -163,6 +200,7 @@ export function PlatformAccountPanel({
     setVerificationCode("");
     setCodeSent(false);
     setSignupStep("form");
+    setPrivacyAccepted(false);
   }, [mode]);
 
   useEffect(() => {
@@ -203,6 +241,10 @@ export function PlatformAccountPanel({
     }
     if (authPassword.length < 8) {
       showNotification("warning", tt("platform.toast.passwordTooShort"));
+      return false;
+    }
+    if (!privacyAccepted) {
+      showNotification("warning", tt("platform.toast.acceptPrivacy"));
       return false;
     }
     return true;
@@ -757,9 +799,27 @@ export function PlatformAccountPanel({
                 </div>
               </label>
 
+              {mode === "signup" ? (
+                <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-white/65">
+                  <input
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                    className="accent-checkbox mt-0.5 h-4 w-4 shrink-0"
+                  />
+                  <span>
+                    <PrivacyInlineText language={language} messageKey="platform.privacyConsent" />
+                  </span>
+                </label>
+              ) : (
+                <p className="text-[11px] leading-relaxed text-white/45">
+                  <PrivacyInlineText language={language} messageKey="platform.privacyLoginNotice" />
+                </p>
+              )}
+
               <button
                 type="button"
-                disabled={loading || sendingCode}
+                disabled={loading || sendingCode || (mode === "signup" && !privacyAccepted)}
                 onClick={() => {
                   if (mode === "signup") void handleSignupNext();
                   else void handleAuth();

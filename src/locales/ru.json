@@ -303,6 +303,29 @@
       "backgroundBlur": {
         "label": "Размытие фона:"
       },
+      "customThemes": {
+        "label": "Кастомная тема:",
+        "default": "Стандартная",
+        "loading": "Загрузка тем…",
+        "importZip": "Импорт ZIP",
+        "create": "Создать тему",
+        "createPrompt": "Название темы:",
+        "openFolder": "Открыть папку тем",
+        "editCss": "Редактировать CSS",
+        "delete": "Удалить тему",
+        "deleteConfirm": "Удалить тему «{{name}}»?",
+        "zipFilterName": "Архив темы",
+        "byAuthor": "Автор: {{author}}",
+        "imported": "Тема «{{name}}» импортирована.",
+        "importFailed": "Не удалось импортировать тему.",
+        "created": "Тема «{{name}}» создана.",
+        "createFailed": "Не удалось создать тему.",
+        "deleted": "Тема «{{name}}» удалена.",
+        "deleteFailed": "Не удалось удалить тему.",
+        "openFolderFailed": "Не удалось открыть папку тем.",
+        "editCssFailed": "Не удалось открыть style.css.",
+        "hint": "Темы — это CSS-переопределения в папке данных лаунчера. В каждой теме нужны theme.json и style.css. Можно также вручную скопировать папку темы в каталог themes."
+      },
       "cache": {
         "label": "Кэш лаунчера:",
         "description": "Аватары Ely и временные загрузки.",
@@ -1014,6 +1037,9 @@
     "showPassword": "Показать пароль",
     "hidePassword": "Скрыть пароль",
     "createAccount": "Создать аккаунт",
+    "privacyPolicyLink": "Политикой конфиденциальности",
+    "privacyConsent": "Я ознакомился с {{link}} и даю согласие на обработку персональных данных.",
+    "privacyLoginNotice": "Входя, вы подтверждаете ознакомление с {{link}}.",
     "next": "Далее",
     "back": "Назад",
     "verificationStepLabel": "Шаг 2 из 2",
@@ -1060,7 +1086,8 @@
       "passwordTooShort": "Пароль должен содержать минимум 8 символов.",
       "enterVerificationCode": "Введите код из письма.",
       "verificationCodeSent": "Код подтверждения отправлен на email.",
-      "accountDeleted": "Аккаунт удалён."
+      "accountDeleted": "Аккаунт удалён.",
+      "acceptPrivacy": "Чтобы создать аккаунт, подтвердите согласие с Политикой конфиденциальности."
     },
     "errors": {
       "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте интернет и доступность API.",
@@ -1074,6 +1101,7 @@
       "tooManyVerificationAttempts": "Слишком много попыток. Запросите новый код.",
       "rateLimited": "Слишком много запросов. Подождите немного.",
       "emailSendFailed": "Не удалось отправить письмо с кодом.",
+      "deleteNotAvailable": "Удаление аккаунта на сервере ещё недоступно. Нужен деплой API.",
       "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16Launcher."
     }
   },
@@ -1146,6 +1174,22 @@
       "elyWaiting": "Ожидание входа…",
       "elyDialogTitle": "Если страница в браузере бесконечно грузится:",
       "elyDialogTip": "Лучше открыть в новой вкладке того же браузера. В другом браузере Ely.by может показать «Invalid request».",
+      "cape": {
+        "title": "Плащ",
+        "none": "Без плаща",
+        "empty": "На этом аккаунте нет плащей.",
+        "loading": "Загрузка плащей…",
+        "error": "Не удалось загрузить плащи."
+      },
+      "skinByUsername": {
+        "title": "Скин по нику",
+        "placeholder": "Steve",
+        "apply": "Применить",
+        "reset": "Сбросить",
+        "loading": "Загрузка скина…",
+        "error": "Не удалось загрузить скин.",
+        "notFound": "Игрок не найден."
+      },
       "toast": {
         "nicknameSaved": "Изменения сохранены!",
         "nicknameSaveFailed": "Не удалось сохранить никнейм.",

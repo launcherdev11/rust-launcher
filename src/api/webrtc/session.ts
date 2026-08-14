@@ -37,7 +37,6 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
     });
     turnOk = true;
   } catch {
-    // TURN optional — STUN / host candidates still tried below.
   }
 
   try {
@@ -51,7 +50,6 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
       });
     }
   } catch {
-    // ignore — fallbacks added below
   }
 
   if (servers.length === 0) {
@@ -60,7 +58,6 @@ async function buildIceServers(): Promise<RTCIceServer[]> {
       { urls: "stun:stun1.l.google.com:19302" },
     );
   } else if (!servers.some((s) => !hasTurnUrl(s.urls))) {
-    // TURN-only list still needs STUN for faster local/direct paths.
     servers.unshift({ urls: "stun:stun.l.google.com:19302" });
   }
 
@@ -216,8 +213,6 @@ export class RoomPeerSession {
     if (this.channel?.readyState === "open") return "noop";
 
     const conn = this.pc.connectionState;
-    // Do NOT tear down while ICE is still working — peer_ready spam used to
-    // restart every ~2.5s and leave the UI stuck on «подключение…».
     if (conn === "connecting" || conn === "connected") return "noop";
     if (this.pc.remoteDescription) {
       if (conn === "failed" || conn === "disconnected" || conn === "closed") {

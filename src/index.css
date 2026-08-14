@@ -104,7 +104,6 @@ body {
   transform: none;
 }
 
-/* Linux / WebKitGTK: backdrop-filter dirty regions inflate during tab transitions. */
 html.launcher-linux .glass-panel,
 html.launcher-linux .glass-chip {
   backdrop-filter: none !important;

@@ -760,7 +760,6 @@ export function ModsTab({
     try {
       window.localStorage.setItem("mods_content_provider", provider);
     } catch {
-      /* ignore */
     }
   };
 
@@ -985,7 +984,6 @@ export function ModsTab({
           try {
             window.localStorage.setItem("mods_layout", next);
           } catch {
-            /* ignore */
           }
         }}
       />

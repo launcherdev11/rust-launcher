@@ -174,7 +174,6 @@ export function AccountsTab({
           if (me.nickname) window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
         })
         .catch(() => {
-          /* keep cached nick */
         });
     };
     syncSystemNickname();
@@ -377,8 +376,21 @@ export function AccountsTab({
               key={`${activeAccountId ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
               profile={profileAvatarInput}
               username={displayedNickname}
+              showCapePicker={activeAccountKind === "microsoft" && !!profile.mc_uuid?.trim()}
               onSettingsClick={() => openSettings("accounts")}
               settingsTitle={tt("app.accounts.accountSettingsTitle")}
+              capePickerTitle={tt("app.accounts.cape.title")}
+              capeNoneLabel={tt("app.accounts.cape.none")}
+              capeEmptyHint={tt("app.accounts.cape.empty")}
+              capeLoadingLabel={tt("app.accounts.cape.loading")}
+              capeErrorHint={tt("app.accounts.cape.error")}
+              skinByUsernameTitle={tt("app.accounts.skinByUsername.title")}
+              skinByUsernamePlaceholder={tt("app.accounts.skinByUsername.placeholder")}
+              skinByUsernameApply={tt("app.accounts.skinByUsername.apply")}
+              skinByUsernameReset={tt("app.accounts.skinByUsername.reset")}
+              skinByUsernameLoading={tt("app.accounts.skinByUsername.loading")}
+              skinByUsernameError={tt("app.accounts.skinByUsername.error")}
+              skinByUsernameNotFound={tt("app.accounts.skinByUsername.notFound")}
             />
           </div>
 

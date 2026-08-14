@@ -56,7 +56,13 @@ use services::modrinth::{
     resolve_profile_item_metadata,
 };
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
-use commands::{export_build, get_ely_avatar, get_ely_skin, get_mc_avatar, get_mc_skin, list_build_files, preview_export};
+use commands::{
+    export_build, get_ely_avatar, get_ely_cape, get_ely_skin, get_mc_avatar, get_mc_cape,
+    apply_mc_skin_by_username, get_mc_skin, get_mc_skin_by_username, get_optifine_cape,
+    list_build_files, list_mc_capes,
+    preview_export,
+    set_mc_active_cape,
+};
 use mrpack_open::take_pending_mrpack_open;
 use profile_launch::{
     extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
@@ -64,6 +70,10 @@ use profile_launch::{
     take_pending_profile_launch,
 };
 use services::shortcuts::create_profile_desktop_shortcut;
+use services::themes::{
+    create_empty_theme, delete_theme, get_theme_css, get_theme_dir, import_theme_zip,
+    list_themes, open_theme_css_file, open_themes_folder, save_custom_theme_css,
+};
 
 #[tauri::command]
 fn get_launcher_logs_file() -> String {
@@ -152,6 +162,7 @@ pub fn run() {
                 }
                 let settings = services::game::settings::load_settings_from_disk();
                 infra::autostart::sync_autostart_from_settings(app.handle(), settings.autostart_enabled);
+                services::themes::ensure_example_theme(app.handle());
                 Ok(())
             }
         })
@@ -269,8 +280,15 @@ pub fn run() {
             add_launcher_account,
             get_ely_avatar,
             get_ely_skin,
+            get_ely_cape,
             get_mc_avatar,
             get_mc_skin,
+            get_mc_skin_by_username,
+            apply_mc_skin_by_username,
+            get_mc_cape,
+            list_mc_capes,
+            set_mc_active_cape,
+            get_optifine_cape,
             take_pending_mrpack_open,
             take_pending_profile_launch,
             create_profile_desktop_shortcut,
@@ -281,7 +299,16 @@ pub fn run() {
             delete_screenshot,
             open_screenshots_folder,
             open_screenshot,
-            get_launcher_logs
+            get_launcher_logs,
+            list_themes,
+            import_theme_zip,
+            get_theme_css,
+            save_custom_theme_css,
+            create_empty_theme,
+            delete_theme,
+            open_themes_folder,
+            open_theme_css_file,
+            get_theme_dir,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

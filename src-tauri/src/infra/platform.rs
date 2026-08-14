@@ -149,8 +149,6 @@ fn resolve_appimage_gstreamer_plugin_dir() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Host `libwayland-client` paths — AppImage often ships an older copy that
-/// breaks EGL (EGL_BAD_ALLOC) against newer Mesa on Arch and similar.
 #[cfg(target_os = "linux")]
 fn resolve_system_wayland_client() -> Option<std::path::PathBuf> {
     use std::path::{Path, PathBuf};
@@ -213,7 +211,6 @@ fn configure_appimage_runtime() {
     let lib_dirs = resolve_appimage_lib_dirs();
     prepend_path_list_env("LD_LIBRARY_PATH", &lib_dirs);
 
-    // Force host Wayland for WebKit GPU/Web processes (fixes EGL_BAD_ALLOC on Arch).
     preload_system_wayland_client();
 
     if env::var_os("GIO_MODULE_DIR").is_none() {

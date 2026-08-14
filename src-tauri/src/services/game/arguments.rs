@@ -45,10 +45,6 @@ fn feature_flag_enabled(features: &GameFeatures, key: &str) -> bool {
                 || features.is_quick_play_singleplayer
                 || features.is_quick_play_realms
         }
-        // Unknown keys are NOT enabled. Skipping them (`continue`) used to make
-        // Mojang rules for is_quick_play_singleplayer/multiplayer/realms always
-        // match, leaking --quickPlaySingleplayer + ${quickPlaySingleplayer}
-        // into argv → "Could not find world with the provided identifier".
         _ => false,
     }
 }
@@ -81,7 +77,6 @@ pub(crate) fn argument_rule_matches(rule: &ArgRule, features: &GameFeatures, os_
     true
 }
 
-/// Remove `--quickPlay*` flags (and their values) plus leftover `${quickPlay*}` placeholders.
 pub(crate) fn strip_quick_play_game_args(args: Vec<String>) -> Vec<String> {
     let mut filtered = Vec::with_capacity(args.len());
     let mut i = 0;
@@ -111,7 +106,6 @@ pub(crate) fn strip_quick_play_game_args(args: Vec<String>) -> Vec<String> {
     filtered
 }
 
-/// Remove legacy `--server` / `--port` pairs (pre-1.20 join flags).
 pub(crate) fn strip_legacy_server_args(args: Vec<String>) -> Vec<String> {
     let mut filtered = Vec::with_capacity(args.len());
     let mut i = 0;

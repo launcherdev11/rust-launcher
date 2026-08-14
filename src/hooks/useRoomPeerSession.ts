@@ -266,7 +266,6 @@ export function useRoomPeerSession(
         peerUserId,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional peer set sync
   }, [expectedKey, localUserId, wsStatus, reconnectTick, room?.id, room?.owner_user_id]);
 
   useEffect(() => {
@@ -276,10 +275,8 @@ export function useRoomPeerSession(
       }
       reconnectAttemptRef.current.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Connecting watchdog per peer
   useEffect(() => {
     if (wsStatus !== "connected") return;
 
@@ -303,10 +300,8 @@ export function useRoomPeerSession(
         if (t) clearTimeout(t);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peerLinks, expectedKey, wsStatus, reconnectTick]);
 
-  // Reconnect backoff per peer
   useEffect(() => {
     if (wsStatus !== "connected") return;
 
@@ -336,7 +331,6 @@ export function useRoomPeerSession(
       for (const t of reconnectTimerRef.current.values()) clearTimeout(t);
       reconnectTimerRef.current.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peerLinks, expectedKey, wsStatus]);
 
   const link = aggregateLink(peerLinks, expectedPeerIds);

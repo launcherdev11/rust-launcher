@@ -1,12 +1,3 @@
-//! Local TCP ↔ frontend bridge for Minecraft LAN over WebRTC DataChannel.
-//!
-//! Guest: listens on 127.0.0.1:0 → MC client connects → bytes go to UI/DC.
-//! Host: connects to 127.0.0.1:{lan_port} when guest opens a session.
-//!
-//! Multiple sessions (keyed by peer user id) let the host serve up to N guests.
-//! The guest listener MUST stay alive for the whole join session: Minecraft may
-//! probe/reconnect, and closing the Tauri process kills the port (connection refused).
-
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
@@ -25,7 +16,6 @@ pub const EVENT_LAN_BRIDGE_STATUS: &str = "lan-bridge-status";
 #[derive(Debug, Clone, Serialize)]
 pub struct LanBridgeDataPayload {
     pub session_id: String,
-    /// Base64-encoded TCP chunk from the local Minecraft socket.
     pub data_b64: String,
 }
 
@@ -39,11 +29,9 @@ pub struct LanBridgeStatusPayload {
 
 struct BridgeSession {
     write_tx: Option<mpsc::Sender<Vec<u8>>>,
-    /// Signal all bridge tasks to stop (`true` = running).
     run_tx: Option<watch::Sender<bool>>,
     role: Option<&'static str>,
     guest_port: Option<u16>,
-    /// Chunks from peer before local TCP writer is ready.
     pending_chunks: VecDeque<Vec<u8>>,
     pending_bytes: usize,
 }
@@ -103,7 +91,6 @@ async fn stop_session(session: &mut BridgeSession) {
     session.pending_bytes = 0;
 }
 
-/// Guest side: bind localhost and keep accepting until stopped.
 #[tauri::command]
 pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Result<u16, String> {
     let sid = normalize_session_id(&session_id);
@@ -229,7 +216,6 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
     Ok(port)
 }
 
-/// Host side: connect to local Open-to-LAN Minecraft port.
 #[tauri::command]
 pub async fn lan_bridge_start_host(
     app: AppHandle,
@@ -320,7 +306,6 @@ pub async fn lan_bridge_start_host(
     Ok(())
 }
 
-/// Bytes arriving from the WebRTC peer → write into the local TCP socket.
 #[tauri::command]
 pub async fn lan_bridge_write(session_id: String, data_b64: String) -> Result<(), String> {
     let sid = normalize_session_id(&session_id);
@@ -419,8 +404,6 @@ async fn run_stream_loop(
     mut run_rx: watch::Receiver<bool>,
 ) {
     let (mut reader, mut writer) = stream.into_split();
-    // Keep chunks modest: each read becomes one WebRTC DataChannel message via IPC.
-    // Large bursts amplify reordering/backpressure issues on the JS bridge.
     let mut buf = vec![0u8; 16 * 1024];
 
     loop {

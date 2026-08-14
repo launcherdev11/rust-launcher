@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 const RESOURCE_PACKS_KEY: &str = "resourcePacks:";
 
-/// Minecraft 1.13+ stores custom packs as `file/<filename>` in options.txt.
 pub fn resource_pack_options_id(filename: &str) -> String {
     format!("file/{filename}")
 }
@@ -18,7 +17,6 @@ fn is_builtin_resource_pack_id(id: &str) -> bool {
     BUILTIN_RESOURCE_PACK_IDS.contains(&id)
 }
 
-/// Map an options.txt entry to a filename in `resourcepacks/`, if applicable.
 pub fn resource_pack_filename_from_options_id(id: &str) -> Option<String> {
     let id = id.trim();
     if id.is_empty() || is_builtin_resource_pack_id(id) {
@@ -106,8 +104,6 @@ pub fn write_resource_packs(options_path: &Path, packs: &[String]) -> Result<(),
     Ok(())
 }
 
-/// Rebuild the file-based portion of `resourcePacks` while preserving built-in entries
-/// (e.g. `vanilla`). `ordered_filenames` is top-to-bottom UI order (highest priority first).
 pub fn merge_resource_pack_order(
     current: &[String],
     ordered_filenames: &[String],
@@ -166,7 +162,6 @@ pub fn remove_resource_pack_from_options(current: &[String], filename: &str) -> 
         .collect()
 }
 
-/// Active shader selection for Iris (`config/iris.properties`) and OptiFine (`optionsshaders.txt`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShaderPackSelection {
     pub name: Option<String>,
@@ -293,7 +288,6 @@ fn upsert_properties_key(text: &str, key: &str, value: &str) -> String {
         .collect();
     if !found {
         if !lines.is_empty() && !lines.last().map(|l| l.is_empty()).unwrap_or(true) {
-            // keep file tidy
         }
         lines.push(new_line);
     }
@@ -351,7 +345,6 @@ pub fn read_shader_pack_selection(profile_dir: &Path) -> Result<ShaderPackSelect
     let iris_path = iris_properties_path(profile_dir);
     if let Some(text) = read_properties_file(&iris_path)? {
         let selection = read_iris_selection(&text);
-        // Prefer Iris/Oculus config when present.
         return Ok(selection);
     }
 

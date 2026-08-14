@@ -38,9 +38,7 @@ type AvatarTarget = {
 type RoomsTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
   language: Language;
-  /** Minecraft account kind for the active launcher profile (not platform API session). */
   minecraftAccountKind: "microsoft" | "ely" | "offline" | string;
-  /** Same Play-tab launch as the green Play button, but with a server address. */
   onLaunchToServer: (serverAddress: string) => Promise<void>;
 };
 

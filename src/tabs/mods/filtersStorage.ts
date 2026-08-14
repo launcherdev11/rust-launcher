@@ -30,7 +30,6 @@ function writeList(key: string, items: SavedCatalogItem[]) {
   try {
     window.localStorage.setItem(key, JSON.stringify(items));
   } catch {
-    /* ignore quota */
   }
 }
 
@@ -97,6 +96,5 @@ export function saveStoredSort(sort: string) {
   try {
     window.localStorage.setItem(SORT_KEY, sort);
   } catch {
-    /* ignore */
   }
 }

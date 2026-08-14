@@ -34,14 +34,12 @@ function normalizeSessionId(sessionId?: string | null): string {
   return trimmed || "default";
 }
 
-/** Start guest TCP listener; returns local port for Minecraft quick-play join. */
 export async function startGuestBridge(sessionId: string): Promise<number> {
   return invoke<number>("lan_bridge_start_guest", {
     sessionId: normalizeSessionId(sessionId),
   });
 }
 
-/** Host: connect bridge to local Open-to-LAN Minecraft port (one session per guest). */
 export async function startHostBridge(sessionId: string, lanPort: number): Promise<void> {
   await invoke("lan_bridge_start_host", {
     sessionId: normalizeSessionId(sessionId),
@@ -59,7 +57,6 @@ export async function writeBridgeBytes(
   });
 }
 
-/** Stop one session, or all sessions when sessionId is omitted. */
 export async function stopBridge(sessionId?: string | null): Promise<void> {
   await invoke("lan_bridge_stop", {
     sessionId: sessionId == null ? null : normalizeSessionId(sessionId),
@@ -69,15 +66,6 @@ export async function stopBridge(sessionId?: string | null): Promise<void> {
 const OUTBOUND_QUEUE_WARN = 256;
 const BACKPRESSURE_POLL_MS = 8;
 
-/**
- * Wire Tauri TCP bridge ↔ WebRTC DataChannel for a single peer session.
- * Returns dispose() — detaches listeners only. Does NOT stop the Rust bridge
- * (stopping mid-join causes Minecraft "connection refused").
- *
- * Ordering is critical: Minecraft TCP is a single byte stream. Concurrent
- * `lan_bridge_write` IPC calls (or silent DataChannel drops) scramble packets
- * and surface as zlib `incorrect header check` after world join.
- */
 export async function attachLanTunnel(opts: {
   sessionId: string;
   sendBinary: (data: ArrayBuffer) => boolean;

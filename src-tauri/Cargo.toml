@@ -43,4 +43,5 @@ discord-rich-presence = "1.1.0"
 image = "0.25"
 url = "2"
 tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
+open = "5"
 

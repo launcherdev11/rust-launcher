@@ -59,7 +59,6 @@ function isQuotaExceededError(error: unknown): boolean {
   );
 }
 
-/** Drop bulky non-essential keys so auth tokens can be saved. */
 function freeDisposableLocalStorage() {
   try {
     window.localStorage.removeItem("game_console_persist_v2");
@@ -128,7 +127,6 @@ export async function apiFetch<T>(
   }
 
   const res = await apiRequest(`${getApiBaseUrl()}${path}`, { ...init, headers });
-  // Shared single-flight refresh (auth.ts) — do not POST /auth/refresh here again.
   if (res.status === 401 && token && accessToken === undefined) {
     if (getStoredRefreshToken()) {
       const { ensureValidAccessToken } = await import("./auth");

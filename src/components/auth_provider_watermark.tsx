@@ -20,7 +20,6 @@ function ElyMark({ className }: { className?: string }) {
   );
 }
 
-/** Soft blurred auth-provider mark for title-bar account chip. Offline → nothing. */
 export function AuthProviderWatermark({ kind }: { kind: string }) {
   if (kind !== "microsoft" && kind !== "ely") return null;
 

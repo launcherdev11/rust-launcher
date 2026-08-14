@@ -131,10 +131,8 @@ let status: Status = "disconnected";
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let intentionalClose = false;
-/** Avoid overlapping ensureValidAccessToken + WebSocket open races. */
 let connectGeneration = 0;
 let connectInFlight = false;
-/** WS closed before open — usually HTTP 401 on /ws upgrade. */
 let authRecoveryAttempts = 0;
 const MAX_AUTH_RECOVERY_ATTEMPTS = 2;
 
@@ -201,7 +199,6 @@ export function getWsStatus(): Status {
   return status;
 }
 
-/** Send a typed client message. Signaling messages are queued until reconnect. */
 export function sendWsMessage(message: WsClientMessage): boolean {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     if (isSignalingMessage(message)) {
@@ -226,11 +223,6 @@ export function sendWsMessage(message: WsClientMessage): boolean {
   }
 }
 
-/**
- * After JWT_SECRET rotation (or deleted refresh sessions), a still-unexpired
- * access token keeps failing /ws forever. Force refresh once, else clear so
- * the user re-logs into the platform account.
- */
 async function recoverAfterWsAuthFailure(): Promise<void> {
   if (authRecoveryAttempts >= MAX_AUTH_RECOVERY_ATTEMPTS) {
     clearApiSession();
@@ -247,7 +239,6 @@ async function recoverAfterWsAuthFailure(): Promise<void> {
 
   const newToken = await ensureValidAccessToken({ force: true });
   if (newToken) {
-    // Explicit reconnect — don't rely only on the auth-changed listener.
     connectPlatformWs();
     return;
   }
@@ -305,10 +296,6 @@ function openPlatformWs(token: string): void {
   };
 }
 
-/**
- * Connect (or reconnect) the platform signaling WebSocket.
- * Refreshes the JWT first so we don't hammer /ws with an expired access token.
- */
 export function connectPlatformWs(): void {
   if (typeof window === "undefined") return;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {

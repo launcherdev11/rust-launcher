@@ -109,15 +109,12 @@ export async function deleteAccount(
   accessToken?: string,
 ): Promise<void> {
   const token = accessToken ?? getStoredAccessToken();
-  try {
-    await apiFetch(
-      "/auth/delete-account",
-      { method: "POST", body: JSON.stringify({ password }) },
-      token,
-    );
-  } finally {
-    clearApiSession();
-  }
+  await apiFetch(
+    "/auth/delete-account",
+    { method: "POST", body: JSON.stringify({ password }) },
+    token,
+  );
+  clearApiSession();
 }
 
 
@@ -165,7 +162,6 @@ export async function registerAndPersist(input: {
   return me;
 }
 
-/** Single in-flight refresh — parallel heartbeats must not rotate the same RT twice. */
 let refreshInFlight: Promise<string | null> | null = null;
 let refreshForcePending = false;
 
@@ -209,7 +205,6 @@ export async function ensureValidAccessToken(options?: {
         return tokens.access_token;
       } catch (e) {
         if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
-          // Another path may have already rotated tokens while this request failed.
           const latestRefresh = getStoredRefreshToken();
           if (latestRefresh && latestRefresh !== currentRefresh) {
             return getStoredAccessToken();
@@ -258,6 +253,9 @@ export function mapAuthErrorMessage(
   const lower = raw.toLowerCase();
   if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
     return t("platform.errors.connectionFailed");
+  }
+  if (lower.includes("not found")) {
+    return t("platform.errors.deleteNotAvailable");
   }
   if (lower.includes("unauthorized") || lower.includes("invalid login")) {
     return t("platform.errors.invalidCredentials");

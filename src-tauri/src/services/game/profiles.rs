@@ -1003,7 +1003,6 @@ pub fn set_profile_item_enabled(
     );
 
     if subdir == "shaderpacks" {
-        // Toggle controls the active shader in Iris/OptiFine config, not .disabled rename.
         if enabled {
             let to = content_dir.join(profile_item_stored_name(&display_name, true));
             if from != to {

@@ -58,6 +58,9 @@ pub struct Settings {
 
     #[serde(default)]
     pub onboarding_completed: bool,
+
+    #[serde(default)]
+    pub custom_theme_id: Option<String>,
 }
 
 pub fn default_sidebar_position() -> String {
@@ -111,6 +114,7 @@ impl Default for Settings {
             split_view_enabled: false,
             sidebar_position: default_sidebar_position(),
             onboarding_completed: false,
+            custom_theme_id: None,
         }
     }
 }
