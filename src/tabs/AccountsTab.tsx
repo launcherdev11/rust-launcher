@@ -316,17 +316,7 @@ export function AccountsTab({
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openSettings("accounts")}
-                className="interactive-press flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 text-white/70 transition hover:bg-black/55 hover:text-white"
-                title={tt("app.accounts.accountSettingsTitle")}
-              >
-                <SettingsIcon className="h-4 w-4 fill-current" />
-                <span className="hidden text-xs font-semibold sm:inline">
-                  {tt("app.accounts.accountSettingsTitle")}
-                </span>
-              </button>
+
               <button
                 type="button"
                 disabled={msLoading || elyLoading}
