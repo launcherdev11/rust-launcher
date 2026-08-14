@@ -5096,6 +5096,22 @@ function App() {
               )}
             </div>
           ) : null}
+          {}
+          <div
+            className={
+              activeItem === "rooms"
+                ? "flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4"
+                : "hidden"
+            }
+            aria-hidden={activeItem !== "rooms"}
+          >
+            <RoomsTab
+              showNotification={showNotification}
+              language={language}
+              minecraftAccountKind={activeAccountKind}
+              onLaunchToServer={handleLaunchToServer}
+            />
+          </div>
           {activeItem === "friends" ? (
             <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
               <FriendsTab
@@ -5104,16 +5120,7 @@ function App() {
                 onOpenRooms={() => setActiveItemWithSound("rooms")}
               />
             </div>
-          ) : activeItem === "rooms" ? (
-            <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
-              <RoomsTab
-                showNotification={showNotification}
-                language={language}
-                minecraftAccountKind={activeAccountKind}
-                onLaunchToServer={handleLaunchToServer}
-              />
-            </div>
-          ) : activeItem === "accounts" ? (
+          ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
             <AccountsTab
               showNotification={showNotification}
               language={language}
