@@ -74,14 +74,6 @@ function PencilIcon() {
   );
 }
 
-function SettingsIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className ?? "h-5 w-5 fill-current"} aria-hidden="true">
-      <path d="M12 8.5a3.5 3.5 0 1 0 .001 7.001A3.5 3.5 0 0 0 12 8.5Zm9 3.25-1.8-1.04.16-2.08-2.12-.84-.84-2.12-2.08.16L12 2.75l-1.32 1.88-2.08-.16-.84 2.12-2.12.84.16 2.08L3 11.75v2.5l1.8 1.04-.16 2.08 2.12.84.84 2.12 2.08-.16L12 21.25l1.32-1.88 2.08.16.84-2.12 2.12-.84-.16-2.08L21 14.25v-2.5Z" />
-    </svg>
-  );
-}
-
 function MicrosoftIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
