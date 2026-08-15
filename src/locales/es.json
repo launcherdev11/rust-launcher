@@ -406,6 +406,7 @@
         "label": "Instalar actualizaciones automáticamente:"
       },
       "checkNow": "Buscar actualizaciones",
+      "checkNowHint": "Shift+clic para forzar el popup de actualización",
       "noneFound": "Estás al día. No hay nueva versión disponible.",
       "installedRestart": "Actualización instalada. Reinicie el iniciador.",
       "availableNextStart": "Está disponible una nueva versión del iniciador: {{version}}. La instalación se ofrecerá en el próximo inicio.",
@@ -416,7 +417,14 @@
       "available": "Nueva versión {{version}} está disponible",
       "released": "La actualización {{version}} está disponible",
       "installNow": "Instalar ahora",
-      "upToDate": "El lanzador está actualizado"
+      "upToDate": "El lanzador está actualizado",
+      "popup": {
+        "defaultTitle": "Actualización disponible",
+        "versionLabel": "Versión {{version}}",
+        "viewChanges": "Ver cambios",
+        "update": "Actualizar",
+        "updating": "Actualizando..."
+      }
     }
   },
   "javaSettings": {

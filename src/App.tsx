@@ -36,8 +36,16 @@ import { RoomsTab } from "./tabs/RoomsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
+import { UpdatePopupModal } from "./components/UpdatePopupModal";
 import { AccountAvatar } from "./components/account_avatar";
 import { AuthProviderWatermark } from "./components/auth_provider_watermark";
+import {
+  createFallbackUpdatePopupBanner,
+  fetchLauncherBanners,
+  pickUpdatePopupBanner,
+  readCachedLauncherBanners,
+  type LauncherBannerData,
+} from "./lib/launcherBanners";
 import { DeleteIcon } from "./components/delete_icon";
 import {
   ProfileInfoIcon,
@@ -966,6 +974,7 @@ function App() {
   >("idle");
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateDownloadPercent, setUpdateDownloadPercent] = useState<number | null>(null);
+  const [updatePopupBanner, setUpdatePopupBanner] = useState<LauncherBannerData | null>(null);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>(
     () => readStoredLanguage() ?? "ru",
@@ -2522,6 +2531,73 @@ function App() {
     [updateVersion, showNotification, tt],
   );
 
+  const markUpdatePopupShown = useCallback((version: string) => {
+    try {
+      localStorage.setItem("mc16launcher:lastShownUpdateVersion", version);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const previewUpdatePopup = useCallback(async () => {
+    try {
+      const cached = readCachedLauncherBanners();
+      let banners = cached ?? [];
+      if (!pickUpdatePopupBanner(banners)) {
+        try {
+          banners = await fetchLauncherBanners();
+        } catch (e) {
+          console.error("Failed to fetch banners for popup preview:", e);
+        }
+      }
+      const popup =
+        pickUpdatePopupBanner(banners) ?? createFallbackUpdatePopupBanner();
+      setUpdatePopupBanner(popup);
+      if (!updateVersion) {
+        setUpdateVersion("preview");
+      }
+      return true;
+    } catch (e) {
+      console.error("Failed to preview update popup:", e);
+      showNotification("error", tt("settings.updates.checkFailed"));
+      return false;
+    }
+  }, [showNotification, tt, updateVersion]);
+
+  const maybeShowUpdatePopup = useCallback(
+    async (version: string) => {
+      try {
+        const cached = readCachedLauncherBanners();
+        let banners = cached ?? [];
+        if (!pickUpdatePopupBanner(banners)) {
+          banners = await fetchLauncherBanners();
+        }
+        const popup = pickUpdatePopupBanner(banners);
+        if (!popup) return false;
+        setUpdatePopupBanner(popup);
+        markUpdatePopupShown(version);
+        return true;
+      } catch (e) {
+        console.error("Failed to load update popup banner:", e);
+        return false;
+      }
+    },
+    [markUpdatePopupShown],
+  );
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("mc16launcher:forceUpdatePopup") !== "1") return;
+      localStorage.removeItem("mc16launcher:forceUpdatePopup");
+    } catch {
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void previewUpdatePopup();
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [previewUpdatePopup]);
+
   const checkForUpdate = useCallback(
     async (options?: { silent?: boolean; source?: "startup" | "manual" }) => {
       const silent = options?.silent ?? false;
@@ -2538,6 +2614,12 @@ function App() {
           const notifyEnabled = settings?.notify_new_update !== false;
           const shouldNotifyManual = !silent && notifyEnabled;
           const shouldNotifyStartup = source === "startup" && notifyEnabled;
+          const autoInstall = settings?.auto_install_updates === true;
+
+          if (autoInstall) {
+            void installUpdate(update);
+            return;
+          }
 
           if (shouldNotifyStartup) {
             const key = "mc16launcher:lastShownUpdateVersion";
@@ -2548,27 +2630,26 @@ function App() {
               lastShown = null;
             }
             if (lastShown !== update.version) {
-              showNotification(
-                "info",
-                tt("settings.updates.released", { version: update.version }),
-              );
-              try {
-                localStorage.setItem(key, update.version);
-              } catch {
-                //ignore
+              const shownPopup = await maybeShowUpdatePopup(update.version);
+              if (!shownPopup) {
+                showNotification(
+                  "info",
+                  tt("settings.updates.released", { version: update.version }),
+                );
+                markUpdatePopupShown(update.version);
               }
             }
           } else if (shouldNotifyManual) {
-            showNotification(
-              "info",
-              tt("settings.updates.available", { version: update.version }),
-            );
-          }
-
-          if (settings?.auto_install_updates) {
-            void installUpdate(update);
+            const shownPopup = await maybeShowUpdatePopup(update.version);
+            if (!shownPopup) {
+              showNotification(
+                "info",
+                tt("settings.updates.available", { version: update.version }),
+              );
+            }
           }
         } else {
+          setUpdatePopupBanner(null);
           setUpdateStatus("up-to-date");
           persistLauncherUpdateBadge("latest");
           if (!silent) {
@@ -2590,6 +2671,8 @@ function App() {
       tt,
       installUpdate,
       persistLauncherUpdateBadge,
+      maybeShowUpdatePopup,
+      markUpdatePopupShown,
     ],
   );
 
@@ -4006,6 +4089,7 @@ function App() {
               updateVersion={updateVersion}
               updateDownloadPercent={updateDownloadPercent}
               onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
+              onPreviewUpdatePopup={() => void previewUpdatePopup()}
               onInstallUpdate={() => void installUpdate()}
             />
             </Suspense>
@@ -4088,6 +4172,7 @@ function App() {
       handleToggleSidebarPin,
       installPaused,
       installUpdate,
+      previewUpdatePopup,
       installedVersionIdsForDropdown,
       isConsoleVisible,
       isInstalling,
@@ -4373,6 +4458,23 @@ function App() {
           );
         })}
       </div>
+
+      {updatePopupBanner && (
+        <UpdatePopupModal
+          language={language}
+          banner={updatePopupBanner}
+          version={updateVersion}
+          busy={
+            updateStatus === "checking" ||
+            updateStatus === "downloading" ||
+            updateStatus === "installing"
+          }
+          onClose={() => setUpdatePopupBanner(null)}
+          onUpdate={() => {
+            void installUpdate();
+          }}
+        />
+      )}
 
       {showHelpModal && (
         <div

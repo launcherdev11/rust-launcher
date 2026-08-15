@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { useT, type Language } from "../i18n";
-import { readDataCache, writeDataCache } from "../lib/launcherDataCache";
 import { copyTextToClipboard } from "../lib/clipboard";
+import {
+  bannerServerAddress,
+  fetchLauncherBanners,
+  isCarouselBanner,
+  readCachedLauncherBanners,
+  resolveBannerImageUrl,
+  type LauncherBannerData,
+} from "../lib/launcherBanners";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
@@ -43,48 +50,6 @@ type DownloadProgressPayload = {
   total: number;
   percent: number;
 };
-
-type LauncherBannerData = {
-  imageUrl: string;
-  title?: string;
-  subtitle?: string;
-  link?: string;
-  ip?: string;
-};
-
-type LauncherBannerResponse =
-  | LauncherBannerData
-  | LauncherBannerData[]
-  | { banners: LauncherBannerData[] };
-
-const BANNER_BASE_URL =
-  "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/";
-
-function resolveBannerImageUrl(url: string): string {
-  if (!url) return url;
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${BANNER_BASE_URL}${url.replace(/^\.?\//, "")}`;
-}
-
-function normalizeBannerServerIp(raw: unknown): string {
-  if (typeof raw !== "string") return "";
-  let ip = raw.trim();
-  if (!ip) return "";
-  ip = ip.replace(/^https?:\/\//i, "");
-  const cut = ip.search(/[/?#]/);
-  if (cut >= 0) ip = ip.slice(0, cut);
-  return ip.trim();
-}
-
-function bannerServerAddress(banner: LauncherBannerData): string {
-  const extra = banner as Record<string, unknown>;
-  return (
-    normalizeBannerServerIp(banner.ip) ||
-    normalizeBannerServerIp(extra.IP) ||
-    normalizeBannerServerIp(extra.Ip) ||
-    normalizeBannerServerIp(extra.serverIp)
-  );
-}
 
 type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
@@ -214,7 +179,7 @@ export function PlayTab({
   const bannerServerIp = currentBanner ? bannerServerAddress(currentBanner) : "";
 
   useEffect(() => {
-    const cached = readDataCache<LauncherBannerData[]>("play-banners", 300_000);
+    const cached = readCachedLauncherBanners(300_000)?.filter(isCarouselBanner);
     if (cached?.length) {
       setBanners(cached);
       setActiveBannerIndex(0);
@@ -226,73 +191,27 @@ export function PlayTab({
     async function fetchBanner() {
       try {
         setBannerError(false);
-        const cacheBust = `?t=${Date.now()}`;
-
-        const urls = [
-          `https://raw.githubusercontent.com/16steyy/16Launcher-News/main/banner.json${cacheBust}`,
-          `https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json${cacheBust}`,
-        ];
-
-        let lastError: unknown = null;
-
-        for (const url of urls) {
-          try {
-            const response = await fetch(url, {
-              signal: controller.signal,
-              cache: "no-store",
-            });
-
-            if (!response.ok) {
-              throw new Error(`Failed to load banner: ${response.status}`);
-            }
-
-            const raw = (await response.json()) as LauncherBannerResponse;
-
-            let parsed: LauncherBannerData[] = [];
-
-            if (Array.isArray(raw)) {
-              parsed = raw;
-            } else if (raw && "banners" in raw && Array.isArray((raw as any).banners)) {
-              parsed = (raw as { banners: LauncherBannerData[] }).banners;
-            } else if (raw && typeof raw === "object" && "imageUrl" in raw) {
-              parsed = [raw as LauncherBannerData];
-            }
-
-            parsed = parsed
-              .filter(
-                (b) => typeof b.imageUrl === "string" && b.imageUrl.trim().length > 0,
-              )
-              .map((b) => {
-                const ip = bannerServerAddress(b);
-                return ip ? { ...b, ip } : b;
-              });
-
-            if (parsed.length > 0) {
-              writeDataCache("play-banners", parsed);
-              setBanners(parsed);
-              setActiveBannerIndex(0);
-              return;
-            }
-
-            throw new Error("Invalid banner format");
-          } catch (err) {
-            if (controller.signal.aborted) return;
-            lastError = err;
-          }
-        }
-
-        throw lastError ?? new Error("Failed to load banner from all sources");
+        const all = await fetchLauncherBanners(controller.signal);
+        const parsed = all.filter(isCarouselBanner);
+        setBanners(parsed);
+        setActiveBannerIndex(0);
       } catch (error) {
+        if (controller.signal.aborted) return;
+        const aborted =
+          error instanceof DOMException && error.name === "AbortError";
+        if (aborted) return;
         console.error(error);
         if (!cached?.length) {
           setBannerError(true);
         }
       } finally {
-        setBannerLoading(false);
+        if (!controller.signal.aborted) {
+          setBannerLoading(false);
+        }
       }
     }
 
-    fetchBanner();
+    void fetchBanner();
 
     return () => {
       controller.abort();
