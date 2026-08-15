@@ -17,6 +17,7 @@ export type PeerSessionCallbacks = {
   onConnectionType?: (type: ConnectionType) => void;
   onChannelOpen?: () => void;
   onTunnelOpen?: () => void;
+  onTunnelReady?: () => void;
 };
 
 function urlList(urls: string | string[]): string[] {
@@ -25,6 +26,25 @@ function urlList(urls: string | string[]): string[] {
 
 function hasTurnUrl(urls: string | string[]): boolean {
   return urlList(urls).some((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+}
+
+function expandTurnTransports(urls: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (u: string) => {
+    if (seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  for (const raw of urls) {
+    add(raw);
+    if (!raw.startsWith("turn:") && !raw.startsWith("turns:")) continue;
+    if (/[?&]transport=/i.test(raw)) continue;
+    const join = raw.includes("?") ? "&" : "?";
+    add(`${raw}${join}transport=udp`);
+    add(`${raw}${join}transport=tcp`);
+  }
+  return out;
 }
 
 function hasStunUrl(urls: string | string[]): boolean {
@@ -50,7 +70,7 @@ async function buildIceServers(): Promise<{ servers: RTCIceServer[]; turnOk: boo
     const turn = await fetchTurnCredentials();
     if (turn.urls?.length) {
       servers.push({
-        urls: turn.urls,
+        urls: expandTurnTransports(turn.urls),
         username: turn.username,
         credential: turn.password,
       });
@@ -144,6 +164,8 @@ export class RoomPeerSession {
   private remoteBinaryHandlers = new Set<(data: ArrayBuffer) => void>();
   private pendingRemoteOffer: string | null = null;
   private pendingRemoteIce: IceCandidateDto[] = [];
+  private tunnelReadyWaiters: Array<() => void> = [];
+  private tunnelReady = false;
 
   constructor(opts: {
     roomId: string;
@@ -297,6 +319,11 @@ export class RoomPeerSession {
       if (typeof ev.data === "string") {
         if (ev.data === "tunnel:open") {
           this.callbacks.onTunnelOpen?.();
+        } else if (ev.data === "tunnel:ready") {
+          this.tunnelReady = true;
+          const waiters = this.tunnelReadyWaiters.splice(0);
+          for (const w of waiters) w();
+          this.callbacks.onTunnelReady?.();
         }
         return;
       }
@@ -312,6 +339,7 @@ export class RoomPeerSession {
   }
 
   signalTunnelOpen(): boolean {
+    this.tunnelReady = false;
     if (!this.channel || this.channel.readyState !== "open") return false;
     try {
       this.channel.send("tunnel:open");
@@ -319,6 +347,32 @@ export class RoomPeerSession {
     } catch {
       return false;
     }
+  }
+
+  signalTunnelReady(): boolean {
+    if (!this.channel || this.channel.readyState !== "open") return false;
+    try {
+      this.channel.send("tunnel:ready");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  waitForTunnelReady(timeoutMs = 20_000): Promise<void> {
+    if (this.tunnelReady) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = this.tunnelReadyWaiters.indexOf(onReady);
+        if (idx >= 0) this.tunnelReadyWaiters.splice(idx, 1);
+        reject(new Error("tunnel:ready timeout"));
+      }, timeoutMs);
+      const onReady = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      this.tunnelReadyWaiters.push(onReady);
+    });
   }
 
   static readonly BUFFERED_AMOUNT_HIGH = 2 * 1024 * 1024;
@@ -416,6 +470,8 @@ export class RoomPeerSession {
   close(): void {
     this.closed = true;
     this.remoteBinaryHandlers.clear();
+    this.tunnelReady = false;
+    this.tunnelReadyWaiters.splice(0);
     try {
       this.channel?.close();
     } catch {
