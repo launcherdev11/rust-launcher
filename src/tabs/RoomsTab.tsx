@@ -15,6 +15,7 @@ import { API_AUTH_CHANGED_EVENT, API_NICKNAME_KEY } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
 import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 import {
+  allowGuestForward,
   attachLanTunnel,
   startGuestBridge,
   startHostBridge,
@@ -271,8 +272,18 @@ export function RoomsTab({
         onRemoteBinary: (handler) => session.onRemoteBinary(handler),
         onStatus: (s: LanBridgeStatus) => {
           setBridgeStatus(s.state);
+          if (s.state === "connected" && isOwner) {
+            session.signalTunnelReady();
+          }
           if (s.state === "connected" && !isOwner) {
             session.signalTunnelOpen();
+            void session
+              .waitForTunnelReady(20_000)
+              .then(() => allowGuestForward(peerUserId))
+              .catch((err) => {
+                console.warn("[Rooms] tunnel:ready wait failed, allowing forward anyway", err);
+                return allowGuestForward(peerUserId);
+              });
           }
         },
       });
@@ -311,11 +322,10 @@ export function RoomsTab({
 
   const onPeerChannelOpen = useCallback(
     (peerUserId: string) => {
-      const port = pendingLanPortRef.current;
-      if (!isOwner || port == null || !hostReady) return;
-      void startHostBridgeForPeer(peerUserId, port);
+      if (!isOwner || !hostReady || pendingLanPortRef.current == null) return;
+      void ensureTunnelAttachedForPeer(peerUserId).catch(() => {});
     },
-    [hostReady, isOwner, startHostBridgeForPeer],
+    [ensureTunnelAttachedForPeer, hostReady, isOwner],
   );
 
   const {
@@ -356,9 +366,13 @@ export function RoomsTab({
     try {
       pendingLanPortRef.current = port;
       setHostReady(true);
-      const peers = [...new Set([...connectedPeerIds, ...pendingGuestPeersRef.current])];
+    
+      for (const peerId of connectedPeerIds) {
+        await ensureTunnelAttachedForPeer(peerId);
+      }
+      const waitingGuests = [...pendingGuestPeersRef.current];
       pendingGuestPeersRef.current.clear();
-      for (const peerId of peers) {
+      for (const peerId of waitingGuests) {
         await startHostBridgeForPeer(peerId, port);
       }
       showNotification(
@@ -618,14 +632,21 @@ export function RoomsTab({
   const p2pReady = peerLink.status === "connected" && peerLink.channelOpen;
   const expectedPeers = expectedPeerIds.length;
   const connectedPeers = connectedPeerIds.length;
+  const linkKind =
+    peerLink.connectionType === "relay"
+      ? "relay"
+      : peerLink.connectionType === "direct"
+        ? "direct"
+        : null;
 
   const p2pStatusLabel = (() => {
     if (selectedRoom && selectedRoom.member_count < 2) return tt("rooms.p2pWaiting");
     if (p2pReady) {
+      const kind = linkKind ? ` · ${linkKind}` : "";
       if (expectedPeers > 1) {
-        return `${tt("rooms.p2pReady")} (${connectedPeers}/${expectedPeers})`;
+        return `${tt("rooms.p2pReady")} (${connectedPeers}/${expectedPeers})${kind}`;
       }
-      return tt("rooms.p2pReady");
+      return `${tt("rooms.p2pReady")}${kind}`;
     }
     if (expectedPeers === 0) return tt("rooms.p2pWaiting");
     if (connectedPeers > 0 && expectedPeers > 1) {

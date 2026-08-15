@@ -30,6 +30,8 @@ pub struct LanBridgeStatusPayload {
 struct BridgeSession {
     write_tx: Option<mpsc::Sender<Vec<u8>>>,
     run_tx: Option<watch::Sender<bool>>,
+    /// Guest waits for host `tunnel:ready` before forwarding Minecraft bytes.
+    guest_forward_tx: Option<watch::Sender<bool>>,
     role: Option<&'static str>,
     guest_port: Option<u16>,
     pending_chunks: VecDeque<Vec<u8>>,
@@ -41,6 +43,7 @@ impl BridgeSession {
         Self {
             write_tx: None,
             run_tx: None,
+            guest_forward_tx: None,
             role: None,
             guest_port: None,
             pending_chunks: VecDeque::new(),
@@ -84,6 +87,9 @@ async fn stop_session(session: &mut BridgeSession) {
     if let Some(tx) = session.run_tx.take() {
         let _ = tx.send(false);
     }
+    if let Some(tx) = session.guest_forward_tx.take() {
+        let _ = tx.send(true);
+    }
     session.write_tx = None;
     session.role = None;
     session.guest_port = None;
@@ -109,9 +115,11 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
         .port();
 
     let (run_tx, run_rx) = watch::channel(true);
+    let (forward_tx, forward_rx) = watch::channel(false);
     let session = BridgeSession {
         write_tx: None,
         run_tx: Some(run_tx),
+        guest_forward_tx: Some(forward_tx),
         role: Some("guest"),
         guest_port: Some(port),
         pending_chunks: VecDeque::new(),
@@ -168,6 +176,41 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
                                 }
                             }
 
+                            // Wait until host ACKs tunnel:ready (critical for high-RTT TURN).
+                            // Fall back after 20s so local/direct is not stuck forever.
+                            {
+                                let mut fwd_rx = forward_rx.clone();
+                                let mut run_rx_fwd = run_rx.clone();
+                                let wait_ready = async {
+                                    if *fwd_rx.borrow() {
+                                        return;
+                                    }
+                                    while fwd_rx.changed().await.is_ok() {
+                                        if *fwd_rx.borrow() {
+                                            return;
+                                        }
+                                    }
+                                };
+                                tokio::select! {
+                                    _ = wait_ready => {
+                                        eprintln!("[LanBridge:{sid2}] guest forward allowed (tunnel:ready)");
+                                    }
+                                    _ = tokio::time::sleep(Duration::from_secs(20)) => {
+                                        eprintln!(
+                                            "[LanBridge:{sid2}] guest forward allow timeout — starting anyway"
+                                        );
+                                    }
+                                    _ = run_rx_fwd.changed() => {
+                                        if !*run_rx_fwd.borrow() {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if !*run_rx.borrow() {
+                                break;
+                            }
+
                             run_stream_loop(app2.clone(), sid2.clone(), stream, &mut conn_rx, run_rx.clone()).await;
 
                             {
@@ -175,6 +218,10 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
                                 if let Some(session) = g.get_mut(&sid2) {
                                     if session.role == Some("guest") {
                                         session.write_tx = None;
+                                        // Reset forward gate for a possible next Minecraft connect.
+                                        if let Some(tx) = session.guest_forward_tx.as_ref() {
+                                            let _ = tx.send(false);
+                                        }
                                         emit_status(
                                             &app2,
                                             &sid2,
@@ -240,6 +287,7 @@ pub async fn lan_bridge_start_host(
         BridgeSession {
             write_tx: Some(write_tx),
             run_tx: Some(run_tx),
+            guest_forward_tx: None,
             role: Some("host"),
             guest_port: None,
             pending_chunks: VecDeque::new(),
@@ -385,6 +433,25 @@ pub async fn lan_bridge_stop(session_id: Option<String>) -> Result<(), String> {
             }
         }
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn lan_bridge_guest_allow_forward(session_id: String) -> Result<(), String> {
+    let sid = normalize_session_id(&session_id);
+    let state = bridges_state();
+    let map = state.lock().await;
+    let Some(session) = map.get(&sid) else {
+        return Err(format!("lan bridge is not running ({sid})"));
+    };
+    if session.role != Some("guest") {
+        return Err(format!("lan bridge is not a guest session ({sid})"));
+    }
+    let Some(tx) = session.guest_forward_tx.as_ref() else {
+        return Err(format!("lan bridge forward gate missing ({sid})"));
+    };
+    let _ = tx.send(true);
+    eprintln!("[LanBridge:{sid}] guest_allow_forward");
     Ok(())
 }
 

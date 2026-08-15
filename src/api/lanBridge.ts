@@ -63,6 +63,12 @@ export async function stopBridge(sessionId?: string | null): Promise<void> {
   });
 }
 
+export async function allowGuestForward(sessionId: string): Promise<void> {
+  await invoke("lan_bridge_guest_allow_forward", {
+    sessionId: normalizeSessionId(sessionId),
+  });
+}
+
 const OUTBOUND_QUEUE_WARN = 256;
 const BACKPRESSURE_POLL_MS = 8;
 
@@ -140,16 +146,30 @@ export async function attachLanTunnel(opts: {
     }),
   );
 
+  const writeWithRetry = async (copy: ArrayBuffer) => {
+    const maxAttempts = 40;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (disposed) return;
+      try {
+        await writeBridgeBytes(sessionId, copy);
+        return;
+      } catch (err) {
+        if (attempt === maxAttempts - 1) {
+          console.warn("[lan-bridge] writeBridgeBytes failed", err);
+          return;
+        }
+        await sleep(25 + attempt * 10);
+      }
+    }
+  };
+
   const detachRemote = opts.onRemoteBinary((data) => {
     if (disposed) return;
     const copy = data.slice(0);
     inboundWriteChain = inboundWriteChain
-      .then(() => {
-        if (disposed) return;
-        return writeBridgeBytes(sessionId, copy);
-      })
+      .then(() => writeWithRetry(copy))
       .catch((err) => {
-        console.warn("[lan-bridge] writeBridgeBytes failed", err);
+        console.warn("[lan-bridge] inbound write chain failed", err);
       });
   });
 

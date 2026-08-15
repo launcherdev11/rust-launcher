@@ -39,8 +39,8 @@ use services::game::{
     set_profile_java_settings, set_selected_profile, set_settings, stop_game, switch_launcher_account,
     update_profile_settings,
     validate_java_args,
-    lan_bridge_guest_port, lan_bridge_start_guest, lan_bridge_start_host, lan_bridge_stop,
-    lan_bridge_write,
+    lan_bridge_guest_allow_forward, lan_bridge_guest_port, lan_bridge_start_guest,
+    lan_bridge_start_host, lan_bridge_stop, lan_bridge_write,
 };
 use services::auth::{
     ely_login_with_password, ely_logout, handle_oauth_callback, ms_logout, refresh_ely_session,
@@ -192,6 +192,7 @@ pub fn run() {
             lan_bridge_write,
             lan_bridge_stop,
             lan_bridge_guest_port,
+            lan_bridge_guest_allow_forward,
             list_installed_versions,
             get_installed_fabric_profile_id,
             get_installed_quilt_profile_id,
