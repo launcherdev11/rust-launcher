@@ -325,6 +325,7 @@ type SettingsTabProps = {
   updateVersion?: string | null;
   updateDownloadPercent?: number | null;
   onCheckUpdate?: () => void;
+  onPreviewUpdatePopup?: () => void;
   onInstallUpdate?: () => void;
   fillPane?: boolean;
 };
@@ -530,6 +531,7 @@ export function SettingsTab({
   updateVersion = null,
   updateDownloadPercent = null,
   onCheckUpdate,
+  onPreviewUpdatePopup,
   onInstallUpdate,
   fillPane = false,
 }: SettingsTabProps) {
@@ -2740,7 +2742,18 @@ export function SettingsTab({
                         <button
                           type="button"
                           disabled={updateStatus === "checking"}
-                          onClick={() => void onCheckUpdate()}
+                          title={
+                            onPreviewUpdatePopup
+                              ? tt("settings.updates.checkNowHint")
+                              : undefined
+                          }
+                          onClick={(e) => {
+                            if (e.shiftKey && onPreviewUpdatePopup) {
+                              void onPreviewUpdatePopup();
+                              return;
+                            }
+                            void onCheckUpdate?.();
+                          }}
                           className="interactive-press rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/40 hover:text-white disabled:opacity-50"
                         >
                           {tt("settings.updates.checkNow")}

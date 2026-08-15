@@ -406,6 +406,7 @@
         "label": "Updates automatisch installieren:"
       },
       "checkNow": "Suchen Sie nach Updates",
+      "checkNowHint": "Shift+Klick zeigt das Update-Popup erzwungen",
       "noneFound": "Du bist auf dem Laufenden. Keine neue Version verfügbar.",
       "installedRestart": "Update installiert. Bitte starten Sie den Launcher neu.",
       "availableNextStart": "Eine neue Launcher-Version ist verfügbar: {{version}}. Die Installation wird beim nächsten Start angeboten.",
@@ -416,7 +417,14 @@
       "available": "Neue Version {{version}} ist verfügbar",
       "released": "Update {{version}} ist verfügbar",
       "installNow": "Jetzt installieren",
-      "upToDate": "Launcher ist auf dem neuesten Stand"
+      "upToDate": "Launcher ist auf dem neuesten Stand",
+      "popup": {
+        "defaultTitle": "Update verfügbar",
+        "versionLabel": "Version {{version}}",
+        "viewChanges": "Änderungen ansehen",
+        "update": "Aktualisieren",
+        "updating": "Wird aktualisiert..."
+      }
     }
   },
   "javaSettings": {
