@@ -138,15 +138,24 @@ pub struct OsInfo {
 pub struct GameFeatures {
     pub is_demo_user: bool,
     pub has_custom_resolution: bool,
+    pub has_quick_plays_support: bool,
+    pub is_quick_play_singleplayer: bool,
+    pub is_quick_play_multiplayer: bool,
+    pub is_quick_play_realms: bool,
     pub is_quick_play: bool,
 }
 
 impl GameFeatures {
     pub fn full() -> Self {
+        Self::default()
+    }
+
+    pub fn for_multiplayer_join() -> Self {
         Self {
-            is_demo_user: false,
-            has_custom_resolution: false,
-            is_quick_play: false,
+            has_quick_plays_support: true,
+            is_quick_play_multiplayer: true,
+            is_quick_play: true,
+            ..Self::default()
         }
     }
 }

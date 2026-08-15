@@ -12,6 +12,7 @@
     "add": "Hinzufügen",
     "rename": "Umbenennen",
     "browse": "Durchsuchen",
+    "sponsor": "Sponsor",
     "format": {
       "modsCount": "Mods: {{count}}",
       "playtimeHoursMinutes": "{{h}}h {{m}}m",
@@ -78,7 +79,55 @@
     "downloadFailed": "Datei konnte nicht heruntergeladen werden.",
     "downloadFailedModrinth": "Das Herunterladen der Modrinth-Datei ist fehlgeschlagen.",
     "downloadFailedCurseforge": "Die CurseForge-Datei konnte nicht heruntergeladen werden.",
-    "curseforgeModpackHint": "CurseForge-Modpack als Archiv gespeichert. Der automatische .mrpack-Import ist nur für Modrinth verfügbar."
+    "curseforgeModpackHint": "CurseForge-Modpack als Archiv gespeichert. Der automatische .mrpack-Import ist nur für Modrinth verfügbar.",
+    "quickInstall": "Installieren",
+    "source": {
+      "catalog": "Katalog",
+      "favorites": "Favoriten",
+      "recent": "Zuletzt"
+    },
+    "sort": {
+      "relevance": "Relevanz",
+      "downloads": "Downloads",
+      "popularity": "Beliebtheit",
+      "updated": "Aktualisiert",
+      "newest": "Neueste"
+    },
+    "filters": {
+      "title": "Filter",
+      "sort": "Sortierung",
+      "categories": "Kategorien",
+      "client": "Client",
+      "server": "Server",
+      "installedOnly": "Nur installierte",
+      "reset": "Zurücksetzen"
+    },
+    "environment": {
+      "any": "Beliebig",
+      "required": "Erforderlich",
+      "optional": "Optional",
+      "unsupported": "Nicht unterstützt"
+    },
+    "favorites": {
+      "add": "Favorit",
+      "remove": "Entfernen",
+      "empty": "Noch keine Favoriten."
+    },
+    "recent": {
+      "empty": "Noch keine zuletzt angesehenen Projekte.",
+      "clear": "Leeren"
+    },
+    "detail": {
+      "loading": "Projektseite wird geladen…",
+      "loadFailed": "Projektseite konnte nicht geladen werden.",
+      "gallery": "Galerie",
+      "description": "Beschreibung",
+      "versions": "Versionen",
+      "wiki": "Wiki",
+      "issues": "Issues",
+      "source": "Quellcode",
+      "discord": "Discord"
+    }
   },
   "settings": {
     "common": {
@@ -90,6 +139,10 @@
         "on": "An",
         "off": "Aus"
       }
+    },
+    "search": {
+      "placeholder": "Einstellungen suchen…",
+      "noResults": "Keine Einstellungen gefunden."
     },
     "tab": {
       "directories": "Verzeichnisse",
@@ -276,6 +329,29 @@
       "backgroundBlur": {
         "label": "Hintergrundunschärfe:"
       },
+      "customThemes": {
+        "label": "Benutzerdefiniertes Theme:",
+        "default": "Standard",
+        "loading": "Themes werden geladen…",
+        "importZip": "ZIP importieren",
+        "create": "Theme erstellen",
+        "createPrompt": "Theme-Name:",
+        "openFolder": "Theme-Ordner öffnen",
+        "editCss": "CSS bearbeiten",
+        "delete": "Theme löschen",
+        "deleteConfirm": "Theme «{{name}}» löschen?",
+        "zipFilterName": "Theme-Archiv",
+        "byAuthor": "Von {{author}}",
+        "imported": "Theme «{{name}}» importiert.",
+        "importFailed": "Theme konnte nicht importiert werden.",
+        "created": "Theme «{{name}}» erstellt.",
+        "createFailed": "Theme konnte nicht erstellt werden.",
+        "deleted": "Theme «{{name}}» gelöscht.",
+        "deleteFailed": "Theme konnte nicht gelöscht werden.",
+        "openFolderFailed": "Theme-Ordner konnte nicht geöffnet werden.",
+        "editCssFailed": "style.css konnte nicht geöffnet werden.",
+        "hint": "Themes sind CSS-Overrides im Launcher-Datenordner. Jedes Theme benötigt theme.json und style.css. Sie können Theme-Ordner auch manuell in den themes-Ordner kopieren."
+      },
       "cache": {
         "label": "Launcher-Cache:",
         "description": "Ely-Avatare und temporäre Downloads.",
@@ -330,6 +406,7 @@
         "label": "Updates automatisch installieren:"
       },
       "checkNow": "Suchen Sie nach Updates",
+      "checkNowHint": "Shift+Klick zeigt das Update-Popup erzwungen",
       "noneFound": "Du bist auf dem Laufenden. Keine neue Version verfügbar.",
       "installedRestart": "Update installiert. Bitte starten Sie den Launcher neu.",
       "availableNextStart": "Eine neue Launcher-Version ist verfügbar: {{version}}. Die Installation wird beim nächsten Start angeboten.",
@@ -340,7 +417,14 @@
       "available": "Neue Version {{version}} ist verfügbar",
       "released": "Update {{version}} ist verfügbar",
       "installNow": "Jetzt installieren",
-      "upToDate": "Launcher ist auf dem neuesten Stand"
+      "upToDate": "Launcher ist auf dem neuesten Stand",
+      "popup": {
+        "defaultTitle": "Update verfügbar",
+        "versionLabel": "Version {{version}}",
+        "viewChanges": "Änderungen ansehen",
+        "update": "Aktualisieren",
+        "updating": "Wird aktualisiert..."
+      }
     }
   },
   "javaSettings": {
@@ -422,6 +506,7 @@
       "loadFailedHint": "Überprüfen Sie Ihre Internetverbindung oder Ihren Zugriff auf GitHub.",
       "defaultAlt": "Launcher-Banner",
       "learnMore": "Erfahren Sie mehr",
+      "play": "Spielen",
       "empty": "Launcher-Neuigkeiten und Spielebanner"
     },
     "version": {
@@ -735,7 +820,17 @@
       "currentOutput": "Aktueller Ausgang",
       "clearOnlyLive": "Clear gilt nur für den aktuellen Ausgang",
       "consoleResizeHint": "Ziehen Sie die Leiste zwischen der Liste und der Konsole, um die Größe zu ändern – die Breite wird gespeichert. Protokolle bleiben bestehen; Vor einem erneuten Start wird die Ausgabe archiviert.",
-      "noVersionsForGame": "Keine Versionen für das ausgewählte Spiel"
+      "noVersionsForGame": "Keine Versionen für das ausgewählte Spiel",
+      "resourcePackOrderHint": "Pakete weiter oben überschreiben die darunter — wie im Spiel",
+      "reorderResourcePacks": "Reihenfolge ändern",
+      "reorderResourcePacksDone": "Fertig",
+      "dragToReorder": "Ziehen zum Sortieren",
+      "disabledResourcePacks": "Deaktiviert",
+      "reorderFailed": "Reihenfolge der Resource-Packs konnte nicht geändert werden.",
+      "shaderPackActiveHint": "Es kann nur ein Shader-Paket gleichzeitig aktiv sein (Iris / OptiFine).",
+      "enableShader": "Als aktiv setzen",
+      "disableShader": "Shader deaktivieren",
+      "inactiveShaders": "Inaktiv"
     },
     "externalImport": {
       "title": "Von einem anderen Launcher importieren",
@@ -800,52 +895,244 @@
     "exportModal": {
       "title": "Build exportieren",
       "format": "Format",
+      "mrpackHint": "Auf Modrinth gefundene Mods werden per Hash verknüpft (nicht eingebettet) – die .mrpack bleibt klein. Configs und unbekannte Jars landen in overrides.",
+      "presets": "Vorlagen",
+      "presetRecommended": "Empfohlen",
+      "presetMinimal": "Minimal",
+      "presetFull": "Alles",
       "ignorePatterns": "Muster ignorieren",
-      "ignoreHint": "Unterstützt: *, **, ! (Negation).",
-      "buildFiles": "Dateien erstellen",
+      "ignoreHint": "Unterstützt: *, **, ! (Negation). Welten/Logs sind standardmäßig ausgeschlossen.",
+      "buildFiles": "Build-Dateien",
+      "refresh": "Aktualisieren",
       "selectAll": "Alles auswählen",
-      "clearAll": "Klar",
+      "clearAll": "Auswahl aufheben",
       "scanning": "Scannen...",
       "noData": "Keine Daten.",
       "emptyFolder": "Der Build-Ordner ist leer.",
       "preview": "Vorschau",
+      "previewing": "Auflösen…",
       "export": "Export",
       "exporting": "Exportieren…",
       "finalContents": "Endgültiger Inhalt",
       "size": "Größe:",
+      "packSize": "Paket:",
+      "downloadSize": "Downloads:",
+      "linkedMods": "{{count}} über Modrinth",
       "nothingIncluded": "Es wird nichts enthalten sein.",
       "done": "Erledigt",
       "openFolder": "Ordner öffnen"
     }
   },
   "friends": {
-    "subtitleSignedIn": "Verwalten Sie Freunde nach Spitznamen.",
-    "subtitleSignedOut": "Melden Sie sich auf der Registerkarte „Konten“ bei Supabase an, um Freunde zu verwenden.",
+    "subtitleSignedIn": "Füge Freunde hinzu, sieh wer online ist und tritt ihren Räumen bei.",
+    "subtitleSignedOut": "Melde dich auf der Registerkarte „Konten“ an, um Freunde zu sehen.",
     "friendNicknamePlaceholder": "Spitzname eines Freundes",
+    "searchPlaceholder": "Freund suchen…",
     "add": "Hinzufügen",
     "refresh": "Aktualisieren",
     "requests": "Anfragen",
-    "incomingTitle": "Eingehende Anfragen",
-    "signInFirst": "Melden Sie sich zunächst auf der Registerkarte „Konten“ an.",
-    "noIncoming": "Keine eingehenden Anfragen.",
-    "accept": "Akzeptieren",
+    "incomingTitle": "Anfragen",
+    "incomingCount": "Anfragen · {{count}}",
+    "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an.",
+    "noIncoming": "Keine neuen Anfragen.",
+    "accept": "Annehmen",
     "reject": "Ablehnen",
-    "yourFriends": "Deine Freunde",
-    "noFriends": "Noch keine Freunde. Senden Sie eine Anfrage per Nickname.",
+    "yourFriends": "Freunde",
+    "friendsOnline": "{{online}} von {{total}} online",
+    "noFriends": "Noch keine Freunde — gib oben einen Spitznamen ein und sende eine Anfrage.",
+    "noSearchResults": "Keine Freunde passen zu dieser Suche.",
+    "statFriends": "Freunde",
+    "statFriendsHint": "In deiner Liste",
+    "statOnline": "Online",
+    "statRequests": "Anfragen",
+    "statRooms": "Räume",
+    "statRoomsHint": "Spielen gerade",
+    "filterAll": "Alle",
+    "filterOnline": "Online",
+    "filterOffline": "Offline",
+    "onlineSection": "Online",
+    "offlineSection": "Offline",
+    "inRoom": "Im Raum",
+    "lastSeenJustNow": "gerade eben",
+    "lastSeenMinutes": "vor {{count}} Min.",
+    "lastSeenHours": "vor {{count}} Std.",
+    "lastSeenDays": "vor {{count}} T.",
+    "lastSeenNever": "lange nicht online",
+    "openRooms": "Zu den Räumen",
+    "howToTitle": "So funktioniert's",
+    "howToStep1": "Gib einen 16Launcher-Spitznamen ein und sende eine Anfrage.",
+    "howToStep2": "Nach der Annahme erscheint der Freund in der Liste.",
+    "howToStep3": "Sieh, wer online ist und wann der Launcher zuletzt geöffnet wurde.",
+    "howToStep4": "Tritt dem Raum eines Freundes direkt von hier bei.",
+    "remove": "Entfernen",
+    "removeConfirm": "{{nick}} aus Freunden entfernen?",
+    "online": "Online",
+    "offline": "Offline",
+    "profileTitle": "Profil",
+    "viewProfile": "Profil ansehen",
+    "addFriend": "Als Freund hinzufügen",
+    "alreadyFriends": "Bereits befreundet",
     "toast": {
       "requestAccepted": "Anfrage angenommen",
       "requestRejected": "Anfrage abgelehnt",
-      "signInFirst": "Melden Sie sich zunächst auf der Registerkarte „Konten“ an",
-      "cannotAddSelf": "Sie können keine Anfrage an sich selbst senden",
-      "requestExists": "Die Anfrage existiert bereits oder Sie sind bereits befreundet.",
-      "requestSent": "Anfrage gesendet"
+      "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an",
+      "cannotAddSelf": "Du kannst keine Anfrage an dich selbst senden",
+      "requestExists": "Die Anfrage existiert bereits oder ihr seid schon befreundet.",
+      "requestSent": "Anfrage gesendet",
+      "removed": "Freund entfernt"
     }
   },
-  "supabase": {
-    "accountTitle": "16launcher-Konto",
+  "rooms": {
+    "subtitleSignedIn": "Erstelle Räume und lade Freunde zum Spielen ein.",
+    "subtitleSignedOut": "Melde dich auf der Registerkarte „Konten“ an, um Räume zu nutzen.",
+    "create": "Raum erstellen",
+    "refresh": "Aktualisieren",
+    "join": "Beitreten",
+    "joinIdPlaceholder": "Raum-ID einfügen…",
+    "joinById": "Per ID beitreten",
+    "yourRooms": "Deine Räume",
+    "friendsRooms": "Räume von Freunden",
+    "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an.",
+    "noRooms": "Noch keine Räume. Erstelle einen oder tritt per ID bei.",
+    "noFriendsRooms": "Keine Freunde hosten gerade einen Raum.",
+    "youOwner": "Besitzer",
+    "youMember": "Mitglied",
+    "ownedBy": "Host: {{nick}}",
+    "players": "{{count}} / {{max}} Spieler",
+    "openRoom": "Öffnen",
+    "joinFriendRoom": "Beitreten",
+    "backToList": "Zurück zu Räumen",
+    "copyId": "ID kopieren",
+    "idCopied": "Raum-ID kopiert",
+    "manageTitle": "Raum",
+    "connectionTitle": "Status",
+    "worldTitle": "Welt",
+    "membersTitle": "Mitglieder",
+    "inviteTitle": "Einladen",
+    "inviteFriendPlaceholder": "Freund wählen…",
+    "inviteEmpty": "Alle Freunde sind schon im Raum — oder füge welche unter „Freunde“ hinzu.",
+    "close": "Raum schließen",
+    "leave": "Raum verlassen",
+    "kick": "Entfernen",
+    "invite": "Einladen",
+    "inviteNicknamePlaceholder": "Spitzname eines Freundes",
+    "mcAccount": "Minecraft",
+    "mcOnlineMicrosoft": "Microsoft",
+    "mcOnlineEly": "Ely",
+    "mcOffline": "offline",
+    "mcOfflineHint": "Melde dich mit Microsoft oder Ely an, um der Welt eines Freundes beizutreten.",
+    "p2pLabel": "Verbindung",
+    "p2pReady": "bereit",
+    "p2pConnecting": "verbindet…",
+    "p2pWaiting": "warte auf Spieler",
+    "bridgeLabel": "Bridge",
+    "channelOpen": "Kanal offen",
+    "lanPort": "LAN-Port",
+    "shareWorld": "Zugang öffnen",
+    "shareWorldWaiting": "Zugang offen",
+    "joinWorld": "Welt beitreten",
+    "hostSteps": "Öffne im Spiel die Welt, aktiviere Open to LAN und gib denselben Port unten ein.",
+    "guestSteps": "Wenn der Host den Zugang öffnet — tippe auf Welt beitreten. Microsoft- oder Ely-Konto nötig.",
+    "waitForPeer": "Lade einen Freund ein — die Verbindung erscheint, wenn er beitritt.",
+    "needP2p": "Warte, bis die Verbindung zum Freund bereit ist",
+    "status": {
+      "open": "offen",
+      "full": "voll",
+      "closed": "geschlossen"
+    },
+    "role": {
+      "owner": "Besitzer",
+      "member": "Mitglied"
+    },
+    "toast": {
+      "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an",
+      "created": "Raum erstellt",
+      "joined": "Raum beigetreten",
+      "left": "Raum verlassen",
+      "closed": "Raum geschlossen",
+      "invited": "Spieler eingeladen",
+      "kicked": "Mitglied entfernt",
+      "cannotInviteSelf": "Du kannst dich nicht selbst einladen"
+    }
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "signInFirst": "Melde dich an, um Benachrichtigungen zu sehen.",
+    "unread": "Ungelesen: {{count}}",
+    "refresh": "Aktualisieren",
+    "readAll": "Alle lesen",
+    "markRead": "Gelesen",
+    "empty": "Noch keine Benachrichtigungen.",
+    "friendRequest": "Freundschaftsanfrage von {{nick}}",
+    "friendAccept": "{{nick}} hat deine Anfrage angenommen",
+    "roomInvite": "{{nick}} hat dich in einen Raum eingeladen",
+    "achievement": "Erfolg: {{title}}",
+    "system": "Systembenachrichtigung"
+  },
+  "achievements": {
+    "title": "Erfolge",
+    "signInFirst": "Melde dich mit deinem Plattformkonto an, um Erfolge zu sehen.",
+    "refresh": "Aktualisieren",
+    "empty": "Noch keine Erfolge.",
+    "locked": "Gesperrt",
+    "progress": "{{unlocked}} / {{total}} freigeschaltet",
+    "unlockedAt": "Freigeschaltet am {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Willkommen an Bord",
+        "description": "Erstelle dein 16Launcher-Konto."
+      },
+      "identity_linked": {
+        "title": "Identität bestätigt",
+        "description": "Verknüpfe ein Ely.by- oder Microsoft-Konto."
+      },
+      "first_friend": {
+        "title": "Freundschaft schließen",
+        "description": "Füge deinen ersten Freund hinzu."
+      },
+      "first_launch": {
+        "title": "In die Welt",
+        "description": "Starte Minecraft zum ersten Mal über 16Launcher."
+      },
+      "ten_launches": {
+        "title": "Stammgast",
+        "description": "Starte das Spiel 10 Mal."
+      },
+      "fifty_launches": {
+        "title": "Nicht zu stoppen",
+        "description": "Starte das Spiel 50 Mal."
+      },
+      "hour_played": {
+        "title": "Die Zeit vergeht",
+        "description": "Spiele insgesamt 1 Stunde."
+      },
+      "ten_hours": {
+        "title": "Hingabe",
+        "description": "Spiele insgesamt 10 Stunden."
+      },
+      "first_room": {
+        "title": "Gastgeber",
+        "description": "Erstelle deinen ersten Raum."
+      },
+      "first_join": {
+        "title": "Gast",
+        "description": "Tritt dem Raum eines anderen bei."
+      },
+      "room_invite": {
+        "title": "Komm vorbei",
+        "description": "Lade einen Freund in einen Raum ein."
+      },
+      "theme_submit": {
+        "title": "Stylist",
+        "description": "Reiche ein eigenes Launcher-Theme ein."
+      }
+    }
+  },
+  "platform": {
+    "accountTitle": "16Launcher-Konto",
     "accountManagement": "Kontoverwaltung",
-    "signIn": "anmelden",
-    "signUp": "Melden Sie sich an",
+    "signIn": "Anmelden",
+    "signUp": "Registrieren",
     "emailLabel": "E-Mail",
     "emailOrNicknameLabel": "E-Mail / Spitzname",
     "nicknameLabel": "Spitzname",
@@ -854,17 +1141,33 @@
     "showPassword": "Passwort anzeigen",
     "hidePassword": "Passwort verbergen",
     "createAccount": "Benutzerkonto erstellen",
+    "privacyPolicyLink": "Datenschutzerklärung",
+    "privacyConsent": "Ich habe die {{link}} gelesen und stimme der Verarbeitung personenbezogener Daten zu.",
+    "privacyLoginNotice": "Mit der Anmeldung bestätigen Sie, dass Sie die {{link}} gelesen haben.",
+    "next": "Weiter",
+    "back": "Zurück",
+    "verificationStepLabel": "Schritt 2 von 2",
+    "verificationTitle": "E-Mail bestätigen",
+    "verificationHint": "Wir haben einen Code an {{email}} gesendet. Geben Sie ihn unten ein, um die Registrierung abzuschließen.",
     "launcherNickname": "Spitzname des Launchers",
     "inGameNickname": "Spitzname im Spiel",
     "newNicknamePlaceholder": "Neuer Spitzname",
     "changeNickname": "Spitznamen ändern",
     "logout": "Abmelden",
-    "linked": "Verlinkt",
-    "linking": "Verlinkung…",
-    "link": "Link",
-    "enterEmail": "Geben Sie die E-Mail-Adresse ein",
-    "enterNicknameOrEmail": "Geben Sie einen Spitznamen oder eine E-Mail-Adresse ein",
+    "dangerZone": "Gefahrenzone",
+    "deleteAccount": "Konto löschen",
+    "deleteAccountConfirm": "Dauerhaft löschen",
+    "deleteAccountHint": "Ihr 16Launcher-Konto und zugehörige Serverdaten werden unwiderruflich gelöscht. Das aktuelle Passwort ist erforderlich.",
+    "linked": "Verknüpft",
+    "linking": "Verknüpfung…",
+    "link": "Verknüpfen",
+    "enterEmail": "E-Mail eingeben",
+    "enterNicknameOrEmail": "Spitzname oder E-Mail eingeben",
     "enterNickname": "Spitznamen eingeben",
+    "verificationCodeLabel": "Bestätigungscode",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Code per E-Mail senden",
+    "resendVerificationCode": "Code erneut senden",
     "linkMicrosoftTitle": "Melden Sie sich bei Microsoft an und klicken Sie dann erneut auf „Verknüpfen“.",
     "linkElyTitle": "Melden Sie sich bei Ely.by an und klicken Sie dann erneut auf „Verknüpfen“.",
     "toast": {
@@ -877,7 +1180,6 @@
       "nicknameAlreadySet": "Dieser Spitzname ist bereits festgelegt.",
       "nicknameUpdated": "Spitzname aktualisiert.",
       "sessionExpired": "16Launcher-Sitzung abgelaufen. Melden Sie sich erneut an.",
-      "sessionExpiredWithMsg": "16Launcher-Sitzung abgelaufen: {{msg}}",
       "signInMicrosoftThenLink": "Melden Sie sich bei Microsoft an und klicken Sie dann erneut auf „Verknüpfen“.",
       "signInElyThenLink": "Melden Sie sich bei Ely.by an und klicken Sie dann erneut auf „Verknüpfen“.",
       "minecraftLinked": "Minecraft mit Konto verknüpft",
@@ -885,24 +1187,26 @@
       "enterEmailSignup": "Geben Sie Ihre E-Mail-Adresse für die Registrierung ein.",
       "enterSignupNickname": "Geben Sie einen Spitznamen für die Registrierung ein.",
       "enterPassword": "Passwort eingeben",
-      "passwordTooShort": "Das Passwort muss mindestens 6 Zeichen lang sein.",
-      "envNotConfigured": "VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY sind in .env nicht konfiguriert",
-      "noAccessToken": "Kein Supabase access_token – melden Sie sich zuerst an.",
-      "noRefreshToken": "Das Refresh_token konnte nicht aus der Supabase-Antwort abgerufen werden.",
-      "noAccessTokenResponse": "Access_token konnte nicht aus der Supabase-Antwort abgerufen werden.",
-      "refreshNoToken": "Die Supabase-Aktualisierung hat access_token nicht zurückgegeben.",
-      "nicknameLoginUnsupported": "Der Supabase-Server unterstützt die Nickname-Anmeldung noch nicht (users_resolve_login fehlt).",
-      "nicknameEmailNotFound": "Für diesen Spitznamen wurde keine E-Mail-Adresse gefunden.",
-      "resolveLoginFailed": "Aufruf von „users_resolve_login“ (Nickname-Login) fehlgeschlagen. Normalerweise CORS/OPTIONS in der Edge-Funktion. Melden Sie sich vorerst mit Ihrer E-Mail-Adresse an und überprüfen Sie dann CORS in „users_resolve_login“."
+      "passwordTooShort": "Das Passwort muss mindestens 8 Zeichen lang sein.",
+      "enterVerificationCode": "Geben Sie den Code aus der E-Mail ein.",
+      "verificationCodeSent": "Bestätigungscode wurde per E-Mail gesendet.",
+      "accountDeleted": "Konto gelöscht.",
+      "acceptPrivacy": "Bitte stimmen Sie der Datenschutzerklärung zu, um ein Konto zu erstellen."
     },
     "errors": {
-      "connectionFailed": "Es kann keine Verbindung zu Supabase hergestellt werden. Überprüfen Sie VITE_SUPABASE_PROJECT_URL (muss https://<project>.supabase.co sein), Internet und Serviceverfügbarkeit.",
+      "connectionFailed": "Es kann keine Verbindung zum 16Launcher-Server hergestellt werden. Überprüfen Sie Internet und API-Verfügbarkeit.",
       "invalidCredentials": "Ungültiger Benutzername oder Passwort.",
       "invalidPassword": "Ungültiges Passwort.",
-      "passwordTooShort": "Das Passwort ist zu kurz. Mindestens 6 Zeichen.",
-      "weakPassword": "Das Passwort ist zu schwach.",
-      "identityAlreadyLinked": "{{provider}} ist bereits mit einem anderen 16launcher-Konto verknüpft. Heben Sie dort die Verknüpfung auf oder verwenden Sie ein anderes {{provider}}-Konto.",
-      "linkConnectionFailed": "Verknüpfung von {{provider}} fehlgeschlagen: Keine Verbindung zu Supabase. Überprüfen Sie die Internet- und Projekteinstellungen."
+      "passwordTooShort": "Das Passwort ist zu kurz. Mindestens 8 Zeichen.",
+      "emailTaken": "Diese E-Mail ist bereits registriert.",
+      "nicknameTaken": "Dieser Spitzname ist bereits vergeben.",
+      "invalidVerificationCode": "Ungültiger Bestätigungscode.",
+      "verificationCodeExpired": "Bestätigungscode abgelaufen. Fordern Sie einen neuen an.",
+      "tooManyVerificationAttempts": "Zu viele Versuche. Fordern Sie einen neuen Code an.",
+      "rateLimited": "Zu viele Anfragen. Bitte warten Sie einen Moment.",
+      "emailSendFailed": "Bestätigungs-E-Mail konnte nicht gesendet werden.",
+      "deleteNotAvailable": "Kontolöschung ist auf dem Server noch nicht verfügbar. API-Deploy erforderlich.",
+      "identityAlreadyLinked": "{{provider}} ist bereits mit einem anderen 16Launcher-Konto verknüpft."
     }
   },
   "app": {
@@ -911,7 +1215,8 @@
       "settings": "Einstellungen",
       "mods": "Mods",
       "modpacks": "Modpacks",
-      "friends": "Freunde"
+      "friends": "Freunde",
+      "rooms": "Räume"
     },
     "splitView": {
       "zones": {
@@ -924,6 +1229,19 @@
       "closePane": "Entfernen Sie diesen Bereich"
     },
     "launcherVersionTitle": "Launcher-Version {{version}}",
+    "sessionNotifications": {
+      "title": "Launcher-Benachrichtigungen",
+      "heading": "Benachrichtigungen",
+      "empty": "Noch keine Benachrichtigungen in dieser Sitzung",
+      "clear": "Leeren",
+      "kindInfo": "Info",
+      "kindSuccess": "Erfolg",
+      "kindError": "Fehler",
+      "kindWarning": "Warnung",
+      "kindSystem": "System",
+      "groupBadge": "×{{count}}",
+      "groupHint": "{{count}}-mal wiederholt — gruppiert"
+    },
     "accounts": {
       "managerTitle": "Account-Manager",
       "managerSubtitle": "",
@@ -940,10 +1258,21 @@
       "kindOffline": "Offline",
       "savedListTitle": "Gespeicherte Konten",
       "savedListHint": "",
+      "savedListHintShort": "Zwischen gespeicherten Minecraft-Profilen wechseln.",
       "removeTitle": "Aus Launcher entfernen",
       "removeConfirm": "Dieses Konto aus der Liste entfernen? Die dafür gespeicherten Zugangsdaten werden gelöscht.",
+      "publishedBuildsTitle": "Veröffentlichte Builds:",
+      "publishedBuildsEmpty": "Noch keine veröffentlichten Builds.",
+      "publishedBuildsSignIn": "Melden Sie sich bei Ihrem Plattformkonto an, um Builds zu veröffentlichen.",
+      "accountSettingsTitle": "Kontoeinstellungen",
+      "settingsSubtitle": "Minecraft-Konten, Plattform und Benachrichtigungen",
+      "settingsTabAccounts": "Konten",
+      "settingsTabPlatform": "Plattform",
+      "settingsTabNotifications": "Benachrichtigungen",
+      "providerSignIn": "Minecraft-Anmeldung",
       "editNickname": "Spitzname bearbeiten",
       "nicknamePlaceholder": "Spieler",
+      "systemNicknameSignedOut": "Nicht bei 16Launcher angemeldet",
       "signedInAsPrefix": "Angemeldet als:",
       "hint": "Konfigurieren Sie Ihr Profil und Ihr Erscheinungsbild, nachdem Sie sich angemeldet haben.",
       "microsoftSignIn": "Melden Sie sich bei Microsoft an",
@@ -952,6 +1281,22 @@
       "elyWaiting": "Warten auf Anmeldung…",
       "elyDialogTitle": "Wenn die Seite in Ihrem Browser ewig lädt:",
       "elyDialogTip": "Es ist besser, es in einem neuen Tab desselben Browsers zu öffnen. In einem anderen Browser zeigt Ely.by möglicherweise „Ungültige Anfrage“ an.",
+      "cape": {
+        "title": "Umhang",
+        "none": "Kein Umhang",
+        "empty": "Auf diesem Konto sind keine Umhänge vorhanden.",
+        "loading": "Umhänge werden geladen…",
+        "error": "Umhänge konnten nicht geladen werden."
+      },
+      "skinByUsername": {
+        "title": "Skin nach Benutzername",
+        "placeholder": "Steve",
+        "apply": "Anwenden",
+        "reset": "Zurücksetzen",
+        "loading": "Skin wird geladen…",
+        "error": "Skin konnte nicht geladen werden.",
+        "notFound": "Spieler nicht gefunden."
+      },
       "toast": {
         "nicknameSaved": "Änderungen gespeichert!",
         "nicknameSaveFailed": "Der Spitzname konnte nicht gespeichert werden.",
@@ -1020,13 +1365,18 @@
       "stopError": "Stoppfehler: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Wählen Sie zunächst ein Profil aus und klicken Sie dann auf „Abspielen“."
+      "selectProfileFirst": "Wählen Sie zunächst ein Profil aus und klicken Sie dann auf „Abspielen“.",
+      "needMinecraftVersion": "Wählen Sie zuerst eine Minecraft-Version auf der Play-Registerkarte.",
+      "needInstalledVersion": "Installieren Sie zuerst die ausgewählte Version auf der Play-Registerkarte.",
+      "closeGameFirst": "Schließen Sie zuerst das bereits laufende Spiel."
     },
     "discord": {
       "play": "Im Hauptmenü",
       "settings": "Konfigurieren des Launchers",
       "mods": "Einen Mod auswählen",
       "modpacks": "Auswählen eines Profils",
+      "friends": "Freunde ansehen",
+      "rooms": "In Räumen",
       "accounts": "Konto verwalten"
     },
     "pinnedProfiles": {

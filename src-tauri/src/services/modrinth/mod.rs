@@ -1,13 +1,15 @@
-mod client;
+pub(crate) mod client;
 mod content_metadata;
 mod dependencies;
 mod installed;
-mod types;
+pub(crate) mod types;
 mod updates;
 
 pub use types::ModrinthDownloadTarget;
 pub use content_metadata::resolve_profile_item_metadata;
-pub use updates::{apply_profile_content_updates, check_profile_content_updates};
+pub use updates::{
+    apply_profile_content_updates, check_profile_content_updates,
+};
 
 use std::path::PathBuf;
 

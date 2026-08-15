@@ -1,2 +1,6 @@
 /target/
-/gen/schemas
+/gen/
+/WixTools/
+/logs/
+*.log
+hs_err_pid*.log

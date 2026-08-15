@@ -167,6 +167,38 @@ async function fetchMcSkinViaBackend(uuid: string): Promise<string | null> {
   }
 }
 
+export async function fetchMcSkinByUsername(username: string): Promise<string | null> {
+  const trimmed = username.trim();
+  if (!trimmed) return null;
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const dataUrl = await invoke<string | null>("get_mc_skin_by_username", {
+      username: trimmed,
+    });
+    return dataUrl ?? null;
+  } catch (error) {
+    console.debug("[skin] Rust Mojang skin-by-username command unavailable", error);
+    return null;
+  }
+}
+
+export async function applyMcSkinByUsername(username: string): Promise<string> {
+  const trimmed = username.trim();
+  if (!trimmed) {
+    throw new Error("Username is empty");
+  }
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  const dataUrl = await invoke<string | null>("apply_mc_skin_by_username", {
+    username: trimmed,
+  });
+  if (!dataUrl) {
+    throw new Error("Player not found");
+  }
+  return dataUrl;
+}
+
 async function fetchMcAvatarViaBackend(uuid: string): Promise<string | null> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -203,6 +235,12 @@ export async function loadViewerSkinSource(
   if (mcUuid) {
     const dataUrl = await fetchMcSkinViaBackend(mcUuid);
     if (dataUrl) return dataUrl;
+    try {
+      const uuid = mcUuid.replace(/-/g, "");
+      return await fetchSkinBlobUrl(`https://vzge.me/full/512/${uuid}.png`);
+    } catch (error) {
+      console.debug("[skin] vzge.me fallback failed", error);
+    }
   }
 
   if (elyUsername) {
@@ -210,6 +248,110 @@ export async function loadViewerSkinSource(
   }
 
   return STEVE_SKIN_URL;
+}
+
+export function buildElyCapeUrl(username: string): string {
+  return `https://skinsystem.ely.by/cloaks/${encodeURIComponent(username)}.png`;
+}
+
+async function fetchMcCapeViaBackend(uuid: string): Promise<string | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const dataUrl = await invoke<string | null>("get_mc_cape", { uuid });
+    return dataUrl ?? null;
+  } catch (error) {
+    console.debug("[cape] Rust Mojang cape command unavailable", error);
+    return null;
+  }
+}
+
+async function fetchElyCapeViaBackend(username: string): Promise<string | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const dataUrl = await invoke<string | null>("get_ely_cape", { username });
+    return dataUrl ?? null;
+  } catch (error) {
+    console.debug("[cape] Rust Ely cape command unavailable", error);
+    return null;
+  }
+}
+
+async function fetchOptifineCapeViaBackend(username: string): Promise<string | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const dataUrl = await invoke<string | null>("get_optifine_cape", { username });
+    return dataUrl ?? null;
+  } catch (error) {
+    console.debug("[cape] Rust OptiFine cape command unavailable", error);
+    return null;
+  }
+}
+
+function resolveCapeUsername(profile: ProfileAvatarInput, username: string): string | null {
+  return (
+    profile.ely_username?.trim() ||
+    profile.nickname?.trim() ||
+    username.trim() ||
+    null
+  );
+}
+
+export async function loadViewerAccountCapeSource(
+  profile: ProfileAvatarInput,
+  username: string = "",
+): Promise<string | null> {
+  if (isOfflineProfile(profile)) return null;
+
+  const elyUsername = resolveSkinUsername(profile);
+  if (elyUsername) {
+    const elyCape = await fetchElyCapeViaBackend(elyUsername);
+    if (elyCape) return elyCape;
+  }
+
+  const mcUuid = profile.mc_uuid?.trim();
+  if (mcUuid) {
+    const mcCape = await fetchMcCapeViaBackend(mcUuid);
+    if (mcCape) return mcCape;
+  }
+
+  if (elyUsername) {
+    try {
+      return await fetchSkinBlobUrl(buildElyCapeUrl(elyUsername));
+    } catch (error) {
+      console.debug("[cape] Ely cape URL fetch failed", error);
+    }
+  }
+
+  void username;
+  return null;
+}
+
+export async function loadViewerOptifineCapeSource(
+  profile: ProfileAvatarInput,
+  username: string = "",
+): Promise<string | null> {
+  const capeUser = resolveCapeUsername(profile, username);
+  if (!capeUser) return null;
+  return fetchOptifineCapeViaBackend(capeUser);
+}
+
+export type ViewerCapeMode = "none" | "account" | "optifine" | "custom";
+
+export async function loadViewerCapeSource(
+  mode: ViewerCapeMode,
+  profile: ProfileAvatarInput,
+  username: string = "",
+  customSrc?: string | null,
+): Promise<string | null> {
+  if (mode === "none") return null;
+  if (mode === "custom") {
+    const src = customSrc?.trim();
+    return src || null;
+  }
+  if (mode === "optifine") {
+    return loadViewerOptifineCapeSource(profile, username);
+  }
+  return loadViewerAccountCapeSource(profile, username);
 }
 
 export function resolveSkinUrl(profile: ProfileAvatarInput, _username: string = ""): string {
@@ -314,17 +456,60 @@ export async function getAvatarSrc(
     }
   }
 
-  const elyKeyRaw = resolveAvatarKey(profile);
-  if (elyKeyRaw) {
-    const src = await getElyAvatarByUsername(elyKeyRaw, fallbackSrc, size);
+  const elyUsername = profile.ely_username?.trim();
+  if (elyUsername) {
+    const src = await getElyAvatarByUsername(elyUsername, fallbackSrc, size);
     if (src !== fallbackSrc) return src;
   }
 
   const mcUuid = profile.mc_uuid?.trim();
   if (mcUuid) {
+    const cacheKey = `mc:${normalizeCacheKey(mcUuid)}`;
+    const cached = getCachedAvatarSrc(cacheKey);
+    if (cached) return cached;
     const avatarSrc = await fetchMcAvatarViaBackend(mcUuid);
-    if (avatarSrc) return avatarSrc;
+    if (avatarSrc) {
+      putCache(cacheKey, avatarSrc);
+      return avatarSrc;
+    }
   }
 
   return fallbackSrc;
+}
+
+export async function getUserListAvatarSrc(
+  input: {
+    nickname: string;
+    ely_username?: string | null;
+    mc_uuid?: string | null;
+  },
+  size: number = 64,
+): Promise<string> {
+  const nickname = input.nickname.trim() || "?";
+  const fallback = buildInitialAvatarDataUrl(nickname);
+  const elyUsername = input.ely_username?.trim() || null;
+  const mcUuid = input.mc_uuid?.trim() || null;
+  if (!elyUsername && !mcUuid) return fallback;
+  return getAvatarSrc(
+    {
+      nickname,
+      ely_username: elyUsername,
+      ely_uuid: null,
+      mc_uuid: mcUuid,
+    },
+    fallback,
+    size,
+  );
+}
+
+export function userListAvatarCacheKey(input: {
+  ely_username?: string | null;
+  mc_uuid?: string | null;
+  nickname: string;
+}): string {
+  const ely = input.ely_username?.trim().toLowerCase();
+  if (ely) return `ely:${ely}`;
+  const mc = input.mc_uuid?.trim().toLowerCase().replace(/-/g, "");
+  if (mc) return `mc:${mc}`;
+  return `nick:${input.nickname.trim().toLowerCase() || "?"}`;
 }

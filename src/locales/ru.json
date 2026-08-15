@@ -12,6 +12,7 @@
     "add": "Добавить",
     "rename": "Переименовать",
     "browse": "Обзор",
+    "sponsor": "Спонсор",
     "format": {
       "modsCount": "Модов: {{count}}",
       "playtimeHoursMinutes": "{{h}}ч {{m}}м",
@@ -78,7 +79,55 @@
     "downloadFailed": "Не удалось скачать файл.",
     "downloadFailedModrinth": "Не удалось скачать файл Modrinth.",
     "downloadFailedCurseforge": "Не удалось скачать файл CurseForge.",
-    "curseforgeModpackHint": "Сборка CurseForge сохранена как архив. Автоимпорт .mrpack доступен только для Modrinth."
+    "curseforgeModpackHint": "Сборка CurseForge сохранена как архив. Автоимпорт .mrpack доступен только для Modrinth.",
+    "quickInstall": "Установить",
+    "source": {
+      "catalog": "Каталог",
+      "favorites": "Избранное",
+      "recent": "Недавние"
+    },
+    "sort": {
+      "relevance": "Релевантность",
+      "downloads": "Загрузки",
+      "popularity": "Популярность",
+      "updated": "Обновления",
+      "newest": "Новизна"
+    },
+    "filters": {
+      "title": "Фильтры",
+      "sort": "Сортировка",
+      "categories": "Категории",
+      "client": "Клиент",
+      "server": "Сервер",
+      "installedOnly": "Только установленные",
+      "reset": "Сбросить"
+    },
+    "environment": {
+      "any": "Любой",
+      "required": "Обязательно",
+      "optional": "Опционально",
+      "unsupported": "Нет"
+    },
+    "favorites": {
+      "add": "В избранное",
+      "remove": "Из избранного",
+      "empty": "В избранном пока пусто."
+    },
+    "recent": {
+      "empty": "Недавних проектов пока нет.",
+      "clear": "Очистить"
+    },
+    "detail": {
+      "loading": "Загрузка страницы проекта…",
+      "loadFailed": "Не удалось загрузить страницу проекта.",
+      "gallery": "Галерея",
+      "description": "Описание",
+      "versions": "Версии",
+      "wiki": "Вики",
+      "issues": "Issues",
+      "source": "Исходники",
+      "discord": "Discord"
+    }
   },
   "settings": {
     "common": {
@@ -90,6 +139,10 @@
         "on": "Да",
         "off": "Нет"
       }
+    },
+    "search": {
+      "placeholder": "Поиск настроек…",
+      "noResults": "Ничего не найдено."
     },
     "tab": {
       "directories": "Директории",
@@ -250,6 +303,29 @@
       "backgroundBlur": {
         "label": "Размытие фона:"
       },
+      "customThemes": {
+        "label": "Кастомная тема:",
+        "default": "Стандартная",
+        "loading": "Загрузка тем…",
+        "importZip": "Импорт ZIP",
+        "create": "Создать тему",
+        "createPrompt": "Название темы:",
+        "openFolder": "Открыть папку тем",
+        "editCss": "Редактировать CSS",
+        "delete": "Удалить тему",
+        "deleteConfirm": "Удалить тему «{{name}}»?",
+        "zipFilterName": "Архив темы",
+        "byAuthor": "Автор: {{author}}",
+        "imported": "Тема «{{name}}» импортирована.",
+        "importFailed": "Не удалось импортировать тему.",
+        "created": "Тема «{{name}}» создана.",
+        "createFailed": "Не удалось создать тему.",
+        "deleted": "Тема «{{name}}» удалена.",
+        "deleteFailed": "Не удалось удалить тему.",
+        "openFolderFailed": "Не удалось открыть папку тем.",
+        "editCssFailed": "Не удалось открыть style.css.",
+        "hint": "Темы — это CSS-переопределения в папке данных лаунчера. В каждой теме нужны theme.json и style.css. Можно также вручную скопировать папку темы в каталог themes."
+      },
       "cache": {
         "label": "Кэш лаунчера:",
         "description": "Аватары Ely и временные загрузки.",
@@ -300,6 +376,7 @@
       "checkOnStart": { "label": "Проверять обновления при запуске:" },
       "autoInstall": { "label": "Автоматически устанавливать обновления:" },
       "checkNow": "Проверить обновления",
+      "checkNowHint": "Shift+клик — принудительно показать update popup",
       "noneFound": "У вас актуальная версия. Обновлений не найдено.",
       "installedRestart": "Обновление установлено. Перезапустите лаунчер.",
       "availableNextStart": "Доступна новая версия лаунчера: {{version}}. Установка будет предложена при следующем запуске.",
@@ -310,7 +387,14 @@
       "available": "Доступна новая версия {{version}}",
       "released": "Вышло обновление {{version}}",
       "installNow": "Установить сейчас",
-      "upToDate": "Лаунчер обновлён"
+      "upToDate": "Лаунчер обновлён",
+      "popup": {
+        "defaultTitle": "Доступно обновление",
+        "versionLabel": "Версия {{version}}",
+        "viewChanges": "Смотреть изменения",
+        "update": "Обновить",
+        "updating": "Обновление..."
+      }
     }
   },
   "javaSettings": {
@@ -392,6 +476,7 @@
       "loadFailedHint": "Проверь подключение к интернету или доступ к GitHub.",
       "defaultAlt": "Баннер лаунчера",
       "learnMore": "Подробнее",
+      "play": "Играть",
       "empty": "Новости лаунчера и баннер игры"
     },
     "version": {
@@ -705,7 +790,17 @@
       "currentOutput": "Текущий вывод",
       "clearOnlyLive": "Очистка только для текущего вывода",
       "consoleResizeHint": "Между списком и консолью можно тянуть разделитель — ширина сохраняется. Лог хранится между перезапусками; перед новым запуском вывод уходит в «Архив».",
-      "noVersionsForGame": "Нет версий для выбранной игры"
+      "noVersionsForGame": "Нет версий для выбранной игры",
+      "resourcePackOrderHint": "Пак выше перекрывает паки ниже — как в игре",
+      "reorderResourcePacks": "Изменить порядок",
+      "reorderResourcePacksDone": "Готово",
+      "dragToReorder": "Перетащите для изменения порядка",
+      "disabledResourcePacks": "Отключённые",
+      "reorderFailed": "Не удалось изменить порядок ресурспаков.",
+      "shaderPackActiveHint": "Одновременно может быть активен только один шейдер (Iris / OptiFine).",
+      "enableShader": "Сделать активным",
+      "disableShader": "Отключить шейдеры",
+      "inactiveShaders": "Неактивные"
     },
     "externalImport": {
       "title": "Импорт из другого лаунчера",
@@ -780,49 +875,241 @@
     "exportModal": {
       "title": "Экспорт сборки",
       "format": "Формат",
+      "mrpackHint": "Моды с Modrinth подключаются по хешу (не вшиваются в архив) — .mrpack получается лёгким. Конфиги и неизвестные jar идут в overrides.",
+      "presets": "Пресеты",
+      "presetRecommended": "Рекомендуемый",
+      "presetMinimal": "Минимальный",
+      "presetFull": "Всё",
       "ignorePatterns": "Исключения",
-      "ignoreHint": "Поддерживаются: *, **, ! (отмена исключения).",
+      "ignoreHint": "Поддерживаются: *, **, ! (отмена). Миры и логи по умолчанию исключены.",
       "buildFiles": "Файлы сборки",
+      "refresh": "Обновить",
       "selectAll": "Выбрать всё",
       "clearAll": "Снять всё",
       "scanning": "Сканирование...",
       "noData": "Нет данных.",
       "emptyFolder": "Папка сборки пуста.",
       "preview": "Предпросмотр",
+      "previewing": "Поиск…",
       "export": "Экспортировать",
       "exporting": "Экспорт…",
       "finalContents": "Итоговое содержимое",
       "size": "Размер:",
+      "packSize": "Архив:",
+      "downloadSize": "Загрузки:",
+      "linkedMods": "{{count}} через Modrinth",
       "nothingIncluded": "Ничего не попадёт в архив.",
       "done": "Готово",
       "openFolder": "Открыть папку"
     }
   },
   "friends": {
-    "subtitleSignedIn": "Управляйте друзьями по nickname.",
-    "subtitleSignedOut": "Войдите в Supabase во вкладке «Аккаунты», чтобы пользоваться друзьями.",
+    "subtitleSignedIn": "Добавляйте друзей, смотрите кто онлайн и заходите в их комнаты.",
+    "subtitleSignedOut": "Войдите во вкладке «Аккаунты», чтобы видеть друзей.",
     "friendNicknamePlaceholder": "Никнейм друга",
+    "searchPlaceholder": "Найти друга…",
     "add": "Добавить",
     "refresh": "Обновить",
     "requests": "Заявки",
-    "incomingTitle": "Входящие заявки",
+    "incomingTitle": "Заявки",
+    "incomingCount": "Заявки · {{count}}",
     "signInFirst": "Сначала войдите во вкладке «Аккаунты».",
-    "noIncoming": "Нет входящих заявок.",
+    "noIncoming": "Новых заявок нет.",
     "accept": "Принять",
     "reject": "Отклонить",
-    "yourFriends": "Ваши друзья",
-    "noFriends": "Пока никого нет. Отправьте заявку по nickname.",
+    "yourFriends": "Друзья",
+    "friendsOnline": "{{online}} из {{total}} онлайн",
+    "noFriends": "Друзей пока нет — введите никнейм выше и отправьте заявку.",
+    "noSearchResults": "Никого не нашли по этому запросу.",
+    "statFriends": "Друзья",
+    "statFriendsHint": "В вашем списке",
+    "statOnline": "В сети",
+    "statRequests": "Заявки",
+    "statRooms": "Комнаты",
+    "statRoomsHint": "Сейчас играют",
+    "filterAll": "Все",
+    "filterOnline": "В сети",
+    "filterOffline": "Не в сети",
+    "onlineSection": "В сети",
+    "offlineSection": "Не в сети",
+    "inRoom": "В комнате",
+    "lastSeenJustNow": "только что",
+    "lastSeenMinutes": "{{count}} мин. назад",
+    "lastSeenHours": "{{count}} ч. назад",
+    "lastSeenDays": "{{count}} дн. назад",
+    "lastSeenNever": "давно не был в сети",
+    "openRooms": "К комнатам",
+    "howToTitle": "Как это работает",
+    "howToStep1": "Введите никнейм игрока 16Launcher и отправьте заявку.",
+    "howToStep2": "Когда друг примет заявку, он появится в списке.",
+    "howToStep3": "Смотрите, кто онлайн и когда заходил в лаунчер.",
+    "howToStep4": "Заходите в комнату друга прямо отсюда.",
+    "remove": "Удалить",
+    "removeConfirm": "Удалить {{nick}} из друзей?",
+    "online": "В сети",
+    "offline": "Не в сети",
+    "profileTitle": "Профиль",
+    "viewProfile": "Открыть профиль",
+    "addFriend": "Добавить в друзья",
+    "alreadyFriends": "Уже в друзьях",
     "toast": {
       "requestAccepted": "Заявка принята",
       "requestRejected": "Заявка отклонена",
       "signInFirst": "Сначала войдите во вкладке «Аккаунты»",
       "cannotAddSelf": "Нельзя отправить заявку самому себе",
-      "requestExists": "Заявка уже существует или вы уже друзья.",
-      "requestSent": "Заявка отправлена"
+      "requestExists": "Заявка уже есть или вы уже друзья.",
+      "requestSent": "Заявка отправлена",
+      "removed": "Друг удалён"
     }
   },
-  "supabase": {
-    "accountTitle": "16launcher аккаунт",
+  "rooms": {
+    "subtitleSignedIn": "Создавайте комнаты и зовите друзей играть вместе.",
+    "subtitleSignedOut": "Войдите во вкладке «Аккаунты», чтобы пользоваться комнатами.",
+    "create": "Создать комнату",
+    "refresh": "Обновить",
+    "join": "Войти",
+    "joinIdPlaceholder": "Вставьте ID комнаты…",
+    "joinById": "Войти по ID",
+    "yourRooms": "Ваши комнаты",
+    "friendsRooms": "Комнаты друзей",
+    "signInFirst": "Сначала войдите во вкладке «Аккаунты».",
+    "noRooms": "Комнат пока нет. Создайте новую или войдите по ID.",
+    "noFriendsRooms": "Сейчас никто из друзей не ведёт комнату.",
+    "youOwner": "Владелец",
+    "youMember": "Участник",
+    "ownedBy": "Хост: {{nick}}",
+    "players": "{{count}} / {{max}} игроков",
+    "openRoom": "Открыть",
+    "joinFriendRoom": "Войти",
+    "backToList": "К списку комнат",
+    "copyId": "Копировать ID",
+    "idCopied": "ID комнаты скопирован",
+    "manageTitle": "Комната",
+    "connectionTitle": "Статус",
+    "worldTitle": "Мир",
+    "membersTitle": "Участники",
+    "inviteTitle": "Пригласить",
+    "inviteFriendPlaceholder": "Выберите друга…",
+    "inviteEmpty": "Все друзья уже в комнате — или добавьте новых во вкладке «Друзья».",
+    "close": "Закрыть комнату",
+    "leave": "Выйти из комнаты",
+    "kick": "Исключить",
+    "invite": "Пригласить",
+    "inviteNicknamePlaceholder": "Никнейм друга",
+    "mcAccount": "Minecraft",
+    "mcOnlineMicrosoft": "Microsoft",
+    "mcOnlineEly": "Ely",
+    "mcOffline": "офлайн",
+    "mcOfflineHint": "Чтобы зайти в мир друга, войдите через Microsoft или Ely.",
+    "p2pLabel": "Связь",
+    "p2pReady": "готово",
+    "p2pConnecting": "подключение…",
+    "p2pWaiting": "ждём игрока",
+    "bridgeLabel": "мост",
+    "channelOpen": "канал открыт",
+    "lanPort": "Порт LAN",
+    "shareWorld": "Открыть доступ",
+    "shareWorldWaiting": "Доступ открыт",
+    "joinWorld": "Войти в мир",
+    "hostSteps": "В игре откройте мир, включите Open to LAN и введите тот же порт ниже.",
+    "guestSteps": "Когда хост откроет доступ — нажмите «Войти в мир». Нужен аккаунт Microsoft или Ely.",
+    "waitForPeer": "Пригласите друга — соединение появится, когда он зайдёт.",
+    "needP2p": "Подождите, пока установится связь с другом",
+    "status": {
+      "open": "открыта",
+      "full": "заполнена",
+      "closed": "закрыта"
+    },
+    "role": {
+      "owner": "владелец",
+      "member": "участник"
+    },
+    "toast": {
+      "signInFirst": "Сначала войдите во вкладке «Аккаунты»",
+      "created": "Комната создана",
+      "joined": "Вы вошли в комнату",
+      "left": "Вы вышли из комнаты",
+      "closed": "Комната закрыта",
+      "invited": "Игрок приглашён",
+      "kicked": "Участник исключён",
+      "cannotInviteSelf": "Нельзя пригласить самого себя"
+    }
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "signInFirst": "Войдите, чтобы видеть уведомления.",
+    "unread": "Непрочитанных: {{count}}",
+    "refresh": "Обновить",
+    "readAll": "Прочитать все",
+    "markRead": "Прочитано",
+    "empty": "Уведомлений пока нет.",
+    "friendRequest": "Заявка в друзья от {{nick}}",
+    "friendAccept": "{{nick}} принял заявку в друзья",
+    "roomInvite": "{{nick}} пригласил вас в комнату",
+    "achievement": "Достижение: {{title}}",
+    "system": "Системное уведомление"
+  },
+  "achievements": {
+    "title": "Достижения",
+    "signInFirst": "Войдите в платформенный аккаунт, чтобы видеть достижения.",
+    "refresh": "Обновить",
+    "empty": "Достижений пока нет.",
+    "locked": "Заблокировано",
+    "progress": "{{unlocked}} / {{total}} открыто",
+    "unlockedAt": "Получено {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Добро пожаловать!",
+        "description": "Создайте аккаунт 16Launcher."
+      },
+      "identity_linked": {
+        "title": "Подтверждение личности",
+        "description": "Привяжите Ely.by или Microsoft аккаунт."
+      },
+      "first_friend": {
+        "title": "Дружелюбство",
+        "description": "Добавьте своего первого друга."
+      },
+      "first_launch": {
+        "title": "В игру",
+        "description": "Запустите Minecraft из 16Launcher."
+      },
+      "ten_launches": {
+        "title": "По привычке",
+        "description": "Запустите игру 10 раз."
+      },
+      "fifty_launches": {
+        "title": "Не остановиться",
+        "description": "Запустите игру 50 раз."
+      },
+      "hour_played": {
+        "title": "Время летит",
+        "description": "Наиграйте суммарно 1 час."
+      },
+      "ten_hours": {
+        "title": "Преданность",
+        "description": "Наиграйте суммарно 10 часов."
+      },
+      "first_room": {
+        "title": "Хозяин",
+        "description": "Создайте свою первую комнату."
+      },
+      "first_join": {
+        "title": "Гость",
+        "description": "Зайдите в чужую комнату."
+      },
+      "room_invite": {
+        "title": "Заходи",
+        "description": "Пригласите друга в комнату."
+      },
+      "theme_submit": {
+        "title": "Стилист",
+        "description": "Отправьте свою тему лаунчера."
+      }
+    }
+  },
+  "platform": {
+    "accountTitle": "16Launcher аккаунт",
     "accountManagement": "Управление аккаунтом",
     "signIn": "Войти",
     "signUp": "Регистрация",
@@ -834,17 +1121,33 @@
     "showPassword": "Показать пароль",
     "hidePassword": "Скрыть пароль",
     "createAccount": "Создать аккаунт",
+    "privacyPolicyLink": "Политикой конфиденциальности",
+    "privacyConsent": "Я ознакомился с {{link}} и даю согласие на обработку персональных данных.",
+    "privacyLoginNotice": "Входя, вы подтверждаете ознакомление с {{link}}.",
+    "next": "Далее",
+    "back": "Назад",
+    "verificationStepLabel": "Шаг 2 из 2",
+    "verificationTitle": "Подтвердите email",
+    "verificationHint": "Мы отправили код на {{email}}. Введите его ниже, чтобы завершить регистрацию.",
     "launcherNickname": "Ник лаунчера",
     "inGameNickname": "Игровой ник",
     "newNicknamePlaceholder": "Новый никнейм",
     "changeNickname": "Сменить ник",
     "logout": "Выйти",
+    "dangerZone": "Опасная зона",
+    "deleteAccount": "Удалить аккаунт",
+    "deleteAccountConfirm": "Удалить навсегда",
+    "deleteAccountHint": "Аккаунт 16Launcher и связанные данные на сервере будут удалены безвозвратно. Нужен текущий пароль.",
     "linked": "Привязан",
     "linking": "Привязка…",
     "link": "Привязать",
     "enterEmail": "Введите email",
     "enterNicknameOrEmail": "Введите никнейм или почту",
     "enterNickname": "Введите никнейм",
+    "verificationCodeLabel": "Код подтверждения",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Отправить код на email",
+    "resendVerificationCode": "Отправить код ещё раз",
     "linkMicrosoftTitle": "Нажмите для входа через Microsoft и повторите привязку",
     "linkElyTitle": "Нажмите для входа через Ely.by и повторите привязку",
     "toast": {
@@ -856,8 +1159,7 @@
       "nicknameTooShort": "Никнейм должен быть не короче 3 символов.",
       "nicknameAlreadySet": "Этот никнейм уже установлен.",
       "nicknameUpdated": "Никнейм обновлен.",
-      "sessionExpired": "Сессия 16launcher истекла. Войдите в аккаунт снова.",
-      "sessionExpiredWithMsg": "Сессия 16launcher истекла: {{msg}}",
+      "sessionExpired": "Сессия 16Launcher истекла. Войдите в аккаунт снова.",
       "signInMicrosoftThenLink": "Выполните вход Microsoft, затем снова нажмите «Привязать».",
       "signInElyThenLink": "Выполните вход Ely.by, затем снова нажмите «Привязать».",
       "minecraftLinked": "Minecraft привязан к аккаунту",
@@ -865,24 +1167,26 @@
       "enterEmailSignup": "Для регистрации укажите email.",
       "enterSignupNickname": "Введите никнейм для регистрации.",
       "enterPassword": "Введите пароль",
-      "passwordTooShort": "Пароль должен содержать минимум 6 символов.",
-      "envNotConfigured": "Не настроены VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY в .env",
-      "noAccessToken": "Нет Supabase access_token — войдите в аккаунт.",
-      "noRefreshToken": "Не удалось получить refresh_token из ответа Supabase.",
-      "noAccessTokenResponse": "Не удалось получить access_token из ответа Supabase.",
-      "refreshNoToken": "Supabase refresh не вернул access_token.",
-      "nicknameLoginUnsupported": "Сервер Supabase пока не поддерживает вход по nickname (нет users_resolve_login).",
-      "nicknameEmailNotFound": "По этому nickname не найден email для входа.",
-      "resolveLoginFailed": "Не удалось обратиться к функции users_resolve_login (вход по никнейму). Обычно это CORS/OPTIONS в Edge Function. Временно войдите по email, затем проверьте CORS в users_resolve_login."
+      "passwordTooShort": "Пароль должен содержать минимум 8 символов.",
+      "enterVerificationCode": "Введите код из письма.",
+      "verificationCodeSent": "Код подтверждения отправлен на email.",
+      "accountDeleted": "Аккаунт удалён.",
+      "acceptPrivacy": "Чтобы создать аккаунт, подтвердите согласие с Политикой конфиденциальности."
     },
     "errors": {
-      "connectionFailed": "Не удается подключиться к Supabase. Проверьте VITE_SUPABASE_PROJECT_URL (должен быть https://<project>.supabase.co), интернет и доступность сервиса.",
+      "connectionFailed": "Не удается подключиться к серверу 16Launcher. Проверьте интернет и доступность API.",
       "invalidCredentials": "Неверный логин или пароль.",
       "invalidPassword": "Неверный пароль.",
-      "passwordTooShort": "Пароль слишком короткий. Минимум 6 символов.",
-      "weakPassword": "Слишком слабый пароль.",
-      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16launcher. Отвяжите его в том аккаунте или используйте другой аккаунт {{provider}}.",
-      "linkConnectionFailed": "Не удалось привязать {{provider}}: нет соединения с Supabase. Проверьте интернет и настройки проекта."
+      "passwordTooShort": "Пароль слишком короткий. Минимум 8 символов.",
+      "emailTaken": "Этот email уже зарегистрирован.",
+      "nicknameTaken": "Этот никнейм уже занят.",
+      "invalidVerificationCode": "Неверный код подтверждения.",
+      "verificationCodeExpired": "Код подтверждения истёк. Запросите новый.",
+      "tooManyVerificationAttempts": "Слишком много попыток. Запросите новый код.",
+      "rateLimited": "Слишком много запросов. Подождите немного.",
+      "emailSendFailed": "Не удалось отправить письмо с кодом.",
+      "deleteNotAvailable": "Удаление аккаунта на сервере ещё недоступно. Нужен деплой API.",
+      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16Launcher."
     }
   },
   "app": {
@@ -891,7 +1195,8 @@
       "settings": "Настройки",
       "mods": "Моды",
       "modpacks": "Сборки",
-      "friends": "Друзья"
+      "friends": "Друзья",
+      "rooms": "Комнаты"
     },
     "splitView": {
       "zones": {
@@ -904,6 +1209,19 @@
       "closePane": "Убрать эту панель"
     },
     "launcherVersionTitle": "Версия лаунчера {{version}}",
+    "sessionNotifications": {
+      "title": "Уведомления лаунчера",
+      "heading": "Уведомления",
+      "empty": "Пока нет уведомлений за эту сессию",
+      "clear": "Очистить",
+      "kindInfo": "Инфо",
+      "kindSuccess": "Успех",
+      "kindError": "Ошибка",
+      "kindWarning": "Внимание",
+      "kindSystem": "Система",
+      "groupBadge": "×{{count}}",
+      "groupHint": "Повторялось {{count}} раз — собрано в группу"
+    },
     "accounts": {
       "managerTitle": "Менеджер аккаунтов",
       "managerSubtitle": "",
@@ -920,10 +1238,18 @@
       "kindOffline": "Офлайн",
       "savedListTitle": "Сохранённые аккаунты",
       "savedListHint": "",
+      "savedListHintShort": "Переключайтесь между сохранёнными профилями Minecraft.",
       "removeTitle": "Удалить из лаунчера",
       "removeConfirm": "Удалить этот аккаунт из списка? Сохранённые для него данные входа будут удалены.",
+      "accountSettingsTitle": "Настройки аккаунта",
+      "settingsSubtitle": "Аккаунты Minecraft, платформа и уведомления",
+      "settingsTabAccounts": "Аккаунты",
+      "settingsTabPlatform": "Платформа",
+      "settingsTabNotifications": "Уведомления",
+      "providerSignIn": "Вход в Minecraft",
       "editNickname": "Редактировать никнейм",
       "nicknamePlaceholder": "Игрок",
+      "systemNicknameSignedOut": "Не выполнен вход в 16Launcher",
       "signedInAsPrefix": "Вход: ",
       "hint": "Войдите в систему.",
       "microsoftSignIn": "Войти через Microsoft",
@@ -932,6 +1258,22 @@
       "elyWaiting": "Ожидание входа…",
       "elyDialogTitle": "Если страница в браузере бесконечно грузится:",
       "elyDialogTip": "Лучше открыть в новой вкладке того же браузера. В другом браузере Ely.by может показать «Invalid request».",
+      "cape": {
+        "title": "Плащ",
+        "none": "Без плаща",
+        "empty": "На этом аккаунте нет плащей.",
+        "loading": "Загрузка плащей…",
+        "error": "Не удалось загрузить плащи."
+      },
+      "skinByUsername": {
+        "title": "Скин по нику",
+        "placeholder": "Steve",
+        "apply": "Применить",
+        "reset": "Сбросить",
+        "loading": "Загрузка скина…",
+        "error": "Не удалось загрузить скин.",
+        "notFound": "Игрок не найден."
+      },
       "toast": {
         "nicknameSaved": "Изменения сохранены!",
         "nicknameSaveFailed": "Не удалось сохранить никнейм.",
@@ -1000,13 +1342,18 @@
       "stopError": "Ошибка остановки: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Сначала выберите сборку, затем нажмите «Играть»."
+      "selectProfileFirst": "Сначала выберите сборку, затем нажмите «Играть».",
+      "needMinecraftVersion": "Сначала выберите версию Minecraft на вкладке Play.",
+      "needInstalledVersion": "Сначала установите выбранную версию на вкладке Play.",
+      "closeGameFirst": "Сначала закройте уже запущенную игру."
     },
     "discord": {
       "play": "В главном меню",
       "settings": "Настраивает лаунчер",
       "mods": "Выбирает мод",
       "modpacks": "Выбирает профиль",
+      "friends": "Смотрит друзей",
+      "rooms": "В комнатах",
       "accounts": "Управляет аккаунтом"
     },
     "pinnedProfiles": {

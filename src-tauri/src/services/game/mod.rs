@@ -11,6 +11,7 @@ pub mod install;
 pub mod integrity;
 pub mod launcher;
 pub mod runtime;
+pub mod options_txt;
 pub mod profiles;
 pub mod external_import;
 pub mod screenshots;
@@ -38,6 +39,10 @@ pub use integrity::check_version_files_integrity;
 pub use launcher::{
     cancel_download, is_game_running_now, launch_game, reset_download_cancel, stop_game,
 };
+pub use runtime::{
+    lan_bridge_guest_allow_forward, lan_bridge_guest_port, lan_bridge_start_guest,
+    lan_bridge_start_host, lan_bridge_stop, lan_bridge_write,
+};
 pub use build_presets::{
     create_build_preset_from_profile, delete_build_preset, get_build_preset_icon_data_uri,
     list_build_presets, save_build_preset,
@@ -45,9 +50,8 @@ pub use build_presets::{
 pub use profiles::{
     add_profile_files, change_profile_version, create_profile, delete_item, delete_profile,
     get_profile_icon_data_uri, get_profile_play_time_seconds, get_profiles, get_selected_profile,
-    list_profile_items, rename_profile, set_profile_icon_from_file, set_profile_item_enabled,
-    set_selected_profile,
-    update_profile_settings,
+    list_profile_items, rename_profile, reorder_profile_resource_packs, set_profile_icon_from_file,
+    set_profile_item_enabled, set_selected_profile, update_profile_settings,
 };
 pub use external_import::{
     default_external_launcher_path,

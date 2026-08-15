@@ -1,172 +1,203 @@
-import { useEffect, useMemo, useState } from "react";
-import { useT, type Language } from "../i18n";
-import { buildInitialAvatarDataUrl, getElyAvatarByUsername } from "../lib/avatar";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  acceptFriendRequest,
+  listFriends,
+  listIncomingRequests,
+  rejectFriendRequest,
+  removeFriend,
+  sendFriendRequest,
+  type FriendRow,
+  type IncomingRequestRow,
+} from "../api/friends";
+import { fetchFriendsPresence, type PresenceInfo } from "../api/presence";
+import { joinRoom, listFriendsRooms, type Room, type RoomMember } from "../api/rooms";
+import { WS_EVENT, type WsEvent } from "../api/ws";
+import {
+  API_AUTH_CHANGED_EVENT,
+  API_NICKNAME_KEY,
+} from "../api/auth";
+import { getStoredAccessToken } from "../api/client";
+import { ApiError } from "../api/client";
+import { localeTag, useT, type Language } from "../i18n";
+import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
+import { NicknameWithSponsor } from "../components/SponsorBadge";
+import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
+
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
+type PresenceFilter = "all" | "online" | "offline";
+
+type AvatarTarget = {
+  nickname: string;
+  ely_username?: string | null;
+  mc_uuid?: string | null;
+};
 
 type FriendsTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
   language: Language;
+  onOpenRooms?: () => void;
 };
 
-type FriendRow = {
-  user_id: string;
-  nickname: string;
-  ely_username?: string | null;
-};
-
-type IncomingRequestRow = {
-  request_id: string;
-  from_user_id: string;
-  from_nickname: string;
-  from_ely_username?: string | null;
-  created_at?: string;
-};
-
-const STORAGE_TOKEN_KEY = "mc16launcher:supabase_access_token_v1";
-const STORAGE_NICKNAME_KEY = "mc16launcher:supabase_nickname_v1";
-
-function jsonErrorFromBody(body: unknown): string {
-  if (!body) return "Unknown error";
-  if (typeof body === "string") return body;
-  if (typeof body === "object") {
-    const o = body as any;
-    const msg = o.message ?? o.error ?? null;
-    const detail = o.detail ?? o.details ?? null;
-    if (msg && detail) return `${msg}: ${detail}`;
-    if (msg) return String(msg);
-    if (detail) return String(detail);
-  }
-  return "Unknown error";
+function formatLastSeen(
+  iso: string | null | undefined,
+  language: Language,
+  tt: (key: string, vars?: Record<string, string | number>) => string,
+  nowMs: number,
+): string {
+  if (!iso) return tt("friends.lastSeenNever");
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return tt("friends.lastSeenNever");
+  const diffMs = Math.max(0, nowMs - then);
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return tt("friends.lastSeenJustNow");
+  if (mins < 60) return tt("friends.lastSeenMinutes", { count: mins });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return tt("friends.lastSeenHours", { count: hours });
+  const days = Math.floor(hours / 24);
+  if (days < 14) return tt("friends.lastSeenDays", { count: days });
+  return new Date(then).toLocaleDateString(localeTag(language), {
+    day: "numeric",
+    month: "short",
+  });
 }
 
-export function FriendsTab({ showNotification, language }: FriendsTabProps) {
+function MemberAvatars({
+  members,
+  avatarSrcFor,
+  max = 4,
+}: {
+  members: RoomMember[];
+  avatarSrcFor: (member: AvatarTarget) => string;
+  max?: number;
+}) {
+  const shown = members.slice(0, max);
+  const extra = Math.max(0, members.length - shown.length);
+  return (
+    <div className="flex items-center">
+      {shown.map((m, i) => (
+        <img
+          key={m.user_id}
+          src={avatarSrcFor(m)}
+          alt=""
+          title={m.is_sponsor ? `${m.nickname} ★` : m.nickname}
+          className="h-7 w-7 rounded-full object-cover ring-2 ring-black/70 [image-rendering:pixelated]"
+          style={{ marginLeft: i === 0 ? 0 : -8 }}
+          draggable={false}
+          onError={(event) => {
+            event.currentTarget.src = buildInitialAvatarDataUrl(m.nickname);
+          }}
+        />
+      ))}
+      {extra > 0 ? (
+        <span
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold text-white/70 ring-2 ring-black/70"
+          style={{ marginLeft: shown.length ? -8 : 0 }}
+        >
+          +{extra}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  accent?: "emerald" | "amber" | "sky";
+}) {
+  const tone =
+    accent === "emerald"
+      ? "from-emerald-500/15 to-black/40 text-emerald-100"
+      : accent === "amber"
+        ? "from-amber-500/15 to-black/40 text-amber-100"
+        : accent === "sky"
+          ? "from-sky-500/15 to-black/40 text-sky-100"
+          : "from-white/8 to-black/40 text-white/90";
+  return (
+    <div className={`rounded-2xl border border-white/10 bg-gradient-to-br ${tone} px-4 py-3.5 shadow-soft`}>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">{label}</p>
+      <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
+      {hint ? <p className="mt-0.5 text-xs text-white/40">{hint}</p> : null}
+    </div>
+  );
+}
+
+export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsTabProps) {
   const tt = useT(language);
-
-  const supabaseProjectUrl = (import.meta.env.VITE_SUPABASE_PROJECT_URL as string | undefined) ?? "";
-  const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
-
-  const edgeAuthHeaders = useMemo(() => {
-    if (!supabaseAnonKey) return null;
-    return {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
-    };
-  }, [supabaseAnonKey]);
 
   const [loading, setLoading] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
-  const [accessToken, setAccessToken] = useState<string>("");
-  const [profileNickname, setProfileNickname] = useState<string>("");
+  const [accessToken, setAccessToken] = useState("");
+  const [profileNickname, setProfileNickname] = useState("");
 
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequestRow[]>([]);
+  const [friendsRooms, setFriendsRooms] = useState<Room[]>([]);
   const [friendNickToAdd, setFriendNickToAdd] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [presenceFilter, setPresenceFilter] = useState<PresenceFilter>("all");
   const [friendAvatarByKey, setFriendAvatarByKey] = useState<Record<string, string>>({});
+  const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresenceInfo>>({});
+  const [viewingProfile, setViewingProfile] = useState<UserProfileSeed | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const syncAuth = useCallback(() => {
+    const token = getStoredAccessToken() ?? "";
+    setAccessToken(token);
     try {
-      const t = window.localStorage.getItem(STORAGE_TOKEN_KEY);
-      const n = window.localStorage.getItem(STORAGE_NICKNAME_KEY);
-      if (t) setAccessToken(t);
-      if (n) setProfileNickname(n);
+      setProfileNickname(window.localStorage.getItem(API_NICKNAME_KEY) ?? "");
     } catch {
-      // ignore
+      setProfileNickname("");
     }
   }, []);
 
-  const loadFriends = async (token: string) => {
-    if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
-    if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
+  useEffect(() => {
+    syncAuth();
+    const onChanged = () => syncAuth();
+    window.addEventListener(API_AUTH_CHANGED_EVENT, onChanged);
+    window.addEventListener("storage", onChanged);
+    return () => {
+      window.removeEventListener(API_AUTH_CHANGED_EVENT, onChanged);
+      window.removeEventListener("storage", onChanged);
+    };
+  }, [syncAuth]);
 
-    const url = `${supabaseProjectUrl}/functions/v1/friends_list_friends`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...edgeAuthHeaders,
-      },
-      body: JSON.stringify({ supabase_access_token: token }),
-    });
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(jsonErrorFromBody(data));
-    return data as { friends: FriendRow[] };
-  };
-
-  const loadIncomingRequests = async (token: string) => {
-    if (!edgeAuthHeaders) throw new Error("Missing SUPABASE anon key (VITE_SUPABASE_ANON_KEY).");
-    if (!supabaseProjectUrl) throw new Error("Missing SUPABASE project url (VITE_SUPABASE_PROJECT_URL).");
-
-    const url = `${supabaseProjectUrl}/functions/v1/friends_list_requests`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...edgeAuthHeaders,
-      },
-      body: JSON.stringify({ supabase_access_token: token }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(jsonErrorFromBody(data));
-    return data as { incoming_requests: IncomingRequestRow[] };
-  };
-
-  const handleLoadFriends = async () => {
-    if (!accessToken) return;
-    setLoading(true);
-    try {
-      const res = await loadFriends(accessToken);
-      setFriends(res.friends ?? []);
-    } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLoadIncomingRequests = async () => {
-    if (!accessToken) return;
-    setRequestsLoading(true);
-    try {
-      const res = await loadIncomingRequests(accessToken);
-      setIncomingRequests(res.incoming_requests ?? []);
-    } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
-    } finally {
-      setRequestsLoading(false);
-    }
-  };
+  const reloadAll = useCallback(async () => {
+    const [friendsRes, requestsRes, presenceRes, roomsRes] = await Promise.all([
+      listFriends(),
+      listIncomingRequests(),
+      fetchFriendsPresence().catch(() => [] as PresenceInfo[]),
+      listFriendsRooms().catch(() => [] as Room[]),
+    ]);
+    setFriends(friendsRes);
+    setIncomingRequests(requestsRes);
+    setPresenceByUserId(
+      Object.fromEntries(presenceRes.map((p) => [p.user_id, p])),
+    );
+    setFriendsRooms(roomsRes);
+  }, []);
 
   const handleAcceptRequest = async (requestId: string) => {
     if (!accessToken) return;
     setRequestsLoading(true);
     try {
-      const url = `${supabaseProjectUrl}/functions/v1/friends_accept_request`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(edgeAuthHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          supabase_access_token: accessToken,
-          request_id: requestId,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(jsonErrorFromBody(data));
+      await acceptFriendRequest(requestId);
       showNotification("success", tt("friends.toast.requestAccepted"));
-      const [reqRes, friendsRes] = await Promise.all([
-        loadIncomingRequests(accessToken),
-        loadFriends(accessToken),
-      ]);
-      setIncomingRequests(reqRes.incoming_requests ?? []);
-      setFriends(friendsRes.friends ?? []);
+      await reloadAll();
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setRequestsLoading(false);
     }
@@ -176,25 +207,11 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     if (!accessToken) return;
     setRequestsLoading(true);
     try {
-      const url = `${supabaseProjectUrl}/functions/v1/friends_reject_request`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(edgeAuthHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          supabase_access_token: accessToken,
-          request_id: requestId,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(jsonErrorFromBody(data));
+      await rejectFriendRequest(requestId);
       showNotification("info", tt("friends.toast.requestRejected"));
-      const reqRes = await loadIncomingRequests(accessToken);
-      setIncomingRequests(reqRes.incoming_requests ?? []);
+      setIncomingRequests(await listIncomingRequests());
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setRequestsLoading(false);
     }
@@ -214,93 +231,202 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
 
     setLoading(true);
     try {
-      const url = `${supabaseProjectUrl}/functions/v1/friends_send_request`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(edgeAuthHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          supabase_access_token: accessToken,
-          to_nickname: toNick,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(jsonErrorFromBody(data));
-
-      if (data?.already_exists) {
+      const result = await sendFriendRequest(toNick);
+      if (result.already_exists) {
         showNotification("info", tt("friends.toast.requestExists"));
       } else {
         showNotification("success", tt("friends.toast.requestSent"));
       }
-
       setFriendNickToAdd("");
     } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRemoveFriend = async (friend: FriendRow) => {
+    if (!accessToken) return;
+    const ok = window.confirm(tt("friends.removeConfirm", { nick: friend.nickname }));
+    if (!ok) return;
+
+    setLoading(true);
+    try {
+      await removeFriend(friend.user_id);
+      showNotification("info", tt("friends.toast.removed"));
+      await reloadAll();
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (!accessToken) return;
+    setLoading(true);
+    setRequestsLoading(true);
+    void reloadAll()
+      .catch((e) => {
+        showNotification("error", e instanceof ApiError ? e.message : String(e));
+      })
+      .finally(() => {
+        setLoading(false);
+        setRequestsLoading(false);
+      });
+  };
+
+  const handleJoinFriendRoom = async (roomId: string) => {
+    if (!accessToken) return;
+    setLoading(true);
+    try {
+      await joinRoom(roomId);
+      showNotification("success", tt("rooms.toast.joined"));
+      onOpenRooms?.();
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openFriendProfile = (friend: FriendRow) => {
+    setViewingProfile({
+      user_id: friend.user_id,
+      nickname: friend.nickname,
+      is_sponsor: friend.is_sponsor,
+      ely_username: friend.ely_username,
+      mc_uuid: friend.mc_uuid,
+      online: Boolean(presenceByUserId[friend.user_id]?.online),
+    });
   };
 
   useEffect(() => {
     if (!accessToken) {
       setFriends([]);
       setIncomingRequests([]);
+      setPresenceByUserId({});
+      setFriendsRooms([]);
       return;
     }
 
-    let isCancelled = false;
+    let cancelled = false;
     setLoading(true);
     setRequestsLoading(true);
 
-    void Promise.all([
-      loadFriends(accessToken),
-      loadIncomingRequests(accessToken),
-    ])
-      .then(([friendsRes, requestsRes]) => {
-        if (isCancelled) return;
-        setFriends(friendsRes.friends ?? []);
-        setIncomingRequests(requestsRes.incoming_requests ?? []);
-      })
+    void reloadAll()
       .catch((e) => {
-        if (isCancelled) return;
-        showNotification("error", e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          showNotification("error", e instanceof ApiError ? e.message : String(e));
+        }
       })
       .finally(() => {
-        if (isCancelled) return;
-        setLoading(false);
-        setRequestsLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setRequestsLoading(false);
+        }
       });
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
     };
-  }, [accessToken, edgeAuthHeaders, supabaseProjectUrl, showNotification]);
+  }, [accessToken, reloadAll, showNotification]);
+
+  useEffect(() => {
+    const onWs = (ev: Event) => {
+      const detail = (ev as CustomEvent<WsEvent>).detail;
+      if (!detail || typeof detail !== "object" || !("type" in detail)) return;
+
+      if (detail.type === "user_online") {
+        const userId = detail.payload.user_id;
+        setPresenceByUserId((prev) => ({
+          ...prev,
+          [userId]: {
+            user_id: userId,
+            online: true,
+            last_seen: prev[userId]?.last_seen,
+          },
+        }));
+        return;
+      }
+
+      if (detail.type === "user_offline") {
+        const userId = detail.payload.user_id;
+        setPresenceByUserId((prev) => ({
+          ...prev,
+          [userId]: {
+            user_id: userId,
+            online: false,
+            last_seen: detail.payload.last_seen ?? prev[userId]?.last_seen,
+          },
+        }));
+        return;
+      }
+
+      if (
+        detail.type === "friend_request_created" ||
+        detail.type === "friend_request_accepted" ||
+        detail.type === "friend_removed"
+      ) {
+        void reloadAll().catch(() => {});
+        return;
+      }
+
+      if (
+        detail.type === "room_created" ||
+        detail.type === "room_updated" ||
+        detail.type === "room_closed" ||
+        detail.type === "room_member_joined" ||
+        detail.type === "room_member_left" ||
+        detail.type === "room_invite"
+      ) {
+        void listFriendsRooms()
+          .then(setFriendsRooms)
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener(WS_EVENT, onWs);
+    return () => window.removeEventListener(WS_EVENT, onWs);
+  }, [reloadAll]);
 
   useEffect(() => {
     let isCancelled = false;
-    const elyNicknames = Array.from(
-      new Set(
-        [
-          ...friends.map((f) => f.ely_username ?? ""),
-          ...incomingRequests.map((r) => r.from_ely_username ?? ""),
-        ]
-          .map((nick) => nick.trim())
-          .filter((nick) => nick.length > 0),
+    const targets: AvatarTarget[] = [
+      ...friends.map((f) => ({
+        nickname: f.nickname,
+        ely_username: f.ely_username,
+        mc_uuid: f.mc_uuid,
+      })),
+      ...incomingRequests.map((r) => ({
+        nickname: r.from_nickname,
+        ely_username: r.from_ely_username,
+        mc_uuid: r.from_mc_uuid,
+      })),
+      ...friendsRooms.flatMap((room) =>
+        (room.members ?? []).map((m) => ({
+          nickname: m.nickname,
+          ely_username: m.ely_username,
+          mc_uuid: m.mc_uuid,
+        })),
       ),
-    );
-    if (elyNicknames.length === 0) {
+    ].filter((t) => t.ely_username?.trim() || t.mc_uuid?.trim());
+
+    if (targets.length === 0) {
       setFriendAvatarByKey({});
       return;
     }
 
     void (async () => {
+      const unique = new Map<string, AvatarTarget>();
+      for (const target of targets) {
+        unique.set(userListAvatarCacheKey(target), target);
+      }
       const entries = await Promise.all(
-        elyNicknames.map(async (elyUsername) => {
-          const fallback = buildInitialAvatarDataUrl(elyUsername);
-          const src = await getElyAvatarByUsername(elyUsername, fallback, 64);
-          return [elyUsername.toLowerCase(), src] as const;
+        [...unique.values()].map(async (target) => {
+          const key = userListAvatarCacheKey(target);
+          const src = await getUserListAvatarSrc(target, 64);
+          return [key, src] as const;
         }),
       );
       if (!isCancelled) {
@@ -311,154 +437,508 @@ export function FriendsTab({ showNotification, language }: FriendsTabProps) {
     return () => {
       isCancelled = true;
     };
-  }, [friends, incomingRequests]);
+  }, [friends, incomingRequests, friendsRooms]);
+
+  const onlineCount = useMemo(
+    () => friends.filter((f) => presenceByUserId[f.user_id]?.online).length,
+    [friends, presenceByUserId],
+  );
+
+  const roomByFriendId = useMemo(() => {
+    const map = new Map<string, Room>();
+    for (const room of friendsRooms) {
+      map.set(room.owner_user_id, room);
+      for (const member of room.members ?? []) {
+        map.set(member.user_id, room);
+      }
+    }
+    return map;
+  }, [friendsRooms]);
+
+  const filteredFriends = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const list = friends.filter((f) => {
+      if (q && !f.nickname.toLowerCase().includes(q)) return false;
+      const online = Boolean(presenceByUserId[f.user_id]?.online);
+      if (presenceFilter === "online") return online;
+      if (presenceFilter === "offline") return !online;
+      return true;
+    });
+    return [...list].sort((a, b) => {
+      const aOnline = presenceByUserId[a.user_id]?.online ? 1 : 0;
+      const bOnline = presenceByUserId[b.user_id]?.online ? 1 : 0;
+      if (aOnline !== bOnline) return bOnline - aOnline;
+      return a.nickname.localeCompare(b.nickname, undefined, { sensitivity: "base" });
+    });
+  }, [friends, presenceByUserId, searchQuery, presenceFilter]);
+
+  const onlineFriends = useMemo(
+    () => filteredFriends.filter((f) => presenceByUserId[f.user_id]?.online),
+    [filteredFriends, presenceByUserId],
+  );
+  const offlineFriends = useMemo(
+    () => filteredFriends.filter((f) => !presenceByUserId[f.user_id]?.online),
+    [filteredFriends, presenceByUserId],
+  );
+
+  const avatarFor = (input: AvatarTarget) =>
+    friendAvatarByKey[userListAvatarCacheKey(input)] ??
+    buildInitialAvatarDataUrl(input.nickname);
+
+  const statusLabel = (status: string) => {
+    if (status === "open") return tt("rooms.status.open");
+    if (status === "full") return tt("rooms.status.full");
+    if (status === "closed") return tt("rooms.status.closed");
+    return status;
+  };
+
+  const statusTone = (status: string) => {
+    if (status === "open") return "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30";
+    if (status === "full") return "bg-amber-500/15 text-amber-100 ring-amber-500/30";
+    return "bg-white/10 text-white/60 ring-white/15";
+  };
+
+  const renderFriendCard = (f: FriendRow) => {
+    const presence = presenceByUserId[f.user_id];
+    const online = Boolean(presence?.online);
+    const room = roomByFriendId.get(f.user_id);
+    const canJoinRoom = room?.status === "open";
+    return (
+      <li
+        key={f.user_id}
+        className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-3.5 py-3 transition hover:border-white/20 hover:bg-black/40"
+      >
+        <button
+          type="button"
+          onClick={() => openFriendProfile(f)}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition hover:opacity-95"
+          title={tt("friends.viewProfile")}
+        >
+          <div className="relative shrink-0">
+            <img
+              src={avatarFor({
+                nickname: f.nickname,
+                ely_username: f.ely_username,
+                mc_uuid: f.mc_uuid,
+              })}
+              alt=""
+              className="h-11 w-11 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
+              draggable={false}
+              onError={(event) => {
+                event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+              }}
+            />
+            <span
+              className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-black/80 ${
+                online ? "bg-emerald-400" : "bg-white/25"
+              }`}
+            />
+          </div>
+          <div className="min-w-0">
+            <NicknameWithSponsor
+              nickname={f.nickname}
+              isSponsor={f.is_sponsor}
+              sponsorTitle={tt("common.sponsor")}
+            />
+            <p className={`mt-0.5 text-xs ${online ? "text-emerald-300/80" : "text-white/40"}`}>
+              {online
+                ? tt("friends.online")
+                : presence?.last_seen
+                  ? formatLastSeen(presence.last_seen, language, tt, nowMs)
+                  : tt("friends.lastSeenNever")}
+            </p>
+            {room ? (
+              <p className="mt-0.5 truncate text-[11px] text-sky-200/80">
+                {tt("friends.inRoom")}
+                {" · "}
+                {tt("rooms.players", {
+                  count: room.member_count,
+                  max: room.max_players,
+                })}
+              </p>
+            ) : null}
+          </div>
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {canJoinRoom && room ? (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void handleJoinFriendRoom(room.id)}
+              className="interactive-press rounded-lg border border-sky-400/35 bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-60"
+            >
+              {tt("rooms.joinFriendRoom")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void handleRemoveFriend(f)}
+            className="interactive-press rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/55 hover:border-red-400/30 hover:bg-red-600/15 hover:text-red-100 disabled:opacity-60"
+          >
+            {tt("friends.remove")}
+          </button>
+        </div>
+      </li>
+    );
+  };
+
+  const howToSteps = [
+    tt("friends.howToStep1"),
+    tt("friends.howToStep2"),
+    tt("friends.howToStep3"),
+    tt("friends.howToStep4"),
+  ];
 
   return (
-    <div className="flex w-full max-w-2xl flex-col items-center gap-6 py-6">
-      <div className="w-full text-center">
-        <h1 className="text-lg font-bold tracking-tight text-white/95">{tt("app.sidebar.friends")}</h1>
-        <p className="mt-1.5 text-sm text-white/50">
-          {accessToken ? tt("friends.subtitleSignedIn") : tt("friends.subtitleSignedOut")}
-        </p>
-      </div>
+    <>
+      <div className="flex w-full max-w-4xl flex-col gap-5 py-6">
+        <div className="w-full text-center">
+          <h1 className="text-lg font-bold tracking-tight text-white/95">{tt("app.sidebar.friends")}</h1>
+          <p className="mt-1.5 text-sm text-white/50">
+            {accessToken ? tt("friends.subtitleSignedIn") : tt("friends.subtitleSignedOut")}
+          </p>
+        </div>
 
-      <div className="w-full rounded-2xl border border-white/10 glass-panel px-6 py-6 shadow-xl backdrop-blur-md bg-black/40">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="text"
-              value={friendNickToAdd}
-              onChange={(e) => setFriendNickToAdd(e.target.value)}
-              className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
-              placeholder={tt("friends.friendNicknamePlaceholder")}
-              disabled={!accessToken}
-            />
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/10 glass-panel bg-black/40 p-4 shadow-xl backdrop-blur-md sm:flex-row sm:items-center">
+          <input
+            type="text"
+            value={friendNickToAdd}
+            onChange={(e) => setFriendNickToAdd(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && friendNickToAdd.trim()) void handleSendRequest();
+            }}
+            className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+            placeholder={tt("friends.friendNicknamePlaceholder")}
+            disabled={!accessToken}
+          />
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               disabled={!accessToken || loading || !friendNickToAdd.trim()}
               onClick={() => void handleSendRequest()}
-              className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+              className="interactive-press rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
             >
               {tt("friends.add")}
             </button>
             <button
               type="button"
               disabled={!accessToken || loading}
-              onClick={() => void handleLoadFriends()}
-              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
+              onClick={handleRefresh}
+              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
             >
               {tt("friends.refresh")}
             </button>
-            <button
-              type="button"
-              disabled={!accessToken || requestsLoading}
-              onClick={() => void handleLoadIncomingRequests()}
-              className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-            >
-              {tt("friends.requests")}
-            </button>
           </div>
+        </div>
 
-          <div className="h-px w-full bg-white/10" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label={tt("friends.statFriends")}
+            value={accessToken ? friends.length : "—"}
+            hint={accessToken ? tt("friends.statFriendsHint") : undefined}
+          />
+          <StatCard
+            label={tt("friends.statOnline")}
+            value={accessToken ? onlineCount : "—"}
+            hint={
+              accessToken
+                ? tt("friends.friendsOnline", {
+                    online: onlineCount,
+                    total: friends.length,
+                  })
+                : undefined
+            }
+            accent="emerald"
+          />
+          <StatCard
+            label={tt("friends.statRequests")}
+            value={accessToken ? incomingRequests.length : "—"}
+            hint={
+              accessToken
+                ? incomingRequests.length > 0
+                  ? tt("friends.incomingCount", { count: incomingRequests.length })
+                  : tt("friends.noIncoming")
+                : undefined
+            }
+            accent="amber"
+          />
+          <StatCard
+            label={tt("friends.statRooms")}
+            value={accessToken ? friendsRooms.length : "—"}
+            hint={accessToken ? tt("friends.statRoomsHint") : undefined}
+            accent="sky"
+          />
+        </div>
 
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-white/45">{tt("friends.incomingTitle")}</p>
-            {!accessToken ? (
-              <p className="text-sm text-white/60">{tt("friends.signInFirst")}</p>
-            ) : incomingRequests.length === 0 ? (
-              <p className="text-sm text-white/60">{tt("friends.noIncoming")}</p>
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <section className="flex flex-col gap-3 rounded-2xl border border-white/10 glass-panel bg-black/40 p-4 shadow-xl backdrop-blur-md sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wider text-white/45">
+                  {tt("friends.yourFriends")}
+                </p>
+                {friends.length > 0 ? (
+                  <p className="mt-0.5 text-xs text-white/40">
+                    {tt("friends.friendsOnline", {
+                      online: onlineCount,
+                      total: friends.length,
+                    })}
+                  </p>
+                ) : null}
+              </div>
+              {loading ? <span className="text-xs text-white/35">…</span> : null}
+            </div>
+
+            {friends.length > 0 ? (
+              <>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                  placeholder={tt("friends.searchPlaceholder")}
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["all", tt("friends.filterAll"), friends.length],
+                      ["online", tt("friends.filterOnline"), onlineCount],
+                      ["offline", tt("friends.filterOffline"), friends.length - onlineCount],
+                    ] as const
+                  ).map(([id, label, count]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setPresenceFilter(id)}
+                      className={`interactive-press rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                        presenceFilter === id
+                          ? "border border-emerald-400/35 bg-emerald-500/20 text-emerald-100"
+                          : "border border-white/10 bg-black/30 text-white/55 hover:bg-black/50"
+                      }`}
+                    >
+                      {label} · {count}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+
+            {!accessToken || friends.length === 0 ? (
+              <div className="flex flex-col gap-4 rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-8">
+                <p className="text-center text-sm text-white/55">
+                  {accessToken ? tt("friends.noFriends") : tt("friends.signInFirst")}
+                </p>
+                <ol className="mx-auto flex w-full max-w-md flex-col gap-2">
+                  {howToSteps.map((step, index) => (
+                    <li
+                      key={step}
+                      className="flex items-start gap-3 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5 text-sm text-white/70"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-200">
+                        {index + 1}
+                      </span>
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : filteredFriends.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-white/55">
+                {tt("friends.noSearchResults")}
+              </p>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {incomingRequests.map((r) => (
-                  <li
-                    key={r.request_id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
-                  >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <img
-                        src={
-                          (r.from_ely_username
-                            ? friendAvatarByKey[r.from_ely_username.trim().toLowerCase()]
-                            : undefined) ??
-                          buildInitialAvatarDataUrl(r.from_nickname)
-                        }
-                        alt=""
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
-                        draggable={false}
-                        onError={(event) => {
-                          event.currentTarget.src = buildInitialAvatarDataUrl(r.from_nickname);
-                        }}
-                      />
-                      <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white/90">{r.from_nickname}</p>
-                      <p className="text-[11px] text-white/45 truncate">{r.from_user_id}</p>
+              <div className="flex flex-col gap-4">
+                {onlineFriends.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-200/70">
+                      {tt("friends.onlineSection")} · {onlineFriends.length}
+                    </p>
+                    <ul className="flex flex-col gap-2">{onlineFriends.map(renderFriendCard)}</ul>
+                  </div>
+                ) : null}
+                {offlineFriends.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">
+                      {tt("friends.offlineSection")} · {offlineFriends.length}
+                    </p>
+                    <ul className="flex flex-col gap-2">{offlineFriends.map(renderFriendCard)}</ul>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </section>
+
+          <div className="flex flex-col gap-5">
+            <section className="flex flex-col gap-3 rounded-2xl border border-white/10 glass-panel bg-black/40 p-4 shadow-xl backdrop-blur-md">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                  {tt("friends.incomingTitle")}
+                </p>
+                {incomingRequests.length > 0 ? (
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-100">
+                    {incomingRequests.length}
+                  </span>
+                ) : null}
+              </div>
+
+              {incomingRequests.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-6 text-center text-sm text-white/55">
+                  {tt("friends.noIncoming")}
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {incomingRequests.map((r) => (
+                    <li
+                      key={r.request_id}
+                      className="flex flex-col gap-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2.5"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <img
+                          src={avatarFor({
+                            nickname: r.from_nickname,
+                            ely_username: r.from_ely_username,
+                            mc_uuid: r.from_mc_uuid,
+                          })}
+                          alt=""
+                          className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
+                          draggable={false}
+                          onError={(event) => {
+                            event.currentTarget.src = buildInitialAvatarDataUrl(r.from_nickname);
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <NicknameWithSponsor
+                            nickname={r.from_nickname}
+                            isSponsor={r.from_is_sponsor}
+                            sponsorTitle={tt("common.sponsor")}
+                          />
+                          {r.created_at ? (
+                            <p className="text-[11px] text-amber-100/60">
+                              {formatLastSeen(r.created_at, language, tt, nowMs)}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={requestsLoading}
-                        onClick={() => void handleAcceptRequest(r.request_id)}
-                        className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
-                      >
-                        {tt("friends.accept")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={requestsLoading}
-                        onClick={() => void handleRejectRequest(r.request_id)}
-                        className="interactive-press rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
-                      >
-                        {tt("friends.reject")}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={requestsLoading}
+                          onClick={() => void handleAcceptRequest(r.request_id)}
+                          className="interactive-press flex-1 rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+                        >
+                          {tt("friends.accept")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={requestsLoading}
+                          onClick={() => void handleRejectRequest(r.request_id)}
+                          className="interactive-press flex-1 rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
+                        >
+                          {tt("friends.reject")}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-          <div className="h-px w-full bg-white/10" />
-
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-white/45">{tt("friends.yourFriends")}</p>
-            {!accessToken ? (
-              <p className="text-sm text-white/60">{tt("friends.signInFirst")}</p>
-            ) : friends.length === 0 ? (
-              <p className="text-sm text-white/60">{tt("friends.noFriends")}</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {friends.map((f) => (
-                  <li
-                    key={f.user_id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+            <section className="flex flex-col gap-3 rounded-2xl border border-white/10 glass-panel bg-black/40 p-4 shadow-xl backdrop-blur-md">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-white/45">
+                  {tt("rooms.friendsRooms")}
+                </p>
+                {onOpenRooms ? (
+                  <button
+                    type="button"
+                    onClick={onOpenRooms}
+                    className="text-[11px] font-semibold text-sky-200/80 hover:text-sky-100"
                   >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <img
-                        src={
-                          (f.ely_username
-                            ? friendAvatarByKey[f.ely_username.trim().toLowerCase()]
-                            : undefined) ??
-                          buildInitialAvatarDataUrl(f.nickname)
-                        }
-                        alt=""
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
-                        draggable={false}
-                        onError={(event) => {
-                          event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
-                        }}
-                      />
-                      <span className="truncate text-sm font-semibold text-white/90">{f.nickname}</span>
-                    </div>
-                    <span className="text-[11px] text-white/40 truncate max-w-[160px]">{f.user_id}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                    {tt("friends.openRooms")}
+                  </button>
+                ) : null}
+              </div>
+
+              {friendsRooms.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-6 text-center text-sm text-white/55">
+                  {tt("rooms.noFriendsRooms")}
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  {friendsRooms.map((room) => {
+                    const members = room.members ?? [];
+                    const owner = members.find((m) => m.user_id === room.owner_user_id);
+                    const ownerNick = owner?.nickname ?? room.owner_user_id.slice(0, 8);
+                    const canJoin = room.status === "open";
+                    return (
+                      <div
+                        key={room.id}
+                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-sky-500/10 via-black/40 to-black/50 p-3.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <img
+                              src={avatarFor({
+                                nickname: ownerNick,
+                                ely_username: owner?.ely_username,
+                                mc_uuid: owner?.mc_uuid,
+                              })}
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
+                              draggable={false}
+                              onError={(event) => {
+                                event.currentTarget.src = buildInitialAvatarDataUrl(ownerNick);
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-white/90">{ownerNick}</p>
+                              <p className="text-[11px] text-white/45">
+                                {tt("rooms.ownedBy", { nick: ownerNick })}
+                              </p>
+                            </div>
+                          </div>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(room.status)}`}
+                          >
+                            {statusLabel(room.status)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <MemberAvatars members={members} avatarSrcFor={avatarFor} />
+                          <p className="text-[11px] text-white/45">
+                            {tt("rooms.players", {
+                              count: room.member_count,
+                              max: room.max_players,
+                            })}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!accessToken || loading || !canJoin}
+                          onClick={() => void handleJoinFriendRoom(room.id)}
+                          className="interactive-press rounded-xl border border-sky-400/35 bg-sky-500/15 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-60"
+                        >
+                          {tt("rooms.joinFriendRoom")}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         </div>
       </div>
-    </div>
+
+      {viewingProfile ? (
+        <UserProfileModal
+          language={language}
+          seed={viewingProfile}
+          isFriend
+          onClose={() => setViewingProfile(null)}
+        />
+      ) : null}
+    </>
   );
 }
-
