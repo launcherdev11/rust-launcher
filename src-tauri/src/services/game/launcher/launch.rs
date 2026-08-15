@@ -4,7 +4,7 @@ use std::time::SystemTime;
 
 use tauri::{AppHandle, Emitter};
 
-use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
+use crate::app::paths::{game_root_dir, launcher_data_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
 use crate::infra::process::hide_console;
 use crate::models::events::{
@@ -13,8 +13,10 @@ use crate::models::events::{
 };
 use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
-use crate::services::game::accounts::get_profile;
-use crate::services::game::arguments::resolve_arguments;
+use crate::services::game::accounts::{get_profile, save_full_profile};
+use crate::services::game::arguments::{
+    resolve_arguments, strip_legacy_server_args, strip_quick_play_game_args,
+};
 use crate::services::game::core::{
     compare_version_like, current_os_name, download_text_with_retries, ensure_fabric_intermediary_library,
     fabric_library_path,
@@ -40,11 +42,130 @@ use crate::services::game::version_types::*;
 use crate::services::game::versions::get_mojang_version_url;
 
 const ELY_AUTHLIB_INJECTOR_TARGET: &str = "ely.by";
+
+const FRIEND_WORLD_OFFLINE_ERR: &str = "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.";
+
+fn format_game_args_for_dump(args: &[String]) -> String {
+    let mut lines = Vec::with_capacity(args.len());
+    let mut i = 0usize;
+    while i < args.len() {
+        let a = &args[i];
+        let redact_next = matches!(
+            a.as_str(),
+            "--accessToken" | "--session" | "--sessionId" | "--userProperties"
+        );
+        lines.push(format!("  {a}"));
+        if redact_next && i + 1 < args.len() && !args[i + 1].starts_with('-') {
+            let val = &args[i + 1];
+            let has = !val.is_empty() && val != "offline" && val != "0";
+            lines.push(format!("  <redacted has_value={has}>"));
+            i += 2;
+            continue;
+        }
+        if a.starts_with("token:") {
+            lines.pop();
+            lines.push("  <redacted session-token>".to_string());
+        }
+        i += 1;
+    }
+    lines.join("\n")
+}
+
+fn write_launch_auth_dump(
+    game_dir: &std::path::Path,
+    version_id: &str,
+    server_address: &Option<String>,
+    auth_mode: &str,
+    user_type: &str,
+    has_access_token: bool,
+    authlib_injector: bool,
+    note: &str,
+) {
+    let dump = format!(
+        "version_id={version_id}\nserver_address={server_address:?}\nauth_mode={auth_mode}\nuser_type={user_type}\nhas_access_token={has_access_token}\nauthlib_injector={authlib_injector}\nnote={note}\n"
+    );
+    let mut dump_paths = vec![game_dir.join("mc16-last-launch-args.txt")];
+    if let Ok(data) = launcher_data_dir() {
+        dump_paths.push(data.join("mc16-last-launch-args.txt"));
+    }
+    if let Ok(root) = game_root_dir() {
+        let p = root.join("mc16-last-launch-args.txt");
+        if !dump_paths.contains(&p) {
+            dump_paths.push(p);
+        }
+    }
+    for dump_path in &dump_paths {
+        if let Err(e) = std::fs::write(dump_path, &dump) {
+            eprintln!("[Launch] failed to write {}: {e}", dump_path.display());
+        }
+    }
+}
+
+fn apply_ms_session(
+    auth_name: &mut String,
+    auth_uuid: &mut String,
+    auth_token: &mut String,
+    user_type: &mut String,
+    auth_is_mojang: &mut bool,
+    auth_uuid_nodash: &mut String,
+    legacy_session: &mut String,
+    mc_name: String,
+    mc_uuid: String,
+    mc_access_token: String,
+) {
+    *auth_name = mc_name;
+    *auth_uuid = if mc_uuid.contains('-') {
+        mc_uuid
+    } else if mc_uuid.len() == 32 {
+        format!(
+            "{}-{}-{}-{}-{}",
+            &mc_uuid[0..8],
+            &mc_uuid[8..12],
+            &mc_uuid[12..16],
+            &mc_uuid[16..20],
+            &mc_uuid[20..32]
+        )
+    } else {
+        mc_uuid
+    };
+    *auth_token = mc_access_token;
+    *user_type = "msa".to_string();
+    *auth_is_mojang = true;
+    *auth_uuid_nodash = auth_uuid.replace('-', "");
+    *legacy_session = format!("token:{}:{}", auth_token, auth_uuid_nodash);
+}
+
+fn split_server_address(addr: &str) -> (String, String) {
+    if let Some((host, port)) = addr.rsplit_once(':') {
+        if !host.is_empty() && port.chars().all(|c| c.is_ascii_digit()) {
+            return (host.to_string(), port.to_string());
+        }
+    }
+    (addr.to_string(), "25565".to_string())
+}
+
+fn version_supports_quick_play_multiplayer(version_id: &str, jar_version: &str) -> bool {
+    fn major_minor(v: &str) -> Option<(u32, u32)> {
+        let mut parts = v.trim().split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next().unwrap_or("0").parse().ok()?;
+        Some((major, minor))
+    }
+    for candidate in [jar_version, version_id] {
+        let head = candidate.split('-').next().unwrap_or(candidate);
+        if let Some((major, minor)) = major_minor(head) {
+            return major > 1 || (major == 1 && minor >= 20);
+        }
+    }
+    false
+}
+
 #[tauri::command]
 pub async fn launch_game(
     app: AppHandle,
     version_id: String,
     version_url: Option<String>,
+    server_address: Option<String>,
 ) -> Result<(), String> {
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
@@ -164,7 +285,23 @@ pub async fn launch_game(
 
     let os_name = current_os_name();
     let os_info = os_info();
-    let features = GameFeatures::full();
+    let join_address = server_address
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    eprintln!(
+        "[Launch] server_address(raw)={:?} join_address={:?}",
+        server_address, join_address
+    );
+
+    let features = if join_address.is_some()
+        && version_supports_quick_play_multiplayer(&version_id, &effective_jar_version)
+    {
+        GameFeatures::for_multiplayer_join()
+    } else {
+        GameFeatures::full()
+    };
 
     let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
     ensure_library_artifacts_present_for_launch(
@@ -361,6 +498,10 @@ pub async fn launch_game(
     }
 
     let profile = get_profile().unwrap_or_default();
+    let is_friend_world_join = server_address
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
 
     let is_offline = profile
         .ely_access_token
@@ -428,68 +569,161 @@ pub async fn launch_game(
             .unwrap_or(false);
 
     if !has_valid_ely_session {
-        if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
-            profile.mc_username.as_ref(),
-            profile.mc_uuid.as_ref(),
-            profile.mc_access_token.as_ref(),
-        ) {
-            if !mc_access_token.is_empty() {
-                auth_name = mc_name.clone();
-                auth_uuid = if mc_uuid.contains('-') {
-                    mc_uuid.clone()
-                } else if mc_uuid.len() == 32 {
-                    format!(
-                        "{}-{}-{}-{}-{}",
-                        &mc_uuid[0..8],
-                        &mc_uuid[8..12],
-                        &mc_uuid[12..16],
-                        &mc_uuid[16..20],
-                        &mc_uuid[20..32]
-                    )
-                } else {
-                    mc_uuid.clone()
-                };
-                auth_token = mc_access_token.clone();
-                user_type = "msa".to_string();
-                auth_is_mojang = true;
-                auth_uuid_nodash = auth_uuid.replace('-', "");
-                legacy_session = format!("token:{}:{}", auth_token, auth_uuid_nodash);
+        let has_ms_token = profile
+            .ms_access_token
+            .as_deref()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        let has_ms_refresh = profile
+            .ms_refresh_token
+            .as_deref()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        let has_cached_mc = profile
+            .mc_access_token
+            .as_deref()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        let should_refresh_ms =
+            (has_ms_token || has_ms_refresh) && (is_friend_world_join || !has_cached_mc);
+
+        if should_refresh_ms {
+            match ensure_ms_minecraft_session().await {
+                Ok(Some((mc_name, mc_uuid, mc_access_token))) => {
+                    if let Ok(mut p) = get_profile() {
+                        p.mc_username = Some(mc_name.clone());
+                        p.mc_uuid = Some(mc_uuid.clone());
+                        p.mc_access_token = Some(mc_access_token.clone());
+                        let _ = save_full_profile(&p);
+                    }
+                    apply_ms_session(
+                        &mut auth_name,
+                        &mut auth_uuid,
+                        &mut auth_token,
+                        &mut user_type,
+                        &mut auth_is_mojang,
+                        &mut auth_uuid_nodash,
+                        &mut legacy_session,
+                        mc_name,
+                        mc_uuid,
+                        mc_access_token,
+                    );
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("[Launch] ensure_ms_minecraft_session: {e}");
+                    if is_friend_world_join {
+                        write_launch_auth_dump(
+                            &game_dir,
+                            &version_id,
+                            &server_address,
+                            "microsoft",
+                            "msa",
+                            false,
+                            false,
+                            "friend_world_ms_refresh_failed_try_cache",
+                        );
+                    }
+                }
             }
+        }
+
+        if !auth_is_mojang {
+            if let (Some(mc_name), Some(mc_uuid), Some(mc_access_token)) = (
+                profile.mc_username.as_ref(),
+                profile.mc_uuid.as_ref(),
+                profile.mc_access_token.as_ref(),
+            ) {
+                if !mc_access_token.is_empty() {
+                    apply_ms_session(
+                        &mut auth_name,
+                        &mut auth_uuid,
+                        &mut auth_token,
+                        &mut user_type,
+                        &mut auth_is_mojang,
+                        &mut auth_uuid_nodash,
+                        &mut legacy_session,
+                        mc_name.clone(),
+                        mc_uuid.clone(),
+                        mc_access_token.clone(),
+                    );
+                }
+            }
+        }
+
+        if is_friend_world_join && !auth_is_mojang && should_refresh_ms {
+            write_launch_auth_dump(
+                &game_dir,
+                &version_id,
+                &server_address,
+                "microsoft",
+                "msa",
+                false,
+                false,
+                "blocked_friend_world_ms_refresh_failed",
+            );
+            return Err(
+                "Не удалось обновить сессию Microsoft для входа в мир друга. \
+                 Войдите снова через Microsoft на вкладке Аккаунты."
+                    .to_string(),
+            );
         }
     }
 
-    if !has_valid_ely_session
-        && profile
-        .mc_access_token
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .is_none()
-        && profile.ms_access_token.is_some()
-    {
-        if let Ok(Some((mc_name, mc_uuid, mc_access_token))) = ensure_ms_minecraft_session().await {
-            auth_name = mc_name;
-            if mc_uuid.contains('-') {
-                auth_uuid = mc_uuid;
-            } else if mc_uuid.len() == 32 {
-                auth_uuid = format!(
-                    "{}-{}-{}-{}-{}",
-                    &mc_uuid[0..8],
-                    &mc_uuid[8..12],
-                    &mc_uuid[12..16],
-                    &mc_uuid[16..20],
-                    &mc_uuid[20..32]
+    let auth_mode: &str = if auth_is_mojang {
+        "microsoft"
+    } else if auth_token != "offline" && !auth_token.is_empty() {
+        "ely"
+    } else {
+        "offline"
+    };
+    let has_access_token = auth_token != "offline" && !auth_token.is_empty();
+
+    if is_friend_world_join && auth_mode == "offline" {
+        write_launch_auth_dump(
+            &game_dir,
+            &version_id,
+            &server_address,
+            auth_mode,
+            &user_type,
+            has_access_token,
+            false,
+            "blocked_friend_world_offline",
+        );
+        return Err(FRIEND_WORLD_OFFLINE_ERR.to_string());
+    }
+
+    let mut authlib_injector_path: Option<std::path::PathBuf> = None;
+    if has_access_token && !auth_is_mojang {
+        match ensure_authlib_injector().await {
+            Ok(path) => {
+                eprintln!(
+                    "[ElyAuth] Используется authlib-injector: {}",
+                    path.to_string_lossy().replace('\\', "/")
                 );
-            } else {
-                auth_uuid = mc_uuid;
+                authlib_injector_path = Some(path);
             }
-            auth_token = mc_access_token;
-            user_type = "msa".to_string();
-            //is_offline = false;
-            auth_is_mojang = true;
-            auth_uuid_nodash = auth_uuid.replace('-', "");
-            legacy_session = format!("token:{}:{}", auth_token, auth_uuid_nodash);
+            Err(e) => {
+                if is_friend_world_join {
+                    write_launch_auth_dump(
+                        &game_dir,
+                        &version_id,
+                        &server_address,
+                        auth_mode,
+                        &user_type,
+                        has_access_token,
+                        false,
+                        "blocked_friend_world_authlib_missing",
+                    );
+                    return Err(format!(
+                        "Для Ely при входе в мир друга нужен authlib-injector: {e}"
+                    ));
+                }
+                eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
+            }
         }
     }
+    let authlib_injector = authlib_injector_path.is_some();
 
     let libs_dir_str = libs_root
         .to_str()
@@ -543,6 +777,15 @@ pub async fn launch_game(
             .flatten()
             .map(|(_, s)| s);
 
+    let quick_play_log = game_dir
+        .join("quickPlay")
+        .join("mc16-log.json")
+        .to_string_lossy()
+        .replace('\\', "/");
+    if join_address.is_some() {
+        let _ = std::fs::create_dir_all(game_dir.join("quickPlay"));
+    }
+
     let replace = |s: &str| -> String {
         s.replace("${game_directory}", game_dir_str)
             .replace("${gameDir}", game_dir_str)
@@ -574,6 +817,20 @@ pub async fn launch_game(
             .replace("${is_demo_user}", "false")
             .replace("${launcher_name}", "16Launcher")
             .replace("${launcher_version}", "2.0.0")
+            .replace(
+                "${quickPlayPath}",
+                if join_address.is_some() {
+                    quick_play_log.as_str()
+                } else {
+                    ""
+                },
+            )
+            .replace("${quickPlaySingleplayer}", "")
+            .replace(
+                "${quickPlayMultiplayer}",
+                join_address.as_deref().unwrap_or(""),
+            )
+            .replace("${quickPlayRealms}", "")
     };
 
     let mut jvm_args: Vec<String> =
@@ -657,31 +914,106 @@ pub async fn launch_game(
     if !features.is_demo_user {
         game_args.retain(|a| a != "--demo");
     }
+    game_args = strip_quick_play_game_args(game_args);
+    game_args = strip_legacy_server_args(game_args);
 
-    if !features.is_quick_play {
-        let mut filtered = Vec::with_capacity(game_args.len());
-        let mut i = 0;
+    if let Some(addr) = &join_address {
+        let use_quick_play = version_supports_quick_play_multiplayer(&version_id, &effective_jar_version);
+        if use_quick_play {
+            game_args.push("--quickPlayPath".to_string());
+            game_args.push(quick_play_log.clone());
+            game_args.push("--quickPlayMultiplayer".to_string());
+            game_args.push(addr.clone());
+        }
+
+        let (host, port) = split_server_address(addr);
+        game_args.push("--server".to_string());
+        game_args.push(host);
+        game_args.push("--port".to_string());
+        game_args.push(port);
+    }
+
+    {
+        let mut join_argv = Vec::new();
+        let mut i = 0usize;
         while i < game_args.len() {
-            let arg = &game_args[i];
-            let is_quick_flag = matches!(
-                arg.as_str(),
+            let a = &game_args[i];
+            if matches!(
+                a.as_str(),
                 "--quickPlayPath"
                     | "--quickPlaySingleplayer"
                     | "--quickPlayMultiplayer"
                     | "--quickPlayRealms"
-            );
-            if is_quick_flag {
-                i += 1;
-                if i < game_args.len() {
-                    i += 1;
+                    | "--server"
+                    | "--port"
+            ) {
+                join_argv.push(a.clone());
+                if i + 1 < game_args.len() && !game_args[i + 1].starts_with("--") {
+                    join_argv.push(game_args[i + 1].clone());
+                    i += 2;
+                    continue;
                 }
-                continue;
-            } else {
-                filtered.push(arg.clone());
-                i += 1;
+            } else if a.starts_with("${quickPlay") {
+                join_argv.push(a.clone());
+            }
+            i += 1;
+        }
+        eprintln!("[Launch] join quick-play/server args: {join_argv:?}");
+        eprintln!(
+            "[Launch] auth_mode={auth_mode} user_type={user_type} has_access_token={has_access_token} authlib_injector={authlib_injector}"
+        );
+        let dump = format!(
+            "version_id={version_id}\nserver_address={server_address:?}\njoin_address={join_address:?}\ngame_dir={game_dir_str}\nauth_mode={auth_mode}\nuser_type={user_type}\nhas_access_token={has_access_token}\nauthlib_injector={authlib_injector}\nfeatures.has_quick_plays_support={}\nfeatures.is_quick_play_multiplayer={}\nfeatures.is_quick_play_singleplayer={}\n\ngame_args:\n{}\n",
+            features.has_quick_plays_support,
+            features.is_quick_play_multiplayer,
+            features.is_quick_play_singleplayer,
+            format_game_args_for_dump(&game_args),
+        );
+
+        let mut dump_paths = vec![game_dir.join("mc16-last-launch-args.txt")];
+        if let Ok(data) = launcher_data_dir() {
+            dump_paths.push(data.join("mc16-last-launch-args.txt"));
+        }
+        if let Ok(root) = game_root_dir() {
+            let p = root.join("mc16-last-launch-args.txt");
+            if !dump_paths.contains(&p) {
+                dump_paths.push(p);
             }
         }
-        game_args = filtered;
+        for dump_path in &dump_paths {
+            if let Err(e) = std::fs::write(dump_path, &dump) {
+                eprintln!(
+                    "[Launch] failed to write {}: {e}",
+                    dump_path.display()
+                );
+            } else {
+                eprintln!(
+                    "[Launch] wrote argv dump → {}",
+                    dump_path.display()
+                );
+            }
+        }
+        let dump_path = dump_paths
+            .last()
+            .cloned()
+            .unwrap_or_else(|| game_dir.join("mc16-last-launch-args.txt"));
+        let has_sp = game_args.iter().any(|a| a == "--quickPlaySingleplayer");
+        let has_mp = game_args.iter().any(|a| a == "--quickPlayMultiplayer");
+        let has_server = game_args.iter().any(|a| a == "--server");
+        let has_placeholder = game_args.iter().any(|a| a.starts_with("${quickPlay"));
+        if has_sp || has_placeholder {
+            return Err(format!(
+                "Внутренняя ошибка запуска: в argv остался singleplayer/placeholder quick-play \
+                 (sp={has_sp}, placeholder={has_placeholder}). Смотрите {}",
+                dump_path.display()
+            ));
+        }
+        if join_address.is_some() && !has_mp && !has_server {
+            return Err(format!(
+                "Внутренняя ошибка запуска: нет --quickPlayMultiplayer/--server при join. Смотрите {}",
+                dump_path.display()
+            ));
+        }
     }
 
     let mut java_settings = instance_settings_for_launch
@@ -743,23 +1075,12 @@ pub async fn launch_game(
             //eprintln!("[Launch] Verified/Fixed execute permission for {}", java_path.display());
         }
     }
-    if auth_token != "offline" && !auth_token.is_empty() && !auth_is_mojang {
-        match ensure_authlib_injector().await {
-            Ok(path) => {
-                let agent_path = path.to_string_lossy().replace('\\', "/");
-                eprintln!(
-                    "[ElyAuth] Используется authlib-injector: {}",
-                    agent_path
-                );
-                jvm_args.insert(
-                    0,
-                    format!("-javaagent:{}={}", agent_path, ELY_AUTHLIB_INJECTOR_TARGET),
-                );
-            }
-            Err(e) => {
-                eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
-            }
-        }
+    if let Some(path) = &authlib_injector_path {
+        let agent_path = path.to_string_lossy().replace('\\', "/");
+        jvm_args.insert(
+            0,
+            format!("-javaagent:{}={}", agent_path, ELY_AUTHLIB_INJECTOR_TARGET),
+        );
     }
 
     let removed_for_log = if is_forge {
@@ -936,7 +1257,7 @@ pub async fn launch_game(
         }
     });
 
-    if settings.close_launcher_on_game_start {
+    if settings.close_launcher_on_game_start && join_address.is_none() {
         app.exit(0);
     }
 

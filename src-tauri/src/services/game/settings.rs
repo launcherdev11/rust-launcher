@@ -145,6 +145,14 @@ pub fn sanitize_imported_settings(settings: &mut Settings, java_settings: &mut J
     if settings.background_accent_color.trim().is_empty() {
         settings.background_accent_color = "#0b1530".to_string();
     }
+    if let Some(ref theme_id) = settings.custom_theme_id {
+        let trimmed = theme_id.trim();
+        if trimmed.is_empty() || !crate::services::themes::theme_exists(trimmed) {
+            settings.custom_theme_id = None;
+        } else if trimmed != theme_id {
+            settings.custom_theme_id = Some(trimmed.to_string());
+        }
+    }
     if java_settings.java_path.as_deref().unwrap_or("").trim().is_empty() {
         java_settings.java_path = None;
     }

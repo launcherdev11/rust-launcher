@@ -261,11 +261,49 @@ type FileNode = {
   children?: FileNode[] | null;
 };
 
-type PreviewFile = { path: string; size: number };
-type PreviewResult = { files: PreviewFile[]; total_bytes: number };
+type PreviewFile = { path: string; size: number; source?: string };
+type PreviewResult = {
+  files: PreviewFile[];
+  total_bytes: number;
+  download_bytes?: number;
+  resolved_count?: number;
+  override_count?: number;
+};
 type ExportProgressPayload = { bytes_written: number; total_bytes: number; current_file: string };
-type ExportFinishedPayload = { path: string; skipped_files: string[] };
+type ExportFinishedPayload = {
+  path: string;
+  skipped_files: string[];
+  resolved_count?: number;
+  override_count?: number;
+};
 type ExportErrorPayload = { message: string };
+
+const DEFAULT_EXPORT_IGNORES = [
+  "logs/",
+  "crash-reports/",
+  "screenshots/",
+  "saves/",
+  ".cache/",
+  "cache/",
+  "*.log",
+  "config.json",
+  "settings.json",
+].join("\n");
+
+const RECOMMENDED_EXPORT_TOP = new Set([
+  "mods",
+  "config",
+  "resourcepacks",
+  "shaderpacks",
+  "datapacks",
+  "options.txt",
+  "optionsof.txt",
+  "optionsshaders.txt",
+  "servers.dat",
+  "servers.dat_old",
+]);
+
+const MINIMAL_EXPORT_TOP = new Set(["mods", "config", "options.txt"]);
 type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
 type LastPlayedUpdatedPayload = { profile_id: string; last_played_at: number };
 
@@ -562,6 +600,10 @@ export function ModpackTab({
   >([]);
   const [externalImportSearch, setExternalImportSearch] = useState("");
   const [externalImportSort, setExternalImportSort] = useState<"name" | "date" | "size">("name");
+  const [isExternalLauncherDropdownOpen, setIsExternalLauncherDropdownOpen] = useState(false);
+  const [isExternalSortDropdownOpen, setIsExternalSortDropdownOpen] = useState(false);
+  const externalLauncherDropdownRef = useRef<HTMLDivElement | null>(null);
+  const externalSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [itemsSearch, setItemsSearch] = useState("");
   const [contentUpdates, setContentUpdates] = useState<ProfileContentUpdate[]>([]);
@@ -610,6 +652,13 @@ export function ModpackTab({
   const [multiSelectedProfileIds, setMultiSelectedProfileIds] = useState<Set<string>>(new Set());
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const profileDragIdsRef = useRef<string[]>([]);
+  const [isResourcePackReorderMode, setIsResourcePackReorderMode] = useState(false);
+  const [resourcePackDragIndex, setResourcePackDragIndex] = useState<number | null>(null);
+  const [resourcePackDragOverIndex, setResourcePackDragOverIndex] = useState<number | null>(null);
+  const resourcePackDragOverIndexRef = useRef<number | null>(null);
+  const resourcePackPointerDragRef = useRef<{ fromIndex: number; active: boolean } | null>(null);
+  const resourcePackReorderListenersRef = useRef<(() => void) | null>(null);
+  const resourcePackRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const groupProfilesDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
     null,
@@ -650,15 +699,17 @@ export function ModpackTab({
   const [profileInfoProfile, setProfileInfoProfile] = useState<ProfileInfoData | null>(null);
   const [exportFormat, setExportFormat] = useState<"mrpack" | "zip">("mrpack");
   const [exportTree, setExportTree] = useState<FileNode[] | null>(null);
+  const [exportTreeProfileId, setExportTreeProfileId] = useState<string | null>(null);
   const [exportTreeLoading, setExportTreeLoading] = useState(false);
   const [selectedExportPaths, setSelectedExportPaths] = useState<Set<string>>(new Set());
-  const [ignorePatternsText, setIgnorePatternsText] = useState("");
+  const [ignorePatternsText, setIgnorePatternsText] = useState(DEFAULT_EXPORT_IGNORES);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgressPayload | null>(null);
   const [exportResultPath, setExportResultPath] = useState<string | null>(null);
   const [exportSkippedFiles, setExportSkippedFiles] = useState<string[]>([]);
+  const [exportResolvedCount, setExportResolvedCount] = useState(0);
   const [exportSpeedLabel, setExportSpeedLabel] = useState<string>("");
   const [collapsedExportPaths, setCollapsedExportPaths] = useState<Set<string>>(new Set());
   const lastProgressRef = useRef<{ t: number; bytes: number } | null>(null);
@@ -820,6 +871,39 @@ export function ModpackTab({
   useEffect(() => {
     setSelectedLogSessionId("live");
   }, [selectedProfileId]);
+
+  useEffect(() => {
+    if (!isExternalLauncherDropdownOpen && !isExternalSortDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (
+        isExternalLauncherDropdownOpen &&
+        externalLauncherDropdownRef.current &&
+        !externalLauncherDropdownRef.current.contains(target)
+      ) {
+        setIsExternalLauncherDropdownOpen(false);
+      }
+      if (
+        isExternalSortDropdownOpen &&
+        externalSortDropdownRef.current &&
+        !externalSortDropdownRef.current.contains(target)
+      ) {
+        setIsExternalSortDropdownOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsExternalLauncherDropdownOpen(false);
+        setIsExternalSortDropdownOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isExternalLauncherDropdownOpen, isExternalSortDropdownOpen]);
 
   useEffect(() => {
     if (selectedLogSessionId === "live") return;
@@ -1238,13 +1322,143 @@ export function ModpackTab({
     return out;
   }
 
+  function collectFilePaths(node: FileNode): string[] {
+    if (!node.is_dir) return [node.path];
+    const out: string[] = [];
+    for (const c of node.children ?? []) {
+      out.push(...collectFilePaths(c));
+    }
+    return out;
+  }
+
+  function pathHasSelectedAncestor(path: string, selected: Set<string>): boolean {
+    let cur = path;
+    while (true) {
+      const idx = cur.lastIndexOf("/");
+      if (idx < 0) break;
+      cur = cur.slice(0, idx);
+      if (selected.has(cur)) return true;
+    }
+    return false;
+  }
+
+  function isExportPathSelected(path: string): boolean {
+    if (selectedExportPaths.has(path)) return true;
+    return pathHasSelectedAncestor(path, selectedExportPaths);
+  }
+
+  function findNodeByPath(nodes: FileNode[] | null, path: string): FileNode | null {
+    if (!nodes) return null;
+    for (const n of nodes) {
+      if (n.path === path) return n;
+      const nested = findNodeByPath(n.children ?? null, path);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  function getFolderCheckState(node: FileNode): "all" | "some" | "none" {
+    const files = collectFilePaths(node);
+    if (files.length === 0) {
+      return isExportPathSelected(node.path) ? "all" : "none";
+    }
+    let selected = 0;
+    for (const f of files) {
+      if (isExportPathSelected(f)) selected += 1;
+    }
+    if (selected === 0) return "none";
+    if (selected === files.length) return "all";
+    return "some";
+  }
+
+  function setExportNodeChecked(node: FileNode, checked: boolean) {
+    setSelectedExportPaths((prev) => {
+      const next = new Set(prev);
+
+      const expandAncestorIfNeeded = () => {
+        const parts = node.path.split("/");
+        for (let i = parts.length - 1; i >= 1; i -= 1) {
+          const ancestorPath = parts.slice(0, i).join("/");
+          if (!next.has(ancestorPath)) continue;
+          const ancestor = findNodeByPath(exportTree, ancestorPath);
+          if (!ancestor) continue;
+          next.delete(ancestorPath);
+          for (const f of collectFilePaths(ancestor)) {
+            if (f === node.path || f.startsWith(`${node.path}/`)) continue;
+            next.add(f);
+          }
+        }
+      };
+
+      if (checked) {
+        expandAncestorIfNeeded();
+        if (node.is_dir) {
+          for (const f of collectFilePaths(node)) next.delete(f);
+          for (const p of flattenTreePaths(node.children ?? null)) next.delete(p);
+          next.add(node.path);
+        } else {
+          next.add(node.path);
+        }
+      } else {
+        expandAncestorIfNeeded();
+        next.delete(node.path);
+        if (node.is_dir) {
+          for (const f of collectFilePaths(node)) next.delete(f);
+          for (const p of flattenTreePaths(node.children ?? null)) next.delete(p);
+        }
+      }
+      return next;
+    });
+  }
+
   function getDefaultSelectedPaths(tree: FileNode[] | null): Set<string> {
     const next = new Set<string>();
     if (!tree) return next;
     for (const n of tree) {
-      next.add(n.path);
+      if (RECOMMENDED_EXPORT_TOP.has(n.name)) next.add(n.path);
+    }
+    if (next.size === 0) {
+      for (const n of tree) {
+        if (!["saves", "logs", "crash-reports", "screenshots"].includes(n.name)) {
+          next.add(n.path);
+        }
+      }
     }
     return next;
+  }
+
+  function applyExportPreset(preset: "recommended" | "minimal" | "full") {
+    if (!exportTree) return;
+    if (preset === "full") {
+      setSelectedExportPaths(new Set(exportTree.map((n) => n.path)));
+      return;
+    }
+    const allow = preset === "minimal" ? MINIMAL_EXPORT_TOP : RECOMMENDED_EXPORT_TOP;
+    const next = new Set<string>();
+    for (const n of exportTree) {
+      if (allow.has(n.name)) next.add(n.path);
+    }
+    setSelectedExportPaths(next);
+  }
+
+  async function loadExportTree(profileId: string, force = false) {
+    if (!force && exportTree && exportTreeProfileId === profileId) return;
+    setExportTreeLoading(true);
+    try {
+      const tree = await invoke<FileNode[]>("list_build_files", { buildId: profileId });
+      setExportTree(tree);
+      setExportTreeProfileId(profileId);
+      setSelectedExportPaths(getDefaultSelectedPaths(tree));
+      setCollapsedExportPaths(new Set());
+      setIgnorePatternsText(DEFAULT_EXPORT_IGNORES);
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.export.readFilesFailed"));
+      setExportTree(null);
+      setExportTreeProfileId(null);
+    } finally {
+      setExportTreeLoading(false);
+    }
   }
 
   async function openExportModal() {
@@ -1253,25 +1467,11 @@ export function ModpackTab({
     setExportResultPath(null);
     setExportProgress(null);
     setExportSkippedFiles([]);
+    setExportResolvedCount(0);
     setExportSpeedLabel("");
     lastProgressRef.current = null;
     setPreviewResult(null);
-    if (exportTree || exportTreeLoading) return;
-    setExportTreeLoading(true);
-    try {
-      const tree = await invoke<FileNode[]>("list_build_files", { buildId: selectedProfile.id });
-      setExportTree(tree);
-      setSelectedExportPaths(getDefaultSelectedPaths(tree));
-    } catch (e) {
-      console.error(e);
-      showNotification(
-        "error",
-        tt("modpacks.export.readFilesFailed"),
-      );
-      setExportTree(null);
-    } finally {
-      setExportTreeLoading(false);
-    }
+    await loadExportTree(selectedProfile.id, exportTreeProfileId !== selectedProfile.id);
   }
 
   async function handlePreviewExport() {
@@ -1291,6 +1491,7 @@ export function ModpackTab({
         buildId: selectedProfile.id,
         selected,
         ignores: parseIgnorePatterns(ignorePatternsText),
+        format: exportFormat,
       });
       setPreviewResult(res);
     } catch (e) {
@@ -1339,6 +1540,7 @@ export function ModpackTab({
     setExportProgress({ bytes_written: 0, total_bytes: 0, current_file: "" });
     setExportResultPath(null);
     setExportSkippedFiles([]);
+    setExportResolvedCount(0);
     setExportSpeedLabel("");
     lastProgressRef.current = null;
 
@@ -1396,6 +1598,9 @@ export function ModpackTab({
           const p = event.payload;
           setExportResultPath(p.path);
           setExportSkippedFiles(Array.isArray(p.skipped_files) ? p.skipped_files : []);
+          setExportResolvedCount(
+            typeof p.resolved_count === "number" ? p.resolved_count : 0,
+          );
           setExportBusy(false);
           setExportProgress(null);
           showNotification(
@@ -1444,7 +1649,7 @@ export function ModpackTab({
     try {
       void invoke("set_selected_profile", { id: profileId });
     } catch {
-      // ignore
+      //ignore
     }
     try {
       const totalGb = await invoke<number>("get_system_memory_gb");
@@ -1773,7 +1978,7 @@ export function ModpackTab({
         window.localStorage.removeItem("modpacks_selected_profile_id");
       }
     } catch {
-      // ignore
+      //ignore
     }
   }, [selectedProfileId]);
 
@@ -1796,6 +2001,35 @@ export function ModpackTab({
       void refreshItems(selectedProfileId, contentTab);
     }
   }, [selectedProfileId, contentTab, activeView]);
+
+  useEffect(() => {
+    setIsResourcePackReorderMode(false);
+    setResourcePackDragIndex(null);
+    setResourcePackDragOverIndex(null);
+    resourcePackDragOverIndexRef.current = null;
+    resourcePackPointerDragRef.current = null;
+    resourcePackReorderListenersRef.current?.();
+    resourcePackReorderListenersRef.current = null;
+  }, [selectedProfileId, contentTab, activeView]);
+
+  useEffect(() => {
+    return () => {
+      resourcePackReorderListenersRef.current?.();
+      resourcePackReorderListenersRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (itemsSearch.trim().length > 0 && isResourcePackReorderMode) {
+      setIsResourcePackReorderMode(false);
+      setResourcePackDragIndex(null);
+      setResourcePackDragOverIndex(null);
+      resourcePackDragOverIndexRef.current = null;
+      resourcePackPointerDragRef.current = null;
+      resourcePackReorderListenersRef.current?.();
+      resourcePackReorderListenersRef.current = null;
+    }
+  }, [itemsSearch, isResourcePackReorderMode]);
 
   const profileItemsKey = useMemo(
     () => items.map((item) => item.name).sort().join("\0"),
@@ -2917,6 +3151,9 @@ export function ModpackTab({
           entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
         ),
       );
+      if (category === "resourcepacks" || category === "shaderpacks") {
+        await refreshItems(selectedProfile.id, contentTab);
+      }
       if (category === "mods" && isProfileSettingsOpen) {
         setProfileConflictsRefreshToken((v) => v + 1);
       }
@@ -2926,6 +3163,115 @@ export function ModpackTab({
         "error",
         tt("modpacks.manage.toggleFailed"),
       );
+    }
+  }
+
+  function cleanupResourcePackReorderListeners() {
+    resourcePackReorderListenersRef.current?.();
+    resourcePackReorderListenersRef.current = null;
+  }
+
+  function resolveResourcePackDropIndex(clientY: number): number | null {
+    const enabledItems = items.filter((entry) => entry.enabled);
+    if (enabledItems.length === 0) return null;
+
+    for (let i = 0; i < enabledItems.length; i++) {
+      const el = resourcePackRowRefs.current.get(enabledItems[i].name);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (clientY >= rect.top && clientY <= rect.bottom) {
+        const mid = rect.top + rect.height / 2;
+        return clientY < mid ? i : Math.min(i + 1, enabledItems.length - 1);
+      }
+    }
+
+    const lastItem = enabledItems[enabledItems.length - 1];
+    const lastEl = resourcePackRowRefs.current.get(lastItem.name);
+    if (lastEl && clientY > lastEl.getBoundingClientRect().bottom) {
+      return enabledItems.length - 1;
+    }
+    const firstEl = resourcePackRowRefs.current.get(enabledItems[0].name);
+    if (firstEl && clientY < firstEl.getBoundingClientRect().top) {
+      return 0;
+    }
+    return null;
+  }
+
+  function handleResourcePackGripPointerDown(index: number, e: ReactPointerEvent<HTMLButtonElement>) {
+    if (!isResourcePackReorderMode || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cleanupResourcePackReorderListeners();
+
+    const pointerId = e.pointerId;
+    const startY = e.clientY;
+    resourcePackPointerDragRef.current = { fromIndex: index, active: false };
+    setResourcePackDragIndex(index);
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const drag = resourcePackPointerDragRef.current;
+      if (!drag) return;
+      if (!drag.active && Math.abs(ev.clientY - startY) > 4) {
+        drag.active = true;
+      }
+      if (!drag.active) return;
+
+      const overIndex = resolveResourcePackDropIndex(ev.clientY);
+      resourcePackDragOverIndexRef.current = overIndex;
+      setResourcePackDragOverIndex(overIndex);
+    };
+
+    const onEnd = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      cleanupResourcePackReorderListeners();
+      const drag = resourcePackPointerDragRef.current;
+      const toIndex = resourcePackDragOverIndexRef.current;
+      resourcePackPointerDragRef.current = null;
+      resourcePackDragOverIndexRef.current = null;
+      setResourcePackDragIndex(null);
+      setResourcePackDragOverIndex(null);
+      if (drag?.active && toIndex !== null && drag.fromIndex !== toIndex) {
+        void handleResourcePackReorder(drag.fromIndex, toIndex);
+      }
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    resourcePackReorderListenersRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+  }
+
+  async function handleResourcePackReorder(fromIndex: number, toIndex: number) {
+    if (!selectedProfile || fromIndex === toIndex) return;
+    const enabledItems = items.filter((entry) => entry.enabled);
+    const disabledItems = items.filter((entry) => !entry.enabled);
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= enabledItems.length ||
+      toIndex >= enabledItems.length
+    ) {
+      return;
+    }
+    const nextEnabled = [...enabledItems];
+    const [moved] = nextEnabled.splice(fromIndex, 1);
+    nextEnabled.splice(toIndex, 0, moved);
+    const orderedNames = nextEnabled.map((entry) => entry.name);
+    setItems([...nextEnabled, ...disabledItems]);
+    try {
+      await invoke("reorder_profile_resource_packs", {
+        id: selectedProfile.id,
+        orderedNames,
+      });
+    } catch (e) {
+      console.error(e);
+      await refreshItems(selectedProfile.id, "resourcepacks");
+      showNotification("error", tt("modpacks.manage.reorderFailed"));
     }
   }
 
@@ -3548,7 +3894,7 @@ export function ModpackTab({
                       window.localStorage.setItem("modpacks_profiles_layout", "list");
                     }
                   } catch {
-                    // ignore
+                    //ignore
                   }
                 }}
                 className={`interactive-press rounded-xl p-1.5 ${
@@ -3576,7 +3922,7 @@ export function ModpackTab({
                       window.localStorage.setItem("modpacks_profiles_layout", "grid");
                     }
                   } catch {
-                    // ignore
+                    //ignore
                   }
                 }}
                 className={`interactive-press rounded-xl p-1.5 ${
@@ -4173,26 +4519,75 @@ export function ModpackTab({
               <label className="mb-1 block text-[11px] font-semibold text-white/70">
                 {tt("modpacks.externalImport.launcher")}
               </label>
-              <select
-                value={externalImportLauncher}
-                onChange={(e) => {
-                  const v = e.target.value as ExternalLauncherType;
-                  setExternalImportLauncher(v);
-                  setExternalImportInstances([]);
-                  setExternalImportScanError(null);
-                  setExternalImportSearch("");
-                  setExternalImportSort("name");
-                  setTimeout(() => void ensureExternalImportPathDefault(), 0);
-                }}
-                className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
-              >
-                <option value="auto">{tt("modpacks.externalImport.auto")}</option>
-                <option value="multimc">MultiMC</option>
-                <option value="prism_launcher">PrismLauncher</option>
-                <option value="atlauncher">ATLauncher</option>
-                <option value="gdlauncher">GDLauncher</option>
-                <option value="curseforge">CurseForge</option>
-              </select>
+              <div ref={externalLauncherDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExternalLauncherDropdownOpen((v) => !v);
+                    setIsExternalSortDropdownOpen(false);
+                  }}
+                  className="interactive-press flex w-full items-center justify-between gap-2 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-left text-xs text-white hover:border-white/35 focus:outline-none"
+                >
+                  <span className="truncate">
+                    {externalImportLauncher === "auto"
+                      ? tt("modpacks.externalImport.auto")
+                      : externalImportLauncher === "multimc"
+                        ? "MultiMC"
+                        : externalImportLauncher === "prism_launcher"
+                          ? "PrismLauncher"
+                          : externalImportLauncher === "atlauncher"
+                            ? "ATLauncher"
+                            : externalImportLauncher === "gdlauncher"
+                              ? "GDLauncher"
+                              : externalImportLauncher === "curseforge"
+                                ? "CurseForge"
+                                : tt("modpacks.externalImport.auto")}
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 text-white/50 transition-transform ${
+                      isExternalLauncherDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {isExternalLauncherDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full z-[120] mt-1 overflow-hidden rounded-2xl border border-white/12 bg-black/95 p-1 text-xs shadow-soft">
+                    {(
+                      [
+                        { id: "auto", label: tt("modpacks.externalImport.auto") },
+                        { id: "multimc", label: "MultiMC" },
+                        { id: "prism_launcher", label: "PrismLauncher" },
+                        { id: "atlauncher", label: "ATLauncher" },
+                        { id: "gdlauncher", label: "GDLauncher" },
+                        { id: "curseforge", label: "CurseForge" },
+                      ] as { id: ExternalLauncherType; label: string }[]
+                    ).map((opt) => {
+                      const active = externalImportLauncher === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setExternalImportLauncher(opt.id);
+                            setExternalImportInstances([]);
+                            setExternalImportScanError(null);
+                            setExternalImportSearch("");
+                            setExternalImportSort("name");
+                            setIsExternalLauncherDropdownOpen(false);
+                            setTimeout(() => void ensureExternalImportPathDefault(), 0);
+                          }}
+                          className={`interactive-press flex w-full items-center rounded-xl px-3 py-1.5 text-left transition-colors ${
+                            active
+                              ? "bg-white/90 font-semibold text-black"
+                              : "text-white/80 hover:bg-white/10"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="sm:col-span-2">
@@ -4248,17 +4643,59 @@ export function ModpackTab({
                   <span className="text-[11px] font-semibold text-white/60">
                     {tt("modpacks.externalImport.sort")}
                   </span>
-                  <select
-                    value={externalImportSort}
-                    onChange={(e) =>
-                      setExternalImportSort(e.target.value as "name" | "date" | "size")
-                    }
-                    className="rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none"
-                  >
-                    <option value="name">{tt("modpacks.externalImport.sortName")}</option>
-                    <option value="date">{tt("modpacks.externalImport.sortDate")}</option>
-                    <option value="size">{tt("modpacks.externalImport.sortSize")}</option>
-                  </select>
+                  <div ref={externalSortDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsExternalSortDropdownOpen((v) => !v);
+                        setIsExternalLauncherDropdownOpen(false);
+                      }}
+                      className="interactive-press flex min-w-[7.5rem] items-center justify-between gap-2 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-left text-xs text-white hover:border-white/35 focus:outline-none"
+                    >
+                      <span className="truncate">
+                        {externalImportSort === "name"
+                          ? tt("modpacks.externalImport.sortName")
+                          : externalImportSort === "date"
+                            ? tt("modpacks.externalImport.sortDate")
+                            : tt("modpacks.externalImport.sortSize")}
+                      </span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 shrink-0 text-white/50 transition-transform ${
+                          isExternalSortDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {isExternalSortDropdownOpen && (
+                      <div className="absolute right-0 top-full z-[120] mt-1 min-w-full overflow-hidden rounded-2xl border border-white/12 bg-black/95 p-1 text-xs shadow-soft">
+                        {(
+                          [
+                            { id: "name", key: "modpacks.externalImport.sortName" },
+                            { id: "date", key: "modpacks.externalImport.sortDate" },
+                            { id: "size", key: "modpacks.externalImport.sortSize" },
+                          ] as { id: "name" | "date" | "size"; key: string }[]
+                        ).map((opt) => {
+                          const active = externalImportSort === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setExternalImportSort(opt.id);
+                                setIsExternalSortDropdownOpen(false);
+                              }}
+                              className={`interactive-press flex w-full items-center rounded-xl px-3 py-1.5 text-left transition-colors ${
+                                active
+                                  ? "bg-white/90 font-semibold text-black"
+                                  : "text-white/80 hover:bg-white/10"
+                              }`}
+                            >
+                              {tt(opt.key)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -4608,7 +5045,7 @@ export function ModpackTab({
             </div>
           </div>
 
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <div
               ref={manageContentTabsContainerRef}
               className="relative inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-white/10 p-1"
@@ -4641,6 +5078,38 @@ export function ModpackTab({
                 },
               )}
             </div>
+            {contentTab === "resourcepacks" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResourcePackReorderMode((active) => {
+                    if (active) {
+                      setResourcePackDragIndex(null);
+                      setResourcePackDragOverIndex(null);
+                      resourcePackDragOverIndexRef.current = null;
+                      resourcePackPointerDragRef.current = null;
+                      cleanupResourcePackReorderListeners();
+                    }
+                    return !active;
+                  });
+                }}
+                disabled={itemsLoading || items.filter((item) => item.enabled).length < 2}
+                className={`interactive-press shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isResourcePackReorderMode
+                    ? "accent-bg text-white shadow-soft"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+                title={
+                  isResourcePackReorderMode
+                    ? tt("modpacks.manage.reorderResourcePacksDone")
+                    : tt("modpacks.manage.reorderResourcePacks")
+                }
+              >
+                {isResourcePackReorderMode
+                  ? tt("modpacks.manage.reorderResourcePacksDone")
+                  : tt("modpacks.manage.reorderResourcePacks")}
+              </button>
+            )}
           </div>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -4667,6 +5136,146 @@ export function ModpackTab({
                   </p>
                 </div>
               </div>
+            ) : contentTab === "resourcepacks" || contentTab === "shaderpacks" ? (
+              (() => {
+                const enabledItems = visibleItems.filter((item) => item.enabled);
+                const disabledItems = visibleItems.filter((item) => !item.enabled);
+                const canReorder =
+                  contentTab === "resourcepacks" &&
+                  searchValue.length === 0 &&
+                  isResourcePackReorderMode;
+                const isShaders = contentTab === "shaderpacks";
+
+                function renderPackRow(
+                  item: ProfileItemEntry,
+                  index: number,
+                  reorderable: boolean,
+                ) {
+                  const isDragging = reorderable && resourcePackDragIndex === index;
+                  const isDropTarget =
+                    reorderable &&
+                    resourcePackDragOverIndex === index &&
+                    resourcePackDragIndex !== index;
+                  return (
+                    <div
+                      key={item.name}
+                      ref={(el) => {
+                        if (el && reorderable) {
+                          resourcePackRowRefs.current.set(item.name, el);
+                        } else {
+                          resourcePackRowRefs.current.delete(item.name);
+                        }
+                      }}
+                      className={`flex items-center justify-between gap-2 rounded-2xl bg-black/45 px-3 py-3 text-xs transition-opacity ${
+                        item.enabled ? "text-white/85" : "text-white/45 opacity-75"
+                      } ${isDragging ? "opacity-50" : ""} ${
+                        isDropTarget ? "ring-2 ring-purple-400/70 ring-inset" : ""
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        {reorderable && canReorder ? (
+                          <button
+                            type="button"
+                            onPointerDown={(e) => handleResourcePackGripPointerDown(index, e)}
+                            className="interactive-press shrink-0 cursor-grab touch-none rounded-md p-0.5 text-white/35 hover:bg-white/10 hover:text-white/60 active:cursor-grabbing"
+                            title={tt("modpacks.manage.dragToReorder")}
+                            aria-label={tt("modpacks.manage.dragToReorder")}
+                          >
+                            <span className="text-sm leading-none" aria-hidden="true">
+                              ⠿
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="w-5 shrink-0" aria-hidden="true" />
+                        )}
+                        <ProfileItemIcon
+                          contentTab={contentTab}
+                          metadata={itemMetadataByFilename[item.name]}
+                        />
+                        <div className="min-w-0">
+                          <span
+                            className="block max-w-[200px] truncate md:max-w-[320px]"
+                            title={
+                              itemMetadataByFilename[item.name]?.title?.trim() || item.name
+                            }
+                          >
+                            {itemMetadataByFilename[item.name]?.title?.trim() || item.name}
+                          </span>
+                          {itemMetadataByFilename[item.name]?.title?.trim() &&
+                            itemMetadataByFilename[item.name]?.title?.trim() !== item.name && (
+                              <span
+                                className="block max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[320px]"
+                                title={item.name}
+                              >
+                                {item.name}
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={item.enabled}
+                          onClick={() => void handleToggleItemEnabled(item)}
+                          className={`interactive-press relative h-6 w-10 rounded-full transition-colors ${
+                            item.enabled ? "bg-emerald-500/90" : "bg-white/20"
+                          }`}
+                          title={
+                            item.enabled
+                              ? isShaders
+                                ? tt("modpacks.manage.disableShader")
+                                : tt("modpacks.manage.disableItem")
+                              : isShaders
+                                ? tt("modpacks.manage.enableShader")
+                                : tt("modpacks.manage.enableItem")
+                          }
+                        >
+                          <span
+                            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${
+                              item.enabled ? "left-[1.125rem]" : "left-0.5"
+                            }`}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteItem(item)}
+                          className="interactive-press rounded-full bg-white/10 p-1.5 text-white/80 hover:bg-red-600 hover:text-white"
+                          title={tt("common.delete")}
+                        >
+                          <DeleteIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex flex-col gap-2.5">
+                    {isShaders && visibleItems.length > 0 && (
+                      <p className="px-1 text-[11px] text-white/45">
+                        {tt("modpacks.manage.shaderPackActiveHint")}
+                      </p>
+                    )}
+                    {canReorder && enabledItems.length > 0 && (
+                      <p className="px-1 text-[11px] text-white/45">
+                        {tt("modpacks.manage.resourcePackOrderHint")}
+                      </p>
+                    )}
+                    {enabledItems.map((item, index) => renderPackRow(item, index, !isShaders))}
+                    {disabledItems.length > 0 && enabledItems.length > 0 && (
+                      <div className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                        {isShaders
+                          ? tt("modpacks.manage.inactiveShaders")
+                          : tt("modpacks.manage.disabledResourcePacks")}
+                      </div>
+                    )}
+                    {disabledItems.map((item, index) =>
+                      renderPackRow(item, index, false),
+                    )}
+                  </div>
+                );
+              })()
             ) : (
               <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
                 {visibleItems.map((item) => (
@@ -6047,14 +6656,44 @@ export function ModpackTab({
                 </div>
 
                 <div className="mt-4 text-xs font-semibold text-white/80">
+                  {tt("modpacks.exportModal.presets")}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={exportBusy || !exportTree}
+                    onClick={() => applyExportPreset("recommended")}
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {tt("modpacks.exportModal.presetRecommended")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportBusy || !exportTree}
+                    onClick={() => applyExportPreset("minimal")}
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {tt("modpacks.exportModal.presetMinimal")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportBusy || !exportTree}
+                    onClick={() => applyExportPreset("full")}
+                    className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {tt("modpacks.exportModal.presetFull")}
+                  </button>
+                </div>
+
+                <div className="mt-4 text-xs font-semibold text-white/80">
                   {tt("modpacks.exportModal.ignorePatterns")}
                 </div>
                 <textarea
                   value={ignorePatternsText}
                   disabled={exportBusy}
                   onChange={(e) => setIgnorePatternsText(e.target.value)}
-                  placeholder={"*.log\ncache/\n!important.log"}
-                  className="custom-scrollbar mt-2 h-32 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
+                  placeholder={"*.log\ncache/\nsaves/"}
+                  className="custom-scrollbar mt-2 h-28 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
                 />
                 <div className="mt-2 text-[11px] text-white/55">
                   {tt("modpacks.exportModal.ignoreHint")}
@@ -6069,8 +6708,18 @@ export function ModpackTab({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={exportBusy || exportTreeLoading || !selectedProfile}
+                      onClick={() =>
+                        selectedProfile && void loadExportTree(selectedProfile.id, true)
+                      }
+                      className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
+                    >
+                      {tt("modpacks.exportModal.refresh")}
+                    </button>
+                    <button
+                      type="button"
                       disabled={exportBusy || exportTreeLoading || !exportTree}
-                      onClick={() => setSelectedExportPaths(new Set(flattenTreePaths(exportTree)))}
+                      onClick={() => applyExportPreset("full")}
                       className="interactive-press rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
                     >
                       {tt("modpacks.exportModal.selectAll")}
@@ -6103,7 +6752,10 @@ export function ModpackTab({
                     <div className="flex flex-col gap-1">
                       {(function renderNodes(nodes: FileNode[], depth: number): ReactNode[] {
                         return nodes.flatMap((n) => {
-                          const checked = selectedExportPaths.has(n.path);
+                          const folderState = n.is_dir ? getFolderCheckState(n) : null;
+                          const checked = n.is_dir
+                            ? folderState === "all"
+                            : isExportPathSelected(n.path);
                           const isCollapsed = collapsedExportPaths.has(n.path);
                           const row = (
                             <label
@@ -6136,15 +6788,19 @@ export function ModpackTab({
                                 ) : (
                                   <span className="mr-0.5 h-4 w-4" />
                                 )}
-                                  <input
+                                <input
                                   type="checkbox"
                                   checked={checked}
+                                  ref={
+                                    n.is_dir
+                                      ? (el) => {
+                                          if (el) el.indeterminate = folderState === "some";
+                                        }
+                                      : undefined
+                                  }
                                   disabled={exportBusy}
                                   onChange={(e) => {
-                                    const next = new Set(selectedExportPaths);
-                                    if (e.target.checked) next.add(n.path);
-                                    else next.delete(n.path);
-                                    setSelectedExportPaths(next);
+                                    setExportNodeChecked(n, e.target.checked);
                                   }}
                                   className="accent-checkbox"
                                 />
@@ -6181,7 +6837,9 @@ export function ModpackTab({
                     onClick={() => void handlePreviewExport()}
                     className="interactive-press inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-60"
                   >
-                    {tt("modpacks.exportModal.preview")}
+                    {previewLoading
+                      ? tt("modpacks.exportModal.previewing")
+                      : tt("modpacks.exportModal.preview")}
                   </button>
                   <button
                     type="button"
@@ -6238,15 +6896,32 @@ export function ModpackTab({
 
                 {previewResult && (
                   <div className="mt-3 rounded-2xl border border-white/12 bg-black/35 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-white/80">
                         {tt("modpacks.exportModal.finalContents")}
                       </div>
-                      <div className="text-xs text-white/70">
-                        {tt("modpacks.exportModal.size")}{" "}
-                        <span className="font-semibold text-white/90">
-                          {formatByteSize(language, previewResult.total_bytes)}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
+                        {exportFormat === "mrpack" && (previewResult.resolved_count ?? 0) > 0 && (
+                          <span>
+                            {tt("modpacks.exportModal.linkedMods", {
+                              count: String(previewResult.resolved_count ?? 0),
+                            })}
+                          </span>
+                        )}
+                        <span>
+                          {tt("modpacks.exportModal.packSize")}{" "}
+                          <span className="font-semibold text-white/90">
+                            {formatByteSize(language, previewResult.total_bytes)}
+                          </span>
                         </span>
+                        {exportFormat === "mrpack" && (previewResult.download_bytes ?? 0) > 0 && (
+                          <span>
+                            {tt("modpacks.exportModal.downloadSize")}{" "}
+                            <span className="font-semibold text-white/90">
+                              {formatByteSize(language, previewResult.download_bytes ?? 0)}
+                            </span>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2 text-[11px] text-white/75">
@@ -6257,8 +6932,15 @@ export function ModpackTab({
                       ) : (
                         <div className="flex flex-col gap-1">
                           {previewResult.files.slice(0, 400).map((f) => (
-                            <div key={f.path} className="flex items-center justify-between gap-3 px-2 py-0.5">
-                              <span className="min-w-0 truncate">{f.path}</span>
+                            <div key={`${f.source ?? "x"}:${f.path}`} className="flex items-center justify-between gap-3 px-2 py-0.5">
+                              <span className="min-w-0 truncate">
+                                {f.source === "modrinth" ? (
+                                  <span className="mr-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
+                                    CDN
+                                  </span>
+                                ) : null}
+                                {f.path}
+                              </span>
                               <span className="shrink-0 text-white/50">
                                 {formatByteSize(language, f.size)}
                               </span>
@@ -6280,6 +6962,11 @@ export function ModpackTab({
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-emerald-200">
                         {tt("modpacks.exportModal.done")}
+                        {exportResolvedCount > 0
+                          ? ` · ${tt("modpacks.exportModal.linkedMods", {
+                              count: String(exportResolvedCount),
+                            })}`
+                          : ""}
                       </div>
                       <button
                         type="button"
@@ -6322,6 +7009,7 @@ export function ModpackTab({
         onClose={() => setIsScreenshotsOpen(false)}
         showNotification={showNotification}
       />
+
     </div>
   );
 }

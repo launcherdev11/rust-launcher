@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: launcher
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-launcher}
+      POSTGRES_DB: launcher
+    # Bind to loopback only — not reachable from the public internet.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U launcher -d launcher"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      API_LISTEN_ADDR: 0.0.0.0:8080
+      # Required — no silent default to "launcher" (that masked .env/export mismatches).
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/.env}
+      REDIS_URL: redis://redis:6379
+      # Compose fails fast if JWT_SECRET is missing — no insecure defaults.
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env (see env.example)}
+      JWT_ACCESS_TTL_SECS: 900
+      JWT_REFRESH_TTL_SECS: 2592000
+      JWT_ISSUER: ${JWT_ISSUER:-mc16launcher-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-mc16launcher}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_REALM: ${TURN_REALM:-16launcher.local}
+      TURN_TTL_SECS: ${TURN_TTL_SECS:-600}
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      IDENTITY_REQUIRE_PROOF: ${IDENTITY_REQUIRE_PROOF:-true}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: "${RESEND_FROM_EMAIL:-16Launcher <noreply@16-launcher.ru>}"
+      EMAIL_VERIFICATION_TTL_SECS: ${EMAIL_VERIFICATION_TTL_SECS:-600}
+    ports:
+      # Loopback only — nginx/admin reach API via 127.0.0.1:8080
+      - "127.0.0.1:8080:8080"
+
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    environment:
+      TURN_SECRET: ${TURN_SECRET:?Set TURN_SECRET in deploy/.env when enabling the turn profile}
+    # Secret is injected at runtime — never commit a real static-auth-secret.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'exec turnserver -c /etc/coturn/turnserver.conf --static-auth-secret="$$TURN_SECRET"'
+    profiles:
+      - turn
+
+volumes:
+  pgdata:
+  redisdata:

@@ -14,13 +14,15 @@ import {
 import { MotionConfig } from "framer-motion";
 import { flushSync } from "react-dom";
 import { getVersion } from "@tauri-apps/api/app";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
+import { reportStats } from "./api/stats";
+import { getStoredAccessToken } from "./api/client";
 import { playNotificationSound, playTabSwitchSound, primeUiSounds } from "./uiSounds";
 import {
   SettingsToggle,
@@ -29,10 +31,21 @@ import {
 } from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
 import { PlayTab } from "./tabs/PlayTab";
+import { FriendsTab } from "./tabs/FriendsTab";
+import { RoomsTab } from "./tabs/RoomsTab";
+import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
+import { UpdatePopupModal } from "./components/UpdatePopupModal";
 import { AccountAvatar } from "./components/account_avatar";
-import { AccountSkinPreview } from "./components/account_skin_preview";
+import { AuthProviderWatermark } from "./components/auth_provider_watermark";
+import {
+  createFallbackUpdatePopupBanner,
+  fetchLauncherBanners,
+  pickUpdatePopupBanner,
+  readCachedLauncherBanners,
+  type LauncherBannerData,
+} from "./lib/launcherBanners";
 import { DeleteIcon } from "./components/delete_icon";
 import {
   ProfileInfoIcon,
@@ -42,6 +55,10 @@ import {
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
+import {
+  SessionNotificationsBell,
+  type SessionNotification,
+} from "./components/SessionNotificationsBell";
 import { readDataCache, writeDataCache } from "./lib/launcherDataCache";
 
 const ModpackTab = lazy(() =>
@@ -59,6 +76,10 @@ import {
   type PlayConsoleHotkeyActions,
 } from "./hooks/useHotkeys";
 import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
+import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
+import { usePlatformWebSocket } from "./hooks/usePlatformWebSocket";
+import { usePlatformNotificationToasts } from "./hooks/usePlatformNotificationToasts";
+import { useLauncherSession } from "./hooks/useLauncherSession";
 import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
@@ -71,7 +92,14 @@ import {
   resetGameConsoleFilter,
 } from "./lib/gameConsoleFilter";
 import { INSTALL_CONSOLE_PROFILE_ID } from "./lib/gameConsoleWindow";
-import { useT, t, isLanguage, readStoredLanguage, type Language } from "./i18n";
+import {
+  useT,
+  t,
+  isLanguage,
+  readStoredLanguage,
+  languageStoredAtLaunch,
+  type Language,
+} from "./i18n";
 import {
   OnboardingFlow,
   ONBOARDING_COMPLETED_STORAGE_KEY,
@@ -100,6 +128,7 @@ type Profile = {
   ely_uuid: string | null;
   ms_id_token: string | null;
   mc_uuid: string | null;
+  mc_username: string | null;
 };
 
 type LauncherAccountSummary = {
@@ -109,7 +138,7 @@ type LauncherAccountSummary = {
   is_active: boolean;
 };
 
-type SidebarItemId = "play" | "settings" | "mods" | "modpacks" | "accounts";
+type SidebarItemId = "play" | "settings" | "friends" | "rooms" | "mods" | "modpacks" | "accounts";
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 type SettingsTabId = "game" | "versions" | "launcher";
@@ -143,6 +172,7 @@ type Settings = {
   split_view_enabled: boolean;
   sidebar_position?: string;
   onboarding_completed?: boolean;
+  custom_theme_id?: string | null;
 };
 
 const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
@@ -203,6 +233,8 @@ type InstanceProfileCard = InstanceProfileSummary & {
 const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
   play: "/launcher-assets/play64.png",
   settings: "/launcher-assets/settings.png",
+  friends: "/launcher-assets/group.png",
+  rooms: "/launcher-assets/room.png",
   mods: "/launcher-assets/mods.png",
   modpacks: "/launcher-assets/modpack_icon.png",
 };
@@ -402,6 +434,7 @@ type GameStatus = "idle" | "running" | "stopped" | "crashed";
 type NotificationKind = "info" | "success" | "error" | "warning";
 
 const MAX_VISIBLE_NOTIFICATIONS = 2;
+const MAX_SESSION_NOTIFICATIONS = 80;
 const NOTIFICATION_EXIT_MS = 200;
 
 type Notification = {
@@ -599,6 +632,11 @@ const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
   { id: "modpacks", labelKey: "app.sidebar.modpacks" },
 ];
 
+const BOTTOM_SIDEBAR_ITEMS: { id: SidebarItemId; labelKey: string }[] = [
+  { id: "rooms", labelKey: "app.sidebar.rooms" },
+  { id: "friends", labelKey: "app.sidebar.friends" },
+];
+
 function PlayIcon() {
   return (
     <svg
@@ -659,14 +697,6 @@ function ProfileIcon() {
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
-      <path d="M16.84 2.73a2.5 2.5 0 0 1 3.54 3.54l-1.06 1.06-3.54-3.54 1.06-1.06ZM4.92 14.49l9.19-9.19 3.54 3.54-9.19 9.19-3.82.42.42-3.96Z" />
-    </svg>
-  );
-}
-
 function PlusIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
@@ -687,25 +717,6 @@ function ChevronDownIcon({ className }: { className?: string }) {
     >
       <path d="M7 10l5 5 5-5H7z" />
     </svg>
-  );
-}
-
-function MicrosoftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
-      <path fill="#f25022" d="M2 2h9.5v9.5H2V2z" />
-      <path fill="#00a4ef" d="M12.5 2H22v9.5h-9.5V2z" />
-      <path fill="#7fba00" d="M2 12.5H11.5V22H2v-9.5z" />
-      <path fill="#ffb900" d="M12.5 12.5H22V22h-9.5v-9.5z" />
-    </svg>
-  );
-}
-
-function ElyByIcon() {
-  return (
-    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#2d7d46] text-[10px] font-bold text-white">
-      E
-    </span>
   );
 }
 
@@ -765,6 +776,9 @@ function TabPaneLoading() {
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
+  usePresenceHeartbeat();
+  usePlatformWebSocket();
+  useLauncherSession();
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
   const [tabSplitLayout, setTabSplitLayout] = useState<TabSplitLayout | null>(() =>
     loadTabSplitLayout(),
@@ -903,6 +917,7 @@ function App() {
     ely_uuid: null,
     ms_id_token: null,
     mc_uuid: null,
+    mc_username: null,
   });
   const [elyLoading, setElyLoading] = useState(false);
   const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
@@ -913,6 +928,10 @@ function App() {
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
+  const [sessionNotificationsOpen, setSessionNotificationsOpen] = useState(false);
+  const sessionNotificationsRef = useRef<HTMLDivElement | null>(null);
+  const sessionNotificationsOpenRef = useRef(false);
+  const [sessionNotifications, setSessionNotifications] = useState<SessionNotification[]>([]);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const nicknameInputFocusedRef = useRef(false);
   const prevActiveAccountIdRef = useRef<string | null>(null);
@@ -955,6 +974,7 @@ function App() {
   >("idle");
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateDownloadPercent, setUpdateDownloadPercent] = useState<number | null>(null);
+  const [updatePopupBanner, setUpdatePopupBanner] = useState<LauncherBannerData | null>(null);
   const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>(
     () => readStoredLanguage() ?? "ru",
@@ -1002,6 +1022,28 @@ function App() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [accountSwitcherOpen]);
+
+  useEffect(() => {
+    if (!sessionNotificationsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = sessionNotificationsRef.current;
+      if (el && !el.contains(e.target as Node)) setSessionNotificationsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [sessionNotificationsOpen]);
+
+  useEffect(() => {
+    sessionNotificationsOpenRef.current = sessionNotificationsOpen;
+  }, [sessionNotificationsOpen]);
+
+  useEffect(() => {
+    if (!sessionNotificationsOpen) return;
+    setSessionNotifications((prev) => {
+      if (prev.every((n) => n.seen)) return prev;
+      return prev.map((n) => (n.seen ? n : { ...n, seen: true }));
+    });
+  }, [sessionNotificationsOpen]);
 
   const accountKindShortLabel = useCallback(
     (kind: string) => {
@@ -1183,9 +1225,10 @@ function App() {
   }, []);
 
   const handleSidebarTabPointerDown = useCallback(
-    (tab: SplittableTabId, e: ReactPointerEvent<HTMLDivElement>) => {
+    (tab: SplittableTabId, e: ReactPointerEvent<HTMLButtonElement>) => {
       if (!splitViewEnabled || e.button !== 0) return;
-      e.preventDefault();
+      // Don't preventDefault on pointerdown — on Linux/WebKit that blocks click.
+      // Drag activation still works via move threshold below.
       cleanupSidebarTabDragListeners();
 
       const pointerId = e.pointerId;
@@ -1316,11 +1359,12 @@ function App() {
       cancelled = true;
     };
   }, []);
-  const isAuthorized = !!profile.ms_id_token || !!profile.ely_username;
+  const isAuthorized = !!profile.ely_username?.trim() || !!profile.mc_username?.trim();
   const displayedNickname =
-    profile.nickname.trim() !== ""
-      ? profile.nickname
-      : profile.ely_username ?? "";
+    profile.ely_username?.trim() ||
+    profile.mc_username?.trim() ||
+    profile.nickname.trim() ||
+    "";
   const activeAccountFromList = launcherAccounts.find((a) => a.is_active);
   const activeAccountId = activeAccountFromList?.id ?? null;
   const activeAccountLabel =
@@ -1686,6 +1730,7 @@ function App() {
         });
         lastRunningRef.current = true;
         setGameStatus("running");
+        void reportStats({ launched: true }).catch(() => {});
       } finally {
         setIsLaunching(false);
       }
@@ -1889,12 +1934,35 @@ function App() {
     if (isLaunching || gameStatus === "running") return;
     const t = window.setTimeout(() => {
       flushPendingConsoleLines();
-      try {
+      const writeConsole = (byProfile: Record<string, ProfileConsoleData>) => {
         window.localStorage.setItem(
           GAME_CONSOLE_STORAGE_KEY,
-          JSON.stringify({ byProfile: consoleByProfile }),
+          JSON.stringify({ byProfile }),
         );
+      };
+      try {
+        writeConsole(consoleByProfile);
       } catch {
+        try {
+          const pruned: Record<string, ProfileConsoleData> = {};
+          for (const [profileId, data] of Object.entries(consoleByProfile)) {
+            pruned[profileId] = {
+              lines: data.lines.slice(-200),
+              sessions: data.sessions.slice(0, 3).map((s) => ({
+                ...s,
+                lines: s.lines.slice(-100),
+              })),
+            };
+          }
+          writeConsole(pruned);
+        } catch {
+          try {
+            window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY);
+            window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY_V1);
+          } catch {
+            //ignore
+          }
+        }
       }
     }, GAME_CONSOLE_PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
@@ -1968,6 +2036,25 @@ function App() {
       let targetId = 0;
       let merged = false;
       const autoDismissIds: number[] = [];
+      const sessionId = Date.now() + Math.random();
+
+      setSessionNotifications((prev) => {
+        const next: SessionNotification[] = [
+          {
+            id: sessionId,
+            kind: entry.kind,
+            message: entry.message,
+            colorMsg: entry.colorMsg,
+            iconMsg: entry.iconMsg,
+            at: Date.now(),
+            seen: sessionNotificationsOpenRef.current,
+          },
+          ...prev,
+        ];
+        return next.length > MAX_SESSION_NOTIFICATIONS
+          ? next.slice(0, MAX_SESSION_NOTIFICATIONS)
+          : next;
+      });
 
       flushSync(() => {
         setNotifications((prev) => {
@@ -2026,6 +2113,23 @@ function App() {
     [settings, pushNotification],
   );
 
+  usePlatformNotificationToasts(showNotification, language);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ profile_id: string; delta_seconds: number }>("playtime-updated", (event) => {
+      const delta = Number(event.payload?.delta_seconds ?? 0);
+      if (!Number.isFinite(delta) || delta <= 0) return;
+      if (!getStoredAccessToken()) return;
+      void reportStats({ playtime_seconds_delta: Math.floor(delta) }).catch(() => {});
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   const showSettingsSavedNotification = useCallback(() => {
     showNotification("success", tt("app.toast.settingsSaved"));
   }, [tt, showNotification]);
@@ -2059,6 +2163,7 @@ function App() {
     sidebar_position: "left",
     onboarding_completed: false,
     interface_language: "ru",
+    custom_theme_id: null,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -2115,15 +2220,14 @@ function App() {
 
       const legacyMigrated =
         window.localStorage.getItem(ONBOARDING_LEGACY_MIGRATED_KEY) === "1";
-      const storedLang = readStoredLanguage();
-      if (!legacyMigrated && storedLang) {
+      if (!legacyMigrated && languageStoredAtLaunch) {
         window.localStorage.setItem(ONBOARDING_LEGACY_MIGRATED_KEY, "1");
         window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
         void invoke("set_settings", {
           settings: {
             ...settings,
             onboarding_completed: true,
-            interface_language: storedLang,
+            interface_language: languageStoredAtLaunch,
           },
         }).catch(() => {});
         setOnboardingVisible(false);
@@ -2427,6 +2531,73 @@ function App() {
     [updateVersion, showNotification, tt],
   );
 
+  const markUpdatePopupShown = useCallback((version: string) => {
+    try {
+      localStorage.setItem("mc16launcher:lastShownUpdateVersion", version);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const previewUpdatePopup = useCallback(async () => {
+    try {
+      const cached = readCachedLauncherBanners();
+      let banners = cached ?? [];
+      if (!pickUpdatePopupBanner(banners)) {
+        try {
+          banners = await fetchLauncherBanners();
+        } catch (e) {
+          console.error("Failed to fetch banners for popup preview:", e);
+        }
+      }
+      const popup =
+        pickUpdatePopupBanner(banners) ?? createFallbackUpdatePopupBanner();
+      setUpdatePopupBanner(popup);
+      if (!updateVersion) {
+        setUpdateVersion("preview");
+      }
+      return true;
+    } catch (e) {
+      console.error("Failed to preview update popup:", e);
+      showNotification("error", tt("settings.updates.checkFailed"));
+      return false;
+    }
+  }, [showNotification, tt, updateVersion]);
+
+  const maybeShowUpdatePopup = useCallback(
+    async (version: string) => {
+      try {
+        const cached = readCachedLauncherBanners();
+        let banners = cached ?? [];
+        if (!pickUpdatePopupBanner(banners)) {
+          banners = await fetchLauncherBanners();
+        }
+        const popup = pickUpdatePopupBanner(banners);
+        if (!popup) return false;
+        setUpdatePopupBanner(popup);
+        markUpdatePopupShown(version);
+        return true;
+      } catch (e) {
+        console.error("Failed to load update popup banner:", e);
+        return false;
+      }
+    },
+    [markUpdatePopupShown],
+  );
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("mc16launcher:forceUpdatePopup") !== "1") return;
+      localStorage.removeItem("mc16launcher:forceUpdatePopup");
+    } catch {
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void previewUpdatePopup();
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [previewUpdatePopup]);
+
   const checkForUpdate = useCallback(
     async (options?: { silent?: boolean; source?: "startup" | "manual" }) => {
       const silent = options?.silent ?? false;
@@ -2443,6 +2614,12 @@ function App() {
           const notifyEnabled = settings?.notify_new_update !== false;
           const shouldNotifyManual = !silent && notifyEnabled;
           const shouldNotifyStartup = source === "startup" && notifyEnabled;
+          const autoInstall = settings?.auto_install_updates === true;
+
+          if (autoInstall) {
+            void installUpdate(update);
+            return;
+          }
 
           if (shouldNotifyStartup) {
             const key = "mc16launcher:lastShownUpdateVersion";
@@ -2453,27 +2630,26 @@ function App() {
               lastShown = null;
             }
             if (lastShown !== update.version) {
-              showNotification(
-                "info",
-                tt("settings.updates.released", { version: update.version }),
-              );
-              try {
-                localStorage.setItem(key, update.version);
-              } catch {
-                // ignore
+              const shownPopup = await maybeShowUpdatePopup(update.version);
+              if (!shownPopup) {
+                showNotification(
+                  "info",
+                  tt("settings.updates.released", { version: update.version }),
+                );
+                markUpdatePopupShown(update.version);
               }
             }
           } else if (shouldNotifyManual) {
-            showNotification(
-              "info",
-              tt("settings.updates.available", { version: update.version }),
-            );
-          }
-
-          if (settings?.auto_install_updates) {
-            void installUpdate(update);
+            const shownPopup = await maybeShowUpdatePopup(update.version);
+            if (!shownPopup) {
+              showNotification(
+                "info",
+                tt("settings.updates.available", { version: update.version }),
+              );
+            }
           }
         } else {
+          setUpdatePopupBanner(null);
           setUpdateStatus("up-to-date");
           persistLauncherUpdateBadge("latest");
           if (!silent) {
@@ -2495,6 +2671,8 @@ function App() {
       tt,
       installUpdate,
       persistLauncherUpdateBadge,
+      maybeShowUpdatePopup,
+      markUpdatePopupShown,
     ],
   );
 
@@ -2535,7 +2713,7 @@ function App() {
           });
         }
       } catch {
-        // ignore
+        //ignore
       }
     })();
   }, []);
@@ -2584,7 +2762,7 @@ function App() {
           pendingProfileLaunchIdRef.current = pending.trim();
         }
       } catch {
-        // ignore
+        //ignore
       }
       try {
         unlisten = await listen<{ profile_id: string }>("profile-launch-request", (event) => {
@@ -2592,7 +2770,7 @@ function App() {
           if (id) pendingProfileLaunchIdRef.current = id;
         });
       } catch {
-        // ignore
+        //ignore
       }
     })();
     return () => {
@@ -2611,7 +2789,7 @@ function App() {
           setOpenedMrpackPath(p);
         }
       } catch {
-        // ignore
+        //ignore
       }
 
       try {
@@ -2622,7 +2800,7 @@ function App() {
           setOpenedMrpackPath(p);
         });
       } catch {
-        // ignore
+        //ignore
       }
     })();
 
@@ -2680,6 +2858,12 @@ function App() {
       case "modpacks":
         details = t(language, "app.discord.modpacks");
         if (activeInstanceProfile?.name) state = activeInstanceProfile.name;
+        break;
+      case "friends":
+        details = t(language, "app.discord.friends");
+        break;
+      case "rooms":
+        details = t(language, "app.discord.rooms");
         break;
       case "accounts":
         details = t(language, "app.discord.accounts");
@@ -2881,13 +3065,13 @@ function App() {
       audio.volume = Math.min(1, Math.max(0, NECO_ARC_SECRET_SOUND_VOLUME));
       void audio.play().catch(() => {});
     } catch {
-      // ignore
+      //ignore
     }
   }, []);
 
   const loadProfile = useCallback(async () => {
     try {
-      const p = await invoke<Profile>("get_profile");
+      const p = await invoke<Profile & { mc_username?: string | null }>("get_profile");
       const nick = p.nickname ?? "";
       setProfile({
         nickname: nick,
@@ -2895,6 +3079,7 @@ function App() {
         ely_uuid: p.ely_uuid ?? null,
         ms_id_token: p.ms_id_token ?? null,
         mc_uuid: p.mc_uuid ?? null,
+        mc_username: p.mc_username ?? null,
       });
       lastPersistedNickNormRef.current = normalizeNicknameForSecretCheck(nick);
     } catch {
@@ -2904,6 +3089,7 @@ function App() {
         ely_uuid: null,
         ms_id_token: null,
         mc_uuid: null,
+        mc_username: null,
       });
       lastPersistedNickNormRef.current = "";
     }
@@ -2971,7 +3157,7 @@ function App() {
       unlistenFail?.();
     };
     try {
-      unlistenOk = await listen<Profile>("ely-login-complete", (e) => {
+      unlistenOk = await listen<Profile & { mc_username?: string | null }>("ely-login-complete", (e) => {
         const p = e.payload;
         setProfile({
           nickname: p.nickname ?? "",
@@ -2979,6 +3165,7 @@ function App() {
           ely_uuid: p.ely_uuid ?? null,
           ms_id_token: p.ms_id_token ?? null,
           mc_uuid: p.mc_uuid ?? null,
+          mc_username: p.mc_username ?? null,
         });
         void refreshLauncherAccounts();
         setElyLoading(false);
@@ -3555,6 +3742,7 @@ function App() {
           });
           lastRunningRef.current = true;
           setGameStatus("running");
+          void reportStats({ launched: true }).catch(() => {});
         } finally {
           setIsLaunching(false);
         }
@@ -3573,6 +3761,102 @@ function App() {
     await runVersionInstall();
   };
 
+  const handleLaunchToServer = useCallback(
+    async (serverAddress: string, options?: { requireOnlineAccount?: boolean }) => {
+      if (!selectedVersion) {
+        throw new Error(tt("app.warnings.needMinecraftVersion"));
+      }
+      if (!isInstalled) {
+        throw new Error(tt("app.warnings.needInstalledVersion"));
+      }
+      if (gameStatus === "running" || isLaunching) {
+        throw new Error(tt("app.warnings.closeGameFirst"));
+      }
+      if (options?.requireOnlineAccount && activeAccountKind === "offline") {
+        throw new Error(
+          "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.",
+        );
+      }
+
+      await invoke("set_profile", {
+        nickname: profile.nickname,
+      });
+      const vanillaSummary =
+        loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
+          ? (selectedVersion as VersionSummary)
+          : null;
+      const versionUrl =
+        vanillaSummary && vanillaSummary.version_type !== "custom" && vanillaSummary.url
+          ? vanillaSummary.url
+          : null;
+      const versionId =
+        loader === "fabric" && fabricProfileId
+          ? fabricProfileId
+          : loader === "quilt" && quiltProfileId
+            ? quiltProfileId
+            : selectedVersion.id;
+
+      const consoleProfileId = await resolveLaunchConsoleProfileId();
+      if (consoleProfileId) {
+        setRunningConsoleProfile(consoleProfileId);
+        archiveCurrentConsoleAndClear(consoleProfileId);
+      }
+      if (settings?.show_console_on_launch) {
+        setIsConsoleVisible(true);
+      }
+
+      setIsLaunching(true);
+      try {
+        console.info("[LaunchToServer]", {
+          versionId,
+          versionUrl,
+          serverAddress,
+          activeAccountKind,
+        });
+        await invoke("launch_game", {
+          versionId,
+          versionUrl,
+          serverAddress,
+        });
+        lastRunningRef.current = true;
+        setGameStatus("running");
+        void reportStats({ launched: true }).catch(() => {});
+      } catch (error) {
+        setRunningConsoleProfile(null);
+        throw error;
+      } finally {
+        setIsLaunching(false);
+      }
+    },
+    [
+      selectedVersion,
+      isInstalled,
+      gameStatus,
+      isLaunching,
+      activeAccountKind,
+      profile.nickname,
+      loader,
+      fabricProfileId,
+      quiltProfileId,
+      resolveLaunchConsoleProfileId,
+      archiveCurrentConsoleAndClear,
+      settings?.show_console_on_launch,
+      tt,
+    ],
+  );
+
+  const handleBannerPlay = useCallback(
+    async (serverAddress: string) => {
+      try {
+        await handleLaunchToServer(serverAddress);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        showNotification("error", tt("app.errors.launchError", { msg }));
+      }
+    },
+    [handleLaunchToServer, showNotification, tt],
+  );
+
   const accentColor = settings?.background_accent_color ?? "#0b1530";
 
   useEffect(() => {
@@ -3589,6 +3873,44 @@ function App() {
       }
     })();
   }, [settings?.background_image_url]);
+
+  useEffect(() => {
+    (async () => {
+      const themeId = settings?.custom_theme_id;
+      const existingStyle = document.getElementById("custom-theme-style");
+      if (!themeId) {
+        existingStyle?.remove();
+        return;
+      }
+      try {
+        let css = await invoke<string>("get_theme_css", { themeId });
+        const themeDir = await invoke<string>("get_theme_dir", { themeId });
+
+        css = css.replace(
+          /url\((['"]?)(?!data:|http:|https:|asset:)(.*?)\1\)/g,
+          (_match, quote, path) => {
+            if (!path || path.trim() === "") return `url(${quote}${path}${quote})`;
+            const separator = themeDir.includes("\\") ? "\\" : "/";
+            const absolutePath =
+              themeDir + separator + path.replace(/[\\/]/g, separator);
+            return `url("${convertFileSrc(absolutePath)}")`;
+          },
+        );
+
+        if (existingStyle) {
+          existingStyle.textContent = css;
+        } else {
+          const style = document.createElement("style");
+          style.id = "custom-theme-style";
+          style.textContent = css;
+          document.head.appendChild(style);
+        }
+      } catch (err) {
+        console.error("Не удалось применить тему:", err);
+        existingStyle?.remove();
+      }
+    })();
+  }, [settings?.custom_theme_id]);
 
   const backgroundImageUrl = resolveLauncherBackgroundUrl(
     settings?.background_image_url,
@@ -3767,6 +4089,7 @@ function App() {
               updateVersion={updateVersion}
               updateDownloadPercent={updateDownloadPercent}
               onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
+              onPreviewUpdatePopup={() => void previewUpdatePopup()}
               onInstallUpdate={() => void installUpdate()}
             />
             </Suspense>
@@ -3817,6 +4140,7 @@ function App() {
               showSnapshots={settings?.show_snapshots ?? false}
               isConsoleDetached={isConsoleDetached}
               onToggleConsoleDetached={toggleConsoleDetached}
+              onPlayServer={handleBannerPlay}
             />
             </div>
           );
@@ -3837,6 +4161,7 @@ function App() {
       prepareInstallConsole,
       registerModpackHotkeys,
       registerPlayConsoleHotkeys,
+      handleBannerPlay,
       handleOpenGameFolder,
       handlePauseInstall,
       handlePrimaryClick,
@@ -3847,6 +4172,7 @@ function App() {
       handleToggleSidebarPin,
       installPaused,
       installUpdate,
+      previewUpdatePopup,
       installedVersionIdsForDropdown,
       isConsoleVisible,
       isInstalling,
@@ -4133,6 +4459,23 @@ function App() {
         })}
       </div>
 
+      {updatePopupBanner && (
+        <UpdatePopupModal
+          language={language}
+          banner={updatePopupBanner}
+          version={updateVersion}
+          busy={
+            updateStatus === "checking" ||
+            updateStatus === "downloading" ||
+            updateStatus === "installing"
+          }
+          onClose={() => setUpdatePopupBanner(null)}
+          onUpdate={() => {
+            void installUpdate();
+          }}
+        />
+      )}
+
       {showHelpModal && (
         <div
           className="pointer-events-auto fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -4415,30 +4758,43 @@ function App() {
           </div>
         ) : null}
         <div className="flex items-center gap-2">
+          <SessionNotificationsBell
+            language={language}
+            open={sessionNotificationsOpen}
+            items={sessionNotifications}
+            panelRef={sessionNotificationsRef}
+            onToggle={() => {
+              setAccountSwitcherOpen(false);
+              setSessionNotificationsOpen((o) => !o);
+            }}
+            onClear={() => setSessionNotifications([])}
+          />
           <div className="relative mr-1" ref={accountSwitcherRef} data-no-drag>
             <button
               type="button"
               onClick={() => {
                 void refreshLauncherAccounts();
+                setSessionNotificationsOpen(false);
                 setAccountSwitcherOpen((o) => !o);
               }}
-              className="interactive-press flex max-w-[200px] items-center gap-2 rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
+              className="interactive-press relative flex max-w-[200px] items-center gap-2 overflow-hidden rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
               title={tt("app.accounts.switcherTitle")}
             >
+              <AuthProviderWatermark kind={activeAccountKind} />
               <AccountAvatar
                 username={activeAccountLabel}
                 profile={profileAvatarInput}
                 kind={activeAccountKind}
                 size={56}
-                className={`h-7 w-7 shrink-0 rounded-full ${accountKindAvatarClass(activeAccountKind)}`}
+                className={`relative z-[1] h-7 w-7 shrink-0 rounded-full ${accountKindAvatarClass(activeAccountKind)}`}
               />
-              <span className="min-w-0 flex-1 truncate">{activeAccountLabel}</span>
+              <span className="relative z-[1] min-w-0 flex-1 truncate">{activeAccountLabel}</span>
               <ChevronDownIcon
-                className={accountSwitcherOpen ? "rotate-180 opacity-100" : "opacity-70"}
+                className={`relative z-[1] ${accountSwitcherOpen ? "rotate-180 opacity-100" : "opacity-70"}`}
               />
             </button>
             {accountSwitcherOpen ? (
-              <div className="absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/15 bg-[#14141c]/96 py-1 shadow-2xl backdrop-blur-lg">
+              <div className="absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/12 bg-[#14141c] py-1 shadow-2xl">
                 <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
                   {tt("app.accounts.switcherHeading")}
                 </p>
@@ -4551,10 +4907,10 @@ function App() {
           ref={sidebarRef}
           className={
             sidebarHorizontal
-              ? `relative mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 rounded-3xl bg-black/40 px-4 py-3 backdrop-blur-lg ${
+              ? `relative z-40 mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 overflow-visible rounded-3xl bg-black/55 px-4 py-3 backdrop-blur-lg ${
                   sidebarPosition === "top" ? "mt-3 w-[calc(100%-1.5rem)]" : "mb-3 w-[calc(100%-1.5rem)]"
                 }`
-              : "relative m-3 flex w-20 shrink-0 flex-col justify-between rounded-3xl bg-black/40 px-3 py-6 backdrop-blur-lg"
+              : "relative z-40 m-3 flex w-20 shrink-0 flex-col justify-between overflow-visible rounded-3xl bg-black/55 px-3 py-6 backdrop-blur-lg"
           }
         >
           <span
@@ -4585,17 +4941,27 @@ function App() {
           />
           <div
             className={
-              sidebarHorizontal ? "flex flex-row items-center gap-3" : "flex flex-col gap-3"
+              sidebarHorizontal
+                ? "flex flex-row items-center gap-3"
+                : "flex flex-col items-center gap-3"
             }
           >
             {orderedSidebarItems.map((item) => {
               const tabId = item.id as SplittableTabId;
               const splitRole =
                 effectiveTabSplit && tabPaneRole(tabId, effectiveTabSplit);
+              const tooltipSide =
+                sidebarHorizontal
+                  ? sidebarPosition === "bottom"
+                    ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
+                    : "top-full left-1/2 mt-2 -translate-x-1/2"
+                  : sidebarPosition === "right"
+                    ? "right-full top-1/2 mr-2 -translate-y-1/2"
+                    : "left-full top-1/2 ml-2 -translate-y-1/2";
               return (
               <div
                 key={item.id}
-                className="interactive-press group relative flex items-center"
+                className="group relative flex h-10 w-10 shrink-0 items-center justify-center"
               >
                 <button
                   type="button"
@@ -4617,17 +4983,15 @@ function App() {
                     }
                     activateSidebarTab(tabId);
                   }}
-                  title={tt(item.labelKey)}
+                  aria-label={tt(item.labelKey)}
                   ref={(el) => {
                     sidebarButtonRefs.current[item.id] = el;
                   }}
-                  className="relative flex items-center"
+                  className="interactive-press relative flex h-10 w-10 shrink-0 items-center justify-center"
+                  onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
                 >
                   <div
-                    className={`sidebar-icon flex items-center justify-center ${
-                      sidebarHorizontal ? "" : "ml-2"
-                    } ${sidebarIconClass(tabId)}`}
-                    onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
+                    className={`sidebar-icon flex items-center justify-center ${sidebarIconClass(tabId)}`}
                   >
                     {SIDEBAR_ICON_PATHS[item.id] ? (
                       <img
@@ -4645,6 +5009,7 @@ function App() {
                     )}
                   </div>
                 </button>
+                <span className={`sidebar-tooltip ${tooltipSide}`}>{tt(item.labelKey)}</span>
                 {splitRole ? (
                   <button
                     type="button"
@@ -4731,37 +5096,85 @@ function App() {
           <div
             className={
               sidebarHorizontal
-                ? "flex shrink-0 items-center border-l border-white/10 pl-4"
-                : "border-t border-white/10 pt-4"
+                ? "flex shrink-0 items-center gap-3 border-l border-white/10 pl-4"
+                : "flex flex-col items-center gap-3 border-t border-white/10 pt-4"
             }
           >
+            {BOTTOM_SIDEBAR_ITEMS.map((item) => {
+              const tooltipSide =
+                sidebarHorizontal
+                  ? sidebarPosition === "bottom"
+                    ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
+                    : "top-full left-1/2 mt-2 -translate-x-1/2"
+                  : sidebarPosition === "right"
+                    ? "right-full top-1/2 mr-2 -translate-y-1/2"
+                    : "left-full top-1/2 ml-2 -translate-y-1/2";
+              return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveItemWithSound(item.id)}
+                aria-label={tt(item.labelKey)}
+                ref={(el) => {
+                  sidebarButtonRefs.current[item.id] = el;
+                }}
+                className="interactive-press group relative flex h-10 w-10 shrink-0 items-center justify-center"
+              >
+                <div
+                  className={`sidebar-icon flex items-center justify-center ${
+                    activeItem === item.id
+                      ? "sidebar-icon-active"
+                      : "bg-black/40 hover:bg-black/70"
+                  }`}
+                >
+                  {SIDEBAR_ICON_PATHS[item.id] ? (
+                    <img
+                      src={SIDEBAR_ICON_PATHS[item.id]}
+                      alt=""
+                      className="h-7 w-7 object-contain"
+                    />
+                  ) : null}
+                </div>
+                <span className={`sidebar-tooltip ${tooltipSide}`}>{tt(item.labelKey)}</span>
+              </button>
+              );
+            })}
             <button
               type="button"
               onClick={() => setActiveItemWithSound("accounts")}
-              title={tt("app.accounts.sidebarTooltip")}
+              aria-label={tt("app.accounts.sidebarTooltip")}
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
               }}
-              className={`interactive-press group relative flex items-center justify-center ${
-                sidebarHorizontal ? "" : "w-full"
-              }`}
+              className="interactive-press group relative flex h-10 w-10 shrink-0 items-center justify-center"
             >
               <div
                 className={`sidebar-icon flex items-center justify-center rounded-full ${
-                  sidebarHorizontal ? "" : "ml-2"
-                } ${
                   activeItem === "accounts" ? "sidebar-icon-active" : "bg-black/40 hover:bg-black/70"
                 }`}
               >
                 <ProfileIcon />
               </div>
+              <span
+                className={`sidebar-tooltip ${
+                  sidebarHorizontal
+                    ? sidebarPosition === "bottom"
+                      ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
+                      : "top-full left-1/2 mt-2 -translate-x-1/2"
+                    : sidebarPosition === "right"
+                      ? "right-full top-1/2 mr-2 -translate-y-1/2"
+                      : "left-full top-1/2 ml-2 -translate-y-1/2"
+                }`}
+              >
+                {tt("app.accounts.sidebarTooltip")}
+              </span>
             </button>
           </div>
         </aside>
 
         <main
           ref={mainSplitRef}
-          className={`relative flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
+          className={`relative z-0 flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
             tabDrag ? "select-none" : ""
           }`}
         >
@@ -4785,236 +5198,69 @@ function App() {
               )}
             </div>
           ) : null}
-          {activeItem === "accounts" ? (
-            <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-5 overflow-y-auto py-1 lg:gap-6 lg:overflow-hidden">
-              <header className="shrink-0 text-center">
-                <h1 className="text-lg font-bold tracking-tight text-white/95">
-                  {tt("app.accounts.managerTitle")}
-                </h1>
-                {tt("app.accounts.managerSubtitle") ? (
-                  <p className="mt-1.5 text-sm text-white/50">{tt("app.accounts.managerSubtitle")}</p>
-                ) : null}
-              </header>
-
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-8">
-                <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
-              <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-4 shadow-xl backdrop-blur-md">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
-                      {tt("app.accounts.savedListTitle")}
-                    </h2>
-                    {tt("app.accounts.savedListHint") ? (
-                      <p className="mt-1 text-[11px] leading-snug text-white/45">
-                        {tt("app.accounts.savedListHint")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={addingAccount}
-                    onClick={() => void handleAddLauncherAccount()}
-                    className="interactive-press flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50"
-                  >
-                    <PlusIcon className="h-3.5 w-3.5" />
-                    {tt("app.accounts.addAccount")}
-                  </button>
-                </div>
-                {launcherAccounts.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-white/45">—</p>
-                ) : (
-                  <ul className="flex max-h-[min(360px,42vh)] flex-col gap-2 overflow-y-auto">
-                    {launcherAccounts.map((acc) => (
-                      <li
-                        key={acc.id}
-                        className={`flex items-stretch gap-2 rounded-xl border px-2 py-2 transition ${
-                          acc.is_active
-                            ? "border-emerald-400/35 bg-emerald-500/10"
-                            : "border-white/10 bg-black/30 hover:bg-black/50"
-                        }`}
-                      >
-                        <AccountAvatar
-                          username={acc.label}
-                          profile={acc.is_active ? profileAvatarInput : undefined}
-                          kind={acc.kind}
-                          size={88}
-                          className={`h-11 w-11 shrink-0 self-center rounded-full ${accountKindAvatarClass(acc.kind)}`}
-                        />
-                        <button
-                          type="button"
-                          disabled={acc.is_active}
-                          onClick={() => {
-                            if (!acc.is_active) void handleSwitchLauncherAccount(acc.id);
-                          }}
-                          className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition enabled:cursor-pointer enabled:hover:bg-white/5 enabled:active:scale-[0.99] disabled:cursor-default"
-                        >
-                          <span className="block truncate text-sm font-semibold text-white/95">
-                            {acc.label}
-                          </span>
-                          <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                                acc.kind === "microsoft"
-                                  ? "bg-sky-500/25 text-sky-100"
-                                  : acc.kind === "ely"
-                                    ? "bg-[#2d7d46]/35 text-emerald-100"
-                                    : "bg-white/10 text-white/55"
-                              }`}
-                            >
-                              {accountKindShortLabel(acc.kind)}
-                            </span>
-                            {acc.is_active ? (
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-300/90">
-                                {tt("app.accounts.activeBadge")}
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => requestRemoveLauncherAccount(acc.id)}
-                          className="interactive-press shrink-0 self-center rounded-lg p-2.5 text-white/35 hover:bg-red-500/15 hover:text-red-300"
-                          title={tt("app.accounts.removeTitle")}
-                        >
-                          <DeleteIcon className="h-4 w-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="w-full">
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-white/45">
-                  {tt("app.accounts.currentProfileSection")}
-                </h2>
-                <div
-                  className="flex w-full items-center gap-5 rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-4 shadow-xl backdrop-blur-md"
-                >
-                  <button
-                    type="button"
-                    className="interactive-press relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/90 bg-[#0f2744] transition hover:border-white hover:bg-[#1e3a5f]"
-                  >
-                    <AccountAvatar
-                      username={displayedNickname}
-                      profile={profileAvatarInput}
-                      kind={activeAccountKind}
-                      size={80}
-                      className="h-full w-full rounded-full"
-                    />
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={isAuthorized ? displayedNickname : nicknameDraft}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setNicknameDraft(v);
-                          setProfile((p) => ({ ...p, nickname: v }));
-                        }}
-                        onFocus={() => {
-                          if (!isAuthorized) nicknameInputFocusedRef.current = true;
-                        }}
-                        onBlur={(e) => {
-                          nicknameInputFocusedRef.current = false;
-                          if (isAuthorized) return;
-                          const v = e.target.value.trim();
-                          const prevNick = profile.nickname.trim();
-                          setNicknameDraft(v);
-                          setProfile((p) => ({ ...p, nickname: v }));
-                          if (v !== prevNick) void handleSaveNickname(v);
-                        }}
-                        placeholder={tt("app.accounts.nicknamePlaceholder")}
-                        className="w-full min-w-0 bg-transparent text-xl font-semibold text-white placeholder:text-white/50 focus:outline-none disabled:opacity-60"
-                        disabled={isAuthorized}
-                      />
-                      {!isAuthorized && (
-                        <span className="text-white/50" title={tt("app.accounts.editNickname")}>
-                          <PencilIcon />
-                        </span>
-                      )}
-                    </div>
-                    {profile.ely_username && (
-                      <p className="mt-0.5 text-xs text-white/60">{profile.ely_username}</p>
-                    )}
-                  </div>
-                </div>
-                {!isAuthorized && (
-                  <p className="mt-4 text-center text-sm text-white/80">{tt("app.accounts.hint")}</p>
-                )}
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {profile.ms_id_token ? (
-                    <button
-                      type="button"
-                      onClick={handleMicrosoftLogout}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
-                    >
-                      <MicrosoftIcon />
-                      <span>{tt("app.accounts.microsoftLogout")}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleMicrosoftLogin}
-                      disabled={elyLoading || msLoading}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
-                    >
-                      <MicrosoftIcon />
-                      <span>{tt("app.accounts.microsoftSignIn")}</span>
-                    </button>
-                  )}
-                  {profile.ely_username ? (
-                    <button
-                      type="button"
-                      onClick={handleElyLogout}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
-                    >
-                      <ElyByIcon />
-                      <span>{tt("app.accounts.elyLogout")}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleElyLogin}
-                      disabled={elyLoading}
-                      className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
-                    >
-                      <ElyByIcon />
-                      <span>
-                        {elyLoading ? tt("app.accounts.elyWaiting") : "Ely.by"}
-                      </span>
-                    </button>
-                  )}
-                </div>
-                {elyAuthUrl && (
-                  <div className="mt-4 w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
-                    <p className="mb-1.5 text-xs font-medium text-amber-200">
-                      {tt("app.accounts.elyDialogTitle")}
-                    </p>
-                    <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
-                    <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
-                  </div>
-                )}
-                {msAuthUrl && (
-                  <div className="mt-4 w-full rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-left">
-                    <p className="mb-1.5 text-xs font-medium text-blue-200">
-                      {tt("app.accounts.microsoftSignIn")}
-                    </p>
-                    <p className="break-all text-xs text-white/90">{msAuthUrl}</p>
-                  </div>
-                )}
-              </div>
-                </div>
-                <div className="flex min-h-[min(360px,40vh)] min-w-0 flex-col lg:min-h-0">
-                  <AccountSkinPreview
-                    key={`${activeAccountFromList?.id ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
-                    profile={profileAvatarInput}
-                    username={displayedNickname}
-                  />
-                </div>
-              </div>
+          {}
+          <div
+            className={
+              activeItem === "rooms"
+                ? "flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4"
+                : "hidden"
+            }
+            aria-hidden={activeItem !== "rooms"}
+          >
+            <RoomsTab
+              showNotification={showNotification}
+              language={language}
+              minecraftAccountKind={activeAccountKind}
+              onLaunchToServer={handleLaunchToServer}
+            />
+          </div>
+          {activeItem === "friends" ? (
+            <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
+              <FriendsTab
+                showNotification={showNotification}
+                language={language}
+                onOpenRooms={() => setActiveItemWithSound("rooms")}
+              />
             </div>
+          ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
+            <AccountsTab
+              showNotification={showNotification}
+              language={language}
+              profile={profile}
+              setProfile={setProfile}
+              launcherAccounts={launcherAccounts}
+              nicknameDraft={nicknameDraft}
+              setNicknameDraft={setNicknameDraft}
+              isAuthorized={isAuthorized}
+              displayedNickname={displayedNickname}
+              profileAvatarInput={profileAvatarInput}
+              activeAccountKind={activeAccountKind}
+              activeAccountId={activeAccountId}
+              elyLoading={elyLoading}
+              msLoading={msLoading}
+              elyAuthUrl={elyAuthUrl}
+              msAuthUrl={msAuthUrl}
+              addingAccount={addingAccount}
+              accountKindShortLabel={accountKindShortLabel}
+              onSaveNickname={handleSaveNickname}
+              onMicrosoftLogin={handleMicrosoftLogin}
+              onMicrosoftLogout={handleMicrosoftLogout}
+              onElyLogin={handleElyLogin}
+              onElyLogout={handleElyLogout}
+              onSwitchAccount={handleSwitchLauncherAccount}
+              onRemoveAccount={async (accountId) => {
+                try {
+                  await invoke("remove_launcher_account", { accountId });
+                  await loadProfile();
+                  await refreshLauncherAccounts();
+                  setAccountSwitcherOpen(false);
+                  showNotification("info", tt("app.accounts.toast.removed"));
+                } catch (e) {
+                  showNotification("error", e instanceof Error ? e.message : String(e));
+                }
+              }}
+              onAddAccount={handleAddLauncherAccount}
+            />
           ) : effectiveTabSplit ? (
             <div
               className={`tab-split-main tab-animate min-h-0 w-full flex-1 ${

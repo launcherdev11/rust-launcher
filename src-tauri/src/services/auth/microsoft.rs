@@ -878,7 +878,52 @@ pub async fn start_ms_oauth(app: AppHandle, language: Option<String>) -> Result<
 
 }
 
+pub async fn refresh_ms_oauth_tokens() -> Result<String, String> {
+    let mut profile = get_profile().unwrap_or_default();
+    let refresh = profile
+        .ms_refresh_token
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            "Нет Microsoft refresh token. Войдите снова через Microsoft на вкладке Аккаунты."
+                .to_string()
+        })?
+        .to_string();
 
+    let secret = std::env::var("MS_CLIENT_SECRET")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
+
+    let mut form = vec![
+        ("client_id", MS_CLIENT_ID.to_string()),
+        ("refresh_token", refresh),
+        ("grant_type", "refresh_token".to_string()),
+        ("redirect_uri", MS_REDIRECT_URI.to_string()),
+    ];
+    if let Some(s) = secret {
+        form.push(("client_secret", s));
+    }
+
+    let resp = http_client()
+        .post(MS_OAUTH2_TOKEN_URL)
+        .form(&form)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка обновления Microsoft токена: {e}"))?;
+
+    let token: MsTokenResponse = handle_resp(resp, "MS OAuth2 refresh").await?;
+
+    profile.ms_access_token = Some(token.access_token.clone());
+    if let Some(rt) = token.refresh_token.filter(|s| !s.is_empty()) {
+        profile.ms_refresh_token = Some(rt);
+    }
+    if let Some(id) = token.id_token.filter(|s| !s.is_empty()) {
+        profile.ms_id_token = Some(id);
+    }
+    save_full_profile(&profile)?;
+
+    Ok(token.access_token)
+}
 
 #[tauri::command]
 

@@ -33,21 +33,22 @@ use services::game::{
     list_installed_versions, list_launcher_accounts, list_profile_items,     open_game_folder,
     open_profile_folder, delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail,
     list_screenshots, open_screenshot, open_screenshots_folder, remove_launcher_account,
-    change_profile_version, rename_profile,
+    change_profile_version, rename_profile, reorder_profile_resource_packs,
     reset_download_cancel,
     reset_settings_to_default, set_java_settings, set_profile, set_profile_item_enabled,
     set_profile_java_settings, set_selected_profile, set_settings, stop_game, switch_launcher_account,
     update_profile_settings,
     validate_java_args,
+    lan_bridge_guest_allow_forward, lan_bridge_guest_port, lan_bridge_start_guest,
+    lan_bridge_start_host, lan_bridge_stop, lan_bridge_write,
 };
 use services::auth::{
     ely_login_with_password, ely_logout, handle_oauth_callback, ms_logout, refresh_ely_session,
     start_ely_oauth, start_ms_oauth,
 };
 use services::curseforge::{
-    curseforge_get_mod, curseforge_get_mod_files, curseforge_list_minecraft_versions,
-    curseforge_search_mods,
-    download_curseforge_file,
+    curseforge_get_mod, curseforge_get_mod_files, curseforge_list_categories,
+    curseforge_list_minecraft_versions, curseforge_search_mods, download_curseforge_file,
 };
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
@@ -55,7 +56,13 @@ use services::modrinth::{
     resolve_profile_item_metadata,
 };
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
-use commands::{export_build, get_ely_avatar, get_ely_skin, get_mc_avatar, get_mc_skin, list_build_files, preview_export};
+use commands::{
+    export_build, get_ely_avatar, get_ely_cape, get_ely_skin, get_mc_avatar, get_mc_cape,
+    apply_mc_skin_by_username, get_mc_skin, get_mc_skin_by_username, get_optifine_cape,
+    list_build_files, list_mc_capes,
+    preview_export,
+    set_mc_active_cape,
+};
 use mrpack_open::take_pending_mrpack_open;
 use profile_launch::{
     extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
@@ -63,6 +70,10 @@ use profile_launch::{
     take_pending_profile_launch,
 };
 use services::shortcuts::create_profile_desktop_shortcut;
+use services::themes::{
+    create_empty_theme, delete_theme, get_theme_css, get_theme_dir, import_theme_zip,
+    list_themes, open_theme_css_file, open_themes_folder, save_custom_theme_css,
+};
 
 #[tauri::command]
 fn get_launcher_logs_file() -> String {
@@ -101,6 +112,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_http::init())
         .manage(pending_mrpack.clone())
         .manage(pending_profile_launch.clone());
 
@@ -150,6 +162,7 @@ pub fn run() {
                 }
                 let settings = services::game::settings::load_settings_from_disk();
                 infra::autostart::sync_autostart_from_settings(app.handle(), settings.autostart_enabled);
+                services::themes::ensure_example_theme(app.handle());
                 Ok(())
             }
         })
@@ -174,6 +187,12 @@ pub fn run() {
             install_neoforge,
             get_game_root_dir,
             launch_game,
+            lan_bridge_start_guest,
+            lan_bridge_start_host,
+            lan_bridge_write,
+            lan_bridge_stop,
+            lan_bridge_guest_port,
+            lan_bridge_guest_allow_forward,
             list_installed_versions,
             get_installed_fabric_profile_id,
             get_installed_quilt_profile_id,
@@ -222,6 +241,7 @@ pub fn run() {
             curseforge_search_mods,
             curseforge_get_mod,
             curseforge_get_mod_files,
+            curseforge_list_categories,
             curseforge_list_minecraft_versions,
             download_curseforge_file,
             import_mrpack,
@@ -233,6 +253,7 @@ pub fn run() {
             delete_item,
             list_profile_items,
             set_profile_item_enabled,
+            reorder_profile_resource_packs,
             rename_profile,
             change_profile_version,
             add_profile_files,
@@ -260,8 +281,15 @@ pub fn run() {
             add_launcher_account,
             get_ely_avatar,
             get_ely_skin,
+            get_ely_cape,
             get_mc_avatar,
             get_mc_skin,
+            get_mc_skin_by_username,
+            apply_mc_skin_by_username,
+            get_mc_cape,
+            list_mc_capes,
+            set_mc_active_cape,
+            get_optifine_cape,
             take_pending_mrpack_open,
             take_pending_profile_launch,
             create_profile_desktop_shortcut,
@@ -272,7 +300,16 @@ pub fn run() {
             delete_screenshot,
             open_screenshots_folder,
             open_screenshot,
-            get_launcher_logs
+            get_launcher_logs,
+            list_themes,
+            import_theme_zip,
+            get_theme_css,
+            save_custom_theme_css,
+            create_empty_theme,
+            delete_theme,
+            open_themes_folder,
+            open_theme_css_file,
+            get_theme_dir,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

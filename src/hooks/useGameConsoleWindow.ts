@@ -131,7 +131,7 @@ export function useGameConsoleWindow({
           formatGameConsoleWindowTitle(profileName, language),
         );
       } catch {
-        // ignore
+        //ignore
       }
     })();
   }, [isConsoleDetached, language, profileName]);

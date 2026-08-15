@@ -9,5 +9,6 @@ pub mod java;
 pub mod rpc;
 pub mod shortcuts;
 pub mod storage;
+pub mod themes;
 
 

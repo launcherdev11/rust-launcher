@@ -12,6 +12,7 @@
     "add": "Add",
     "rename": "Rename",
     "browse": "Browse",
+    "sponsor": "Sponsor",
     "format": {
       "modsCount": "Mods: {{count}}",
       "playtimeHoursMinutes": "{{h}}h {{m}}m",
@@ -78,7 +79,55 @@
     "downloadFailed": "Failed to download file.",
     "downloadFailedModrinth": "Failed to download Modrinth file.",
     "downloadFailedCurseforge": "Failed to download CurseForge file.",
-    "curseforgeModpackHint": "CurseForge modpack saved as an archive. Automatic .mrpack import is only available for Modrinth."
+    "curseforgeModpackHint": "CurseForge modpack saved as an archive. Automatic .mrpack import is only available for Modrinth.",
+    "quickInstall": "Install",
+    "source": {
+      "catalog": "Catalog",
+      "favorites": "Favorites",
+      "recent": "Recent"
+    },
+    "sort": {
+      "relevance": "Relevance",
+      "downloads": "Downloads",
+      "popularity": "Popularity",
+      "updated": "Updated",
+      "newest": "Newest"
+    },
+    "filters": {
+      "title": "Filters",
+      "sort": "Sort",
+      "categories": "Categories",
+      "client": "Client",
+      "server": "Server",
+      "installedOnly": "Installed only",
+      "reset": "Reset"
+    },
+    "environment": {
+      "any": "Any",
+      "required": "Required",
+      "optional": "Optional",
+      "unsupported": "Unsupported"
+    },
+    "favorites": {
+      "add": "Favorite",
+      "remove": "Unfavorite",
+      "empty": "No favorites yet."
+    },
+    "recent": {
+      "empty": "No recently viewed projects yet.",
+      "clear": "Clear"
+    },
+    "detail": {
+      "loading": "Loading project page…",
+      "loadFailed": "Failed to load project page.",
+      "gallery": "Gallery",
+      "description": "Description",
+      "versions": "Versions",
+      "wiki": "Wiki",
+      "issues": "Issues",
+      "source": "Source",
+      "discord": "Discord"
+    }
   },
   "settings": {
     "common": {
@@ -90,6 +139,10 @@
         "on": "On",
         "off": "Off"
       }
+    },
+    "search": {
+      "placeholder": "Search settings…",
+      "noResults": "No settings found."
     },
     "tab": {
       "directories": "Directories",
@@ -250,6 +303,29 @@
       "backgroundBlur": {
         "label": "Background blur:"
       },
+      "customThemes": {
+        "label": "Custom theme:",
+        "default": "Default",
+        "loading": "Loading themes…",
+        "importZip": "Import ZIP",
+        "create": "Create theme",
+        "createPrompt": "Theme name:",
+        "openFolder": "Open themes folder",
+        "editCss": "Edit CSS",
+        "delete": "Delete theme",
+        "deleteConfirm": "Delete theme «{{name}}»?",
+        "zipFilterName": "Theme archive",
+        "byAuthor": "By {{author}}",
+        "imported": "Theme «{{name}}» imported.",
+        "importFailed": "Failed to import theme.",
+        "created": "Theme «{{name}}» created.",
+        "createFailed": "Failed to create theme.",
+        "deleted": "Theme «{{name}}» deleted.",
+        "deleteFailed": "Failed to delete theme.",
+        "openFolderFailed": "Failed to open themes folder.",
+        "editCssFailed": "Failed to open style.css.",
+        "hint": "Themes are CSS overrides stored in the launcher data folder. Each theme needs theme.json and style.css. You can also drop a theme folder into the themes directory manually."
+      },
       "cache": {
         "label": "Launcher cache:",
         "description": "Ely avatars and temporary downloads.",
@@ -300,6 +376,7 @@
       "checkOnStart": { "label": "Check for updates on start:" },
       "autoInstall": { "label": "Automatically install updates:" },
       "checkNow": "Check for updates",
+      "checkNowHint": "Shift+click to force show the update popup",
       "noneFound": "You're up to date. No new version available.",
       "installedRestart": "Update installed. Please restart the launcher.",
       "availableNextStart": "A new launcher version is available: {{version}}. Installation will be offered on the next start.",
@@ -310,7 +387,14 @@
       "available": "New version {{version}} is available",
       "released": "Update {{version}} is available",
       "installNow": "Install now",
-      "upToDate": "Launcher is up to date"
+      "upToDate": "Launcher is up to date",
+      "popup": {
+        "defaultTitle": "Update available",
+        "versionLabel": "Version {{version}}",
+        "viewChanges": "View changelog",
+        "update": "Update",
+        "updating": "Updating..."
+      }
     }
   },
   "javaSettings": {
@@ -392,6 +476,7 @@
       "loadFailedHint": "Check your internet connection or access to GitHub.",
       "defaultAlt": "Launcher banner",
       "learnMore": "Learn more",
+      "play": "Play",
       "empty": "Launcher news and game banner"
     },
     "version": {
@@ -705,7 +790,17 @@
       "currentOutput": "Current output",
       "clearOnlyLive": "Clear only applies to current output",
       "consoleResizeHint": "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived.",
-      "noVersionsForGame": "No versions for the selected game"
+      "noVersionsForGame": "No versions for the selected game",
+      "resourcePackOrderHint": "Packs higher in the list override those below — same as in-game",
+      "reorderResourcePacks": "Reorder",
+      "reorderResourcePacksDone": "Done",
+      "dragToReorder": "Drag to reorder",
+      "disabledResourcePacks": "Disabled",
+      "reorderFailed": "Failed to reorder resource packs.",
+      "shaderPackActiveHint": "Only one shader pack can be active at a time (Iris / OptiFine).",
+      "enableShader": "Set as active",
+      "disableShader": "Disable shaders",
+      "inactiveShaders": "Inactive"
     },
     "externalImport": {
       "title": "Import from another launcher",
@@ -780,49 +875,241 @@
     "exportModal": {
       "title": "Export build",
       "format": "Format",
+      "mrpackHint": "Mods found on Modrinth are linked by hash (not embedded), so the .mrpack stays small. Configs and unknown jars go into overrides.",
+      "presets": "Presets",
+      "presetRecommended": "Recommended",
+      "presetMinimal": "Minimal",
+      "presetFull": "Everything",
       "ignorePatterns": "Ignore patterns",
-      "ignoreHint": "Supported: *, **, ! (negation).",
+      "ignoreHint": "Supported: *, **, ! (negation). Saves/logs are excluded by default.",
       "buildFiles": "Build files",
+      "refresh": "Refresh",
       "selectAll": "Select all",
       "clearAll": "Clear",
       "scanning": "Scanning...",
       "noData": "No data.",
       "emptyFolder": "Build folder is empty.",
       "preview": "Preview",
+      "previewing": "Resolving…",
       "export": "Export",
       "exporting": "Exporting…",
       "finalContents": "Final contents",
       "size": "Size:",
+      "packSize": "Pack:",
+      "downloadSize": "Downloads:",
+      "linkedMods": "{{count}} via Modrinth",
       "nothingIncluded": "Nothing will be included.",
       "done": "Done",
       "openFolder": "Open folder"
     }
   },
   "friends": {
-    "subtitleSignedIn": "Manage friends by nickname.",
-    "subtitleSignedOut": "Sign in to Supabase in the Accounts tab to use friends.",
+    "subtitleSignedIn": "Add friends, see who's online, and join their rooms.",
+    "subtitleSignedOut": "Sign in on the Accounts tab to see your friends.",
     "friendNicknamePlaceholder": "Friend's nickname",
+    "searchPlaceholder": "Find a friend…",
     "add": "Add",
     "refresh": "Refresh",
     "requests": "Requests",
-    "incomingTitle": "Incoming requests",
+    "incomingTitle": "Requests",
+    "incomingCount": "Requests · {{count}}",
     "signInFirst": "Sign in first in the Accounts tab.",
-    "noIncoming": "No incoming requests.",
+    "noIncoming": "No new requests.",
     "accept": "Accept",
-    "reject": "Reject",
-    "yourFriends": "Your friends",
-    "noFriends": "No friends yet. Send a request by nickname.",
+    "reject": "Decline",
+    "yourFriends": "Friends",
+    "friendsOnline": "{{online}} of {{total}} online",
+    "noFriends": "No friends yet — enter a nickname above and send a request.",
+    "noSearchResults": "No friends match that search.",
+    "statFriends": "Friends",
+    "statFriendsHint": "In your list",
+    "statOnline": "Online",
+    "statRequests": "Requests",
+    "statRooms": "Rooms",
+    "statRoomsHint": "Playing now",
+    "filterAll": "All",
+    "filterOnline": "Online",
+    "filterOffline": "Offline",
+    "onlineSection": "Online",
+    "offlineSection": "Offline",
+    "inRoom": "In a room",
+    "lastSeenJustNow": "just now",
+    "lastSeenMinutes": "{{count}} min ago",
+    "lastSeenHours": "{{count}} h ago",
+    "lastSeenDays": "{{count}} d ago",
+    "lastSeenNever": "hasn't been online recently",
+    "openRooms": "Go to rooms",
+    "howToTitle": "How it works",
+    "howToStep1": "Enter a 16Launcher nickname and send a request.",
+    "howToStep2": "When they accept, they appear in your list.",
+    "howToStep3": "See who's online and when they last opened the launcher.",
+    "howToStep4": "Join a friend's room right from this tab.",
+    "remove": "Remove",
+    "removeConfirm": "Remove {{nick}} from friends?",
+    "online": "Online",
+    "offline": "Offline",
+    "profileTitle": "Profile",
+    "viewProfile": "View profile",
+    "addFriend": "Add friend",
+    "alreadyFriends": "Already friends",
     "toast": {
       "requestAccepted": "Request accepted",
-      "requestRejected": "Request rejected",
+      "requestRejected": "Request declined",
       "signInFirst": "Sign in first in the Accounts tab",
       "cannotAddSelf": "You cannot send a request to yourself",
       "requestExists": "Request already exists or you are already friends.",
-      "requestSent": "Request sent"
+      "requestSent": "Request sent",
+      "removed": "Friend removed"
     }
   },
-  "supabase": {
-    "accountTitle": "16launcher account",
+  "rooms": {
+    "subtitleSignedIn": "Create rooms and invite friends to play together.",
+    "subtitleSignedOut": "Sign in on the Accounts tab to use rooms.",
+    "create": "Create room",
+    "refresh": "Refresh",
+    "join": "Join",
+    "joinIdPlaceholder": "Paste room ID…",
+    "joinById": "Join by ID",
+    "yourRooms": "Your rooms",
+    "friendsRooms": "Friends' rooms",
+    "signInFirst": "Sign in first in the Accounts tab.",
+    "noRooms": "No rooms yet. Create one or join by ID.",
+    "noFriendsRooms": "No friends are hosting a room right now.",
+    "youOwner": "Owner",
+    "youMember": "Member",
+    "ownedBy": "Host: {{nick}}",
+    "players": "{{count}} / {{max}} players",
+    "openRoom": "Open",
+    "joinFriendRoom": "Join",
+    "backToList": "Back to rooms",
+    "copyId": "Copy ID",
+    "idCopied": "Room ID copied",
+    "manageTitle": "Room",
+    "connectionTitle": "Status",
+    "worldTitle": "World",
+    "membersTitle": "Members",
+    "inviteTitle": "Invite",
+    "inviteFriendPlaceholder": "Choose a friend…",
+    "inviteEmpty": "All friends are already in the room — or add more on the Friends tab.",
+    "close": "Close room",
+    "leave": "Leave room",
+    "kick": "Kick",
+    "invite": "Invite",
+    "inviteNicknamePlaceholder": "Friend's nickname",
+    "mcAccount": "Minecraft",
+    "mcOnlineMicrosoft": "Microsoft",
+    "mcOnlineEly": "Ely",
+    "mcOffline": "offline",
+    "mcOfflineHint": "Sign in with Microsoft or Ely to join a friend's world.",
+    "p2pLabel": "Link",
+    "p2pReady": "ready",
+    "p2pConnecting": "connecting…",
+    "p2pWaiting": "waiting for player",
+    "bridgeLabel": "bridge",
+    "channelOpen": "channel open",
+    "lanPort": "LAN port",
+    "shareWorld": "Open access",
+    "shareWorldWaiting": "Access open",
+    "joinWorld": "Join world",
+    "hostSteps": "In-game, open your world, turn on Open to LAN, then enter the same port below.",
+    "guestSteps": "When the host opens access, tap Join world. You need a Microsoft or Ely account.",
+    "waitForPeer": "Invite a friend — the link appears when they join.",
+    "needP2p": "Wait until the link with your friend is ready",
+    "status": {
+      "open": "open",
+      "full": "full",
+      "closed": "closed"
+    },
+    "role": {
+      "owner": "owner",
+      "member": "member"
+    },
+    "toast": {
+      "signInFirst": "Sign in first in the Accounts tab",
+      "created": "Room created",
+      "joined": "Joined the room",
+      "left": "Left the room",
+      "closed": "Room closed",
+      "invited": "Player invited",
+      "kicked": "Member kicked",
+      "cannotInviteSelf": "You cannot invite yourself"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "signInFirst": "Sign in to see notifications.",
+    "unread": "Unread: {{count}}",
+    "refresh": "Refresh",
+    "readAll": "Read all",
+    "markRead": "Read",
+    "empty": "No notifications yet.",
+    "friendRequest": "Friend request from {{nick}}",
+    "friendAccept": "{{nick}} accepted your friend request",
+    "roomInvite": "{{nick}} invited you to a room",
+    "achievement": "Achievement: {{title}}",
+    "system": "System notification"
+  },
+  "achievements": {
+    "title": "Achievements",
+    "signInFirst": "Sign in to your platform account to view achievements.",
+    "refresh": "Refresh",
+    "empty": "No achievements yet.",
+    "locked": "Locked",
+    "progress": "{{unlocked}} / {{total}} unlocked",
+    "unlockedAt": "Unlocked {{date}}",
+    "items": {
+      "welcome": {
+        "title": "Welcome aboard",
+        "description": "Create your 16Launcher platform account."
+      },
+      "identity_linked": {
+        "title": "Identity confirmed",
+        "description": "Link an Ely.by or Microsoft Minecraft account."
+      },
+      "first_friend": {
+        "title": "Making friends",
+        "description": "Add your first friend on 16Launcher."
+      },
+      "first_launch": {
+        "title": "Into the world",
+        "description": "Launch Minecraft from 16Launcher for the first time."
+      },
+      "ten_launches": {
+        "title": "Regular",
+        "description": "Launch the game 10 times."
+      },
+      "fifty_launches": {
+        "title": "Can't stop",
+        "description": "Launch the game 50 times."
+      },
+      "hour_played": {
+        "title": "Time flies",
+        "description": "Play for a total of 1 hour."
+      },
+      "ten_hours": {
+        "title": "Dedicated",
+        "description": "Play for a total of 10 hours."
+      },
+      "first_room": {
+        "title": "Host",
+        "description": "Create your first room."
+      },
+      "first_join": {
+        "title": "Guest",
+        "description": "Join someone else's room."
+      },
+      "room_invite": {
+        "title": "Come over",
+        "description": "Invite a friend to a room."
+      },
+      "theme_submit": {
+        "title": "Stylist",
+        "description": "Submit a custom launcher theme."
+      }
+    }
+  },
+  "platform": {
+    "accountTitle": "16Launcher account",
     "accountManagement": "Account management",
     "signIn": "Sign in",
     "signUp": "Sign up",
@@ -834,17 +1121,33 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "createAccount": "Create account",
+    "privacyPolicyLink": "Privacy Policy",
+    "privacyConsent": "I have read the {{link}} and consent to the processing of personal data.",
+    "privacyLoginNotice": "By signing in, you confirm that you have read the {{link}}.",
+    "next": "Next",
+    "back": "Back",
+    "verificationStepLabel": "Step 2 of 2",
+    "verificationTitle": "Confirm your email",
+    "verificationHint": "We sent a code to {{email}}. Enter it below to finish registration.",
     "launcherNickname": "Launcher nickname",
     "inGameNickname": "In-game nickname",
     "newNicknamePlaceholder": "New nickname",
     "changeNickname": "Change nickname",
     "logout": "Log out",
+    "dangerZone": "Danger zone",
+    "deleteAccount": "Delete account",
+    "deleteAccountConfirm": "Delete permanently",
+    "deleteAccountHint": "Your 16Launcher account and related server data will be permanently deleted. Your current password is required.",
     "linked": "Linked",
     "linking": "Linking…",
     "link": "Link",
     "enterEmail": "Enter email",
     "enterNicknameOrEmail": "Enter nickname or email",
     "enterNickname": "Enter nickname",
+    "verificationCodeLabel": "Verification code",
+    "enterVerificationCode": "000000",
+    "sendVerificationCode": "Send code to email",
+    "resendVerificationCode": "Resend code",
     "linkMicrosoftTitle": "Sign in with Microsoft, then click Link again",
     "linkElyTitle": "Sign in with Ely.by, then click Link again",
     "toast": {
@@ -856,8 +1159,7 @@
       "nicknameTooShort": "Nickname must be at least 3 characters.",
       "nicknameAlreadySet": "This nickname is already set.",
       "nicknameUpdated": "Nickname updated.",
-      "sessionExpired": "16launcher session expired. Sign in again.",
-      "sessionExpiredWithMsg": "16launcher session expired: {{msg}}",
+      "sessionExpired": "16Launcher session expired. Sign in again.",
       "signInMicrosoftThenLink": "Sign in with Microsoft, then click Link again.",
       "signInElyThenLink": "Sign in with Ely.by, then click Link again.",
       "minecraftLinked": "Minecraft linked to account",
@@ -865,24 +1167,26 @@
       "enterEmailSignup": "Enter email for registration.",
       "enterSignupNickname": "Enter a nickname for registration.",
       "enterPassword": "Enter password",
-      "passwordTooShort": "Password must be at least 6 characters.",
-      "envNotConfigured": "VITE_SUPABASE_PROJECT_URL / VITE_SUPABASE_ANON_KEY are not configured in .env",
-      "noAccessToken": "No Supabase access_token — sign in first.",
-      "noRefreshToken": "Failed to get refresh_token from Supabase response.",
-      "noAccessTokenResponse": "Failed to get access_token from Supabase response.",
-      "refreshNoToken": "Supabase refresh did not return access_token.",
-      "nicknameLoginUnsupported": "Supabase server does not support nickname login yet (users_resolve_login missing).",
-      "nicknameEmailNotFound": "No email found for this nickname.",
-      "resolveLoginFailed": "Failed to call users_resolve_login (nickname login). Usually CORS/OPTIONS in Edge Function. Sign in with email for now, then check CORS in users_resolve_login."
+      "passwordTooShort": "Password must be at least 8 characters.",
+      "enterVerificationCode": "Enter the code from the email.",
+      "verificationCodeSent": "Verification code sent to your email.",
+      "accountDeleted": "Account deleted.",
+      "acceptPrivacy": "To create an account, please accept the Privacy Policy."
     },
     "errors": {
-      "connectionFailed": "Cannot connect to Supabase. Check VITE_SUPABASE_PROJECT_URL (must be https://<project>.supabase.co), internet, and service availability.",
+      "connectionFailed": "Cannot connect to the 16Launcher server. Check your internet connection and API availability.",
       "invalidCredentials": "Invalid login or password.",
       "invalidPassword": "Invalid password.",
-      "passwordTooShort": "Password is too short. Minimum 6 characters.",
-      "weakPassword": "Password is too weak.",
-      "identityAlreadyLinked": "{{provider}} is already linked to another 16launcher account. Unlink it there or use a different {{provider}} account.",
-      "linkConnectionFailed": "Failed to link {{provider}}: no connection to Supabase. Check internet and project settings."
+      "passwordTooShort": "Password is too short. Minimum 8 characters.",
+      "emailTaken": "This email is already registered.",
+      "nicknameTaken": "This nickname is already taken.",
+      "invalidVerificationCode": "Invalid verification code.",
+      "verificationCodeExpired": "Verification code expired. Request a new one.",
+      "tooManyVerificationAttempts": "Too many attempts. Request a new code.",
+      "rateLimited": "Too many requests. Please wait a moment.",
+      "emailSendFailed": "Failed to send the verification email.",
+      "deleteNotAvailable": "Account deletion is not available on the server yet. API deploy is required.",
+      "identityAlreadyLinked": "{{provider}} is already linked to another 16Launcher account."
     }
   },
   "app": {
@@ -891,7 +1195,8 @@
       "settings": "Settings",
       "mods": "Mods",
       "modpacks": "Modpacks",
-      "friends": "Friends"
+      "friends": "Friends",
+      "rooms": "Rooms"
     },
     "splitView": {
       "zones": {
@@ -904,6 +1209,19 @@
       "closePane": "Remove this pane"
     },
     "launcherVersionTitle": "Launcher version {{version}}",
+    "sessionNotifications": {
+      "title": "Launcher notifications",
+      "heading": "Notifications",
+      "empty": "No notifications this session yet",
+      "clear": "Clear",
+      "kindInfo": "Info",
+      "kindSuccess": "Success",
+      "kindError": "Error",
+      "kindWarning": "Warning",
+      "kindSystem": "System",
+      "groupBadge": "×{{count}}",
+      "groupHint": "Repeated {{count}} times — grouped"
+    },
     "accounts": {
       "managerTitle": "Account manager",
       "managerSubtitle": "",
@@ -920,10 +1238,18 @@
       "kindOffline": "Offline",
       "savedListTitle": "Saved accounts",
       "savedListHint": "",
+      "savedListHintShort": "Switch between saved Minecraft profiles.",
       "removeTitle": "Remove from launcher",
       "removeConfirm": "Remove this account from the list? Saved credentials for it will be deleted.",
+      "accountSettingsTitle": "Account settings",
+      "settingsSubtitle": "Minecraft accounts, platform, and notifications",
+      "settingsTabAccounts": "Accounts",
+      "settingsTabPlatform": "Platform",
+      "settingsTabNotifications": "Notifications",
+      "providerSignIn": "Minecraft sign-in",
       "editNickname": "Edit nickname",
       "nicknamePlaceholder": "Player",
+      "systemNicknameSignedOut": "Not signed in to 16Launcher",
       "signedInAsPrefix": "Signed in as: ",
       "hint": "Configure your profile and appearance after you sign in.",
       "microsoftSignIn": "Sign in with Microsoft",
@@ -932,6 +1258,22 @@
       "elyWaiting": "Waiting for login…",
       "elyDialogTitle": "If the page in your browser is loading forever:",
       "elyDialogTip": "It is better to open it in a new tab of the same browser. In another browser Ely.by may show “Invalid request”.",
+      "cape": {
+        "title": "Cape",
+        "none": "No cape",
+        "empty": "You have no capes on this account.",
+        "loading": "Loading capes…",
+        "error": "Failed to load capes."
+      },
+      "skinByUsername": {
+        "title": "Skin by username",
+        "placeholder": "Steve",
+        "apply": "Apply",
+        "reset": "Reset",
+        "loading": "Loading skin…",
+        "error": "Failed to load skin.",
+        "notFound": "Player not found."
+      },
       "toast": {
         "nicknameSaved": "Changes saved!",
         "nicknameSaveFailed": "Failed to save nickname.",
@@ -1000,13 +1342,18 @@
       "stopError": "Stop error: {{msg}}"
     },
     "warnings": {
-      "selectProfileFirst": "Select a profile first, then click “Play”."
+      "selectProfileFirst": "Select a profile first, then click “Play”.",
+      "needMinecraftVersion": "Select a Minecraft version on the Play tab first.",
+      "needInstalledVersion": "Install the selected version on the Play tab first.",
+      "closeGameFirst": "Close the running game first."
     },
     "discord": {
       "play": "In the main menu",
       "settings": "Configuring the launcher",
       "mods": "Selecting a mod",
       "modpacks": "Selecting a profile",
+      "friends": "Viewing friends",
+      "rooms": "In rooms",
       "accounts": "Managing account"
     },
     "pinnedProfiles": {

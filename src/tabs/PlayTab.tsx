@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { useT, type Language } from "../i18n";
-import { readDataCache, writeDataCache } from "../lib/launcherDataCache";
 import { copyTextToClipboard } from "../lib/clipboard";
+import {
+  bannerServerAddress,
+  fetchLauncherBanners,
+  isCarouselBanner,
+  readCachedLauncherBanners,
+  resolveBannerImageUrl,
+  type LauncherBannerData,
+} from "../lib/launcherBanners";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
@@ -44,27 +51,6 @@ type DownloadProgressPayload = {
   percent: number;
 };
 
-type LauncherBannerData = {
-  imageUrl: string;
-  title?: string;
-  subtitle?: string;
-  link?: string;
-};
-
-type LauncherBannerResponse =
-  | LauncherBannerData
-  | LauncherBannerData[]
-  | { banners: LauncherBannerData[] };
-
-const BANNER_BASE_URL =
-  "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/";
-
-function resolveBannerImageUrl(url: string): string {
-  if (!url) return url;
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${BANNER_BASE_URL}${url.replace(/^\.?\//, "")}`;
-}
-
 type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
 import type { PlayConsoleHotkeyActions } from "../hooks/useHotkeys";
@@ -104,6 +90,7 @@ type PlayTabProps = {
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
   fillPane?: boolean;
+  onPlayServer?: (serverAddress: string) => void | Promise<void>;
 };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -149,6 +136,7 @@ export function PlayTab({
   installedVersionIds,
   showSnapshots,
   fillPane = false,
+  onPlayServer,
 }: PlayTabProps) {
   const tt = useT(language);
   const [banners, setBanners] = useState<LauncherBannerData[]>([]);
@@ -188,14 +176,14 @@ export function PlayTab({
     activeBannerIndex < banners.length
       ? banners[activeBannerIndex]
       : null;
+  const bannerServerIp = currentBanner ? bannerServerAddress(currentBanner) : "";
 
   useEffect(() => {
-    const cached = readDataCache<LauncherBannerData[]>("play-banners", 300_000);
+    const cached = readCachedLauncherBanners(300_000)?.filter(isCarouselBanner);
     if (cached?.length) {
       setBanners(cached);
       setActiveBannerIndex(0);
       setBannerLoading(false);
-      return;
     }
 
     const controller = new AbortController();
@@ -203,65 +191,27 @@ export function PlayTab({
     async function fetchBanner() {
       try {
         setBannerError(false);
-
-        const urls = [
-          "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/banner.json",
-          "https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json",
-        ];
-
-        let lastError: unknown = null;
-
-        for (const url of urls) {
-          try {
-            const response = await fetch(url, {
-              signal: controller.signal,
-              cache: "no-store",
-            });
-
-            if (!response.ok) {
-              throw new Error(`Failed to load banner: ${response.status}`);
-            }
-
-            const raw = (await response.json()) as LauncherBannerResponse;
-
-            let parsed: LauncherBannerData[] = [];
-
-            if (Array.isArray(raw)) {
-              parsed = raw;
-            } else if (raw && "banners" in raw && Array.isArray((raw as any).banners)) {
-              parsed = (raw as { banners: LauncherBannerData[] }).banners;
-            } else if (raw && typeof raw === "object" && "imageUrl" in raw) {
-              parsed = [raw as LauncherBannerData];
-            }
-
-            parsed = parsed.filter(
-              (b) => typeof b.imageUrl === "string" && b.imageUrl.trim().length > 0,
-            );
-
-            if (parsed.length > 0) {
-              writeDataCache("play-banners", parsed);
-              setBanners(parsed);
-              setActiveBannerIndex(0);
-              return;
-            }
-
-            throw new Error("Invalid banner format");
-          } catch (err) {
-            if (controller.signal.aborted) return;
-            lastError = err;
-          }
-        }
-
-        throw lastError ?? new Error("Failed to load banner from all sources");
+        const all = await fetchLauncherBanners(controller.signal);
+        const parsed = all.filter(isCarouselBanner);
+        setBanners(parsed);
+        setActiveBannerIndex(0);
       } catch (error) {
+        if (controller.signal.aborted) return;
+        const aborted =
+          error instanceof DOMException && error.name === "AbortError";
+        if (aborted) return;
         console.error(error);
-        setBannerError(true);
+        if (!cached?.length) {
+          setBannerError(true);
+        }
       } finally {
-        setBannerLoading(false);
+        if (!controller.signal.aborted) {
+          setBannerLoading(false);
+        }
       }
     }
 
-    fetchBanner();
+    void fetchBanner();
 
     return () => {
       controller.abort();
@@ -389,17 +339,33 @@ export function PlayTab({
                   {currentBanner.subtitle}
                 </p>
               )}
-              {currentBanner.link && (
-                <div className="mt-4">
-                  <a
-                    href={currentBanner.link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20"
-                  >
-                    {tt("play.banner.learnMore")}
-                    <span className="ml-1 text-[10px]">↗</span>
-                  </a>
+              {(bannerServerIp || currentBanner.link) && (
+                <div className="pointer-events-auto mt-4 flex flex-wrap items-center gap-2">
+                  {bannerServerIp && onPlayServer && (
+                    <button
+                      type="button"
+                      disabled={isLaunching || isInstalling}
+                      onClick={() => void onPlayServer(bannerServerIp)}
+                      className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs font-semibold text-white shadow-soft ${primaryColorClasses} ${
+                        isLaunching || isInstalling
+                          ? "cursor-not-allowed opacity-60"
+                          : "interactive-press hover:opacity-90"
+                      }`}
+                    >
+                      {tt("play.banner.play")}
+                    </button>
+                  )}
+                  {currentBanner.link && (
+                    <a
+                      href={currentBanner.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20"
+                    >
+                      {tt("play.banner.learnMore")}
+                      <span className="ml-1 text-[10px]">↗</span>
+                    </a>
+                  )}
                 </div>
               )}
             </div>
