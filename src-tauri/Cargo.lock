@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "json-patch"
-version = "3.0.1"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "863726d7afb6bc2590eeff7135d923545e5e964f004c2ccf8716c25e70a86f08"
 dependencies = [
@@ -2739,7 +2739,7 @@ dependencies = [
 
 [[package]]
 name = "mc16launcher"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",

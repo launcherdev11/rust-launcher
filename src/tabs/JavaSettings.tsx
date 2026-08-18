@@ -63,6 +63,8 @@ export function JavaSettingsTab({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [runtimes, setRuntimes] = useState<JavaRuntimeInfo[]>([]);
+  const [loadingRuntimes, setLoadingRuntimes] = useState(false);
   const [validation, setValidation] = useState<ValidationState>({
     xmsError: null,
     xmxError: null,
@@ -94,13 +96,20 @@ export function JavaSettingsTab({
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setLoadingRuntimes(true);
       try {
-        const data = profileId
-          ? await invoke<JavaSettings>("get_profile_java_settings", { id: profileId })
-          : await invoke<JavaSettings>("get_java_settings");
+        const [data, detected] = await Promise.all([
+          profileId
+            ? invoke<JavaSettings>("get_profile_java_settings", { id: profileId })
+            : invoke<JavaSettings>("get_java_settings"),
+          invoke<JavaRuntimeInfo[]>("list_installed_java_runtimes").catch(
+            () => [] as JavaRuntimeInfo[],
+          ),
+        ]);
         if (cancelled) return;
         setSettings(data);
         setInitialSettings(data);
+        setRuntimes(detected);
       } catch (e) {
         console.error(e);
         if (!cancelled) {
@@ -110,13 +119,16 @@ export function JavaSettingsTab({
           );
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingRuntimes(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [language, showNotification]);
+  }, [language, profileId, showNotification, tt]);
 
   const updateField = <K extends keyof JavaSettings>(key: K, value: JavaSettings[K]) => {
     setSettings((prev) => ({
@@ -261,18 +273,31 @@ export function JavaSettingsTab({
     }
   };
 
+  const handleSelectRuntime = (path: string) => {
+    updateField("java_path", path.trim().length === 0 ? null : path);
+  };
+
+  const selectedRuntimePath = effectiveSettings.java_path?.trim() ?? "";
+  const runtimePaths = useMemo(
+    () => new Set(runtimes.map((runtime) => runtime.path)),
+    [runtimes],
+  );
+  const isCustomRuntimePath =
+    selectedRuntimePath.length > 0 && !runtimePaths.has(selectedRuntimePath);
+
   const handleDetectJava = async () => {
     setDetecting(true);
     try {
-      const runtimes = await invoke<JavaRuntimeInfo[]>("detect_java_runtimes");
-      if (!runtimes || runtimes.length === 0) {
+      const detected = await invoke<JavaRuntimeInfo[]>("detect_java_runtimes");
+      setRuntimes(detected);
+      if (!detected || detected.length === 0) {
         showNotification(
           "warning",
           tt("javaSettings.toast.noSuitableRuntimes"),
         );
         return;
       }
-      const preferred = runtimes[0];
+      const preferred = detected[0];
       updateField("java_path", preferred.path);
       showNotification(
         "success",
@@ -345,6 +370,68 @@ export function JavaSettingsTab({
           <div className="mb-1 text-xs text-white/60">
             {tt("javaSettings.description")}
           </div>
+          {profileId && (
+            <div className="text-xs text-amber-200/80">
+              {tt("javaSettings.runtime.profileHint")}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-white/90">
+                {tt("javaSettings.runtime.title")}
+              </span>
+              <span className="text-[11px] text-white/50">
+                {tt("javaSettings.runtime.hint")}
+              </span>
+            </div>
+            <select
+              value={selectedRuntimePath}
+              onChange={(e) => handleSelectRuntime(e.target.value)}
+              className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-white/35 focus:outline-none"
+            >
+              <option value="">{tt("javaSettings.runtime.auto")}</option>
+              {runtimes.map((runtime) => (
+                <option key={runtime.path} value={runtime.path}>
+                  {runtime.version}
+                </option>
+              ))}
+              {isCustomRuntimePath && (
+                <option value={selectedRuntimePath}>
+                  {tt("javaSettings.runtime.custom")}
+                </option>
+              )}
+            </select>
+            <div className="flex items-center gap-2 flex-nowrap">
+              <input
+                type="text"
+                value={effectiveSettings.java_path ?? ""}
+                onChange={(e) =>
+                  updateField(
+                    "java_path",
+                    e.target.value.trim().length === 0 ? null : e.target.value,
+                  )
+                }
+                placeholder={tt("javaSettings.javaPath.placeholder")}
+                className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/35 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleDetectJava}
+                disabled={loadingRuntimes || detecting}
+                className="interactive-press shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {tt("javaSettings.actions.detect")}
+              </button>
+              <button
+                type="button"
+                onClick={handleBrowseJava}
+                className="interactive-press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("javaSettings.actions.browse")}
+              </button>
+            </div>
+          </div>
 
           <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
             <label className="flex items-center justify-between gap-3 text-sm text-white/90">
@@ -405,48 +492,6 @@ export function JavaSettingsTab({
 
           {effectiveSettings.use_custom_jvm_args && (
             <>
-              <div className="mt-4 space-y-2 rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-white/90">
-                    {tt("javaSettings.javaPath.label")}
-                  </span>
-                  <span className="text-[11px] text-white/50">
-                    {tt("javaSettings.javaPath.hint")}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center gap-2 flex-nowrap">
-                  <input
-                    type="text"
-                    value={effectiveSettings.java_path ?? ""}
-                    onChange={(e) =>
-                      updateField(
-                        "java_path",
-                        e.target.value.trim().length === 0 ? null : e.target.value,
-                      )
-                    }
-                    placeholder={
-                      tt("javaSettings.javaPath.placeholder")
-                    }
-                    className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/35 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleDetectJava}
-                    disabled={detecting}
-                    className="interactive-press shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
-                  >
-                    {tt("javaSettings.actions.detect")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleBrowseJava}
-                    className="interactive-press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-                  >
-                    {tt("javaSettings.actions.browse")}
-                  </button>
-                </div>
-              </div>
-
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-1">
                 <div className="space-y-2 rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
                 <div className="flex items-center justify-between gap-2">

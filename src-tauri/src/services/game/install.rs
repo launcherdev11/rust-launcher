@@ -19,8 +19,8 @@ use crate::services::game::console::log_to_console;
 use crate::services::game::runtime::{
     download_assets, download_file, download_file_checked, download_forge_installer_once,
     ensure_launcher_profiles_json, extract_natives_jar, file_starts_with_pk,
-    forge_installer_url_with_official_maven, parse_forge_id, parse_neoforge_id,
-    select_latest_quilt_loader,
+    forge_installer_url_with_official_maven, forge_java_runtime_for_mc_version,
+    parse_forge_id, parse_neoforge_id, resolve_natives_extract_dir, select_latest_quilt_loader,
 };
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
@@ -49,6 +49,17 @@ async fn ensure_base_version_json(
         .await
         .map_err(|e| format!("Ошибка записи version.json: {e}"))?;
     Ok(())
+}
+
+fn extract_version_natives(
+    jar_path: &std::path::Path,
+    natives_root: &std::path::Path,
+    game_version: &str,
+    lib_name: &str,
+    artifact_path: &str,
+) {
+    let out_dir = resolve_natives_extract_dir(natives_root, game_version, lib_name, artifact_path);
+    let _ = extract_natives_jar(jar_path, &out_dir);
 }
 
 #[tauri::command]
@@ -204,7 +215,6 @@ pub async fn install_fabric(
     };
 
     log_to_console(&app, "[Fabric] Загрузка библиотек и natives Mojang");
-    log_to_console(&app, "[Quilt] Загрузка библиотек и natives Mojang");
     for lib in &mojang_detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
@@ -242,7 +252,13 @@ pub async fn install_fabric(
                 total_downloaded = total_downloaded.saturating_add(artifact.size);
             }
             if is_probably_native_jar_path(&artifact.path) && path.is_file() {
-                let _ = extract_natives_jar(&path, &natives_dir);
+                extract_version_natives(
+                    &path,
+                    &natives_dir,
+                    &profile.inherits_from,
+                    &lib.name,
+                    &artifact.path,
+                );
             }
         }
         if let Some(ref classifiers) = lib.downloads.classifiers {
@@ -262,7 +278,13 @@ pub async fn install_fabric(
                             },
                         );
                     }
-                    let _ = extract_natives_jar(&path, &natives_dir);
+                    extract_version_natives(
+                        &path,
+                        &natives_dir,
+                        &profile.inherits_from,
+                        &lib.name,
+                        &nat.path,
+                    );
                     continue;
                 }
                 if let Some(parent) = path.parent() {
@@ -279,7 +301,13 @@ pub async fn install_fabric(
                 )
                 .await?;
                 total_downloaded = total_downloaded.saturating_add(nat.size);
-                let _ = extract_natives_jar(&path, &natives_dir);
+                extract_version_natives(
+                    &path,
+                    &natives_dir,
+                    &profile.inherits_from,
+                    &lib.name,
+                    &nat.path,
+                );
             }
         }
     }
@@ -544,7 +572,13 @@ pub async fn install_quilt(
                 total_downloaded = total_downloaded.saturating_add(artifact.size);
             }
             if is_probably_native_jar_path(&artifact.path) && path.is_file() {
-                let _ = extract_natives_jar(&path, &natives_dir);
+                extract_version_natives(
+                    &path,
+                    &natives_dir,
+                    &profile.inherits_from,
+                    &lib.name,
+                    &artifact.path,
+                );
             }
         }
         if let Some(ref classifiers) = lib.downloads.classifiers {
@@ -564,7 +598,13 @@ pub async fn install_quilt(
                             },
                         );
                     }
-                    let _ = extract_natives_jar(&path, &natives_dir);
+                    extract_version_natives(
+                        &path,
+                        &natives_dir,
+                        &profile.inherits_from,
+                        &lib.name,
+                        &nat.path,
+                    );
                     continue;
                 }
                 if let Some(parent) = path.parent() {
@@ -581,7 +621,13 @@ pub async fn install_quilt(
                 )
                 .await?;
                 total_downloaded = total_downloaded.saturating_add(nat.size);
-                let _ = extract_natives_jar(&path, &natives_dir);
+                extract_version_natives(
+                    &path,
+                    &natives_dir,
+                    &profile.inherits_from,
+                    &lib.name,
+                    &nat.path,
+                );
             }
         }
     }
@@ -806,8 +852,9 @@ pub async fn install_forge(
     let game_dir = root.clone();
     let java_installer = installer_path.clone();
 
+    let (forge_java_major, forge_java_component) = forge_java_runtime_for_mc_version(&mc_version);
     let mut forge_java_bin =
-        crate::java_runtime::ensure_java_runtime(17, "java-runtime-gamma").await?;
+        crate::java_runtime::ensure_java_runtime(forge_java_major, forge_java_component).await?;
     #[cfg(windows)]
     {
         if let Some(name) = forge_java_bin.file_name().and_then(|n| n.to_str()) {
@@ -1188,6 +1235,23 @@ async fn install_version_from_json(
         if let Some(ref artifact) = lib.downloads.artifact {
             let dest = libs_root.join(&artifact.path);
             if dest.exists() {
+                if is_probably_native_jar_path(&artifact.path) {
+                    let natives_dir2 = natives_dir.clone();
+                    let dest2 = dest.clone();
+                    let version_id2 = version_id.clone();
+                    let lib_name = lib.name.clone();
+                    let artifact_path = artifact.path.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let out_dir = resolve_natives_extract_dir(
+                            &natives_dir2,
+                            &version_id2,
+                            &lib_name,
+                            &artifact_path,
+                        );
+                        extract_natives_jar(&dest2, &out_dir)
+                    })
+                    .await;
+                }
                 continue;
             }
             let url = artifact.url.clone();
@@ -1197,6 +1261,10 @@ async fn install_version_from_json(
             let sem2 = sem.clone();
             let total_done2 = total_done.clone();
             let vid = version_id.clone();
+            let artifact_path = artifact.path.clone();
+            let lib_name = lib.name.clone();
+            let natives_dir_dl = natives_dir.clone();
+            let version_id_dl = version_id.clone();
             tasks.push(tokio::spawn(async move {
                 let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
                 let expected2 = match expected {
@@ -1215,6 +1283,15 @@ async fn install_version_from_json(
                     DEFAULT_DOWNLOAD_RETRIES,
                 )
                 .await?;
+                if is_probably_native_jar_path(&artifact_path) {
+                    let out_dir = resolve_natives_extract_dir(
+                        &natives_dir_dl,
+                        &version_id_dl,
+                        &lib_name,
+                        &artifact_path,
+                    );
+                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &out_dir)).await;
+                }
                 Ok::<(), String>(())
             }));
         }
@@ -1224,7 +1301,19 @@ async fn install_version_from_json(
             if dest.exists() {
                 let natives_dir2 = natives_dir.clone();
                 let dest2 = dest.clone();
-                let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest2, &natives_dir2)).await;
+                let version_id2 = version_id.clone();
+                let lib_name = lib.name.clone();
+                let nat_path = nat.path.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    let out_dir = resolve_natives_extract_dir(
+                        &natives_dir2,
+                        &version_id2,
+                        &lib_name,
+                        &nat_path,
+                    );
+                    extract_natives_jar(&dest2, &out_dir)
+                })
+                .await;
             } else {
                 let url = nat.url.clone();
                 let expected = nat.sha1.clone();
@@ -1233,7 +1322,10 @@ async fn install_version_from_json(
                 let sem2 = sem.clone();
                 let total_done2 = total_done.clone();
                 let vid = version_id.clone();
-                let natives_dir2 = natives_dir.clone();
+                let natives_dir_dl = natives_dir.clone();
+                let version_id_dl = version_id.clone();
+                let lib_name = lib.name.clone();
+                let nat_path = nat.path.clone();
                 tasks.push(tokio::spawn(async move {
                     let _permit = sem2.acquire_owned().await.map_err(|_| "Semaphore закрыт".to_string())?;
                     let expected2 = match expected {
@@ -1252,7 +1344,13 @@ async fn install_version_from_json(
                         DEFAULT_DOWNLOAD_RETRIES,
                     )
                     .await?;
-                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &natives_dir2)).await;
+                    let out_dir = resolve_natives_extract_dir(
+                        &natives_dir_dl,
+                        &version_id_dl,
+                        &lib_name,
+                        &nat_path,
+                    );
+                    let _ = tokio::task::spawn_blocking(move || extract_natives_jar(&dest, &out_dir)).await;
                     Ok::<(), String>(())
                 }));
             }

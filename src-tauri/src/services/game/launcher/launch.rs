@@ -33,7 +33,8 @@ use crate::services::game::runtime::{
     ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args,
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
-    resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version,
+    resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version, resolve_natives_extract_dir,
+    forge_java_runtime_for_mc_version,
 };
 use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
 use crate::services::game::settings as settings_service;
@@ -419,14 +420,18 @@ pub async fn launch_game(
             if is_probably_native_jar_path(&a.path) {
                 let path = libs_root.join(&a.path);
                 if path.exists() {
-                    let _ = extract_natives_jar(&path, &natives_dir);
+                    let out_dir =
+                        resolve_natives_extract_dir(&natives_dir, &version_id, &lib.name, &a.path);
+                    let _ = extract_natives_jar(&path, &out_dir);
                 }
             }
         }
         if let Some(nat) = resolve_native_artifact(lib, os_name) {
             let path = libs_root.join(&nat.path);
             if path.exists() {
-                let _ = extract_natives_jar(&path, &natives_dir);
+                let out_dir =
+                    resolve_natives_extract_dir(&natives_dir, &version_id, &lib.name, &nat.path);
+                let _ = extract_natives_jar(&path, &out_dir);
             }
         }
     }
@@ -441,7 +446,13 @@ pub async fn launch_game(
                 if is_probably_native_jar_path(&a.path) {
                     let path = libs_root.join(&a.path);
                     if path.exists() {
-                        let _ = extract_natives_jar(&path, &natives_dir);
+                        let out_dir = resolve_natives_extract_dir(
+                            &natives_dir,
+                            &version_id,
+                            &lib.name,
+                            &a.path,
+                        );
+                        let _ = extract_natives_jar(&path, &out_dir);
                     }
                 }
             }
@@ -478,7 +489,9 @@ pub async fn launch_game(
                             .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
                     }
                 }
-                let _ = extract_natives_jar(&path, &natives_dir);
+                let out_dir =
+                    resolve_natives_extract_dir(&natives_dir, &version_id, &lib.name, &nat.path);
+                let _ = extract_natives_jar(&path, &out_dir);
             }
         }
         has_natives_files = natives_dir_has_files(&natives_dir);
@@ -736,21 +749,14 @@ pub async fn launch_game(
             .iter()
             .any(|l| l.name.to_ascii_lowercase().contains("net.neoforged:"));
     let (java_major, java_component) = if let Some(ref jv) = detail.java_version {
-        let mut major = jv.major_version;
-        let mut component = jv.component.clone();
-        if is_forge && !is_neoforge && major >= 21 {
-            eprintln!(
-                "[Launch] Forge: используем Java 17 вместо {} (обход бага Nashorn/ASM в Java 21)",
-                major
-            );
-            major = 17;
-            component = "java-runtime-gamma".to_string();
-        }
-        (major, component)
+        (jv.major_version, jv.component.clone())
     } else {
         if is_forge && !is_neoforge {
-            eprintln!("[Launch] Forge без java_version в manifest: используем Java 17");
-            (17, "java-runtime-gamma".to_string())
+            let (major, component) = forge_java_runtime_for_mc_version(&effective_jar_version);
+            eprintln!(
+                "[Launch] Forge без java_version в manifest: используем Java {major} ({component})"
+            );
+            (major, component.to_string())
         } else if is_fabric {
             let (major, component) = fallback_java_runtime_for_mc_version(&effective_jar_version);
             eprintln!(
@@ -758,7 +764,11 @@ pub async fn launch_game(
             );
             (major, component.to_string())
         } else {
-            (8, "jre-legacy".to_string())
+            let (major, component) = fallback_java_runtime_for_mc_version(&effective_jar_version);
+            eprintln!(
+                "[Launch] Без java_version в manifest: используем Java {major} ({component})"
+            );
+            (major, component.to_string())
         }
     };
     let default_java_path =
@@ -1038,6 +1048,10 @@ pub async fn launch_game(
         java_settings.xmx = None;
     }
 
+    let has_custom_java = java_settings
+        .java_path
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty());
     let (java_path, mut jvm_args) = build_java_command(
         default_java_path.clone(),
         &settings,
@@ -1049,7 +1063,7 @@ pub async fn launch_game(
         &version_id,
         &classpath_str,
         jvm_args,
-        if is_forge || is_fabric {
+        if (is_forge || is_fabric) && !has_custom_java {
             Some(default_java_path)
         } else {
             None

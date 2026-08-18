@@ -400,6 +400,13 @@
   "javaSettings": {
     "loading": "Loading Java settings...",
     "description": "Control which Java and JVM arguments the game will use. When custom arguments are disabled, the launcher applies safe default values.",
+    "runtime": {
+      "title": "Java runtime",
+      "hint": "By default the launcher downloads and uses Mojang Java for the selected Minecraft version.",
+      "auto": "Auto (Mojang runtime)",
+      "custom": "Custom Java path",
+      "profileHint": "These settings apply only to this modpack and override global settings."
+    },
     "useCustomArgs": {
       "label": "Use custom JVM arguments",
       "hint": "When off, only launcher defaults are used."
@@ -1294,6 +1301,7 @@
       "settingsSaved": "Settings saved!",
       "downloadStarted": "Download started!",
       "downloadFinished": "Download finished!",
+      "gameExitedEarly": "The game exited right after launch (code {{code}}). Open the console for details.",
       "copy": "Copy",
       "copied": "Copied!"
     },

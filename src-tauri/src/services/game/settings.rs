@@ -270,3 +270,8 @@ pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
     java_service::detect::detect_java_runtimes().await
 }
 
+#[command]
+pub fn list_installed_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
+    crate::java_runtime::list_installed_runtimes()
+}
+

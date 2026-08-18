@@ -592,6 +592,30 @@ pub async fn fetch_neoforge_versions() -> Result<Vec<NeoForgeVersionSummary>, St
 
 
 #[tauri::command]
+fn sort_fabric_loader_options(mut entries: Vec<LoaderVersionOption>) -> Vec<LoaderVersionOption> {
+    entries.sort_by(|a, b| {
+        compare_version_like(&b.version, &a.version).then_with(|| {
+            match (a.channel, b.channel) {
+                (Some(LoaderVersionChannel::Stable), Some(LoaderVersionChannel::Stable)) => {
+                    std::cmp::Ordering::Equal
+                }
+                (Some(LoaderVersionChannel::Stable), _) => std::cmp::Ordering::Less,
+                (_, Some(LoaderVersionChannel::Stable)) => std::cmp::Ordering::Greater,
+                _ => std::cmp::Ordering::Equal,
+            }
+        })
+    });
+    let mut out: Vec<LoaderVersionOption> = Vec::new();
+    let mut seen = HashSet::new();
+    for opt in entries {
+        if seen.insert(opt.version.clone()) {
+            out.push(opt);
+        }
+    }
+    out
+}
+
+#[tauri::command]
 pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let url = format!("{FABRIC_META_LOADERS}/{game_version}");
     let client = http_client(false);
@@ -602,27 +626,14 @@ pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<LoaderVers
         let head = text.chars().take(200).collect::<String>();
         format!("Ошибка разбора списка Fabric: {e}. Первые символы ответа: {head}")
     })?;
-    let mut entries: Vec<(u32, LoaderVersionOption)> = list
+    let entries: Vec<LoaderVersionOption> = list
         .into_iter()
-        .map(|e| {
-            (
-                e.loader.build,
-                LoaderVersionOption {
-                    version: e.loader.version.clone(),
-                    channel: fabric_loader_channel(e.loader.stable),
-                },
-            )
+        .map(|e| LoaderVersionOption {
+            version: e.loader.version.clone(),
+            channel: fabric_loader_channel(e.loader.stable),
         })
         .collect();
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
-    let mut out: Vec<LoaderVersionOption> = Vec::new();
-    let mut seen = HashSet::new();
-    for (_, opt) in entries {
-        if seen.insert(opt.version.clone()) {
-            out.push(opt);
-        }
-    }
-    Ok(out)
+    Ok(sort_fabric_loader_options(entries))
 }
 
 
@@ -998,6 +1009,31 @@ mod neoforge_version_tests {
         assert_eq!(
             neoforge_build_snapshot_manifest_id("26.1.0.0-alpha.10+snapshot-6").as_deref(),
             Some("26.1-snapshot-6")
+        );
+    }
+
+    #[test]
+    fn fabric_loaders_prefer_modern_semver_over_legacy_build() {
+        let sorted = sort_fabric_loader_options(vec![
+            LoaderVersionOption {
+                version: "0.10.6+build.214".into(),
+                channel: fabric_loader_channel(false),
+            },
+            LoaderVersionOption {
+                version: "0.19.3".into(),
+                channel: fabric_loader_channel(true),
+            },
+            LoaderVersionOption {
+                version: "0.18.6".into(),
+                channel: fabric_loader_channel(false),
+            },
+        ]);
+        assert_eq!(
+            sorted
+                .iter()
+                .map(|o| o.version.as_str())
+                .collect::<Vec<_>>(),
+            vec!["0.19.3", "0.18.6", "0.10.6+build.214"]
         );
     }
 }
