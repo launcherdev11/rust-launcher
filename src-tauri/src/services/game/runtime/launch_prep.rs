@@ -139,7 +139,7 @@ pub(crate) fn offline_uuid_from_username(name: &str) -> String {
     )
 }
 
-fn parse_release_version_parts(version_id: &str) -> (u32, u32, u32) {
+pub(crate) fn parse_release_version_parts(version_id: &str) -> (u32, u32, u32) {
     let normalized = version_id
         .split_once('-')
         .map(|(base, _)| base)
@@ -163,10 +163,57 @@ pub(crate) fn is_release_1_20_5_or_newer(version_id: &str) -> bool {
         || (major == 1 && minor == 20 && patch >= 5)
 }
 
+pub(crate) fn uses_natives_subdirectories(version_id: &str) -> bool {
+    let (major, _, _) = parse_release_version_parts(version_id);
+    major >= 26
+}
+
+pub(crate) fn natives_extract_subdir(lib_name: &str, artifact_path: &str) -> &'static str {
+    let n = format!("{lib_name} {artifact_path}").to_ascii_lowercase();
+    if n.contains("lwjgl") {
+        "lwjgl"
+    } else if n.contains("jna") {
+        "jna"
+    } else if n.contains("netty") {
+        "netty"
+    } else {
+        "java"
+    }
+}
+
+pub(crate) fn resolve_natives_extract_dir(
+    natives_root: &Path,
+    version_id: &str,
+    lib_name: &str,
+    artifact_path: &str,
+) -> PathBuf {
+    if uses_natives_subdirectories(version_id) {
+        natives_root.join(natives_extract_subdir(lib_name, artifact_path))
+    } else {
+        natives_root.to_path_buf()
+    }
+}
+
 pub(crate) fn fallback_java_runtime_for_mc_version(version_id: &str) -> (u8, &'static str) {
-    if is_release_1_20_5_or_newer(version_id) {
+    let (major, _, _) = parse_release_version_parts(version_id);
+    if major >= 26 {
+        (25, "java-runtime-epsilon")
+    } else if is_release_1_20_5_or_newer(version_id) {
         (21, "java-runtime-delta")
     } else if is_release_1_17_or_newer(version_id) {
+        (17, "java-runtime-gamma")
+    } else {
+        (8, "jre-legacy")
+    }
+}
+
+pub(crate) fn forge_java_runtime_for_mc_version(mc_version: &str) -> (u8, &'static str) {
+    let (major, minor, _) = parse_release_version_parts(mc_version);
+    if major >= 26 {
+        fallback_java_runtime_for_mc_version(mc_version)
+    } else if major == 1 && minor >= 21 {
+        (21, "java-runtime-delta")
+    } else if is_release_1_17_or_newer(mc_version) {
         (17, "java-runtime-gamma")
     } else {
         (8, "jre-legacy")

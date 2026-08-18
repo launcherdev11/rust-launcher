@@ -9,6 +9,8 @@ use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use tokio::sync::Mutex;
 
+use crate::models::JavaRuntimeInfo;
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -123,6 +125,59 @@ fn is_runtime_ready(home: &Path, major: u8) -> bool {
         return false;
     }
     true
+}
+
+fn parse_major_from_runtime_dir(name: &str) -> Option<u8> {
+    let suffix = name.rsplit_once("-java")?.1;
+    suffix.parse().ok()
+}
+
+pub fn list_installed_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
+    let runtimes_root = crate::app::paths::game_root_dir()?.join("runtimes");
+    if !runtimes_root.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut result: Vec<(u8, JavaRuntimeInfo)> = Vec::new();
+    for entry in fs::read_dir(&runtimes_root).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let dir_name = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let Some(major) = parse_major_from_runtime_dir(dir_name) else {
+            continue;
+        };
+
+        let bin = java_bin_path(&dir);
+        if !bin.is_file() {
+            continue;
+        }
+
+        let Some(home) = java_home_from_bin(&bin) else {
+            continue;
+        };
+        if !is_runtime_ready(&home, major) {
+            continue;
+        }
+
+        result.push((
+            major,
+            JavaRuntimeInfo {
+                path: bin.to_string_lossy().into_owned(),
+                version: format!("Java {major}"),
+                source: "Mojang runtime".to_string(),
+            },
+        ));
+    }
+
+    result.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(result.into_iter().map(|(_, info)| info).collect())
 }
 
 fn resolve_existing(major: u8, component: &str) -> Result<Option<PathBuf>, String> {
