@@ -1,12 +1,17 @@
 import { useEffect, useRef } from "react";
 import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { getStoredAccessToken } from "../api/client";
-import { sendPresenceHeartbeat, sendPresenceOffline } from "../api/presence";
+import { sendPresenceHeartbeat, sendPresenceOffline, type PresenceActivity } from "../api/presence";
 
 const HEARTBEAT_INTERVAL_MS = 25_000;
 
-export function usePresenceHeartbeat() {
+export function usePresenceHeartbeat(activity?: PresenceActivity | null) {
   const onlineRef = useRef(false);
+  const activityRef = useRef<PresenceActivity | null>(activity ?? null);
+
+  useEffect(() => {
+    activityRef.current = activity ?? null;
+  }, [activity]);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +41,7 @@ export function usePresenceHeartbeat() {
         return;
       }
       try {
-        await sendPresenceHeartbeat();
+        await sendPresenceHeartbeat({ activity: activityRef.current });
         onlineRef.current = true;
       } catch {
       }
@@ -56,7 +61,7 @@ export function usePresenceHeartbeat() {
         start();
       } else {
         stop();
-        onlineRef.current = false;
+        markOffline();
       }
     };
 

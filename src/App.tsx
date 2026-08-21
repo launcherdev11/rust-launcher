@@ -93,6 +93,11 @@ import {
 } from "./lib/gameConsoleFilter";
 import { INSTALL_CONSOLE_PROFILE_ID } from "./lib/gameConsoleWindow";
 import {
+  derivePresenceActivity,
+  type LaunchPresenceContext,
+  type RoomPresenceContext,
+} from "./lib/socialActivity";
+import {
   useT,
   t,
   isLanguage,
@@ -776,7 +781,6 @@ function TabPaneLoading() {
 const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
-  usePresenceHeartbeat();
   usePlatformWebSocket();
   useLauncherSession();
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
@@ -1569,6 +1573,21 @@ function App() {
   const gameLaunchStartedAtRef = useRef<number | null>(null);
   const [activeInstanceProfile, setActiveInstanceProfile] =
     useState<InstanceProfileSummary | null>(null);
+  const [roomPresenceContext, setRoomPresenceContext] = useState<RoomPresenceContext | null>(null);
+  const [launchPresenceContext, setLaunchPresenceContext] = useState<LaunchPresenceContext | null>(null);
+
+  const presenceActivity = useMemo(
+    () =>
+      derivePresenceActivity({
+        gameStatus,
+        activeItem,
+        activeInstanceName: activeInstanceProfile?.name ?? null,
+        roomContext: roomPresenceContext,
+        launchContext: launchPresenceContext,
+      }),
+    [activeItem, activeInstanceProfile?.name, gameStatus, launchPresenceContext, roomPresenceContext],
+  );
+  usePresenceHeartbeat(presenceActivity);
 
   const consoleProfileId =
     activeInstanceProfile?.id ?? runningConsoleProfileId ?? null;
@@ -1872,6 +1891,10 @@ function App() {
         });
         lastRunningRef.current = true;
         gameLaunchStartedAtRef.current = Date.now();
+        setLaunchPresenceContext({
+          kind: "modpack",
+          startedAt: new Date().toISOString(),
+        });
         setGameStatus("running");
         void reportStats({ launched: true }).catch(() => {});
       } finally {
@@ -1987,6 +2010,7 @@ function App() {
           ? Date.now() - gameLaunchStartedAtRef.current
           : null;
       gameLaunchStartedAtRef.current = null;
+      setLaunchPresenceContext(null);
       if (exitCode != null && exitCode !== 0) {
         showNotification(
           "error",
@@ -3694,6 +3718,7 @@ function App() {
     try {
       await invoke("stop_game");
       lastRunningRef.current = false;
+      setLaunchPresenceContext(null);
       setGameStatus("stopped");
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -3761,6 +3786,10 @@ function App() {
           });
           lastRunningRef.current = true;
           gameLaunchStartedAtRef.current = Date.now();
+          setLaunchPresenceContext({
+            kind: "modpack",
+            startedAt: new Date().toISOString(),
+          });
           setGameStatus("running");
           void reportStats({ launched: true }).catch(() => {});
         } finally {
@@ -3782,7 +3811,10 @@ function App() {
   };
 
   const handleLaunchToServer = useCallback(
-    async (serverAddress: string, options?: { requireOnlineAccount?: boolean }) => {
+    async (
+      serverAddress: string,
+      options?: { requireOnlineAccount?: boolean; presenceContext?: LaunchPresenceContext | null },
+    ) => {
       if (!selectedVersion) {
         throw new Error(tt("app.warnings.needMinecraftVersion"));
       }
@@ -3840,6 +3872,13 @@ function App() {
         });
         lastRunningRef.current = true;
         gameLaunchStartedAtRef.current = Date.now();
+        setLaunchPresenceContext(
+          options?.presenceContext ?? {
+            kind: "server",
+            serverAddress,
+            startedAt: new Date().toISOString(),
+          },
+        );
         setGameStatus("running");
         void reportStats({ launched: true }).catch(() => {});
       } catch (error) {
@@ -4123,7 +4162,7 @@ function App() {
               className={
                 inSplitPane
                   ? "tab-pane-fill items-center justify-center overflow-auto py-2"
-                  : "flex min-h-0 w-full flex-1 flex-col items-center justify-center"
+                  : "flex min-h-0 w-full flex-1 flex-col items-center"
               }
             >
             <PlayTab
@@ -4162,6 +4201,23 @@ function App() {
               isConsoleDetached={isConsoleDetached}
               onToggleConsoleDetached={toggleConsoleDetached}
               onPlayServer={handleBannerPlay}
+              profiles={profilesHydrated ? knownProfiles : []}
+              selectedProfileId={activeInstanceProfile?.id ?? null}
+              onSelectProfile={(profileId) => {
+                const profile = knownProfiles.find((p) => p.id === profileId);
+                if (!profile) return;
+                handleModpackProfileSelectionChange(profile);
+                void invoke("set_selected_profile", { id: profileId }).catch(() => {});
+              }}
+              onPlayProfile={(profileId) => {
+                const profile = knownProfiles.find((p) => p.id === profileId);
+                if (!profile) return;
+                void handlePlayPinnedProfile(profile);
+              }}
+              onOpenModpacks={() => activateSidebarTab("modpacks")}
+              onOpenProfile={(profileId) => {
+                void handleOpenProfileInModpacks(profileId);
+              }}
             />
             </div>
           );
@@ -5233,6 +5289,8 @@ function App() {
               language={language}
               minecraftAccountKind={activeAccountKind}
               onLaunchToServer={handleLaunchToServer}
+              onPresenceContextChange={setRoomPresenceContext}
+              onRoomLaunchContextChange={setLaunchPresenceContext}
             />
           </div>
           {activeItem === "friends" ? (

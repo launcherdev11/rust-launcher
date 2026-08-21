@@ -20,6 +20,7 @@ import { getStoredAccessToken } from "../api/client";
 import { ApiError } from "../api/client";
 import { localeTag, useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
+import { formatDurationShort, formatPresenceStatus, getElapsedSeconds } from "../lib/socialActivity";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
 import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 
@@ -32,6 +33,24 @@ type AvatarTarget = {
   ely_username?: string | null;
   mc_uuid?: string | null;
 };
+
+function decodeJwtSub(token: string): string {
+  const parts = token.split(".");
+  if (parts.length < 2) return "";
+  try {
+    const payload = JSON.parse(atob(parts[1])) as { sub?: string };
+    return typeof payload.sub === "string" ? payload.sub : "";
+  } catch {
+    return "";
+  }
+}
+
+function isRoomVisibleToUser(room: Room, userId: string): boolean {
+  if (room.visibility !== "private") return true;
+  if (!userId) return false;
+  if (room.owner_user_id === userId) return true;
+  return (room.members ?? []).some((member) => member.user_id === userId);
+}
 
 type FriendsTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
@@ -135,6 +154,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
   const [loading, setLoading] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [accessToken, setAccessToken] = useState("");
+  const [userId, setUserId] = useState("");
   const [profileNickname, setProfileNickname] = useState("");
 
   const [friends, setFriends] = useState<FriendRow[]>([]);
@@ -151,6 +171,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
     setAccessToken(token);
+    setUserId(token ? decodeJwtSub(token) : "");
     try {
       setProfileNickname(window.localStorage.getItem(API_NICKNAME_KEY) ?? "");
     } catch {
@@ -170,7 +191,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
   }, [syncAuth]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    const id = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -345,6 +366,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
             user_id: userId,
             online: true,
             last_seen: prev[userId]?.last_seen,
+            activity: prev[userId]?.activity,
           },
         }));
         return;
@@ -359,6 +381,17 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
             online: false,
             last_seen: detail.payload.last_seen ?? prev[userId]?.last_seen,
           },
+        }));
+        return;
+      }
+
+      if (
+        detail.type === "presence_updated"
+      ) {
+        const next = detail.payload.presence;
+        setPresenceByUserId((prev) => ({
+          ...prev,
+          [next.user_id]: next,
         }));
         return;
       }
@@ -444,16 +477,21 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
     [friends, presenceByUserId],
   );
 
+  const visibleFriendsRooms = useMemo(
+    () => friendsRooms.filter((room) => isRoomVisibleToUser(room, userId)),
+    [friendsRooms, userId],
+  );
+
   const roomByFriendId = useMemo(() => {
     const map = new Map<string, Room>();
-    for (const room of friendsRooms) {
+    for (const room of visibleFriendsRooms) {
       map.set(room.owner_user_id, room);
       for (const member of room.members ?? []) {
         map.set(member.user_id, room);
       }
     }
     return map;
-  }, [friendsRooms]);
+  }, [visibleFriendsRooms]);
 
   const filteredFriends = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -542,7 +580,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
             />
             <p className={`mt-0.5 text-xs ${online ? "text-emerald-300/80" : "text-white/40"}`}>
               {online
-                ? tt("friends.online")
+                ? formatPresenceStatus(presence, tt)
                 : presence?.last_seen
                   ? formatLastSeen(presence.last_seen, language, tt, nowMs)
                   : tt("friends.lastSeenNever")}
@@ -665,7 +703,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
           />
           <StatCard
             label={tt("friends.statRooms")}
-            value={accessToken ? friendsRooms.length : "—"}
+            value={accessToken ? visibleFriendsRooms.length : "—"}
             hint={accessToken ? tt("friends.statRoomsHint") : undefined}
             accent="sky"
           />
@@ -860,17 +898,19 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
                 ) : null}
               </div>
 
-              {friendsRooms.length === 0 ? (
+              {visibleFriendsRooms.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-6 text-center text-sm text-white/55">
                   {tt("rooms.noFriendsRooms")}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {friendsRooms.map((room) => {
+                  {visibleFriendsRooms.map((room) => {
                     const members = room.members ?? [];
                     const owner = members.find((m) => m.user_id === room.owner_user_id);
                     const ownerNick = owner?.nickname ?? room.owner_user_id.slice(0, 8);
                     const canJoin = room.status === "open";
+                    const roomTitle = room.name?.trim() || ownerNick;
+                    const sessionPlaytimeSeconds = getElapsedSeconds(room.session_started_at, nowMs);
                     return (
                       <div
                         key={room.id}
@@ -892,7 +932,7 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
                               }}
                             />
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-white/90">{ownerNick}</p>
+                              <p className="truncate text-sm font-semibold text-white/90">{roomTitle}</p>
                               <p className="text-[11px] text-white/45">
                                 {tt("rooms.ownedBy", { nick: ownerNick })}
                               </p>
@@ -906,12 +946,20 @@ export function FriendsTab({ showNotification, language, onOpenRooms }: FriendsT
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <MemberAvatars members={members} avatarSrcFor={avatarFor} />
-                          <p className="text-[11px] text-white/45">
-                            {tt("rooms.players", {
-                              count: room.member_count,
-                              max: room.max_players,
-                            })}
-                          </p>
+                          <div className="text-right">
+                            <p className="text-[11px] text-white/45">
+                              {tt("rooms.players", {
+                                count: room.member_count,
+                                max: room.max_players,
+                              })}
+                            </p>
+                            {sessionPlaytimeSeconds != null ? (
+                              <p className="mt-0.5 text-[10px] font-semibold text-emerald-200/80">
+                                {tt("rooms.sessionPlaytimeLabel")}:{" "}
+                                {formatDurationShort(sessionPlaytimeSeconds, tt)}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
                         <button
                           type="button"
