@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
-import { useT, type Language } from "../i18n";
+import { ProfileInstanceIcon } from "../components/profile_instance_icon";
+import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 import {
   bannerServerAddress,
@@ -10,6 +11,16 @@ import {
   resolveBannerImageUrl,
   type LauncherBannerData,
 } from "../lib/launcherBanners";
+
+export type PlayHomeProfile = {
+  id: string;
+  name: string;
+  game_version: string;
+  loader: string;
+  play_time_seconds: number;
+  last_played_at?: number | null;
+  mods_count: number;
+};
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
@@ -91,6 +102,12 @@ type PlayTabProps = {
   showSnapshots: boolean;
   fillPane?: boolean;
   onPlayServer?: (serverAddress: string) => void | Promise<void>;
+  profiles?: PlayHomeProfile[];
+  selectedProfileId?: string | null;
+  onSelectProfile?: (profileId: string) => void;
+  onPlayProfile?: (profileId: string) => void;
+  onOpenModpacks?: () => void;
+  onOpenProfile?: (profileId: string) => void;
 };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -137,12 +154,29 @@ export function PlayTab({
   showSnapshots,
   fillPane = false,
   onPlayServer,
+  profiles = [],
+  selectedProfileId = null,
+  onSelectProfile,
+  onPlayProfile,
+  onOpenModpacks,
+  onOpenProfile,
 }: PlayTabProps) {
   const tt = useT(language);
   const [banners, setBanners] = useState<LauncherBannerData[]>([]);
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerError, setBannerError] = useState(false);
+
+  const recentProfiles = useMemo(() => {
+    return [...profiles]
+      .sort((a, b) => {
+        const aT = a.last_played_at ?? 0;
+        const bT = b.last_played_at ?? 0;
+        if (bT !== aT) return bT - aT;
+        return (b.play_time_seconds ?? 0) - (a.play_time_seconds ?? 0);
+      })
+      .slice(0, 4);
+  }, [profiles]);
 
   const consoleText = useMemo(
     () => playConsoleLines.map((e) => e.line).join("\n"),
@@ -291,12 +325,151 @@ export function PlayTab({
   }, [isVersionDropdownOpen, filteredVersions.length]);
 
   const bannerClass = fillPane
-    ? "glass-panel relative flex min-h-[7rem] max-h-[min(220px,42%)] w-full max-w-none flex-1 overflow-hidden rounded-3xl"
-    : "glass-panel relative flex h-[260px] w-full max-w-1xl overflow-hidden rounded-3xl";
+    ? "glass-panel relative flex min-h-[7rem] max-h-[min(220px,42%)] w-full max-w-none shrink-0 overflow-hidden rounded-3xl"
+    : "glass-panel relative flex h-[260px] w-full shrink-0 overflow-hidden rounded-3xl";
 
   const controlsClass = fillPane
     ? "relative mt-2 flex w-full max-w-none shrink-0 justify-center px-2"
     : "pointer-events-none relative mt-auto mb-10 flex w-full max-w-[95vw] justify-center px-2";
+
+  const homeCards = (
+    <div
+      className={
+        fillPane
+          ? "mt-2 flex min-h-0 w-full flex-1 flex-col gap-2"
+          : "mt-3 flex w-full flex-col gap-2"
+      }
+    >
+      <div className="flex items-center justify-between px-1">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">
+          {tt("play.home.recentTitle")}
+        </h3>
+        {onOpenModpacks && (
+          <button
+            type="button"
+            onClick={onOpenModpacks}
+            className="text-[11px] font-medium text-white/55 transition-colors hover:text-white/90"
+          >
+            {tt("play.home.seeAll")}
+          </button>
+        )}
+      </div>
+
+      <div
+        className={
+          fillPane
+            ? "grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-2"
+            : "grid grid-cols-2 gap-2 sm:gap-3"
+        }
+      >
+        {Array.from({ length: 4 }, (_, index) => {
+          const profile = recentProfiles[index];
+          if (!profile) {
+            const isFirstEmpty = index === recentProfiles.length;
+            return (
+              <button
+                key={`empty-${index}`}
+                type="button"
+                onClick={onOpenModpacks}
+                className={`glass-panel group flex min-h-[5.5rem] flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/15 bg-black/25 px-3 py-3 text-center transition-colors hover:border-white/30 hover:bg-black/40 sm:min-h-[6.5rem] ${
+                  fillPane ? "min-h-0" : ""
+                } ${onOpenModpacks ? "cursor-pointer" : "cursor-default"}`}
+              >
+                {isFirstEmpty ? (
+                  <>
+                    <img
+                      src="/launcher-assets/modpack_icon.png"
+                      alt=""
+                      className="h-7 w-7 object-contain opacity-50 transition-opacity group-hover:opacity-80"
+                    />
+                    <span className="text-[11px] font-medium text-white/45 group-hover:text-white/70">
+                      {profiles.length === 0
+                        ? tt("play.home.emptyCreate")
+                        : tt("play.home.emptySlot")}
+                    </span>
+                  </>
+                ) : (
+                  <span className="h-7 w-7 rounded-lg bg-white/5 opacity-40" />
+                )}
+              </button>
+            );
+          }
+
+          const isSelected = selectedProfileId === profile.id;
+          return (
+            <div
+              key={profile.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelectProfile?.(profile.id)}
+              onDoubleClick={() => onOpenProfile?.(profile.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectProfile?.(profile.id);
+                }
+              }}
+              className={`glass-panel group relative flex min-h-[5.5rem] cursor-pointer items-stretch gap-3 overflow-hidden rounded-2xl px-3 py-3 text-left transition-colors sm:min-h-[6.5rem] sm:px-4 sm:py-3.5 ${
+                fillPane ? "min-h-0" : ""
+              } ${
+                isSelected
+                  ? "border border-emerald-400/70 bg-white/12 ring-1 ring-emerald-400/35"
+                  : "border border-white/10 hover:border-white/25 hover:bg-white/8"
+              }`}
+            >
+              <ProfileInstanceIcon
+                profile={profile}
+                className="h-12 w-12 shrink-0 self-center rounded-xl sm:h-14 sm:w-14"
+              />
+              <div className="min-w-0 flex-1 self-center">
+                <div className="truncate text-sm font-semibold text-white">
+                  {profile.name}
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-white/60">
+                  {profile.game_version} · {profile.loader}
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-white/45">
+                  <span className="inline-flex items-center gap-1">
+                    <img
+                      src="/launcher-assets/clock.png"
+                      alt=""
+                      className="h-3 w-3 object-contain opacity-70"
+                    />
+                    {formatPlaytimeShort(language, profile.play_time_seconds)}
+                  </span>
+                  <span>
+                    {tt("play.home.modsCount", { count: profile.mods_count })}
+                  </span>
+                </div>
+              </div>
+              {onPlayProfile && (
+                <button
+                  type="button"
+                  title={tt("play.home.playTitle")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPlayProfile(profile.id);
+                  }}
+                  className={`interactive-press absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-white opacity-0 shadow-soft transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${primaryColorClasses}`}
+                >
+                  <img
+                    src="/launcher-assets/play.png"
+                    alt=""
+                    className="h-4 w-4 object-contain"
+                  />
+                </button>
+              )}
+              {isSelected && (
+                <span className="absolute bottom-2 right-2 rounded-full bg-emerald-500/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                  {tt("play.home.selectedBadge")}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const shell = (
     <>
@@ -378,6 +551,8 @@ export function PlayTab({
           </div>
         )}
       </div>
+
+      {homeCards}
 
       <div className={controlsClass}>
         <div className="pointer-events-auto relative w-full max-w-2xl">
@@ -626,6 +801,10 @@ export function PlayTab({
       <div className="flex h-full min-h-0 w-full max-w-none flex-col">{shell}</div>
     );
   }
-  return shell;
+  return (
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      {shell}
+    </div>
+  );
 }
 

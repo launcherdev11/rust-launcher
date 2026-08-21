@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   closeRoom,
   createRoom,
+  getRoomSession,
   inviteToRoom,
   joinRoom,
   leaveRoom,
@@ -9,6 +10,7 @@ import {
   listRooms,
   type Room,
   type RoomMember,
+  type RoomSession,
 } from "../api/rooms";
 import { listFriends, sendFriendRequest, type FriendRow } from "../api/friends";
 import { API_AUTH_CHANGED_EVENT, API_NICKNAME_KEY } from "../api/auth";
@@ -26,6 +28,13 @@ import { WS_EVENT, type WsEvent } from "../api/ws";
 import { useRoomPeerSession } from "../hooks/useRoomPeerSession";
 import { useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
+import {
+  formatDurationShort,
+  formatRoomVisibility,
+  getElapsedSeconds,
+  type LaunchPresenceContext,
+  type RoomPresenceContext,
+} from "../lib/socialActivity";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -43,8 +52,10 @@ type RoomsTabProps = {
   minecraftAccountKind: "microsoft" | "ely" | "offline" | string;
   onLaunchToServer: (
     serverAddress: string,
-    options?: { requireOnlineAccount?: boolean },
+    options?: { requireOnlineAccount?: boolean; presenceContext?: LaunchPresenceContext | null },
   ) => Promise<void>;
+  onPresenceContextChange?: (context: RoomPresenceContext | null) => void;
+  onRoomLaunchContextChange?: (context: LaunchPresenceContext | null) => void;
 };
 
 function decodeJwtSub(token: string): string {
@@ -67,6 +78,13 @@ function statusTone(status: string): string {
   if (status === "open") return "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30";
   if (status === "full") return "bg-amber-500/15 text-amber-100 ring-amber-500/30";
   return "bg-white/10 text-white/60 ring-white/15";
+}
+
+function isRoomVisibleToUser(room: Room, userId: string): boolean {
+  if (room.visibility !== "private") return true;
+  if (!userId) return false;
+  if (room.owner_user_id === userId) return true;
+  return (room.members ?? []).some((member) => member.user_id === userId);
 }
 
 function MemberAvatars({
@@ -113,6 +131,8 @@ export function RoomsTab({
   language,
   minecraftAccountKind,
   onLaunchToServer,
+  onPresenceContextChange,
+  onRoomLaunchContextChange,
 }: RoomsTabProps) {
   const tt = useT(language);
 
@@ -134,12 +154,25 @@ export function RoomsTab({
   const [friendsRooms, setFriendsRooms] = useState<Room[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [selectedRoomSession, setSelectedRoomSession] = useState<RoomSession | null>(null);
   const [managing, setManaging] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState("");
+  const [joinPassword, setJoinPassword] = useState("");
   const [showJoinPanel, setShowJoinPanel] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createRoomName, setCreateRoomName] = useState("");
+  const [createRoomVisibility, setCreateRoomVisibility] = useState<"public" | "private">("public");
+  const [createRoomPassword, setCreateRoomPassword] = useState("");
+  const [isVisibilityDropdownOpen, setIsVisibilityDropdownOpen] = useState(false);
+  const visibilityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [inviteNickname, setInviteNickname] = useState("");
   const [avatarByKey, setAvatarByKey] = useState<Record<string, string>>({});
   const [viewingProfile, setViewingProfile] = useState<UserProfileSeed | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [lanPortInput, setLanPortInput] = useState("25565");
+  const [bridgeStatus, setBridgeStatus] = useState<string>("idle");
+  const [tunnelBusy, setTunnelBusy] = useState(false);
+  const [hostReady, setHostReady] = useState(false);
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -218,23 +251,92 @@ export function RoomsTab({
         detail.type === "room_invite"
       ) {
         void reloadRooms().catch(() => {});
+        if (selectedRoomId) {
+          void getRoomSession(selectedRoomId)
+            .then(setSelectedRoomSession)
+            .catch(() => {});
+        }
       }
     };
     window.addEventListener(WS_EVENT, onWs);
     return () => window.removeEventListener(WS_EVENT, onWs);
-  }, [reloadRooms]);
+  }, [reloadRooms, selectedRoomId]);
 
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId) ?? null;
   const isOwner = selectedRoom?.owner_user_id === userId;
+  const selectedRoomSessionStartedAt =
+    selectedRoomSession?.started_at ?? selectedRoom?.session_started_at ?? null;
 
   useEffect(() => {
     if (!selectedRoom) setManaging(false);
   }, [selectedRoom]);
 
-  const [lanPortInput, setLanPortInput] = useState("25565");
-  const [bridgeStatus, setBridgeStatus] = useState<string>("idle");
-  const [tunnelBusy, setTunnelBusy] = useState(false);
-  const [hostReady, setHostReady] = useState(false);
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!accessToken || !selectedRoomId) {
+      setSelectedRoomSession(null);
+      return;
+    }
+    let cancelled = false;
+    void getRoomSession(selectedRoomId)
+      .then((session) => {
+        if (!cancelled) {
+          setSelectedRoomSession(session);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedRoomSession(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, selectedRoomId]);
+
+  useEffect(() => {
+    if (!onPresenceContextChange) return;
+    if (!selectedRoom) {
+      onPresenceContextChange(null);
+      return;
+    }
+    const memberNicknames = (selectedRoom.members ?? [])
+      .filter((member) => member.user_id !== userId)
+      .map((member) => member.nickname)
+      .filter(Boolean);
+    onPresenceContextChange({
+      roomId: selectedRoom.id,
+      roomName: selectedRoom.name?.trim() || null,
+      visibility: selectedRoom.visibility ?? null,
+      joinCode: selectedRoom.join_code?.trim() || null,
+      memberNicknames,
+      sessionStartedAt: selectedRoomSessionStartedAt,
+    });
+    return () => {
+      onPresenceContextChange(null);
+    };
+  }, [onPresenceContextChange, selectedRoom, selectedRoomSessionStartedAt, userId]);
+
+  useEffect(() => {
+    if (!onRoomLaunchContextChange) return;
+    if (!selectedRoom || !hostReady || !isOwner) {
+      onRoomLaunchContextChange(null);
+      return;
+    }
+    onRoomLaunchContextChange({
+      kind: "room_world",
+      worldName: selectedRoom.name?.trim() || null,
+      startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
+    });
+    return () => {
+      onRoomLaunchContextChange(null);
+    };
+  }, [hostReady, isOwner, onRoomLaunchContextChange, selectedRoom, selectedRoomSessionStartedAt]);
+
   const tunnelDisposeByPeerRef = useRef<Map<string, () => void>>(new Map());
   const hostBridgeStartedByPeerRef = useRef<Set<string>>(new Set());
   const pendingLanPortRef = useRef<number | null>(null);
@@ -417,6 +519,12 @@ export function RoomsTab({
       );
       await onLaunchToServer(`127.0.0.1:${localPort}`, {
         requireOnlineAccount: true,
+        presenceContext: {
+          kind: "room_world",
+          serverAddress: `127.0.0.1:${localPort}`,
+          worldName: selectedRoom?.name?.trim() || null,
+            startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
+        },
       });
       showNotification(
         "success",
@@ -429,15 +537,58 @@ export function RoomsTab({
     }
   };
 
+  const resetCreateForm = () => {
+    setCreateRoomName("");
+    setCreateRoomVisibility("public");
+    setCreateRoomPassword("");
+    setIsVisibilityDropdownOpen(false);
+  };
+
+  useEffect(() => {
+    if (!showCreateModal || !isVisibilityDropdownOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (
+        visibilityDropdownRef.current &&
+        target &&
+        !visibilityDropdownRef.current.contains(target)
+      ) {
+        setIsVisibilityDropdownOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsVisibilityDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isVisibilityDropdownOpen, showCreateModal]);
+
   const handleCreate = async () => {
     if (!accessToken) {
       showNotification("warning", tt("rooms.toast.signInFirst"));
       return;
     }
+    const password = createRoomPassword.trim();
+    if (createRoomVisibility === "private") {
+      if (password.length < 4 || password.length > 32) {
+        showNotification("warning", tt("rooms.toast.passwordRequired"));
+        return;
+      }
+    }
     setLoading(true);
     try {
-      const room = await createRoom(5);
+      const room = await createRoom({
+        name: createRoomName.trim() || undefined,
+        visibility: createRoomVisibility,
+        password: createRoomVisibility === "private" ? password : undefined,
+      });
       showNotification("success", tt("rooms.toast.created"));
+      resetCreateForm();
+      setShowCreateModal(false);
       await reloadRooms();
       setSelectedRoomId(room.id);
       setManaging(true);
@@ -453,13 +604,17 @@ export function RoomsTab({
       showNotification("warning", tt("rooms.toast.signInFirst"));
       return;
     }
-    const id = (roomId ?? joinRoomId).trim();
-    if (!id) return;
+    const idOrName = (roomId ?? joinRoomId).trim();
+    const password = roomId ? undefined : joinPassword.trim();
+    if (!idOrName && !password) return;
     setLoading(true);
     try {
-      const room = await joinRoom(id);
+      const room = await joinRoom(idOrName || password!, {
+        password: idOrName ? password || undefined : undefined,
+      });
       showNotification("success", tt("rooms.toast.joined"));
       setJoinRoomId("");
+      setJoinPassword("");
       setShowJoinPanel(false);
       await reloadRooms();
       setSelectedRoomId(room.id);
@@ -517,13 +672,17 @@ export function RoomsTab({
     }
   };
 
-  const handleCopyId = async (id: string) => {
+  const handleCopyText = async (value: string, successMessage: string) => {
     try {
-      await navigator.clipboard.writeText(id);
-      showNotification("success", tt("rooms.idCopied"), { sound: false });
+      await navigator.clipboard.writeText(value);
+      showNotification("success", successMessage, { sound: false });
     } catch {
-      showNotification("error", id);
+      showNotification("error", value);
     }
+  };
+
+  const handleCopyId = async (id: string) => {
+    await handleCopyText(id, tt("rooms.idCopied"));
   };
 
   const handleRefresh = () => {
@@ -629,6 +788,11 @@ export function RoomsTab({
     [avatarByKey],
   );
 
+  const visibleFriendsRooms = useMemo(
+    () => friendsRooms.filter((room) => isRoomVisibleToUser(room, userId)),
+    [friendsRooms, userId],
+  );
+
   const p2pReady = peerLink.status === "connected" && peerLink.channelOpen;
   const expectedPeers = expectedPeerIds.length;
   const connectedPeers = connectedPeerIds.length;
@@ -679,46 +843,33 @@ export function RoomsTab({
   const renderMyRoomCard = (room: Room) => {
     const owned = room.owner_user_id === userId;
     const members = room.members ?? [];
+    const roomTitle = room.name?.trim() || shortRoomId(room.id);
     return (
       <button
         key={room.id}
         type="button"
         onClick={() => openRoom(room)}
-        className="group flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/35 p-4 text-left shadow-soft transition hover:border-emerald-400/35 hover:bg-black/50"
+        className="group flex items-center gap-3 rounded-xl border border-white/10 bg-black/35 px-3 py-2.5 text-left transition hover:border-emerald-400/35 hover:bg-black/50"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-mono text-sm font-semibold text-white/90">
-              {shortRoomId(room.id)}
-            </p>
-            <p className="mt-1 text-xs text-white/45">
-              {tt("rooms.players", { count: room.member_count, max: room.max_players })}
-            </p>
+        <MemberAvatars members={members} avatarSrcFor={avatarSrcFor} max={3} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-white/90">{roomTitle}</p>
+            <span
+              className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(room.status)}`}
+            >
+              {statusLabel(room.status)}
+            </span>
           </div>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(room.status)}`}
-          >
-            {statusLabel(room.status)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <MemberAvatars members={members} avatarSrcFor={avatarSrcFor} />
-          <span
-            className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
-              owned
-                ? "bg-emerald-500/15 text-emerald-200"
-                : "bg-white/10 text-white/65"
-            }`}
-          >
+          <p className="mt-0.5 truncate text-[11px] text-white/40">
+            {tt("rooms.players", { count: room.member_count, max: room.max_players })}
+            {" · "}
+            {formatRoomVisibility(room.visibility, tt)}
+            {" · "}
             {owned ? tt("rooms.youOwner") : tt("rooms.youMember")}
-          </span>
+          </p>
         </div>
-
-        <div className="flex items-center justify-between border-t border-white/8 pt-3 text-xs text-white/40 group-hover:text-emerald-200/80">
-          <span>{tt("rooms.openRoom")}</span>
-          <span aria-hidden>→</span>
-        </div>
+        <span className="shrink-0 text-xs text-white/35 group-hover:text-emerald-200/80">→</span>
       </button>
     );
   };
@@ -728,53 +879,50 @@ export function RoomsTab({
     const owner = members.find((m) => m.user_id === room.owner_user_id);
     const ownerNick = owner?.nickname ?? shortRoomId(room.owner_user_id);
     const canJoin = room.status === "open";
+    const roomTitle = room.name?.trim() || ownerNick;
+    const sessionPlaytimeSeconds = getElapsedSeconds(room.session_started_at, nowMs);
 
     return (
       <div
         key={room.id}
-        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-sky-500/10 via-black/40 to-black/50 p-4 shadow-soft"
+        className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/35 px-3 py-2.5"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <img
-              src={avatarSrcFor({
-                nickname: ownerNick,
-                ely_username: owner?.ely_username,
-                mc_uuid: owner?.mc_uuid,
-              })}
-              alt=""
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
-              draggable={false}
-              onError={(event) => {
-                event.currentTarget.src = buildInitialAvatarDataUrl(ownerNick);
-              }}
-            />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white/90">{ownerNick}</p>
-              <p className="mt-0.5 text-xs text-white/45">
-                {tt("rooms.ownedBy", { nick: ownerNick })}
-              </p>
-            </div>
+        <img
+          src={avatarSrcFor({
+            nickname: ownerNick,
+            ely_username: owner?.ely_username,
+            mc_uuid: owner?.mc_uuid,
+          })}
+          alt=""
+          className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
+          draggable={false}
+          onError={(event) => {
+            event.currentTarget.src = buildInitialAvatarDataUrl(ownerNick);
+          }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-white/90">{roomTitle}</p>
+            <span
+              className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(room.status)}`}
+            >
+              {statusLabel(room.status)}
+            </span>
           </div>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(room.status)}`}
-          >
-            {statusLabel(room.status)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <MemberAvatars members={members} avatarSrcFor={avatarSrcFor} />
-          <p className="text-xs text-white/45">
+          <p className="mt-0.5 truncate text-[11px] text-white/40">
+            {tt("rooms.ownedBy", { nick: ownerNick })}
+            {" · "}
             {tt("rooms.players", { count: room.member_count, max: room.max_players })}
+            {sessionPlaytimeSeconds != null
+              ? ` · ${formatDurationShort(sessionPlaytimeSeconds, tt)}`
+              : ""}
           </p>
         </div>
-
         <button
           type="button"
           disabled={!accessToken || loading || !canJoin}
           onClick={() => void handleJoin(room.id)}
-          className="interactive-press mt-auto rounded-xl border border-sky-400/35 bg-sky-500/15 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-60"
+          className="interactive-press shrink-0 rounded-lg border border-sky-400/35 bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-60"
         >
           {tt("rooms.joinFriendRoom")}
         </button>
@@ -784,426 +932,638 @@ export function RoomsTab({
 
   if (managing && selectedRoom) {
     const members = selectedRoom.members ?? [];
+    const roomTitle = selectedRoom.name?.trim() || shortRoomId(selectedRoom.id);
+    const sessionPlaytimeSeconds = getElapsedSeconds(selectedRoomSessionStartedAt, nowMs);
     return (
       <>
-      <div className="flex w-full max-w-4xl flex-col gap-5 py-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setViewingProfile(null);
-              setManaging(false);
-            }}
-            className="interactive-press rounded-xl border border-white/12 bg-black/30 px-3 py-2 text-sm font-semibold text-white/70 hover:bg-black/50"
-          >
-            ← {tt("rooms.backToList")}
-          </button>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex w-full max-w-5xl flex-col gap-3 py-4">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void handleCopyId(selectedRoom.id)}
-              className="interactive-press rounded-xl border border-white/12 bg-black/30 px-3 py-2 text-sm font-semibold text-white/70 hover:bg-black/50"
+              onClick={() => {
+                setViewingProfile(null);
+                setManaging(false);
+              }}
+              className="interactive-press rounded-lg border border-white/12 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50"
             >
-              {tt("rooms.copyId")}
+              ← {tt("rooms.backToList")}
             </button>
-            {isOwner ? (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void handleClose()}
-                className="interactive-press rounded-xl border border-red-500/35 bg-red-600/20 px-3 py-2 text-sm font-semibold text-red-100 hover:bg-red-600/30 disabled:opacity-60"
-              >
-                {tt("rooms.close")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void handleLeave()}
-                className="interactive-press rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-sm font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
-              >
-                {tt("rooms.leave")}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 via-black/45 to-black/60 p-5 shadow-xl backdrop-blur-md">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-                {tt("rooms.manageTitle")}
-              </p>
-              <h2 className="mt-1 truncate font-mono text-lg font-bold text-white/95">
-                {shortRoomId(selectedRoom.id)}
-              </h2>
-              <p className="mt-1 text-sm text-white/50">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-base font-bold text-white/95">{roomTitle}</h2>
+                <span
+                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(selectedRoom.status)}`}
+                >
+                  {statusLabel(selectedRoom.status)}
+                </span>
+                <span
+                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                    isOwner
+                      ? "bg-emerald-500/15 text-emerald-200"
+                      : "bg-white/10 text-white/65"
+                  }`}
+                >
+                  {isOwner ? tt("rooms.youOwner") : tt("rooms.youMember")}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-white/40">
                 {tt("rooms.players", {
                   count: selectedRoom.member_count,
                   max: selectedRoom.max_players,
                 })}
+                {" · "}
+                {formatRoomVisibility(selectedRoom.visibility, tt)}
+                {" · "}
+                {shortRoomId(selectedRoom.id)}
+                {sessionPlaytimeSeconds != null
+                  ? ` · ${tt("rooms.sessionPlaytimeLabel")}: ${formatDurationShort(sessionPlaytimeSeconds, tt)}`
+                  : ""}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ring-1 ${statusTone(selectedRoom.status)}`}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => void handleCopyId(selectedRoom.id)}
+                className="interactive-press rounded-lg border border-white/12 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50"
               >
-                {statusLabel(selectedRoom.status)}
-              </span>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                  isOwner
-                    ? "bg-emerald-500/15 text-emerald-200"
-                    : "bg-white/10 text-white/65"
-                }`}
-              >
-                {isOwner ? tt("rooms.youOwner") : tt("rooms.youMember")}
-              </span>
+                {tt("rooms.copyId")}
+              </button>
+              {selectedRoom.visibility === "private" && selectedRoom.join_code?.trim() ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleCopyText(
+                      selectedRoom.join_code!.trim(),
+                      tt("rooms.passwordCopied"),
+                    )
+                  }
+                  className="interactive-press rounded-lg border border-white/12 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50"
+                >
+                  {tt("rooms.passwordLabel")}: {selectedRoom.join_code.trim()}
+                </button>
+              ) : null}
+              {isOwner ? (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void handleClose()}
+                  className="interactive-press rounded-lg border border-red-500/35 bg-red-600/20 px-2.5 py-1.5 text-xs font-semibold text-red-100 hover:bg-red-600/30 disabled:opacity-60"
+                >
+                  {tt("rooms.close")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void handleLeave()}
+                  className="interactive-press rounded-lg border border-white/20 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
+                >
+                  {tt("rooms.leave")}
+                </button>
+              )}
             </div>
           </div>
-        </div>
 
-        <div className="grid gap-4 lg:grid-cols-5">
-          <div className="flex flex-col gap-4 lg:col-span-3">
-            <section className="rounded-2xl border border-white/10 glass-panel bg-black/40 p-5 shadow-xl backdrop-blur-md">
-              <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-                {tt("rooms.connectionTitle")}
-              </p>
-              <div className="mt-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-black/30 px-3 py-2.5">
-                  <span className="text-sm text-white/55">{tt("rooms.mcAccount")}</span>
-                  <span
-                    className={`text-sm font-semibold ${
-                      mcAuthOnline ? "text-emerald-300/90" : "text-amber-300/90"
-                    }`}
-                  >
-                    {mcAuthLabel}
-                  </span>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <div className="flex flex-col gap-3">
+              <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-black/30 px-2.5 py-2">
+                    <span className="text-xs text-white/50">{tt("rooms.mcAccount")}</span>
+                    <span
+                      className={`text-xs font-semibold ${
+                        mcAuthOnline ? "text-emerald-300/90" : "text-amber-300/90"
+                      }`}
+                    >
+                      {mcAuthLabel}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-black/30 px-2.5 py-2">
+                    <span className="text-xs text-white/50">{tt("rooms.p2pLabel")}</span>
+                    <span
+                      className={`truncate text-xs font-semibold ${
+                        p2pReady ? "text-emerald-300/90" : "text-white/70"
+                      }`}
+                    >
+                      {p2pStatusLabel}
+                    </span>
+                  </div>
                 </div>
                 {!mcAuthOnline ? (
-                  <p className="text-xs text-amber-200/70">{tt("rooms.mcOfflineHint")}</p>
+                  <p className="mt-2 text-[11px] text-amber-200/70">{tt("rooms.mcOfflineHint")}</p>
                 ) : null}
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-black/30 px-3 py-2.5">
-                  <span className="text-sm text-white/55">{tt("rooms.p2pLabel")}</span>
-                  <span
-                    className={`text-sm font-semibold ${
-                      p2pReady ? "text-emerald-300/90" : "text-white/70"
-                    }`}
-                  >
-                    {p2pStatusLabel}
-                  </span>
-                </div>
-              </div>
-            </section>
+              </section>
 
-            <section className="rounded-2xl border border-white/10 glass-panel bg-black/40 p-5 shadow-xl backdrop-blur-md">
-              <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-                {tt("rooms.worldTitle")}
-              </p>
-
-              {selectedRoom.member_count < 2 ? (
-                <p className="mt-4 text-sm text-white/55">{tt("rooms.waitForPeer")}</p>
-              ) : isOwner ? (
-                <div className="mt-4 flex flex-col gap-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <label className="flex flex-1 flex-col gap-1.5">
-                      <span className="text-xs font-semibold text-white/45">{tt("rooms.lanPort")}</span>
-                      <input
-                        type="text"
-                        value={lanPortInput}
-                        onChange={(e) => setLanPortInput(e.target.value)}
-                        className="rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400/30"
-                        placeholder="25565"
-                        disabled={tunnelBusy}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={tunnelBusy || !p2pReady}
-                      onClick={() => void handleHostShareWorld()}
-                      className="interactive-press rounded-xl border border-emerald-500/40 bg-emerald-600/25 px-4 py-2.5 text-sm font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
-                    >
-                      {hostReady ? tt("rooms.shareWorldWaiting") : tt("rooms.shareWorld")}
-                    </button>
-                  </div>
-                  <p className="text-xs leading-relaxed text-white/45">{tt("rooms.hostSteps")}</p>
-                </div>
-              ) : (
-                <div className="mt-4 flex flex-col gap-3">
-                  <button
-                    type="button"
-                    disabled={tunnelBusy || !mcAuthOnline || !p2pReady}
-                    onClick={() => void handleGuestJoinWorld()}
-                    className="interactive-press w-full rounded-xl border border-emerald-500/40 bg-emerald-600/25 px-4 py-3 text-sm font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60 sm:w-fit"
-                    title={
-                      !mcAuthOnline
-                        ? "Войдите через Microsoft или Ely на вкладке Аккаунты"
-                        : undefined
-                    }
-                  >
-                    {tt("rooms.joinWorld")}
-                  </button>
-                  <p className="text-xs leading-relaxed text-white/45">{tt("rooms.guestSteps")}</p>
-                </div>
-              )}
-            </section>
-          </div>
-
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <section className="rounded-2xl border border-white/10 glass-panel bg-black/40 p-5 shadow-xl backdrop-blur-md">
-              <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-                {tt("rooms.membersTitle")}
-              </p>
-              <ul className="mt-3 flex flex-col gap-2">
-                {members.map((m) => (
-                  <li
-                    key={m.user_id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 transition hover:border-white/20 hover:bg-black/40"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => openMemberProfile(m)}
-                      className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left transition hover:opacity-95"
-                      title={tt("friends.viewProfile")}
-                    >
-                      <img
-                        src={avatarSrcFor(m)}
-                        alt=""
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
-                        draggable={false}
-                        onError={(event) => {
-                          event.currentTarget.src = buildInitialAvatarDataUrl(m.nickname);
-                        }}
-                      />
-                      <div className="min-w-0">
-                        <NicknameWithSponsor
-                          nickname={m.nickname}
-                          isSponsor={m.is_sponsor}
-                          sponsorTitle={tt("common.sponsor")}
-                        />
-                        <p className="text-xs text-white/45">
-                          {m.role === "owner" ? tt("rooms.role.owner") : tt("rooms.role.member")}
-                        </p>
-                      </div>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {m.user_id !== userId && !friendIds.has(m.user_id) ? (
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => void handleAddFriendFromRoom(m)}
-                          className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
-                        >
-                          {tt("friends.add")}
-                        </button>
-                      ) : null}
-                      {isOwner && m.role !== "owner" ? (
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => void handleKick(m.user_id)}
-                          className="interactive-press rounded-lg border border-white/20 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
-                        >
-                          {tt("rooms.kick")}
-                        </button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            {isOwner ? (
-              <section className="rounded-2xl border border-white/10 glass-panel bg-black/40 p-5 shadow-xl backdrop-blur-md">
-                <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-                  {tt("rooms.inviteTitle")}
+              <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+                  {tt("rooms.worldTitle")}
                 </p>
-                <div className="mt-3 flex flex-col gap-2">
-                  {inviteableFriends.length > 0 ? (
-                    <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto">
-                      {inviteableFriends.map((f) => (
-                        <li
-                          key={f.user_id}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
-                        >
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <img
-                              src={avatarSrcFor(f)}
-                              alt=""
-                              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
-                              draggable={false}
-                              onError={(event) => {
-                                event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
-                              }}
-                            />
-                            <NicknameWithSponsor
-                              nickname={f.nickname}
-                              isSponsor={f.is_sponsor}
-                              sponsorTitle={tt("common.sponsor")}
-                              as="span"
-                            />
-                          </div>
+
+                {selectedRoom.member_count < 2 ? (
+                  <p className="mt-2 text-sm text-white/55">{tt("rooms.waitForPeer")}</p>
+                ) : isOwner ? (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <label className="flex flex-1 flex-col gap-1">
+                        <span className="text-[11px] font-semibold text-white/45">{tt("rooms.lanPort")}</span>
+                        <input
+                          type="text"
+                          value={lanPortInput}
+                          onChange={(e) => setLanPortInput(e.target.value)}
+                          className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
+                          placeholder="25565"
+                          disabled={tunnelBusy}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={tunnelBusy || !p2pReady}
+                        onClick={() => void handleHostShareWorld()}
+                        className="interactive-press rounded-lg border border-emerald-500/40 bg-emerald-600/25 px-3 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
+                      >
+                        {hostReady ? tt("rooms.shareWorldWaiting") : tt("rooms.shareWorld")}
+                      </button>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-white/45">{tt("rooms.hostSteps")}</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      disabled={tunnelBusy || !mcAuthOnline || !p2pReady}
+                      onClick={() => void handleGuestJoinWorld()}
+                      className="interactive-press w-full rounded-lg border border-emerald-500/40 bg-emerald-600/25 px-3 py-2.5 text-sm font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60 sm:w-fit"
+                      title={
+                        !mcAuthOnline
+                          ? "Войдите через Microsoft или Ely на вкладке Аккаунты"
+                          : undefined
+                      }
+                    >
+                      {tt("rooms.joinWorld")}
+                    </button>
+                    <p className="text-[11px] leading-relaxed text-white/45">{tt("rooms.guestSteps")}</p>
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+                  {tt("rooms.membersTitle")} · {members.length}
+                </p>
+                <ul className="mt-2 flex max-h-52 flex-col gap-1.5 overflow-y-auto">
+                  {members.map((m) => (
+                    <li
+                      key={m.user_id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openMemberProfile(m)}
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition hover:opacity-95"
+                        title={tt("friends.viewProfile")}
+                      >
+                        <img
+                          src={avatarSrcFor(m)}
+                          alt=""
+                          className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
+                          draggable={false}
+                          onError={(event) => {
+                            event.currentTarget.src = buildInitialAvatarDataUrl(m.nickname);
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <NicknameWithSponsor
+                            nickname={m.nickname}
+                            isSponsor={m.is_sponsor}
+                            sponsorTitle={tt("common.sponsor")}
+                            className="truncate text-sm"
+                          />
+                          <p className="text-[10px] text-white/40">
+                            {m.role === "owner" ? tt("rooms.role.owner") : tt("rooms.role.member")}
+                          </p>
+                        </div>
+                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {m.user_id !== userId && !friendIds.has(m.user_id) ? (
                           <button
                             type="button"
                             disabled={loading}
-                            onClick={() => void handleInviteFriend(f.nickname)}
-                            className="interactive-press shrink-0 rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+                            onClick={() => void handleAddFriendFromRoom(m)}
+                            className="interactive-press rounded-md border border-emerald-500/35 bg-emerald-600/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
                           >
-                            {tt("rooms.invite")}
+                            {tt("friends.add")}
                           </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm leading-relaxed text-white/50">{tt("rooms.inviteEmpty")}</p>
-                  )}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={inviteNickname}
-                      onChange={(e) => setInviteNickname(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && inviteNickname.trim()) {
-                          void handleInviteFriend(inviteNickname);
-                        }
-                      }}
-                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
-                      placeholder={tt("rooms.inviteNicknamePlaceholder")}
-                      disabled={loading}
-                    />
-                    <button
-                      type="button"
-                      disabled={loading || !inviteNickname.trim()}
-                      onClick={() => void handleInviteFriend(inviteNickname)}
-                      className="interactive-press shrink-0 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
-                    >
-                      {tt("rooms.invite")}
-                    </button>
-                  </div>
-                </div>
+                        ) : null}
+                        {isOwner && m.role !== "owner" ? (
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => void handleKick(m.user_id)}
+                            className="interactive-press rounded-md border border-white/20 bg-black/40 px-2 py-1 text-[11px] font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
+                          >
+                            {tt("rooms.kick")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </section>
-            ) : null}
+
+              {isOwner ? (
+                <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+                    {tt("rooms.inviteTitle")}
+                  </p>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {inviteableFriends.length > 0 ? (
+                      <ul className="flex max-h-36 flex-col gap-1.5 overflow-y-auto">
+                        {inviteableFriends.map((f) => (
+                          <li
+                            key={f.user_id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <img
+                                src={avatarSrcFor(f)}
+                                alt=""
+                                className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-white/20 [image-rendering:pixelated]"
+                                draggable={false}
+                                onError={(event) => {
+                                  event.currentTarget.src = buildInitialAvatarDataUrl(f.nickname);
+                                }}
+                              />
+                              <NicknameWithSponsor
+                                nickname={f.nickname}
+                                isSponsor={f.is_sponsor}
+                                sponsorTitle={tt("common.sponsor")}
+                                as="span"
+                                className="truncate text-sm"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              disabled={loading}
+                              onClick={() => void handleInviteFriend(f.nickname)}
+                              className="interactive-press shrink-0 rounded-md border border-emerald-500/35 bg-emerald-600/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
+                            >
+                              {tt("rooms.invite")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs leading-relaxed text-white/50">{tt("rooms.inviteEmpty")}</p>
+                    )}
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={inviteNickname}
+                        onChange={(e) => setInviteNickname(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && inviteNickname.trim()) {
+                            void handleInviteFriend(inviteNickname);
+                          }
+                        }}
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+                        placeholder={tt("rooms.inviteNicknamePlaceholder")}
+                        disabled={loading}
+                      />
+                      <button
+                        type="button"
+                        disabled={loading || !inviteNickname.trim()}
+                        onClick={() => void handleInviteFriend(inviteNickname)}
+                        className="interactive-press shrink-0 rounded-lg border border-white/15 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+                      >
+                        {tt("rooms.invite")}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
-      {viewingProfile ? (
-        <UserProfileModal
-          language={language}
-          seed={viewingProfile}
-          currentUserId={userId}
-          isFriend={friendIds.has(viewingProfile.user_id)}
-          onClose={() => setViewingProfile(null)}
-          onNotify={showNotification}
-          onFriendRequestSent={() => {
-            void reloadRooms().catch(() => {});
-          }}
-        />
-      ) : null}
+        {viewingProfile ? (
+          <UserProfileModal
+            language={language}
+            seed={viewingProfile}
+            currentUserId={userId}
+            isFriend={friendIds.has(viewingProfile.user_id)}
+            onClose={() => setViewingProfile(null)}
+            onNotify={showNotification}
+            onFriendRequestSent={() => {
+              void reloadRooms().catch(() => {});
+            }}
+          />
+        ) : null}
       </>
     );
   }
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-6 py-6">
-      <div className="w-full text-center">
-        <h1 className="text-lg font-bold tracking-tight text-white/95">{tt("app.sidebar.rooms")}</h1>
-        <p className="mt-1.5 text-sm text-white/50">
-          {accessToken ? tt("rooms.subtitleSignedIn") : tt("rooms.subtitleSignedOut")}
-        </p>
-      </div>
+    <>
+      <div className="flex w-full max-w-5xl flex-col gap-3 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="text-base font-bold tracking-tight text-white/95">{tt("app.sidebar.rooms")}</h1>
+            <p className="mt-0.5 text-xs text-white/45">
+              {accessToken ? tt("rooms.subtitleSignedIn") : tt("rooms.subtitleSignedOut")}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              disabled={!accessToken || loading}
+              onClick={() => {
+                resetCreateForm();
+                setShowCreateModal(true);
+              }}
+              className="interactive-press rounded-lg border border-emerald-500/40 bg-emerald-600/25 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
+            >
+              {tt("rooms.create")}
+            </button>
+            <button
+              type="button"
+              disabled={!accessToken}
+              onClick={() => setShowJoinPanel((v) => !v)}
+              className={`interactive-press rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-60 ${
+                showJoinPanel
+                  ? "border-sky-400/40 bg-sky-500/20 text-sky-100"
+                  : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
+              }`}
+            >
+              {tt("rooms.joinById")}
+            </button>
+            <button
+              type="button"
+              disabled={!accessToken || loading}
+              onClick={handleRefresh}
+              className="interactive-press rounded-lg border border-white/15 bg-black/30 px-3 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
+            >
+              {tt("rooms.refresh")}
+            </button>
+          </div>
+        </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 glass-panel bg-black/40 p-4 shadow-xl backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={!accessToken || loading}
-            onClick={() => void handleCreate()}
-            className="interactive-press rounded-xl border border-emerald-500/40 bg-emerald-600/25 px-4 py-2.5 text-sm font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
-          >
-            {tt("rooms.create")}
-          </button>
-          <button
-            type="button"
-            disabled={!accessToken}
-            onClick={() => setShowJoinPanel((v) => !v)}
-            className={`interactive-press rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-60 ${
-              showJoinPanel
-                ? "border-sky-400/40 bg-sky-500/20 text-sky-100"
-                : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
-            }`}
-          >
-            {tt("rooms.joinById")}
-          </button>
-          <button
-            type="button"
-            disabled={!accessToken || loading}
-            onClick={handleRefresh}
-            className="interactive-press rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-          >
-            {tt("rooms.refresh")}
-          </button>
+        {showJoinPanel ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-sky-400/20 bg-sky-500/5 p-2.5">
+            <p className="text-[11px] leading-relaxed text-white/50">{tt("rooms.joinHint")}</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                value={joinRoomId}
+                onChange={(e) => setJoinRoomId(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (joinRoomId.trim() || joinPassword.trim())) {
+                    void handleJoin();
+                  }
+                }}
+                className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-sky-400/40 disabled:opacity-60"
+                placeholder={tt("rooms.joinIdPlaceholder")}
+                disabled={!accessToken}
+              />
+              <input
+                type="password"
+                value={joinPassword}
+                onChange={(e) => setJoinPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (joinRoomId.trim() || joinPassword.trim())) {
+                    void handleJoin();
+                  }
+                }}
+                className="sm:w-44 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-sky-400/40 disabled:opacity-60"
+                placeholder={tt("rooms.joinPasswordPlaceholder")}
+                disabled={!accessToken}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                disabled={
+                  !accessToken || loading || (!joinRoomId.trim() && !joinPassword.trim())
+                }
+                onClick={() => void handleJoin()}
+                className="interactive-press rounded-lg border border-sky-400/35 bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/30 disabled:opacity-60"
+              >
+                {tt("rooms.join")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+              {tt("rooms.statYours")}
+            </p>
+            <p className="mt-0.5 text-lg font-bold text-white/90">
+              {accessToken ? rooms.length : "—"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+              {tt("rooms.statFriends")}
+            </p>
+            <p className="mt-0.5 text-lg font-bold text-sky-100/90">
+              {accessToken ? visibleFriendsRooms.length : "—"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          <section className="flex flex-col gap-2 rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+                {tt("rooms.yourRooms")}
+                {accessToken ? ` · ${rooms.length}` : ""}
+              </p>
+              {loading ? <span className="text-xs text-white/35">…</span> : null}
+            </div>
+
+            {!accessToken ? (
+              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
+                {tt("rooms.signInFirst")}
+              </p>
+            ) : rooms.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
+                {tt("rooms.noRooms")}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">{rooms.map(renderMyRoomCard)}</div>
+            )}
+          </section>
+
+          <section className="flex flex-col gap-2 rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+              {tt("rooms.friendsRooms")}
+              {accessToken ? ` · ${visibleFriendsRooms.length}` : ""}
+            </p>
+
+            {!accessToken ? (
+              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
+                {tt("rooms.signInFirst")}
+              </p>
+            ) : visibleFriendsRooms.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
+                {tt("rooms.noFriendsRooms")}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {visibleFriendsRooms.map(renderFriendRoomCard)}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
-      {showJoinPanel ? (
-        <div className="flex flex-col gap-2 rounded-2xl border border-sky-400/20 bg-sky-500/5 p-4 sm:flex-row sm:items-center">
-          <input
-            type="text"
-            value={joinRoomId}
-            onChange={(e) => setJoinRoomId(e.target.value)}
-            className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/40 disabled:opacity-60"
-            placeholder={tt("rooms.joinIdPlaceholder")}
-            disabled={!accessToken}
-          />
-          <button
-            type="button"
-            disabled={!accessToken || loading || !joinRoomId.trim()}
-            onClick={() => void handleJoin()}
-            className="interactive-press rounded-xl border border-sky-400/35 bg-sky-500/20 px-4 py-2.5 text-sm font-semibold text-sky-100 hover:bg-sky-500/30 disabled:opacity-60"
+      {showCreateModal ? (
+        <div
+          className="pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!loading) setShowCreateModal(false);
+          }}
+        >
+          <div
+            className="glass-panel pointer-events-auto flex w-[min(96vw,26rem)] flex-col overflow-hidden rounded-[20px] border border-white/15 bg-[#14141c]/95 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-room-title"
           >
-            {tt("rooms.join")}
-          </button>
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
+              <div className="min-w-0">
+                <h2 id="create-room-title" className="text-base font-semibold text-white/95">
+                  {tt("rooms.createModalTitle")}
+                </h2>
+                <p className="mt-0.5 text-xs text-white/45">{tt("rooms.createModalSubtitle")}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                disabled={loading}
+                className="interactive-press rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-60"
+                aria-label={tt("common.close")}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 px-4 py-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-white/45">{tt("rooms.roomNameLabel")}</span>
+                <input
+                  type="text"
+                  value={createRoomName}
+                  onChange={(e) => setCreateRoomName(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+                  placeholder={tt("rooms.roomNamePlaceholder")}
+                  disabled={loading}
+                  autoFocus
+                />
+              </label>
+
+              <div ref={visibilityDropdownRef} className="relative flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-white/45">
+                  {tt("rooms.visibilityLabel")}
+                </span>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setIsVisibilityDropdownOpen((prev) => !prev)}
+                  className="interactive-press flex w-full items-center justify-between rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-left text-sm text-white outline-none transition-colors hover:border-white/25 hover:bg-black/40 focus:border-emerald-400/30 disabled:opacity-60"
+                >
+                  <span>
+                    {createRoomVisibility === "private"
+                      ? tt("rooms.visibility.private")
+                      : tt("rooms.visibility.public")}
+                  </span>
+                  <span className="text-[10px] text-white/50">▾</span>
+                </button>
+                {isVisibilityDropdownOpen ? (
+                  <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg">
+                    {(
+                      [
+                        { value: "public" as const, label: tt("rooms.visibility.public") },
+                        { value: "private" as const, label: tt("rooms.visibility.private") },
+                      ] as const
+                    ).map((option) => {
+                      const active = createRoomVisibility === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setCreateRoomVisibility(option.value);
+                            setIsVisibilityDropdownOpen(false);
+                            if (option.value === "public") setCreateRoomPassword("");
+                          }}
+                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                            active ? "bg-white/90 text-black" : "text-white/80 hover:bg-white/10"
+                          }`}
+                        >
+                          <span>{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+
+              <p className="text-[11px] leading-relaxed text-white/45">
+                {createRoomVisibility === "private"
+                  ? tt("rooms.privateHint")
+                  : tt("rooms.publicHint")}
+              </p>
+
+              {createRoomVisibility === "private" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-white/45">
+                    {tt("rooms.passwordLabel")}
+                  </span>
+                  <input
+                    type="text"
+                    value={createRoomPassword}
+                    onChange={(e) => setCreateRoomPassword(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+                    placeholder={tt("rooms.passwordPlaceholder")}
+                    disabled={loading}
+                    autoComplete="off"
+                  />
+                </label>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-white/10 px-4 py-3">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setShowCreateModal(false)}
+                className="interactive-press rounded-lg border border-white/12 bg-black/30 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void handleCreate()}
+                className="interactive-press rounded-lg border border-emerald-500/40 bg-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
+              >
+                {tt("rooms.createModalSubmit")}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
-
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-            {tt("rooms.yourRooms")}
-          </p>
-          {loading ? <span className="text-xs text-white/35">…</span> : null}
-        </div>
-
-        {!accessToken ? (
-          <p className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-white/55">
-            {tt("rooms.signInFirst")}
-          </p>
-        ) : rooms.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-white/55">
-            {tt("rooms.noRooms")}
-          </p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">{rooms.map(renderMyRoomCard)}</div>
-        )}
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <p className="text-xs font-bold uppercase tracking-wider text-white/45">
-          {tt("rooms.friendsRooms")}
-        </p>
-
-        {!accessToken ? (
-          <p className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-white/55">
-            {tt("rooms.signInFirst")}
-          </p>
-        ) : friendsRooms.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center text-sm text-white/55">
-            {tt("rooms.noFriendsRooms")}
-          </p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">{friendsRooms.map(renderFriendRoomCard)}</div>
-        )}
-      </section>
-    </div>
+    </>
   );
 }

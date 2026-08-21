@@ -710,6 +710,7 @@ export function ModpackTab({
   const [exportResultPath, setExportResultPath] = useState<string | null>(null);
   const [exportSkippedFiles, setExportSkippedFiles] = useState<string[]>([]);
   const [exportResolvedCount, setExportResolvedCount] = useState(0);
+  const [exportOverrideCount, setExportOverrideCount] = useState(0);
   const [exportSpeedLabel, setExportSpeedLabel] = useState<string>("");
   const [collapsedExportPaths, setCollapsedExportPaths] = useState<Set<string>>(new Set());
   const lastProgressRef = useRef<{ t: number; bytes: number } | null>(null);
@@ -1468,6 +1469,7 @@ export function ModpackTab({
     setExportProgress(null);
     setExportSkippedFiles([]);
     setExportResolvedCount(0);
+    setExportOverrideCount(0);
     setExportSpeedLabel("");
     lastProgressRef.current = null;
     setPreviewResult(null);
@@ -1541,6 +1543,7 @@ export function ModpackTab({
     setExportResultPath(null);
     setExportSkippedFiles([]);
     setExportResolvedCount(0);
+    setExportOverrideCount(0);
     setExportSpeedLabel("");
     lastProgressRef.current = null;
 
@@ -1600,6 +1603,9 @@ export function ModpackTab({
           setExportSkippedFiles(Array.isArray(p.skipped_files) ? p.skipped_files : []);
           setExportResolvedCount(
             typeof p.resolved_count === "number" ? p.resolved_count : 0,
+          );
+          setExportOverrideCount(
+            typeof p.override_count === "number" ? p.override_count : 0,
           );
           setExportBusy(false);
           setExportProgress(null);
@@ -6654,6 +6660,11 @@ export function ModpackTab({
                     ZIP
                   </button>
                 </div>
+                <div className="mt-3 text-[11px] leading-relaxed text-white/60">
+                  {exportFormat === "mrpack"
+                    ? tt("modpacks.exportModal.mrpackHint")
+                    : tt("modpacks.exportModal.zipHint")}
+                </div>
 
                 <div className="mt-4 text-xs font-semibold text-white/80">
                   {tt("modpacks.exportModal.presets")}
@@ -6908,6 +6919,13 @@ export function ModpackTab({
                             })}
                           </span>
                         )}
+                        {(previewResult.override_count ?? 0) > 0 && (
+                          <span>
+                            {tt("modpacks.exportModal.overrideFiles", {
+                              count: String(previewResult.override_count ?? 0),
+                            })}
+                          </span>
+                        )}
                         <span>
                           {tt("modpacks.exportModal.packSize")}{" "}
                           <span className="font-semibold text-white/90">
@@ -6962,11 +6980,21 @@ export function ModpackTab({
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-emerald-200">
                         {tt("modpacks.exportModal.done")}
-                        {exportResolvedCount > 0
-                          ? ` · ${tt("modpacks.exportModal.linkedMods", {
-                              count: String(exportResolvedCount),
-                            })}`
-                          : ""}
+                        {[
+                          exportResolvedCount > 0
+                            ? tt("modpacks.exportModal.linkedMods", {
+                                count: String(exportResolvedCount),
+                              })
+                            : "",
+                          exportOverrideCount > 0
+                            ? tt("modpacks.exportModal.overrideFiles", {
+                                count: String(exportOverrideCount),
+                              })
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                          .replace(/^/, exportResolvedCount > 0 || exportOverrideCount > 0 ? " · " : "")}
                       </div>
                       <button
                         type="button"

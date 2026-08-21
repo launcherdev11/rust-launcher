@@ -5,6 +5,8 @@ import {
   getStoredRefreshToken,
 } from "./client";
 import { API_AUTH_CHANGED_EVENT, ensureValidAccessToken } from "./auth";
+import { normalizePresenceInfo, type PresenceInfo } from "./presence";
+import { normalizeRoom } from "./rooms";
 
 export const WS_EVENT = "mc16launcher:ws-event";
 export const WS_STATUS_EVENT = "mc16launcher:ws-status";
@@ -20,6 +22,7 @@ export type ConnectionType = "direct" | "relay";
 export type WsEvent =
   | { type: "user_online"; payload: { user_id: string; nickname?: string | null } }
   | { type: "user_offline"; payload: { user_id: string; last_seen?: string | null } }
+  | { type: "presence_updated"; payload: { presence: PresenceInfo } }
   | {
       type: "friend_request_created";
       payload: {
@@ -37,7 +40,16 @@ export type WsEvent =
   | { type: "room_created"; payload: { room_id: string; owner_user_id: string } }
   | {
       type: "room_updated";
-      payload: { room_id: string; status: string; member_count: number };
+      payload: {
+        room_id: string;
+        status: string;
+        member_count: number;
+        name?: string | null;
+        visibility?: string | null;
+        join_code?: string | null;
+        invite_only?: boolean | null;
+        session_started_at?: string | null;
+      };
     }
   | { type: "room_closed"; payload: { room_id: string } }
   | {
@@ -116,6 +128,135 @@ export type WsClientMessage =
       type: "connection_established";
       payload: { room_id: string; connection_type: ConnectionType };
     };
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asOptionalString(value: unknown): string | null | undefined {
+  return typeof value === "string" ? value : value == null ? null : undefined;
+}
+
+function asOptionalTimestampString(value: unknown): string | null | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
+  return value == null ? null : undefined;
+}
+
+function asOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function asOptionalBoolean(value: unknown): boolean | null | undefined {
+  return typeof value === "boolean" ? value : value == null ? null : undefined;
+}
+
+function asLooseBoolean(value: unknown): boolean | null | undefined {
+  if (typeof value === "boolean" || value == null) {
+    return asOptionalBoolean(value);
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+    if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+  }
+  return undefined;
+}
+
+function normalizeWsEvent(input: unknown): WsEvent | null {
+  const raw = asObject(input);
+  if (!raw) return null;
+
+  const type = asOptionalString(raw.type);
+  const payload = raw.payload;
+  if (!type) return null;
+
+  if (type === "presence_updated") {
+    const payloadObject = asObject(payload);
+    const presence = normalizePresenceInfo(payloadObject?.presence ?? payload);
+    return presence ? { type, payload: { presence } } : null;
+  }
+
+  if (type === "room_updated") {
+    const payloadObject = asObject(payload);
+    const normalizedRoom = normalizeRoom(payloadObject);
+    if (normalizedRoom) {
+      return {
+        type,
+        payload: {
+          room_id: normalizedRoom.id,
+          status: normalizedRoom.status,
+          member_count: normalizedRoom.member_count,
+          name: normalizedRoom.name ?? null,
+          visibility: normalizedRoom.visibility ?? null,
+          join_code: normalizedRoom.join_code ?? null,
+          invite_only: normalizedRoom.invite_only ?? null,
+          session_started_at: normalizedRoom.session_started_at ?? null,
+        },
+      };
+    }
+
+    const roomId =
+      asOptionalString(payloadObject?.room_id) ?? asOptionalString(payloadObject?.roomId);
+    const status = asOptionalString(payloadObject?.status);
+    const memberCount =
+      asOptionalNumber(payloadObject?.member_count) ?? asOptionalNumber(payloadObject?.memberCount);
+    if (!roomId || !status || memberCount == null) return null;
+
+    return {
+      type,
+      payload: {
+        room_id: roomId,
+        status,
+        member_count: memberCount,
+          name:
+            asOptionalString(payloadObject?.name) ??
+            asOptionalString(payloadObject?.room_name) ??
+            asOptionalString(payloadObject?.roomName) ??
+            null,
+        visibility:
+            asOptionalString(payloadObject?.visibility) ??
+            asOptionalString(payloadObject?.room_visibility) ??
+            asOptionalString(payloadObject?.roomVisibility) ??
+            (asLooseBoolean(payloadObject?.is_private) === true
+              ? "private"
+              : asLooseBoolean(payloadObject?.is_private) === false
+                ? "public"
+                : null),
+        join_code:
+          asOptionalString(payloadObject?.join_code) ??
+          asOptionalString(payloadObject?.joinCode) ??
+            asOptionalString(payloadObject?.invite_code) ??
+            asOptionalString(payloadObject?.inviteCode) ??
+          null,
+        invite_only:
+          asOptionalBoolean(payloadObject?.invite_only) ??
+            asOptionalBoolean(payloadObject?.inviteOnly) ??
+            asLooseBoolean(payloadObject?.private) ??
+          null,
+        session_started_at:
+            asOptionalTimestampString(payloadObject?.session_started_at) ??
+            asOptionalTimestampString(payloadObject?.sessionStartedAt) ??
+            asOptionalTimestampString(asObject(payloadObject?.session)?.started_at) ??
+            asOptionalTimestampString(asObject(payloadObject?.session)?.startedAt) ??
+            null,
+      },
+    };
+  }
+
+  return raw as WsEvent;
+}
 
 function wsBaseUrl(): string {
   const http = getApiBaseUrl();
@@ -270,7 +411,8 @@ function openPlatformWs(token: string): void {
 
   ws.onmessage = (ev) => {
     try {
-      const data = JSON.parse(String(ev.data)) as WsEvent;
+      const data = normalizeWsEvent(JSON.parse(String(ev.data)));
+      if (!data) return;
       window.dispatchEvent(new CustomEvent(WS_EVENT, { detail: data }));
     } catch {
     }
