@@ -1525,7 +1525,21 @@ struct McAuthCape {
 }
 
 #[derive(Debug, Deserialize)]
+struct McAuthSkin {
+    id: String,
+    #[serde(default)]
+    alias: String,
+    url: String,
+    #[serde(default)]
+    variant: String,
+    #[serde(default)]
+    state: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct McAuthProfile {
+    #[serde(default)]
+    skins: Vec<McAuthSkin>,
     #[serde(default)]
     capes: Vec<McAuthCape>,
 }
@@ -1691,4 +1705,258 @@ pub async fn set_mc_active_cape(cape_id: Option<String>) -> Result<Vec<McCapeInf
     }
 
     fetch_mc_capes_resilient().await
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct McSkinInfo {
+    pub id: String,
+    pub alias: String,
+    pub url: String,
+    pub variant: String,
+    pub state: String,
+}
+
+fn map_mc_skin_info(s: McAuthSkin) -> McSkinInfo {
+    McSkinInfo {
+        id: s.id,
+        alias: if s.alias.trim().is_empty() {
+            "Skin".to_string()
+        } else {
+            s.alias
+        },
+        url: s.url,
+        variant: if s.variant.eq_ignore_ascii_case("SLIM") {
+            "SLIM".to_string()
+        } else {
+            "CLASSIC".to_string()
+        },
+        state: if s.state.eq_ignore_ascii_case("ACTIVE") {
+            "ACTIVE".to_string()
+        } else {
+            "INACTIVE".to_string()
+        },
+    }
+}
+
+async fn fetch_mc_skins_with_token(access_token: &str) -> Result<Vec<McSkinInfo>, String> {
+    let profile = fetch_mc_auth_profile(access_token).await?;
+    Ok(profile.skins.into_iter().map(map_mc_skin_info).collect())
+}
+
+async fn fetch_mc_skins_resilient() -> Result<Vec<McSkinInfo>, String> {
+    use crate::services::game::accounts::{get_profile, save_full_profile};
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let token = resolve_mc_access_token().await?;
+    match fetch_mc_skins_with_token(&token).await {
+        Ok(skins) => Ok(skins),
+        Err(e) if e == "MC_TOKEN_EXPIRED" => {
+            match ensure_ms_minecraft_session().await? {
+                Some((_name, _uuid, new_token)) => {
+                    if let Ok(mut p) = get_profile() {
+                        p.mc_access_token = Some(new_token.clone());
+                        let _ = save_full_profile(&p);
+                    }
+                    fetch_mc_skins_with_token(&new_token).await
+                }
+                None => Err(
+                    "Сессия Minecraft истекла. Войдите снова через Microsoft.".to_string(),
+                ),
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn mc_skin_variant_to_api(variant: &str) -> &'static str {
+    if variant.eq_ignore_ascii_case("SLIM") {
+        "slim"
+    } else {
+        "classic"
+    }
+}
+
+async fn post_mc_skin_upload(
+    access_token: &str,
+    png_bytes: &[u8],
+    variant: &str,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("16Launcher/1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let part = reqwest::multipart::Part::bytes(png_bytes.to_vec())
+        .file_name("skin.png")
+        .mime_str("image/png")
+        .map_err(|e| format!("Invalid skin MIME type: {e}"))?;
+    let form = reqwest::multipart::Form::new()
+        .text("variant", variant.to_string())
+        .part("file", part);
+
+    let resp = client
+        .post("https://api.minecraftservices.com/minecraft/profile/skins")
+        .bearer_auth(access_token)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Minecraft skin upload request failed: {e}"))?;
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("MC_TOKEN_EXPIRED".to_string());
+    }
+    if !status.is_success() {
+        let body = resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "<empty>".to_string());
+        return Err(format!("Minecraft skin upload failed: HTTP {status}: {body}"));
+    }
+
+    Ok(())
+}
+
+async fn apply_mc_skin_from_library(skin_id: &str) -> Result<Vec<u8>, String> {
+    use crate::services::game::accounts::{get_profile, save_full_profile};
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let trimmed_id = skin_id.trim();
+    if trimmed_id.is_empty() {
+        return Err("Skin id is empty".to_string());
+    }
+
+    let mut access_token = resolve_mc_access_token().await?;
+    let skins = fetch_mc_skins_with_token(&access_token).await?;
+    let selected = skins
+        .into_iter()
+        .find(|s| s.id.eq_ignore_ascii_case(trimmed_id))
+        .ok_or_else(|| "Skin not found in library".to_string())?;
+    let variant = mc_skin_variant_to_api(&selected.variant);
+
+    let mut retried = false;
+    loop {
+        match post_mc_skin_from_url(&access_token, &selected.url, variant).await {
+            Ok(()) => break,
+            Err(e) if e == "MC_TOKEN_EXPIRED" && !retried => {
+                retried = true;
+                match ensure_ms_minecraft_session().await? {
+                    Some((_name, _uuid, new_token)) => {
+                        if let Ok(mut p) = get_profile() {
+                            p.mc_access_token = Some(new_token.clone());
+                            let _ = save_full_profile(&p);
+                        }
+                        access_token = new_token;
+                        continue;
+                    }
+                    None => {
+                        return Err(
+                            "Сессия Minecraft истекла. Войдите снова через Microsoft.".to_string(),
+                        );
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    if let Ok(profile) = get_profile() {
+        if let Some(uuid) = profile.mc_uuid.as_ref().filter(|s| !s.trim().is_empty()) {
+            clear_mc_avatar_cache(uuid);
+            return fetch_mc_skin_png(uuid).await;
+        }
+    }
+
+    download_texture_png(&selected.url, "skin").await
+}
+
+async fn upload_mc_skin_from_file(file_path: &str, variant: &str) -> Result<Vec<u8>, String> {
+    use crate::services::game::accounts::{get_profile, save_full_profile};
+    use crate::services::game::runtime::ensure_ms_minecraft_session;
+
+    let path = PathBuf::from(file_path.trim());
+    if !path.is_file() {
+        return Err("Файл скина не найден".to_string());
+    }
+
+    let png_bytes = std::fs::read(&path).map_err(|e| format!("Не удалось прочитать файл скина: {e}"))?;
+    if png_bytes.is_empty() {
+        return Err("Файл скина пуст".to_string());
+    }
+
+    let api_variant = match variant.trim().to_ascii_lowercase().as_str() {
+        "slim" => "slim",
+        _ => "classic",
+    };
+
+    let mut access_token = resolve_mc_access_token().await?;
+    let mut retried = false;
+    loop {
+        match post_mc_skin_upload(&access_token, &png_bytes, api_variant).await {
+            Ok(()) => break,
+            Err(e) if e == "MC_TOKEN_EXPIRED" && !retried => {
+                retried = true;
+                match ensure_ms_minecraft_session().await? {
+                    Some((_name, _uuid, new_token)) => {
+                        if let Ok(mut p) = get_profile() {
+                            p.mc_access_token = Some(new_token.clone());
+                            let _ = save_full_profile(&p);
+                        }
+                        access_token = new_token;
+                        continue;
+                    }
+                    None => {
+                        return Err(
+                            "Сессия Minecraft истекла. Войдите снова через Microsoft.".to_string(),
+                        );
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    if let Ok(profile) = get_profile() {
+        if let Some(uuid) = profile.mc_uuid.as_ref().filter(|s| !s.trim().is_empty()) {
+            clear_mc_avatar_cache(uuid);
+            return fetch_mc_skin_png(uuid).await;
+        }
+    }
+
+    Ok(png_bytes)
+}
+
+#[tauri::command]
+pub async fn get_mc_texture_data_url(url: String) -> Result<Option<String>, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let png = match download_texture_png(trimmed, "texture").await {
+        Ok(v) => v,
+        Err(error) => {
+            eprintln!("[texture] failed to fetch Mojang texture '{trimmed}': {error}");
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(png_data_url(&png)))
+}
+
+#[tauri::command]
+pub async fn list_mc_skins() -> Result<Vec<McSkinInfo>, String> {
+    fetch_mc_skins_resilient().await
+}
+
+#[tauri::command]
+pub async fn set_mc_active_skin(skin_id: String) -> Result<Option<String>, String> {
+    let skin_png = apply_mc_skin_from_library(&skin_id).await?;
+    Ok(Some(png_data_url(&skin_png)))
+}
+
+#[tauri::command]
+pub async fn upload_mc_skin(file_path: String, variant: String) -> Result<Option<String>, String> {
+    let skin_png = upload_mc_skin_from_file(&file_path, &variant).await?;
+    Ok(Some(png_data_url(&skin_png)))
 }

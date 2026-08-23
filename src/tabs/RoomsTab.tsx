@@ -19,6 +19,7 @@ import { UserProfileModal, type UserProfileSeed } from "../components/UserProfil
 import {
   allowGuestForward,
   attachLanTunnel,
+  getLocalLanIp,
   startGuestBridge,
   startHostBridge,
   stopBridge,
@@ -35,6 +36,8 @@ import {
   type LaunchPresenceContext,
   type RoomPresenceContext,
 } from "../lib/socialActivity";
+import { copyTextToClipboard } from "../lib/clipboard";
+import type { GameStatus } from "../lib/gameConsoleWindow";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -50,9 +53,13 @@ type RoomsTabProps = {
   showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
   language: Language;
   minecraftAccountKind: "microsoft" | "ely" | "offline" | string;
+  gameStatus: GameStatus;
   onLaunchToServer: (
     serverAddress: string,
-    options?: { requireOnlineAccount?: boolean; presenceContext?: LaunchPresenceContext | null },
+    options?: {
+      requireOnlineAccount?: boolean;
+      presenceContext?: LaunchPresenceContext | null;
+    },
   ) => Promise<void>;
   onPresenceContextChange?: (context: RoomPresenceContext | null) => void;
   onRoomLaunchContextChange?: (context: LaunchPresenceContext | null) => void;
@@ -130,6 +137,7 @@ export function RoomsTab({
   showNotification,
   language,
   minecraftAccountKind,
+  gameStatus,
   onLaunchToServer,
   onPresenceContextChange,
   onRoomLaunchContextChange,
@@ -173,6 +181,9 @@ export function RoomsTab({
   const [bridgeStatus, setBridgeStatus] = useState<string>("idle");
   const [tunnelBusy, setTunnelBusy] = useState(false);
   const [hostReady, setHostReady] = useState(false);
+  const [localLanIp, setLocalLanIp] = useState<string | null>(null);
+  const [activeLanPort, setActiveLanPort] = useState<number | null>(null);
+  const [guestBridgePort, setGuestBridgePort] = useState<number | null>(null);
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -299,6 +310,35 @@ export function RoomsTab({
   }, [accessToken, selectedRoomId]);
 
   useEffect(() => {
+    if (!managing || !selectedRoomId) {
+      setLocalLanIp(null);
+      return;
+    }
+    let cancelled = false;
+    void getLocalLanIp()
+      .then((ip) => {
+        if (!cancelled) setLocalLanIp(ip);
+      })
+      .catch(() => {
+        if (!cancelled) setLocalLanIp(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [managing, selectedRoomId]);
+
+  const roomConnectAddress = useMemo(() => {
+    if (isOwner && hostReady && activeLanPort != null) {
+      const hostIp = localLanIp ?? "127.0.0.1";
+      return `${hostIp}:${activeLanPort}`;
+    }
+    if (!isOwner && guestBridgePort != null) {
+      return `127.0.0.1:${guestBridgePort}`;
+    }
+    return null;
+  }, [activeLanPort, guestBridgePort, hostReady, isOwner, localLanIp]);
+
+  useEffect(() => {
     if (!onPresenceContextChange) return;
     if (!selectedRoom) {
       onPresenceContextChange(null);
@@ -355,6 +395,8 @@ export function RoomsTab({
     pendingLanPortRef.current = null;
     pendingGuestPeersRef.current.clear();
     setHostReady(false);
+    setActiveLanPort(null);
+    setGuestBridgePort(null);
     setBridgeStatus("idle");
     void stopBridge();
   }, []);
@@ -374,6 +416,12 @@ export function RoomsTab({
         onRemoteBinary: (handler) => session.onRemoteBinary(handler),
         onStatus: (s: LanBridgeStatus) => {
           setBridgeStatus(s.state);
+          if (!isOwner && s.state === "listening" && s.detail) {
+            const match = /:(\d+)$/.exec(s.detail);
+            if (match) {
+              setGuestBridgePort(Number.parseInt(match[1]!, 10));
+            }
+          }
           if (s.state === "connected" && isOwner) {
             session.signalTunnelReady();
           }
@@ -467,6 +515,7 @@ export function RoomsTab({
     setTunnelBusy(true);
     try {
       pendingLanPortRef.current = port;
+      setActiveLanPort(port);
       setHostReady(true);
     
       for (const peerId of connectedPeerIds) {
@@ -509,27 +558,37 @@ export function RoomsTab({
     try {
       await ensureTunnelAttachedForPeer(hostPeerId);
       const localPort = await startGuestBridge(hostPeerId);
+      setGuestBridgePort(localPort);
       if (!sessionsRef.current[hostPeerId]?.channelOpen) {
-        throw new Error("P2P канал закрылся до запуска игры — дождитесь channel open и попробуйте снова");
+        throw new Error("P2P канал закрылся — дождитесь channel open и попробуйте снова");
       }
       console.info("[Rooms] guest bridge listening", { localPort, bridgeStatus, hostPeerId });
-      showNotification(
-        "info",
-        `Туннель 127.0.0.1:${localPort} — запускаю игру…`,
-      );
-      await onLaunchToServer(`127.0.0.1:${localPort}`, {
+      const serverAddress = `127.0.0.1:${localPort}`;
+      const presenceContext: LaunchPresenceContext = {
+        kind: "room_world",
+        serverAddress,
+        worldName: selectedRoom?.name?.trim() || null,
+        startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
+      };
+
+      if (gameStatus === "running") {
+        const copied = await copyTextToClipboard(serverAddress);
+        onRoomLaunchContextChange?.(presenceContext);
+        showNotification(
+          "success",
+          copied
+            ? tt("rooms.joinWorldInGameCopied", { address: serverAddress })
+            : tt("rooms.joinWorldInGame", { address: serverAddress }),
+        );
+        return;
+      }
+
+      showNotification("info", tt("rooms.joinWorldLaunching", { address: serverAddress }));
+      await onLaunchToServer(serverAddress, {
         requireOnlineAccount: true,
-        presenceContext: {
-          kind: "room_world",
-          serverAddress: `127.0.0.1:${localPort}`,
-          worldName: selectedRoom?.name?.trim() || null,
-            startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
-        },
+        presenceContext,
       });
-      showNotification(
-        "success",
-        `Игра → 127.0.0.1:${localPort}. Не закрывайте лаунчер — туннель внутри него.`,
-      );
+      showNotification("success", tt("rooms.joinWorldLaunched", { address: serverAddress }));
     } catch (e) {
       showNotification("error", e instanceof Error ? e.message : String(e));
     } finally {
@@ -975,12 +1034,42 @@ export function RoomsTab({
                 {formatRoomVisibility(selectedRoom.visibility, tt)}
                 {" · "}
                 {shortRoomId(selectedRoom.id)}
+                {roomConnectAddress ? (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleCopyText(
+                          roomConnectAddress,
+                          tt("rooms.connectAddressCopied"),
+                        )
+                      }
+                      className="font-semibold text-emerald-300/85 transition hover:text-emerald-200"
+                      title={tt("rooms.connectAddressHint")}
+                    >
+                      {roomConnectAddress}
+                    </button>
+                  </>
+                ) : null}
                 {sessionPlaytimeSeconds != null
                   ? ` · ${tt("rooms.sessionPlaytimeLabel")}: ${formatDurationShort(sessionPlaytimeSeconds, tt)}`
                   : ""}
               </p>
             </div>
             <div className="flex flex-wrap gap-1.5">
+              {roomConnectAddress ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleCopyText(roomConnectAddress, tt("rooms.connectAddressCopied"))
+                  }
+                  className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/25"
+                  title={tt("rooms.connectAddressHint")}
+                >
+                  {roomConnectAddress}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void handleCopyId(selectedRoom.id)}

@@ -28,7 +28,7 @@ use services::game::{
     get_settings, get_system_memory_gb, get_launcher_cache_size, import_custom_version,
     import_launcher_settings_backup, import_modpack_files, import_mrpack, import_mrpack_as_new_profile,
     install_fabric, install_forge, install_local_version, install_neoforge, install_quilt, install_version,
-    is_game_running_now,
+    is_game_running_now, is_minecraft_client_running,
     launch_game, list_installed_fabric_game_versions, list_installed_quilt_game_versions,
     list_installed_versions, list_launcher_accounts, list_profile_items,     open_game_folder,
     open_profile_folder, delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail,
@@ -39,6 +39,7 @@ use services::game::{
     set_profile_java_settings, set_selected_profile, set_settings, stop_game, switch_launcher_account,
     update_profile_settings,
     validate_java_args,
+    get_local_lan_ip,
     lan_bridge_guest_allow_forward, lan_bridge_guest_port, lan_bridge_start_guest,
     lan_bridge_start_host, lan_bridge_stop, lan_bridge_write,
 };
@@ -58,10 +59,9 @@ use services::modrinth::{
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 use commands::{
     export_build, get_ely_avatar, get_ely_cape, get_ely_skin, get_mc_avatar, get_mc_cape,
-    apply_mc_skin_by_username, get_mc_skin, get_mc_skin_by_username, get_optifine_cape,
-    list_build_files, list_mc_capes,
-    preview_export,
-    set_mc_active_cape,
+    apply_mc_skin_by_username, get_mc_skin, get_mc_skin_by_username, get_mc_texture_data_url,
+    get_optifine_cape, list_build_files, list_mc_capes, list_mc_skins, preview_export,
+    set_mc_active_cape, set_mc_active_skin, upload_mc_skin,
 };
 use mrpack_open::take_pending_mrpack_open;
 use profile_launch::{
@@ -193,6 +193,7 @@ pub fn run() {
             lan_bridge_stop,
             lan_bridge_guest_port,
             lan_bridge_guest_allow_forward,
+            get_local_lan_ip,
             list_installed_versions,
             get_installed_fabric_profile_id,
             get_installed_quilt_profile_id,
@@ -220,6 +221,7 @@ pub fn run() {
             set_settings,
             get_effective_settings,
             is_game_running_now,
+            is_minecraft_client_running,
             stop_game,
             get_system_memory_gb,
             start_ely_oauth,
@@ -288,8 +290,12 @@ pub fn run() {
             get_mc_skin_by_username,
             apply_mc_skin_by_username,
             get_mc_cape,
+            get_mc_texture_data_url,
             list_mc_capes,
+            list_mc_skins,
             set_mc_active_cape,
+            set_mc_active_skin,
+            upload_mc_skin,
             get_optifine_cape,
             take_pending_mrpack_open,
             take_pending_profile_launch,

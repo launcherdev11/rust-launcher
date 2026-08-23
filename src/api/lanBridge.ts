@@ -34,6 +34,18 @@ function normalizeSessionId(sessionId?: string | null): string {
   return trimmed || "default";
 }
 
+export async function getGuestBridgePort(sessionId: string): Promise<number | null> {
+  const port = await invoke<number | null>("lan_bridge_guest_port", {
+    sessionId: normalizeSessionId(sessionId),
+  });
+  return port ?? null;
+}
+
+export async function getLocalLanIp(): Promise<string | null> {
+  const ip = await invoke<string | null>("get_local_lan_ip");
+  return ip ?? null;
+}
+
 export async function startGuestBridge(sessionId: string): Promise<number> {
   return invoke<number>("lan_bridge_start_guest", {
     sessionId: normalizeSessionId(sessionId),

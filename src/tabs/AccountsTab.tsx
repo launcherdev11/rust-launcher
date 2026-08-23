@@ -373,6 +373,17 @@ export function AccountsTab({
               skinByUsernameLoading={tt("app.accounts.skinByUsername.loading")}
               skinByUsernameError={tt("app.accounts.skinByUsername.error")}
               skinByUsernameNotFound={tt("app.accounts.skinByUsername.notFound")}
+              skinUploadTitle={tt("app.accounts.skinUpload.title")}
+              skinUploadPick={tt("app.accounts.skinUpload.pick")}
+              skinUploadApply={tt("app.accounts.skinUpload.apply")}
+              skinUploadLoading={tt("app.accounts.skinUpload.loading")}
+              skinUploadError={tt("app.accounts.skinUpload.error")}
+              skinModelStandard={tt("app.accounts.skinUpload.standard")}
+              skinModelSlim={tt("app.accounts.skinUpload.slim")}
+              skinLibraryTitle={tt("app.accounts.skinLibrary.title")}
+              skinLibraryEmpty={tt("app.accounts.skinLibrary.empty")}
+              skinLibraryLoading={tt("app.accounts.skinLibrary.loading")}
+              skinLibraryError={tt("app.accounts.skinLibrary.error")}
             />
           </div>
 

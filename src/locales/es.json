@@ -1021,6 +1021,8 @@
     "backToList": "Volver",
     "copyId": "ID",
     "idCopied": "ID de sala copiado",
+    "connectAddressCopied": "Dirección de conexión copiada",
+    "connectAddressHint": "Clic para copiar. En el juego: Multijugador → Conexión directa",
     "joinCodeLabel": "Contraseña",
     "joinCodeCopied": "Contraseña de sala copiada",
     "manageTitle": "Sala",

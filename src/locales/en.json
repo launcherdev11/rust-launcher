@@ -1024,6 +1024,8 @@
     "backToList": "Back",
     "copyId": "ID",
     "idCopied": "Room ID copied",
+    "connectAddressCopied": "Connection address copied",
+    "connectAddressHint": "Click to copy. In-game: Multiplayer → Direct Connect",
     "joinCodeLabel": "Password",
     "joinCodeCopied": "Room password copied",
     "manageTitle": "Room",
@@ -1062,8 +1064,12 @@
     "shareWorld": "Open access",
     "shareWorldWaiting": "Access open",
     "joinWorld": "Join world",
+    "joinWorldLaunching": "Tunnel {{address}} — launching game…",
+    "joinWorldLaunched": "Game → {{address}}. Keep the launcher open — the tunnel runs inside it.",
+    "joinWorldInGameCopied": "Address {{address}} copied. In-game: Multiplayer → Direct Connect.",
+    "joinWorldInGame": "Tunnel ready: {{address}}. In-game: Multiplayer → Direct Connect.",
     "hostSteps": "In-game: world → Open to LAN → same port below.",
-    "guestSteps": "When the host opens access — Join world. Microsoft or Ely required.",
+    "guestSteps": "When the host opens access — Join world. If the game is already running, the address is copied — connect via Multiplayer → Direct Connect.",
     "waitForPeer": "Invite a friend — the link appears when they join.",
     "needP2p": "Wait until the link with your friend is ready",
     "visibility": {
@@ -1334,6 +1340,21 @@
         "loading": "Loading skin…",
         "error": "Failed to load skin.",
         "notFound": "Player not found."
+      },
+      "skinUpload": {
+        "title": "Upload skin",
+        "pick": "Choose PNG",
+        "apply": "Upload",
+        "loading": "Uploading skin…",
+        "error": "Failed to upload skin.",
+        "standard": "Standard",
+        "slim": "Slim"
+      },
+      "skinLibrary": {
+        "title": "Skin library",
+        "empty": "You have no saved skins on this account.",
+        "loading": "Loading skins…",
+        "error": "Failed to load skin library."
       },
       "toast": {
         "nicknameSaved": "Changes saved!",

@@ -3813,7 +3813,10 @@ function App() {
   const handleLaunchToServer = useCallback(
     async (
       serverAddress: string,
-      options?: { requireOnlineAccount?: boolean; presenceContext?: LaunchPresenceContext | null },
+      options?: {
+        requireOnlineAccount?: boolean;
+        presenceContext?: LaunchPresenceContext | null;
+      },
     ) => {
       if (!selectedVersion) {
         throw new Error(tt("app.warnings.needMinecraftVersion"));
@@ -5288,6 +5291,7 @@ function App() {
               showNotification={showNotification}
               language={language}
               minecraftAccountKind={activeAccountKind}
+              gameStatus={gameStatus}
               onLaunchToServer={handleLaunchToServer}
               onPresenceContextChange={setRoomPresenceContext}
               onRoomLaunchContextChange={setLaunchPresenceContext}

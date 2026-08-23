@@ -83,6 +83,11 @@ pub fn is_game_running_now() -> Result<bool, String> {
 }
 
 #[command]
+pub fn is_minecraft_client_running() -> Result<bool, String> {
+    Ok(is_minecraft_java_process_running_except(0))
+}
+
+#[command]
 pub fn stop_game() -> Result<(), String> {
     let pid = GAME_PROCESS_PID.swap(0, Ordering::SeqCst);
     if pid == 0 {

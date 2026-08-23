@@ -38,6 +38,14 @@ const CAPE_UV = {
 } as const;
 
 async function loadCapeImageBitmap(url: string): Promise<ImageBitmap> {
+  const { fetchMcTextureDataUrl } = await import("./skin");
+  const dataUrl = await fetchMcTextureDataUrl(url);
+  if (dataUrl) {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return createImageBitmap(blob);
+  }
+
   const response = await fetch(url, { cache: "no-cache" });
   if (!response.ok) {
     throw new Error(`Cape request failed: ${response.status}`);

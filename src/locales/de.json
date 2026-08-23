@@ -1021,6 +1021,8 @@
     "backToList": "Zurück",
     "copyId": "ID",
     "idCopied": "Raum-ID kopiert",
+    "connectAddressCopied": "Verbindungsadresse kopiert",
+    "connectAddressHint": "Klicken zum Kopieren. Im Spiel: Mehrspieler → Direktverbindung",
     "joinCodeLabel": "Passwort",
     "joinCodeCopied": "Raumpasswort kopiert",
     "manageTitle": "Raum",

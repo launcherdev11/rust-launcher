@@ -30,7 +30,6 @@ pub struct LanBridgeStatusPayload {
 struct BridgeSession {
     write_tx: Option<mpsc::Sender<Vec<u8>>>,
     run_tx: Option<watch::Sender<bool>>,
-    /// Guest waits for host `tunnel:ready` before forwarding Minecraft bytes.
     guest_forward_tx: Option<watch::Sender<bool>>,
     role: Option<&'static str>,
     guest_port: Option<u16>,
@@ -176,8 +175,6 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
                                 }
                             }
 
-                            // Wait until host ACKs tunnel:ready (critical for high-RTT TURN).
-                            // Fall back after 20s so local/direct is not stuck forever.
                             {
                                 let mut fwd_rx = forward_rx.clone();
                                 let mut run_rx_fwd = run_rx.clone();
@@ -218,7 +215,6 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
                                 if let Some(session) = g.get_mut(&sid2) {
                                     if session.role == Some("guest") {
                                         session.write_tx = None;
-                                        // Reset forward gate for a possible next Minecraft connect.
                                         if let Some(tx) = session.guest_forward_tx.as_ref() {
                                             let _ = tx.send(false);
                                         }
@@ -461,6 +457,29 @@ pub async fn lan_bridge_guest_port(session_id: Option<String>) -> Result<Option<
     let map = state.lock().await;
     let sid = normalize_session_id(session_id.as_deref().unwrap_or("default"));
     Ok(map.get(&sid).and_then(|s| s.guest_port))
+}
+
+#[tauri::command]
+pub async fn get_local_lan_ip() -> Result<Option<String>, String> {
+    use std::net::IpAddr;
+
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
+        .await
+        .map_err(|e| format!("local ip bind failed: {e}"))?;
+    socket
+        .connect("8.8.8.8:80")
+        .await
+        .map_err(|e| format!("local ip route failed: {e}"))?;
+    let ip = socket
+        .local_addr()
+        .map_err(|e| format!("local ip addr failed: {e}"))?
+        .ip();
+
+    match ip {
+        IpAddr::V4(v4) if !v4.is_loopback() && !v4.is_unspecified() => Ok(Some(v4.to_string())),
+        IpAddr::V6(v6) if !v6.is_loopback() && !v6.is_unspecified() => Ok(Some(v6.to_string())),
+        _ => Ok(None),
+    }
 }
 
 async fn run_stream_loop(
