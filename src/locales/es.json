@@ -1490,8 +1490,58 @@
     },
     "finish": {
       "title": "¡Listo!",
-      "subtitle": "La configuración está completa. Dirígete al lanzador y comienza a jugar.",
-      "cta": "empezar a jugar"
+      "subtitle": "La configuración está completa. A continuación te mostramos el lanzador.",
+      "cta": "Iniciar tour"
+    }
+  },
+  "productTour": {
+    "progress": "Paso {{current}} de {{total}}",
+    "skip": "Omitir",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "finish": "¡Entendido!",
+    "replay": "Repetir tour",
+    "steps": {
+      "welcome": {
+        "title": "¡Bienvenido al lanzador!",
+        "body": "Un tour rápido: elegir versión, iniciar el juego, gestionar mods y registrarse en la plataforma."
+      },
+      "sidebar": {
+        "title": "Navegación",
+        "body": "La barra lateral es el menú principal.\n\n• Jugar — iniciar Minecraft\n• Ajustes — Java, gráficos, launcher\n• Mods — catálogo de mods\n• Modpacks — perfiles y modpacks"
+      },
+      "launch-controls": {
+        "title": "Versión, loader e inicio",
+        "body": "Izquierda — versión de Minecraft. Derecha — loader de mods (Vanilla, Fabric, Forge, etc.).\n\nEl botón central — Instalar o Jugar."
+      },
+      "profiles": {
+        "title": "Perfiles y modpacks",
+        "body": "Aquí aparecen los modpacks recientes. Haz clic en una tarjeta o crea uno nuevo."
+      },
+      "settings": {
+        "title": "Ajustes",
+        "body": "Configura Java, memoria, argumentos JVM, apariencia y atajos."
+      },
+      "mods": {
+        "title": "Catálogo de mods",
+        "body": "Busca e instala mods de Modrinth y CurseForge."
+      },
+      "modpacks": {
+        "title": "Modpacks",
+        "body": "Crea perfiles separados para diferentes conjuntos de mods."
+      },
+      "mc-account": {
+        "title": "Cuenta de Minecraft",
+        "body": "Cambia tu cuenta de juego — Ely.by o Microsoft. Necesaria para iniciar sesión, skins y multijugador."
+      },
+      "platform": {
+        "title": "Registro en la plataforma",
+        "body": "Cuenta de plataforma para amigos, salas y notificaciones.\n\nIntroduce email, apodo y contraseña y confirma el email."
+      },
+      "finish": {
+        "title": "¡Listo!",
+        "body": "Ya conoces lo básico. ¡Disfruta!\n\nRepite el tour en cualquier momento — ? arriba → Repetir tour."
+      }
     }
   }
 }

@@ -15,9 +15,7 @@ fn truncate_discord_field(s: &str) -> String {
 }
 
 fn application_id_from_env() -> Option<String> {
-    let raw = std::env::var("DISCORD_APPLICATION_ID")
-        .ok()
-        .or_else(|| option_env!("DISCORD_APPLICATION_ID").map(|s| s.to_string()))?;
+    let raw = std::env::var("DISCORD_APPLICATION_ID").ok()?;
     let t = raw.trim().to_string();
     if t.is_empty() {
         None
@@ -45,9 +43,7 @@ fn make_activity<'a>(details: &'a str, state: Option<&'a str>) -> activity::Acti
             act = act.state(st);
         }
     }
-    let raw_large_image_key = std::env::var("DISCORD_RPC_LARGE_IMAGE_KEY")
-        .ok()
-        .or_else(|| option_env!("DISCORD_RPC_LARGE_IMAGE_KEY").map(|s| s.to_string()));
+    let raw_large_image_key = std::env::var("DISCORD_RPC_LARGE_IMAGE_KEY").ok();
     if let Some(key) = raw_large_image_key {
         let k = key.trim();
         if !k.is_empty() {

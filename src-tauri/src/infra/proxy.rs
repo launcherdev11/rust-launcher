@@ -1,25 +1,8 @@
 use std::env;
 
 pub fn env_var_trim(key: &str) -> Option<String> {
-    let runtime = env::var(key)
+    env::var(key)
         .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    if runtime.is_some() {
-        return runtime;
-    }
-
-    let compile_time = match key {
-        "PROXY_HOST" => option_env!("PROXY_HOST"),
-        "PROXY_PORT" => option_env!("PROXY_PORT"),
-        "PROXY_HOSTS" => option_env!("PROXY_HOSTS"),
-        "PROXY_HOST_FORGE_IPV6" => option_env!("PROXY_HOST_FORGE_IPV6"),
-        "PROXY_USER" => option_env!("PROXY_USER"),
-        "PROXY_PASS" => option_env!("PROXY_PASS"),
-        _ => return None,
-    };
-
-    compile_time
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }
@@ -66,4 +49,3 @@ pub fn preferred_proxy_host(prefer_ipv6: bool) -> Option<String> {
     }
     candidates.into_iter().find(|h| !h.trim().is_empty())
 }
-

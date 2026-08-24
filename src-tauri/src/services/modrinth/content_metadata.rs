@@ -10,12 +10,12 @@ use zip::read::ZipArchive;
 use crate::app::paths::instance_dir;
 use crate::services::game::profiles::{profile_content_subdir, resolve_profile_item_path};
 
+use crate::infra::api_base::curseforge_api_base;
 use super::client::{modrinth_get_json, modrinth_http_client, MODRINTH_API_BASE};
 use super::installed::index_content_dir_sha1;
 use super::types::{ModrinthVersion, ProfileItemMetadata, MODRINTH_USER_AGENT};
 
 const VERSION_FILES_BATCH: usize = 96;
-const CF_API_BASE: &str = "https://api.curseforge.com/v1";
 const MINECRAFT_GAME_ID: u32 = 432;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -202,19 +202,6 @@ async fn fetch_modrinth_projects(
     Ok(out)
 }
 
-fn curseforge_api_key() -> Option<String> {
-    std::env::var("CURSEFORGE_API_KEY")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            option_env!("CURSEFORGE_API_KEY")
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-        })
-}
-
 fn is_ignored_in_curseforge_fingerprint(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r')
 }
@@ -263,11 +250,6 @@ async fn curseforge_lookup_filenames(
     filenames: &[String],
     content_dir: &Path,
 ) -> Result<HashMap<String, u32>, String> {
-    let api_key = match curseforge_api_key() {
-        Some(k) => k,
-        None => return Ok(HashMap::new()),
-    };
-
     let mut fingerprint_by_filename: HashMap<String, i32> = HashMap::new();
     for filename in filenames {
         let Some(path) = resolve_profile_item_path(content_dir, filename) else {
@@ -285,11 +267,10 @@ async fn curseforge_lookup_filenames(
 
     let fingerprints: Vec<i32> = fingerprint_by_filename.values().copied().collect();
     let client = crate::infra::http::http_client(false);
-    let url = format!("{CF_API_BASE}/fingerprints/{MINECRAFT_GAME_ID}");
+    let url = format!("{}/fingerprints/{MINECRAFT_GAME_ID}", curseforge_api_base());
     let body = CurseforgeFingerprintRequest { fingerprints };
     let resp = client
         .post(&url)
-        .header("x-api-key", api_key)
         .header("Accept", "application/json")
         .json(&body)
         .send()
@@ -324,10 +305,6 @@ async fn curseforge_lookup_filenames(
 async fn fetch_curseforge_mods(
     mod_ids: &[u32],
 ) -> Result<HashMap<u32, (String, Option<String>)>, String> {
-    let api_key = match curseforge_api_key() {
-        Some(k) => k,
-        None => return Ok(HashMap::new()),
-    };
     if mod_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -337,11 +314,10 @@ async fn fetch_curseforge_mods(
         .map(|id| id.to_string())
         .collect::<Vec<_>>()
         .join(",");
-    let url = format!("{CF_API_BASE}/mods?modIds={ids_str}");
+    let url = format!("{}/mods?modIds={ids_str}", curseforge_api_base());
     let client = crate::infra::http::http_client(false);
     let resp = client
         .get(&url)
-        .header("x-api-key", api_key)
         .header("Accept", "application/json")
         .send()
         .await

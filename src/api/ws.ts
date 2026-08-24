@@ -200,7 +200,6 @@ function normalizeWsEvent(input: unknown): WsEvent | null {
           member_count: normalizedRoom.member_count,
           name: normalizedRoom.name ?? null,
           visibility: normalizedRoom.visibility ?? null,
-          join_code: normalizedRoom.join_code ?? null,
           invite_only: normalizedRoom.invite_only ?? null,
           session_started_at: normalizedRoom.session_started_at ?? null,
         },
@@ -234,12 +233,6 @@ function normalizeWsEvent(input: unknown): WsEvent | null {
               : asLooseBoolean(payloadObject?.is_private) === false
                 ? "public"
                 : null),
-        join_code:
-          asOptionalString(payloadObject?.join_code) ??
-          asOptionalString(payloadObject?.joinCode) ??
-            asOptionalString(payloadObject?.invite_code) ??
-            asOptionalString(payloadObject?.inviteCode) ??
-          null,
         invite_only:
           asOptionalBoolean(payloadObject?.invite_only) ??
             asOptionalBoolean(payloadObject?.inviteOnly) ??
@@ -396,8 +389,8 @@ function openPlatformWs(token: string): void {
   setStatus("connecting");
   let opened = false;
 
-  const url = `${wsBaseUrl()}/ws?token=${encodeURIComponent(token)}`;
-  const ws = new WebSocket(url);
+  const url = `${wsBaseUrl()}/ws`;
+  const ws = new WebSocket(url, ["mc16launcher.bearer", token]);
   socket = ws;
 
   ws.onopen = () => {

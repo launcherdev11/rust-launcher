@@ -57,21 +57,6 @@ async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
 
 static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
-fn get_client_secret() -> Result<String, String> {
-    crate::app::env::load_dotenv_files();
-    crate::services::game::runtime::load_project_env_for_runtime();
-
-    std::env::var("ELY_CLIENT_SECRET")
-        .or_else(|_| option_env!("ELY_CLIENT_SECRET").map(String::from).ok_or(()))
-        .map(|s| s.trim().to_string())
-        .and_then(|s| if s.is_empty() { Err(()) } else { Ok(s) })
-        .map_err(|_| {
-            "Секрет Ely.by OAuth2 не задан. Добавьте ELY_CLIENT_SECRET в файл .env в корне проекта \
-             (рядом с package.json) и перезапустите лаунчер. Либо войдите по логину/паролю Ely."
-                .to_string()
-        })
-}
-
 fn gen_random_str(len: usize) -> String {
     rand::thread_rng().sample_iter(&Alphanumeric).take(len).map(char::from).collect()
 }
@@ -92,14 +77,6 @@ pub struct OAuth2TokenResponse {
     pub access_token: String,
     #[serde(default)] pub refresh_token: Option<String>,
     pub token_type: String, pub expires_in: u64,
-}
-#[derive(Debug, Serialize)]
-struct OAuth2TokenRequest<'a> {
-    client_id: &'a str, client_secret: String, redirect_uri: &'a str,
-    grant_type: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")] code: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")] refresh_token: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")] scope: Option<&'a str>,
 }
 #[derive(Debug, Deserialize)]
 pub struct AccountInfo {
@@ -154,13 +131,24 @@ pub fn generate_oauth2_url(state: &str) -> String {
 }
 
 async fn oauth2_token_request(grant_type: &str, code: Option<&str>, refresh: Option<&str>) -> Result<OAuth2TokenResponse, String> {
-    let client_secret = get_client_secret()?;
-    let body = OAuth2TokenRequest {
-        client_id: ELY_CLIENT_ID, client_secret, redirect_uri: REDIRECT_URI,
-        grant_type, code, refresh_token: refresh,
-        scope: if grant_type == "refresh_token" { Some("minecraft_server_session account_info offline_access") } else { None },
-    };
-    let resp = http_client().post(OAUTH2_TOKEN_URL).form(&body).send().await.map_err(|e| e.to_string())?;
+    let url = crate::infra::api_base::ely_oauth_token_url();
+    let mut body = serde_json::json!({
+        "grant_type": grant_type,
+        "redirect_uri": REDIRECT_URI,
+    });
+    if let Some(code) = code {
+        body["code"] = serde_json::Value::String(code.to_string());
+    }
+    if let Some(refresh) = refresh {
+        body["refresh_token"] = serde_json::Value::String(refresh.to_string());
+    }
+
+    let resp = http_client()
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     handle_resp(resp, "Ely.by OAuth2 token").await
 }
 

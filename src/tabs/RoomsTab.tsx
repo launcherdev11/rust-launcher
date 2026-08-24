@@ -1077,7 +1077,7 @@ export function RoomsTab({
               >
                 {tt("rooms.copyId")}
               </button>
-              {selectedRoom.visibility === "private" && selectedRoom.join_code?.trim() ? (
+              {isOwner && selectedRoom.visibility === "private" && selectedRoom.join_code?.trim() ? (
                 <button
                   type="button"
                   onClick={() =>

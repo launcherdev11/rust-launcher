@@ -58,6 +58,8 @@ type AccountsTabProps = {
   onSwitchAccount: (accountId: string) => Promise<void>;
   onRemoveAccount: (accountId: string) => Promise<void>;
   onAddAccount: () => Promise<void>;
+  tourAccountsSection?: SettingsSection | null;
+  tourForceSettingsOpen?: boolean;
 };
 
 function accountKindAvatarClass(kind: string): string {
@@ -136,6 +138,8 @@ export function AccountsTab({
   onSwitchAccount,
   onRemoveAccount,
   onAddAccount,
+  tourAccountsSection = null,
+  tourForceSettingsOpen = false,
 }: AccountsTabProps) {
   const tt = useT(language);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -148,6 +152,15 @@ export function AccountsTab({
     return window.localStorage.getItem(API_NICKNAME_KEY)?.trim() || "";
   });
   const [systemIsSponsor, setSystemIsSponsor] = useState(false);
+
+  useEffect(() => {
+    if (!tourAccountsSection) return;
+    setSettingsSection(tourAccountsSection);
+  }, [tourAccountsSection]);
+
+  useEffect(() => {
+    if (tourForceSettingsOpen) setSettingsOpen(true);
+  }, [tourForceSettingsOpen]);
 
   useEffect(() => {
     const syncSystemNickname = () => {

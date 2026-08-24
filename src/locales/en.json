@@ -1513,8 +1513,58 @@
     },
     "finish": {
       "title": "All set!",
-      "subtitle": "Setup is complete. Head to the launcher and start playing.",
-      "cta": "Start playing"
+      "subtitle": "Setup is complete. We'll show you how to use the launcher next.",
+      "cta": "Start the tour"
+    }
+  },
+  "productTour": {
+    "progress": "Step {{current}} of {{total}}",
+    "skip": "Skip",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Got it!",
+    "replay": "Take the tour",
+    "steps": {
+      "welcome": {
+        "title": "Welcome to the launcher!",
+        "body": "A quick tour of the essentials: choosing a version, launching the game, managing mods, and signing up on the platform."
+      },
+      "sidebar": {
+        "title": "Navigation",
+        "body": "The sidebar is the main menu.\n\n• Play — launch Minecraft\n• Settings — Java, graphics, launcher options\n• Mods — mod catalog\n• Modpacks — your profiles and modpacks"
+      },
+      "launch-controls": {
+        "title": "Version, loader & launch",
+        "body": "Left — Minecraft version (release, snapshot, Forge, etc.). Right — mod loader:\n\n• Vanilla — no mods\n• Fabric / Quilt — modern mods\n• Forge / NeoForge — classic mods\n\nThe center button — Install (if missing) or Play."
+      },
+      "profiles": {
+        "title": "Profiles & modpacks",
+        "body": "Recent modpacks appear here — each with its own version, loader, and mods. Click a card to select it, or create a new one in the Modpacks tab."
+      },
+      "settings": {
+        "title": "Settings",
+        "body": "Configure Java, memory, JVM args, launcher appearance, hotkeys, and more."
+      },
+      "mods": {
+        "title": "Mod catalog",
+        "body": "Search and install mods from Modrinth and CurseForge. Filter by version, loader, and category — mods go straight into the selected profile."
+      },
+      "modpacks": {
+        "title": "Modpacks",
+        "body": "Create separate profiles for different mod sets. Each profile has its own folder, version, loader, and mod list."
+      },
+      "mc-account": {
+        "title": "Minecraft account",
+        "body": "Switch your game account here — Ely.by or Microsoft. Required for Minecraft login, skins, and multiplayer.\n\nAdd an account in the Profile tab."
+      },
+      "platform": {
+        "title": "Platform sign-up",
+        "body": "A 16Launcher platform account unlocks friends, rooms, notifications, and sync.\n\n1. Click Sign up\n2. Enter email, nickname, and password\n3. Confirm your email with the code from the message\n\nAlready have an account? Use Sign in."
+      },
+      "finish": {
+        "title": "You're all set!",
+        "body": "You know the basics now. Have fun!\n\nReplay the tour anytime — click ? at the top → Take the tour."
+      }
     }
   }
 }

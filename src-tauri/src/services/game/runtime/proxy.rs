@@ -17,25 +17,12 @@ pub(crate) fn build_java_http_proxy_args_with_preferred_host(prefer_ipv6: bool) 
         _ => return Vec::new(),
     };
 
-    let user = env_var_trim("PROXY_USER");
-    let pass = env_var_trim("PROXY_PASS");
-
     let mut args = Vec::new();
 
     args.push(format!("-Dhttp.proxyHost={}", host));
     args.push(format!("-Dhttp.proxyPort={}", port));
     args.push(format!("-Dhttps.proxyHost={}", host));
     args.push(format!("-Dhttps.proxyPort={}", port));
-
-    if let (Some(user), Some(pass)) = (user, pass) {
-        args.push(format!("-DproxyUser={}", user));
-        args.push(format!("-DproxyPass={}", pass));
-
-        args.push(format!("-Dhttp.proxyUser={}", user));
-        args.push(format!("-Dhttp.proxyPassword={}", pass));
-        args.push(format!("-Dhttps.proxyUser={}", user));
-        args.push(format!("-Dhttps.proxyPassword={}", pass));
-    }
 
     args.push("-Djdk.http.auth.tunneling.disabledSchemes=".to_string());
 

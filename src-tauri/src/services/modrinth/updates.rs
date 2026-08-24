@@ -10,6 +10,7 @@ use crate::services::game::profiles::{
     resolve_profile_item_path,
 };
 
+use crate::infra::api_base::curseforge_api_base;
 use super::client::{modrinth_http_client, should_filter_by_loader, MODRINTH_API_BASE};
 use super::installed::index_content_dir_sha1;
 use super::types::{
@@ -17,7 +18,6 @@ use super::types::{
 };
 
 const VERSION_FILES_BATCH: usize = 96;
-const CF_API_BASE: &str = "https://api.curseforge.com/v1";
 const MINECRAFT_GAME_ID: u32 = 432;
 
 #[derive(Debug, serde::Serialize)]
@@ -87,21 +87,6 @@ async fn post_version_files_map(
     resp.json::<HashMap<String, ModrinthVersion>>()
         .await
         .map_err(|e| format!("{context}: ошибка разбора JSON: {e}"))
-}
-
-fn curseforge_api_key() -> Result<String, String> {
-    std::env::var("CURSEFORGE_API_KEY")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            option_env!("CURSEFORGE_API_KEY")
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-        })
-        .ok_or_else(|| {
-            "CURSEFORGE_API_KEY не задан. Добавьте ключ API CurseForge в файл .env (значения с символом $ укажите в одинарных кавычках).".to_string()
-        })
 }
 
 fn is_ignored_in_curseforge_fingerprint(b: u8) -> bool {
@@ -238,14 +223,12 @@ async fn check_curseforge_content_updates(
         return Ok(Vec::new());
     }
 
-    let api_key = curseforge_api_key()?;
     let client = crate::infra::http::http_client(false);
-    let url = format!("{CF_API_BASE}/fingerprints/{MINECRAFT_GAME_ID}");
+    let url = format!("{}/fingerprints/{MINECRAFT_GAME_ID}", curseforge_api_base());
 
     let body = CurseforgeFingerprintRequest { fingerprints };
     let resp = client
         .post(&url)
-        .header("x-api-key", api_key)
         .header("Accept", "application/json")
         .json(&body)
         .send()

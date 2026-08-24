@@ -620,7 +620,10 @@ export function PlatformAccountPanel({
   }
 
   return (
-    <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-6 py-6 shadow-xl backdrop-blur-md">
+    <div
+      data-tour-id="tour-platform-register"
+      className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-6 py-6 shadow-xl backdrop-blur-md"
+    >
       <div className="mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
           {tt("platform.accountTitle")}

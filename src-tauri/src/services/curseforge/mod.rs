@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::app::paths::{game_root_dir, instance_dir};
+use crate::infra::api_base::curseforge_api_base;
 use crate::infra::http::{http_client, http_client_for_binary_download};
 
-const CF_API_BASE: &str = "https://api.curseforge.com/v1";
 const MINECRAFT_GAME_ID: u32 = 432;
 
 #[derive(Debug, Serialize, Clone)]
@@ -204,22 +204,6 @@ struct CfMinecraftVersion {
     version: String,
 }
 
-fn curseforge_api_key() -> Result<String, String> {
-    std::env::var("CURSEFORGE_API_KEY")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            option_env!("CURSEFORGE_API_KEY")
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-        })
-        .ok_or_else(|| {
-            "CURSEFORGE_API_KEY не задан. Добавьте ключ API CurseForge в файл .env (значения с символом $ укажите в одинарных кавычках).".to_string()
-        })
-}
-
 fn class_id_for_content_type(content_type: &str) -> Result<u32, String> {
     match content_type {
         "mod" => Ok(6),
@@ -274,11 +258,9 @@ async fn cf_get_json<T: for<'de> Deserialize<'de>>(
     client: &reqwest::Client,
     path_and_query: &str,
 ) -> Result<T, String> {
-    let api_key = curseforge_api_key()?;
-    let url = format!("{CF_API_BASE}{path_and_query}");
+    let url = format!("{}{}", curseforge_api_base(), path_and_query);
     let resp = client
         .get(&url)
-        .header("x-api-key", api_key)
         .header("Accept", "application/json")
         .send()
         .await
@@ -292,15 +274,8 @@ async fn cf_get_json<T: for<'de> Deserialize<'de>>(
         } else {
             format!(": {body}")
         };
-        let hint = if status.as_u16() == 403
-            && body.contains("API Key")
-        {
-            " Проверьте CURSEFORGE_API_KEY в .env: ключ CurseForge начинается с $2a$ — оберните значение в одинарные кавычки, чтобы dotenv не обрезал его."
-        } else {
-            ""
-        };
         return Err(format!(
-            "CurseForge API вернул ошибку {status}{detail}{hint}"
+            "CurseForge API вернул ошибку {status}{detail}"
         ));
     }
 

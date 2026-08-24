@@ -1493,8 +1493,58 @@
     },
     "finish": {
       "title": "Alles klar!",
-      "subtitle": "Die Einrichtung ist abgeschlossen. Gehen Sie zum Launcher und beginnen Sie zu spielen.",
-      "cta": "Fangen Sie an zu spielen"
+      "subtitle": "Die Einrichtung ist abgeschlossen. Als Nächstes zeigen wir Ihnen den Launcher.",
+      "cta": "Tour starten"
+    }
+  },
+  "productTour": {
+    "progress": "Schritt {{current}} von {{total}}",
+    "skip": "Überspringen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "finish": "Verstanden!",
+    "replay": "Tour wiederholen",
+    "steps": {
+      "welcome": {
+        "title": "Willkommen im Launcher!",
+        "body": "Eine kurze Tour: Version wählen, Spiel starten, Mods verwalten und auf der Plattform registrieren."
+      },
+      "sidebar": {
+        "title": "Navigation",
+        "body": "Die Seitenleiste ist das Hauptmenü.\n\n• Spielen — Minecraft starten\n• Einstellungen — Java, Grafik, Launcher\n• Mods — Mod-Katalog\n• Modpacks — Profile und Modpacks"
+      },
+      "launch-controls": {
+        "title": "Version, Loader & Start",
+        "body": "Links — Minecraft-Version. Rechts — Mod-Loader (Vanilla, Fabric, Forge usw.).\n\nDie mittlere Schaltfläche — Installieren oder Spielen."
+      },
+      "profiles": {
+        "title": "Profile & Modpacks",
+        "body": "Hier erscheinen kürzlich genutzte Modpacks. Klicken Sie auf eine Karte oder erstellen Sie ein neues Modpack."
+      },
+      "settings": {
+        "title": "Einstellungen",
+        "body": "Java, Speicher, JVM-Argumente, Erscheinungsbild und Tastenkürzel konfigurieren."
+      },
+      "mods": {
+        "title": "Mod-Katalog",
+        "body": "Mods von Modrinth und CurseForge suchen und installieren."
+      },
+      "modpacks": {
+        "title": "Modpacks",
+        "body": "Separate Profile für verschiedene Mod-Sets erstellen."
+      },
+      "mc-account": {
+        "title": "Minecraft-Konto",
+        "body": "Spielkonto wechseln — Ely.by oder Microsoft. Erforderlich für Login, Skins und Multiplayer."
+      },
+      "platform": {
+        "title": "Plattform-Registrierung",
+        "body": "Plattformkonto für Freunde, Räume und Benachrichtigungen.\n\nE-Mail, Nickname und Passwort eingeben und E-Mail bestätigen."
+      },
+      "finish": {
+        "title": "Fertig!",
+        "body": "Sie kennen die Grundlagen. Viel Spaß!\n\nTour jederzeit über ? oben → Tour wiederholen."
+      }
     }
   }
 }

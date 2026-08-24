@@ -170,6 +170,8 @@ fn parse_maven_metadata_versions(metadata: &str) -> Vec<String> {
 }
 
 async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
+    use crate::infra::api_base::platform_proxy_fetch_url;
+
     let direct_client = http_client(false);
     match download_text_with_retries(
         &direct_client,
@@ -180,16 +182,12 @@ async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
     {
         Ok(text) => return Ok(text),
         Err(direct_err) => {
-            let proxy_client = http_client(true);
-            download_text_with_retries(
-                &proxy_client,
-                NEOFORGE_MAVEN_METADATA_URL,
-                DEFAULT_DOWNLOAD_RETRIES,
-            )
+            let proxy_url = platform_proxy_fetch_url(NEOFORGE_MAVEN_METADATA_URL);
+            download_text_with_retries(&direct_client, &proxy_url, DEFAULT_DOWNLOAD_RETRIES)
             .await
             .map_err(|proxy_err| {
                 format!(
-                    "Ошибка загрузки NeoForge metadata: {direct_err}; через прокси: {proxy_err}"
+                    "Ошибка загрузки NeoForge metadata: {direct_err}; через серверный прокси: {proxy_err}"
                 )
             })
         }

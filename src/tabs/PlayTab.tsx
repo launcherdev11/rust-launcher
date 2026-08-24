@@ -334,6 +334,7 @@ export function PlayTab({
 
   const homeCards = (
     <div
+      data-tour-id="tour-profiles"
       className={
         fillPane
           ? "mt-2 flex min-h-0 w-full flex-1 flex-col gap-2"
@@ -556,7 +557,7 @@ export function PlayTab({
 
       <div className={controlsClass}>
         <div className="pointer-events-auto relative w-full max-w-2xl">
-          <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8">
+          <div className="glass-chip flex flex-wrap items-center justify-center gap-4 px-6 py-4 sm:gap-6 sm:px-8" data-tour-id="tour-launch-controls">
             <div className="relative flex flex-col text-left">
               <span className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
                 {tt("play.version.label")}

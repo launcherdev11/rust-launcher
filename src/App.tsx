@@ -112,6 +112,12 @@ import {
   ONBOARDING_LEGACY_MIGRATED_KEY,
 } from "./onboarding";
 import {
+  ProductTour,
+  PRODUCT_TOUR_COMPLETED_STORAGE_KEY,
+  PRODUCT_TOUR_FORCE_STORAGE_KEY,
+} from "./product-tour";
+import type { TourAccountsSection, TourTabId } from "./product-tour/types";
+import {
   applyTabDrop,
   detectDropZone,
   isSplittableTab,
@@ -642,6 +648,12 @@ const BOTTOM_SIDEBAR_ITEMS: { id: SidebarItemId; labelKey: string }[] = [
   { id: "friends", labelKey: "app.sidebar.friends" },
 ];
 
+const TOUR_SIDEBAR_TARGET_IDS: Partial<Record<SidebarItemId, string>> = {
+  settings: "tour-sidebar-settings",
+  mods: "tour-sidebar-mods",
+  modpacks: "tour-sidebar-modpacks",
+};
+
 function PlayIcon() {
   return (
     <svg
@@ -984,6 +996,8 @@ function App() {
     () => readStoredLanguage() ?? "ru",
   );
   const [onboardingVisible, setOnboardingVisible] = useState<boolean | null>(null);
+  const [productTourActive, setProductTourActive] = useState(false);
+  const [tourAccountsSection, setTourAccountsSection] = useState<TourAccountsSection>("accounts");
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [launcherVersion, setLauncherVersion] = useState<string | null>(null);
   const [launcherUpdateBadge, setLauncherUpdateBadge] = useState<"latest" | "outdated" | null>(() => {
@@ -1283,6 +1297,22 @@ function App() {
     },
     [activeItem, settings?.ui_sounds_enabled],
   );
+
+  const completeProductTour = useCallback(() => {
+    try {
+      window.localStorage.setItem(PRODUCT_TOUR_COMPLETED_STORAGE_KEY, "1");
+    } catch {
+    }
+    setProductTourActive(false);
+    setTourAccountsSection("accounts");
+  }, []);
+
+  const startProductTour = useCallback(() => {
+    setShowHelpModal(false);
+    setActiveItemWithSound("play");
+    setTourAccountsSection("accounts");
+    setProductTourActive(true);
+  }, [setActiveItemWithSound]);
 
   const activateSidebarTab = useCallback(
     (next: SplittableTabId) => {
@@ -1637,6 +1667,7 @@ function App() {
   const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
   const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
   const didApplyStartPageRef = useRef(false);
+  const pendingProductTourRef = useRef(false);
   const languageHydratedRef = useRef(false);
 
   const profileAvatarInput = useMemo<ProfileAvatarInput>(
@@ -2281,6 +2312,29 @@ function App() {
 
     setOnboardingVisible(true);
   }, [settings]);
+
+  useEffect(() => {
+    if (onboardingVisible !== false) return;
+
+    if (pendingProductTourRef.current) {
+      pendingProductTourRef.current = false;
+      try {
+        if (window.localStorage.getItem(PRODUCT_TOUR_COMPLETED_STORAGE_KEY) !== "1") {
+          setProductTourActive(true);
+        }
+      } catch {
+      }
+      return;
+    }
+
+    try {
+      if (window.localStorage.getItem(PRODUCT_TOUR_FORCE_STORAGE_KEY) === "1") {
+        window.localStorage.removeItem(PRODUCT_TOUR_FORCE_STORAGE_KEY);
+        setProductTourActive(true);
+      }
+    } catch {
+    }
+  }, [onboardingVisible]);
 
   const updateSettings = useCallback(
     async (patch: Partial<Settings>, profileId?: string | null) => {
@@ -4320,6 +4374,7 @@ function App() {
           } catch {
           }
           await updateSettings({ onboarding_completed: true });
+          pendingProductTourRef.current = true;
           setOnboardingVisible(false);
         }}
       />
@@ -4611,7 +4666,17 @@ function App() {
                 </button>
               </p>
             </div>
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowHelpModal(false);
+                  startProductTour();
+                }}
+                className="interactive-press rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/12"
+              >
+                {tt("productTour.replay")}
+              </button>
               <button
                 type="button"
                 onClick={() => setShowHelpModal(false)}
@@ -4857,6 +4922,7 @@ function App() {
                 setSessionNotificationsOpen(false);
                 setAccountSwitcherOpen((o) => !o);
               }}
+              data-tour-id="tour-account-switcher"
               className="interactive-press relative flex max-w-[200px] items-center gap-2 overflow-hidden rounded-lg border border-white/15 bg-black/25 py-1 pl-1.5 pr-2 text-left text-[11px] font-semibold text-white/88 hover:bg-black/40"
               title={tt("app.accounts.switcherTitle")}
             >
@@ -4985,6 +5051,7 @@ function App() {
       >
         <aside
           ref={sidebarRef}
+          data-tour-id="tour-sidebar"
           className={
             sidebarHorizontal
               ? `relative z-40 mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 overflow-visible rounded-3xl bg-black/55 px-4 py-3 backdrop-blur-lg ${
@@ -5042,6 +5109,7 @@ function App() {
               <div
                 key={item.id}
                 className="group relative flex h-10 w-10 shrink-0 items-center justify-center"
+                data-tour-id={TOUR_SIDEBAR_TARGET_IDS[item.id]}
               >
                 <button
                   type="button"
@@ -5331,6 +5399,8 @@ function App() {
               onElyLogin={handleElyLogin}
               onElyLogout={handleElyLogout}
               onSwitchAccount={handleSwitchLauncherAccount}
+              tourAccountsSection={productTourActive ? tourAccountsSection : null}
+              tourForceSettingsOpen={productTourActive && tourAccountsSection === "platform"}
               onRemoveAccount={async (accountId) => {
                 try {
                   await invoke("remove_launcher_account", { accountId });
@@ -5441,6 +5511,16 @@ function App() {
 
         <ActiveDownloadsPanel jobs={activeDownloadJobs} language={language} />
       </div>
+
+      <ProductTour
+        language={language}
+        accentColor={accentColor}
+        active={productTourActive}
+        onNavigateTab={(tab: TourTabId) => setActiveItemWithSound(tab)}
+        onNavigateAccountsSection={setTourAccountsSection}
+        onComplete={completeProductTour}
+        onSkip={completeProductTour}
+      />
     </div>
     </LauncherAnimationScope>
   );
