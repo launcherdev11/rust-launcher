@@ -18,6 +18,7 @@ export const TAB_SPLIT_RATIO_MAX = 0.78;
 export const TAB_SPLIT_RATIO_DEFAULT = 0.5;
 export const TAB_DRAG_THRESHOLD_PX = 8;
 export const TAB_DROP_EDGE_FRAC = 0.28;
+export const TAB_SPLIT_MIN_WIDTH_PX = 960;
 
 const SPLITTABLE_ORDER: SplittableTabId[] = ["play", "mods", "modpacks", "settings"];
 

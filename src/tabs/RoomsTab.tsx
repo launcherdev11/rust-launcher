@@ -39,6 +39,15 @@ import {
 import { copyTextToClipboard } from "../lib/clipboard";
 import type { GameStatus } from "../lib/gameConsoleWindow";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
+import {
+  ActionButton,
+  AuthGate,
+  EmptyState,
+  Modal,
+  Panel,
+  RoomCardSkeleton,
+  TextField,
+} from "../components/ui";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -63,6 +72,7 @@ type RoomsTabProps = {
   ) => Promise<void>;
   onPresenceContextChange?: (context: RoomPresenceContext | null) => void;
   onRoomLaunchContextChange?: (context: LaunchPresenceContext | null) => void;
+  onOpenAccounts?: () => void;
 };
 
 function decodeJwtSub(token: string): string {
@@ -141,6 +151,7 @@ export function RoomsTab({
   onLaunchToServer,
   onPresenceContextChange,
   onRoomLaunchContextChange,
+  onOpenAccounts,
 }: RoomsTabProps) {
   const tt = useT(language);
 
@@ -154,6 +165,7 @@ export function RoomsTab({
     minecraftAccountKind === "microsoft" || minecraftAccountKind === "ely";
 
   const [loading, setLoading] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState("");
   const [userId, setUserId] = useState("");
   const [profileNickname, setProfileNickname] = useState("");
@@ -638,6 +650,7 @@ export function RoomsTab({
         return;
       }
     }
+    setBusyAction("create");
     setLoading(true);
     try {
       const room = await createRoom({
@@ -655,6 +668,7 @@ export function RoomsTab({
       showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
+      setBusyAction(null);
     }
   };
 
@@ -666,6 +680,7 @@ export function RoomsTab({
     const idOrName = (roomId ?? joinRoomId).trim();
     const password = roomId ? undefined : joinPassword.trim();
     if (!idOrName && !password) return;
+    setBusyAction(roomId ? `join:${roomId}` : "join");
     setLoading(true);
     try {
       const room = await joinRoom(idOrName || password!, {
@@ -682,6 +697,7 @@ export function RoomsTab({
       showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
+      setBusyAction(null);
     }
   };
 
@@ -745,12 +761,16 @@ export function RoomsTab({
   };
 
   const handleRefresh = () => {
+    setBusyAction("refresh");
     setLoading(true);
     void reloadRooms()
       .catch((e) => {
         showNotification("error", e instanceof ApiError ? e.message : String(e));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setBusyAction(null);
+      });
   };
 
   const statusLabel = (status: string) => {
@@ -977,14 +997,16 @@ export function RoomsTab({
               : ""}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={!accessToken || loading || !canJoin}
+        <ActionButton
+          size="sm"
+          variant="sky"
+          loading={busyAction === `join:${room.id}`}
+          loadingLabel={tt("rooms.joining")}
+          disabled={!canJoin || (loading && busyAction !== `join:${room.id}`)}
           onClick={() => void handleJoin(room.id)}
-          className="interactive-press shrink-0 rounded-lg border border-sky-400/35 bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-100 hover:bg-sky-500/25 disabled:opacity-60"
         >
           {tt("rooms.joinFriendRoom")}
-        </button>
+        </ActionButton>
       </div>
     );
   };
@@ -995,21 +1017,21 @@ export function RoomsTab({
     const sessionPlaytimeSeconds = getElapsedSeconds(selectedRoomSessionStartedAt, nowMs);
     return (
       <>
-        <div className="flex w-full max-w-5xl flex-col gap-3 py-4">
+        <div className="flex w-full max-w-4xl flex-col gap-5 py-6">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
+            <ActionButton
+              size="sm"
+              variant="secondary"
               onClick={() => {
                 setViewingProfile(null);
                 setManaging(false);
               }}
-              className="interactive-press rounded-lg border border-white/12 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50"
             >
               ← {tt("rooms.backToList")}
-            </button>
+            </ActionButton>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-base font-bold text-white/95">{roomTitle}</h2>
+                <h2 className="ui-title truncate text-base">{roomTitle}</h2>
                 <span
                   className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${statusTone(selectedRoom.status)}`}
                 >
@@ -1025,7 +1047,7 @@ export function RoomsTab({
                   {isOwner ? tt("rooms.youOwner") : tt("rooms.youMember")}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-[11px] text-white/40">
+              <p className="ui-meta mt-0.5 truncate">
                 {tt("rooms.players", {
                   count: selectedRoom.member_count,
                   max: selectedRoom.max_players,
@@ -1059,66 +1081,66 @@ export function RoomsTab({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {roomConnectAddress ? (
-                <button
-                  type="button"
+                <ActionButton
+                  size="sm"
+                  variant="emerald"
                   onClick={() =>
                     void handleCopyText(roomConnectAddress, tt("rooms.connectAddressCopied"))
                   }
-                  className="interactive-press rounded-lg border border-emerald-500/35 bg-emerald-600/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/25"
                   title={tt("rooms.connectAddressHint")}
                 >
                   {roomConnectAddress}
-                </button>
+                </ActionButton>
               ) : null}
-              <button
-                type="button"
+              <ActionButton
+                size="sm"
+                variant="secondary"
                 onClick={() => void handleCopyId(selectedRoom.id)}
-                className="interactive-press rounded-lg border border-white/12 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50"
               >
                 {tt("rooms.copyId")}
-              </button>
+              </ActionButton>
               {isOwner && selectedRoom.visibility === "private" && selectedRoom.join_code?.trim() ? (
-                <button
-                  type="button"
+                <ActionButton
+                  size="sm"
+                  variant="secondary"
                   onClick={() =>
                     void handleCopyText(
                       selectedRoom.join_code!.trim(),
                       tt("rooms.passwordCopied"),
                     )
                   }
-                  className="interactive-press rounded-lg border border-white/12 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50"
                 >
                   {tt("rooms.passwordLabel")}: {selectedRoom.join_code.trim()}
-                </button>
+                </ActionButton>
               ) : null}
               {isOwner ? (
-                <button
-                  type="button"
+                <ActionButton
+                  size="sm"
+                  variant="danger"
                   disabled={loading}
                   onClick={() => void handleClose()}
-                  className="interactive-press rounded-lg border border-red-500/35 bg-red-600/20 px-2.5 py-1.5 text-xs font-semibold text-red-100 hover:bg-red-600/30 disabled:opacity-60"
                 >
                   {tt("rooms.close")}
-                </button>
+                </ActionButton>
               ) : (
-                <button
-                  type="button"
+                <ActionButton
+                  size="sm"
+                  variant="secondary"
                   disabled={loading}
                   onClick={() => void handleLeave()}
-                  className="interactive-press rounded-lg border border-white/20 bg-black/40 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
                 >
                   {tt("rooms.leave")}
-                </button>
+                </ActionButton>
               )}
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <div className="flex flex-col gap-3">
-              <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <div className="flex flex-col gap-5">
+              <Panel padding="sm">
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-black/30 px-2.5 py-2">
-                    <span className="text-xs text-white/50">{tt("rooms.mcAccount")}</span>
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/30 px-2.5 py-2">
+                    <span className="ui-caption">{tt("rooms.mcAccount")}</span>
                     <span
                       className={`text-xs font-semibold ${
                         mcAuthOnline ? "text-emerald-300/90" : "text-amber-300/90"
@@ -1127,8 +1149,8 @@ export function RoomsTab({
                       {mcAuthLabel}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-black/30 px-2.5 py-2">
-                    <span className="text-xs text-white/50">{tt("rooms.p2pLabel")}</span>
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/30 px-2.5 py-2">
+                    <span className="ui-caption">{tt("rooms.p2pLabel")}</span>
                     <span
                       className={`truncate text-xs font-semibold ${
                         p2pReady ? "text-emerald-300/90" : "text-white/70"
@@ -1139,14 +1161,12 @@ export function RoomsTab({
                   </div>
                 </div>
                 {!mcAuthOnline ? (
-                  <p className="mt-2 text-[11px] text-amber-200/70">{tt("rooms.mcOfflineHint")}</p>
+                  <p className="ui-meta mt-2 text-amber-200/70">{tt("rooms.mcOfflineHint")}</p>
                 ) : null}
-              </section>
+              </Panel>
 
-              <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
-                  {tt("rooms.worldTitle")}
-                </p>
+              <Panel padding="sm">
+                <p className="ui-section">{tt("rooms.worldTitle")}</p>
 
                 {selectedRoom.member_count < 2 ? (
                   <p className="mt-2 text-sm text-white/55">{tt("rooms.waitForPeer")}</p>
@@ -1190,22 +1210,22 @@ export function RoomsTab({
                     >
                       {tt("rooms.joinWorld")}
                     </button>
-                    <p className="text-[11px] leading-relaxed text-white/45">{tt("rooms.guestSteps")}</p>
+                    <p className="ui-meta leading-relaxed">{tt("rooms.guestSteps")}</p>
                   </div>
                 )}
-              </section>
+              </Panel>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+            <div className="flex flex-col gap-5">
+              <Panel padding="sm">
+                <p className="ui-section">
                   {tt("rooms.membersTitle")} · {members.length}
                 </p>
                 <ul className="mt-2 flex max-h-52 flex-col gap-1.5 overflow-y-auto">
                   {members.map((m) => (
                     <li
                       key={m.user_id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5"
                     >
                       <button
                         type="button"
@@ -1229,50 +1249,48 @@ export function RoomsTab({
                             sponsorTitle={tt("common.sponsor")}
                             className="truncate text-sm"
                           />
-                          <p className="text-[10px] text-white/40">
+                          <p className="ui-caption">
                             {m.role === "owner" ? tt("rooms.role.owner") : tt("rooms.role.member")}
                           </p>
                         </div>
                       </button>
                       <div className="flex shrink-0 items-center gap-1">
                         {m.user_id !== userId && !friendIds.has(m.user_id) ? (
-                          <button
-                            type="button"
+                          <ActionButton
+                            size="sm"
+                            variant="emerald"
                             disabled={loading}
                             onClick={() => void handleAddFriendFromRoom(m)}
-                            className="interactive-press rounded-md border border-emerald-500/35 bg-emerald-600/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
                           >
                             {tt("friends.add")}
-                          </button>
+                          </ActionButton>
                         ) : null}
                         {isOwner && m.role !== "owner" ? (
-                          <button
-                            type="button"
+                          <ActionButton
+                            size="sm"
+                            variant="secondary"
                             disabled={loading}
                             onClick={() => void handleKick(m.user_id)}
-                            className="interactive-press rounded-md border border-white/20 bg-black/40 px-2 py-1 text-[11px] font-semibold text-white/75 hover:bg-black/60 disabled:opacity-60"
                           >
                             {tt("rooms.kick")}
-                          </button>
+                          </ActionButton>
                         ) : null}
                       </div>
                     </li>
                   ))}
                 </ul>
-              </section>
+              </Panel>
 
               {isOwner ? (
-                <section className="rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
-                    {tt("rooms.inviteTitle")}
-                  </p>
+                <Panel padding="sm">
+                  <p className="ui-section">{tt("rooms.inviteTitle")}</p>
                   <div className="mt-2 flex flex-col gap-2">
                     {inviteableFriends.length > 0 ? (
                       <ul className="flex max-h-36 flex-col gap-1.5 overflow-y-auto">
                         {inviteableFriends.map((f) => (
                           <li
                             key={f.user_id}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5"
+                            className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-2.5 py-1.5"
                           >
                             <div className="flex min-w-0 items-center gap-2">
                               <img
@@ -1292,22 +1310,22 @@ export function RoomsTab({
                                 className="truncate text-sm"
                               />
                             </div>
-                            <button
-                              type="button"
+                            <ActionButton
+                              size="sm"
+                              variant="emerald"
                               disabled={loading}
                               onClick={() => void handleInviteFriend(f.nickname)}
-                              className="interactive-press shrink-0 rounded-md border border-emerald-500/35 bg-emerald-600/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-60"
                             >
                               {tt("rooms.invite")}
-                            </button>
+                            </ActionButton>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-xs leading-relaxed text-white/50">{tt("rooms.inviteEmpty")}</p>
+                      <p className="ui-meta leading-relaxed">{tt("rooms.inviteEmpty")}</p>
                     )}
                     <div className="flex gap-1.5">
-                      <input
+                      <TextField
                         type="text"
                         value={inviteNickname}
                         onChange={(e) => setInviteNickname(e.target.value)}
@@ -1316,21 +1334,21 @@ export function RoomsTab({
                             void handleInviteFriend(inviteNickname);
                           }
                         }}
-                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
+                        className="min-w-0 flex-1"
                         placeholder={tt("rooms.inviteNicknamePlaceholder")}
                         disabled={loading}
                       />
-                      <button
-                        type="button"
+                      <ActionButton
+                        size="sm"
+                        variant="secondary"
                         disabled={loading || !inviteNickname.trim()}
                         onClick={() => void handleInviteFriend(inviteNickname)}
-                        className="interactive-press shrink-0 rounded-lg border border-white/15 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
                       >
                         {tt("rooms.invite")}
-                      </button>
+                      </ActionButton>
                     </div>
                   </div>
-                </section>
+                </Panel>
               ) : null}
             </div>
           </div>
@@ -1352,56 +1370,66 @@ export function RoomsTab({
     );
   }
 
+  if (!accessToken) {
+    return (
+      <div className="flex w-full max-w-4xl flex-col gap-5 py-6">
+        <div className="w-full text-center">
+          <h1 className="ui-title">{tt("app.sidebar.rooms")}</h1>
+          <p className="ui-subtitle mt-1.5">{tt("rooms.subtitleSignedOut")}</p>
+        </div>
+        <AuthGate
+          title={tt("rooms.authGateTitle")}
+          description={tt("rooms.authGateBody")}
+          ctaLabel={tt("common.goToAccounts")}
+          onSignIn={() => onOpenAccounts?.()}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="flex w-full max-w-5xl flex-col gap-3 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="text-base font-bold tracking-tight text-white/95">{tt("app.sidebar.rooms")}</h1>
-            <p className="mt-0.5 text-xs text-white/45">
-              {accessToken ? tt("rooms.subtitleSignedIn") : tt("rooms.subtitleSignedOut")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              disabled={!accessToken || loading}
-              onClick={() => {
-                resetCreateForm();
-                setShowCreateModal(true);
-              }}
-              className="interactive-press rounded-lg border border-emerald-500/40 bg-emerald-600/25 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
-            >
-              {tt("rooms.create")}
-            </button>
-            <button
-              type="button"
-              disabled={!accessToken}
-              onClick={() => setShowJoinPanel((v) => !v)}
-              className={`interactive-press rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-60 ${
-                showJoinPanel
-                  ? "border-sky-400/40 bg-sky-500/20 text-sky-100"
-                  : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
-              }`}
-            >
-              {tt("rooms.joinById")}
-            </button>
-            <button
-              type="button"
-              disabled={!accessToken || loading}
-              onClick={handleRefresh}
-              className="interactive-press rounded-lg border border-white/15 bg-black/30 px-3 py-1.5 text-xs font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-            >
-              {tt("rooms.refresh")}
-            </button>
-          </div>
+      <div className="flex w-full max-w-4xl flex-col gap-5 py-6">
+        <div className="w-full text-center">
+          <h1 className="ui-title">{tt("app.sidebar.rooms")}</h1>
+          <p className="ui-subtitle mt-1.5">{tt("rooms.subtitleSignedIn")}</p>
         </div>
 
+        <Panel className="flex flex-wrap items-center justify-center gap-2">
+          <ActionButton
+            size="sm"
+            variant="emerald"
+            onClick={() => {
+              resetCreateForm();
+              setShowCreateModal(true);
+            }}
+          >
+            {tt("rooms.create")}
+          </ActionButton>
+          <ActionButton
+            size="sm"
+            variant={showJoinPanel ? "sky" : "secondary"}
+            onClick={() => setShowJoinPanel((v) => !v)}
+          >
+            {tt("rooms.joinById")}
+          </ActionButton>
+          <ActionButton
+            size="sm"
+            variant="secondary"
+            loading={busyAction === "refresh"}
+            loadingLabel={tt("common.loading")}
+            disabled={loading && busyAction !== "refresh"}
+            onClick={handleRefresh}
+          >
+            {tt("rooms.refresh")}
+          </ActionButton>
+        </Panel>
+
         {showJoinPanel ? (
-          <div className="flex flex-col gap-2 rounded-xl border border-sky-400/20 bg-sky-500/5 p-2.5">
-            <p className="text-[11px] leading-relaxed text-white/50">{tt("rooms.joinHint")}</p>
+          <Panel padding="sm" className="flex flex-col gap-2 border-sky-400/20 bg-sky-500/5">
+            <p className="ui-meta leading-relaxed">{tt("rooms.joinHint")}</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
+              <TextField
                 type="text"
                 value={joinRoomId}
                 onChange={(e) => setJoinRoomId(e.target.value)}
@@ -1410,11 +1438,10 @@ export function RoomsTab({
                     void handleJoin();
                   }
                 }}
-                className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-sky-400/40 disabled:opacity-60"
+                className="flex-1 focus:border-sky-400/40"
                 placeholder={tt("rooms.joinIdPlaceholder")}
-                disabled={!accessToken}
               />
-              <input
+              <TextField
                 type="password"
                 value={joinPassword}
                 onChange={(e) => setJoinPassword(e.target.value)}
@@ -1423,236 +1450,195 @@ export function RoomsTab({
                     void handleJoin();
                   }
                 }}
-                className="sm:w-44 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-sky-400/40 disabled:opacity-60"
+                className="sm:w-44 focus:border-sky-400/40"
                 placeholder={tt("rooms.joinPasswordPlaceholder")}
-                disabled={!accessToken}
                 autoComplete="off"
               />
-              <button
-                type="button"
+              <ActionButton
+                size="sm"
+                variant="sky"
+                loading={busyAction === "join"}
+                loadingLabel={tt("rooms.joining")}
                 disabled={
-                  !accessToken || loading || (!joinRoomId.trim() && !joinPassword.trim())
+                  (loading && busyAction !== "join") ||
+                  (!joinRoomId.trim() && !joinPassword.trim())
                 }
                 onClick={() => void handleJoin()}
-                className="interactive-press rounded-lg border border-sky-400/35 bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/30 disabled:opacity-60"
               >
                 {tt("rooms.join")}
-              </button>
+              </ActionButton>
             </div>
-          </div>
+          </Panel>
         ) : null}
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-              {tt("rooms.statYours")}
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          <Panel className="flex flex-col gap-3">
+            <p className="ui-section">
+              {tt("rooms.yourRooms")}
+              {` · ${rooms.length}`}
             </p>
-            <p className="mt-0.5 text-lg font-bold text-white/90">
-              {accessToken ? rooms.length : "—"}
-            </p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-              {tt("rooms.statFriends")}
-            </p>
-            <p className="mt-0.5 text-lg font-bold text-sky-100/90">
-              {accessToken ? visibleFriendsRooms.length : "—"}
-            </p>
-          </div>
-        </div>
 
-        <div className="grid items-start gap-3 lg:grid-cols-2">
-          <section className="flex flex-col gap-2 rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
-                {tt("rooms.yourRooms")}
-                {accessToken ? ` · ${rooms.length}` : ""}
-              </p>
-              {loading ? <span className="text-xs text-white/35">…</span> : null}
-            </div>
-
-            {!accessToken ? (
-              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
-                {tt("rooms.signInFirst")}
-              </p>
+            {loading && rooms.length === 0 ? (
+              <div className="flex flex-col gap-2" aria-busy="true">
+                <RoomCardSkeleton />
+                <RoomCardSkeleton />
+              </div>
             ) : rooms.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
-                {tt("rooms.noRooms")}
-              </p>
+              <EmptyState
+                compact
+                title={tt("rooms.emptyTitle")}
+                description={tt("rooms.emptyBody")}
+                action={
+                  <ActionButton
+                    size="sm"
+                    variant="emerald"
+                    onClick={() => {
+                      resetCreateForm();
+                      setShowCreateModal(true);
+                    }}
+                  >
+                    {tt("rooms.emptyCreateCta")}
+                  </ActionButton>
+                }
+              />
             ) : (
-              <div className="flex flex-col gap-1.5">{rooms.map(renderMyRoomCard)}</div>
+              <div className="flex flex-col gap-2">{rooms.map(renderMyRoomCard)}</div>
             )}
-          </section>
+          </Panel>
 
-          <section className="flex flex-col gap-2 rounded-xl border border-white/10 glass-panel bg-black/40 p-3 shadow-xl backdrop-blur-md">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">
+          <Panel className="flex flex-col gap-3">
+            <p className="ui-section">
               {tt("rooms.friendsRooms")}
-              {accessToken ? ` · ${visibleFriendsRooms.length}` : ""}
+              {` · ${visibleFriendsRooms.length}`}
             </p>
 
-            {!accessToken ? (
-              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
-                {tt("rooms.signInFirst")}
-              </p>
+            {loading && visibleFriendsRooms.length === 0 ? (
+              <div className="flex flex-col gap-2" aria-busy="true">
+                <RoomCardSkeleton />
+                <RoomCardSkeleton />
+              </div>
             ) : visibleFriendsRooms.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-white/10 bg-black/20 px-3 py-4 text-center text-xs text-white/55">
-                {tt("rooms.noFriendsRooms")}
-              </p>
+              <EmptyState compact title={tt("rooms.noFriendsRooms")} />
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 {visibleFriendsRooms.map(renderFriendRoomCard)}
               </div>
             )}
-          </section>
+          </Panel>
         </div>
       </div>
 
-      {showCreateModal ? (
-        <div
-          className="pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => {
-            if (!loading) setShowCreateModal(false);
-          }}
-        >
-          <div
-            className="glass-panel pointer-events-auto flex w-[min(96vw,26rem)] flex-col overflow-hidden rounded-[20px] border border-white/15 bg-[#14141c]/95 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-room-title"
-          >
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
-              <div className="min-w-0">
-                <h2 id="create-room-title" className="text-base font-semibold text-white/95">
-                  {tt("rooms.createModalTitle")}
-                </h2>
-                <p className="mt-0.5 text-xs text-white/45">{tt("rooms.createModalSubtitle")}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                disabled={loading}
-                className="interactive-press rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-60"
-                aria-label={tt("common.close")}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path
-                    d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                </svg>
-              </button>
-            </div>
+      <Modal
+        open={showCreateModal}
+        title={tt("rooms.createModalTitle")}
+        subtitle={tt("rooms.createModalSubtitle")}
+        onClose={() => {
+          if (!loading) setShowCreateModal(false);
+        }}
+        closeDisabled={loading}
+        closeLabel={tt("common.close")}
+        footer={
+          <>
+            <ActionButton
+              size="sm"
+              variant="secondary"
+              disabled={loading}
+              onClick={() => setShowCreateModal(false)}
+            >
+              {tt("common.cancel")}
+            </ActionButton>
+            <ActionButton
+              size="sm"
+              variant="emerald"
+              loading={busyAction === "create"}
+              loadingLabel={tt("rooms.creating")}
+              disabled={loading && busyAction !== "create"}
+              onClick={() => void handleCreate()}
+            >
+              {tt("rooms.createModalSubmit")}
+            </ActionButton>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="ui-caption font-semibold">{tt("rooms.roomNameLabel")}</span>
+              <TextField
+                type="text"
+                value={createRoomName}
+              onChange={(e) => setCreateRoomName(e.target.value)}
+              placeholder={tt("rooms.roomNamePlaceholder")}
+              disabled={loading}
+              autoFocus
+            />
+          </label>
 
-            <div className="flex flex-col gap-3 px-4 py-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-white/45">{tt("rooms.roomNameLabel")}</span>
-                <input
-                  type="text"
-                  value={createRoomName}
-                  onChange={(e) => setCreateRoomName(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
-                  placeholder={tt("rooms.roomNamePlaceholder")}
-                  disabled={loading}
-                  autoFocus
-                />
-              </label>
-
-              <div ref={visibilityDropdownRef} className="relative flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-white/45">
-                  {tt("rooms.visibilityLabel")}
-                </span>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => setIsVisibilityDropdownOpen((prev) => !prev)}
-                  className="interactive-press flex w-full items-center justify-between rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-left text-sm text-white outline-none transition-colors hover:border-white/25 hover:bg-black/40 focus:border-emerald-400/30 disabled:opacity-60"
-                >
-                  <span>
-                    {createRoomVisibility === "private"
-                      ? tt("rooms.visibility.private")
-                      : tt("rooms.visibility.public")}
-                  </span>
-                  <span className="text-[10px] text-white/50">▾</span>
-                </button>
-                {isVisibilityDropdownOpen ? (
-                  <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg">
-                    {(
-                      [
-                        { value: "public" as const, label: tt("rooms.visibility.public") },
-                        { value: "private" as const, label: tt("rooms.visibility.private") },
-                      ] as const
-                    ).map((option) => {
-                      const active = createRoomVisibility === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setCreateRoomVisibility(option.value);
-                            setIsVisibilityDropdownOpen(false);
-                            if (option.value === "public") setCreateRoomPassword("");
-                          }}
-                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                            active ? "bg-white/90 text-black" : "text-white/80 hover:bg-white/10"
-                          }`}
-                        >
-                          <span>{option.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-
-              <p className="text-[11px] leading-relaxed text-white/45">
+          <div ref={visibilityDropdownRef} className="relative flex flex-col gap-1">
+            <span className="ui-caption font-semibold">{tt("rooms.visibilityLabel")}</span>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setIsVisibilityDropdownOpen((prev) => !prev)}
+              className="interactive-press flex w-full items-center justify-between rounded-xl border border-white/12 bg-black/40 px-3 py-2.5 text-left text-sm text-white outline-none transition-colors hover:border-white/25 hover:bg-black/50 focus:border-white/25 disabled:opacity-60"
+            >
+              <span>
                 {createRoomVisibility === "private"
-                  ? tt("rooms.privateHint")
-                  : tt("rooms.publicHint")}
-              </p>
-
-              {createRoomVisibility === "private" ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold text-white/45">
-                    {tt("rooms.passwordLabel")}
-                  </span>
-                  <input
-                    type="text"
-                    value={createRoomPassword}
-                    onChange={(e) => setCreateRoomPassword(e.target.value)}
-                    className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30 disabled:opacity-60"
-                    placeholder={tt("rooms.passwordPlaceholder")}
-                    disabled={loading}
-                    autoComplete="off"
-                  />
-                </label>
-              ) : null}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-white/10 px-4 py-3">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => setShowCreateModal(false)}
-                className="interactive-press rounded-lg border border-white/12 bg-black/30 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-black/50 disabled:opacity-60"
-              >
-                {tt("common.cancel")}
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void handleCreate()}
-                className="interactive-press rounded-lg border border-emerald-500/40 bg-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-50 hover:bg-emerald-600/35 disabled:opacity-60"
-              >
-                {tt("rooms.createModalSubmit")}
-              </button>
-            </div>
+                  ? tt("rooms.visibility.private")
+                  : tt("rooms.visibility.public")}
+              </span>
+              <span className="text-[10px] text-white/50">▾</span>
+            </button>
+            {isVisibilityDropdownOpen ? (
+              <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg">
+                {(
+                  [
+                    { value: "public" as const, label: tt("rooms.visibility.public") },
+                    { value: "private" as const, label: tt("rooms.visibility.private") },
+                  ] as const
+                ).map((option) => {
+                  const active = createRoomVisibility === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setCreateRoomVisibility(option.value);
+                        setIsVisibilityDropdownOpen(false);
+                        if (option.value === "public") setCreateRoomPassword("");
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                        active ? "bg-white/90 text-black" : "text-white/80 hover:bg-white/10"
+                      }`}
+                    >
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
+
+          <p className="ui-meta leading-relaxed">
+            {createRoomVisibility === "private"
+              ? tt("rooms.privateHint")
+              : tt("rooms.publicHint")}
+          </p>
+
+          {createRoomVisibility === "private" ? (
+            <label className="flex flex-col gap-1">
+              <span className="ui-caption font-semibold">{tt("rooms.passwordLabel")}</span>
+              <TextField
+                type="text"
+                value={createRoomPassword}
+                onChange={(e) => setCreateRoomPassword(e.target.value)}
+                placeholder={tt("rooms.passwordPlaceholder")}
+                disabled={loading}
+                autoComplete="off"
+              />
+            </label>
+          ) : null}
         </div>
-      ) : null}
+      </Modal>
     </>
   );
 }

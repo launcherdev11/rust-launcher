@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Spinner } from "../../components/ui";
 import { DescriptionBody } from "./DescriptionBody";
 import type {
   CatalogVersion,
@@ -42,6 +43,7 @@ type ProjectDetailPageProps = {
   onDownloadVersion: (v: CatalogVersion) => void;
   onCancelModpackImport: () => void;
   canQuickInstall: boolean;
+  installBusy?: boolean;
 };
 
 export function ProjectDetailPage({
@@ -64,6 +66,7 @@ export function ProjectDetailPage({
   onDownloadVersion,
   onCancelModpackImport,
   canQuickInstall,
+  installBusy = false,
 }: ProjectDetailPageProps) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>("overview");
@@ -87,8 +90,20 @@ export function ProjectDetailPage({
 
   if (loading && !detail) {
     return (
-      <div className="glass-panel flex min-h-0 flex-1 items-center justify-center text-xs text-white/60">
-        {tt("mods.detail.loading")}
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-white/12 bg-black/65 p-5 shadow-soft backdrop-blur-xl"
+        aria-busy="true"
+      >
+        <div className="flex items-center gap-3">
+          <div className="h-16 w-16 animate-pulse rounded-2xl bg-white/10" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-5 w-48 animate-pulse rounded-lg bg-white/10" />
+            <div className="h-3 w-72 max-w-full animate-pulse rounded-lg bg-white/10" />
+            <div className="h-3 w-40 animate-pulse rounded-lg bg-white/10" />
+          </div>
+        </div>
+        <div className="h-24 animate-pulse rounded-2xl bg-white/5" />
+        <div className="h-40 animate-pulse rounded-2xl bg-white/5" />
       </div>
     );
   }
@@ -140,16 +155,18 @@ export function ProjectDetailPage({
               <button
                 type="button"
                 onClick={onQuickInstall}
-                disabled={modpackImportBusy}
-                className="interactive-press rounded-xl accent-bg px-5 py-2.5 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-40"
+                disabled={modpackImportBusy || installBusy}
+                aria-busy={installBusy || undefined}
+                className="interactive-press inline-flex items-center gap-2 rounded-full accent-bg px-5 py-2.5 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:opacity-40"
               >
-                {tt("mods.quickInstall")}
+                {installBusy ? <Spinner className="h-4 w-4" /> : null}
+                {installBusy ? tt("mods.installing") : tt("mods.quickInstall")}
               </button>
             )}
             <button
               type="button"
               onClick={onOpenExternal}
-              className="interactive-press rounded-xl bg-white/10 px-5 py-2.5 text-sm font-semibold text-violet-200 hover:bg-white/20"
+              className="interactive-press rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-violet-200 hover:bg-white/20"
             >
               {provider === "modrinth"
                 ? tt("mods.openOnModrinth")

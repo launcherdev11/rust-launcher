@@ -238,7 +238,6 @@ export type CreateRoomInput = {
   maxPlayers?: number;
   name?: string;
   visibility?: "public" | "private";
-  /** Private-room password (sent as `password`; backend also accepts `join_code`). Required for private rooms. */
   password?: string;
 };
 

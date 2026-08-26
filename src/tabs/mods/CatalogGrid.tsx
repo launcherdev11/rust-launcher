@@ -1,3 +1,4 @@
+import { CatalogCardSkeleton, EmptyState, Spinner } from "../../components/ui";
 import type { CatalogProject, ContentProvider } from "./types";
 
 type Tt = (key: string, vars?: Record<string, string | number>) => string;
@@ -33,6 +34,7 @@ type CatalogGridProps = {
   provider: ContentProvider;
   selectedKey: string | null;
   installedKeys: Set<string>;
+  installingKey?: string | null;
   contentTypeIsModpack: boolean;
   activeProfileId?: string | null;
   onSelect: (key: string) => void;
@@ -53,6 +55,7 @@ export function CatalogGrid({
   provider,
   selectedKey,
   installedKeys,
+  installingKey = null,
   contentTypeIsModpack,
   activeProfileId,
   onSelect,
@@ -68,18 +71,33 @@ export function CatalogGrid({
   const currentPage = page + 1;
   const canPrevPage = currentPage > 1;
   const canNextPage = currentPage < totalPages;
+  const showSkeletons = loading && projects.length === 0;
+  const skeletonCount = layout === "grid" ? 8 : 5;
 
   return (
-    <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/65 p-3 shadow-soft backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
         <div className="flex items-center gap-2">
-          <span className="ml-1.5">
-            {loading ? tt("mods.loadingPopular") : ""}
-          </span>
           {error ? <span className="text-rose-300">{error}</span> : null}
         </div>
       </div>
       <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
+        {showSkeletons ? (
+          <div
+            className={
+              layout === "grid"
+                ? "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                : "flex flex-col gap-2"
+            }
+            aria-busy="true"
+            aria-label={tt("mods.loadingPopular")}
+          >
+            {Array.from({ length: skeletonCount }, (_, i) => (
+              <CatalogCardSkeleton key={i} layout={layout} />
+            ))}
+          </div>
+        ) : null}
+
         {projects.length > 0 && (
           <div
             className={
@@ -94,6 +112,7 @@ export function CatalogGrid({
                 activeProfileId != null &&
                 !contentTypeIsModpack &&
                 installedKeys.has(p.key);
+              const isInstalling = installingKey === p.key;
               return (
                 <div
                   key={p.key}
@@ -164,13 +183,21 @@ export function CatalogGrid({
                     <button
                       type="button"
                       title={tt("mods.quickInstall")}
+                      disabled={Boolean(installingKey)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onQuickInstall(p.key);
                       }}
-                      className="interactive-press absolute right-2 bottom-2 rounded-full accent-bg px-2.5 py-1 text-[10px] font-semibold text-white opacity-0 shadow-soft transition-opacity group-hover:opacity-100"
+                      className={`absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full accent-bg px-2.5 py-1 text-[10px] font-semibold text-white shadow-soft transition-opacity disabled:cursor-not-allowed disabled:opacity-60 ${
+                        isInstalling
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100"
+                      }`}
                     >
-                      {tt("mods.quickInstall")}
+                      {isInstalling ? <Spinner className="h-3 w-3" /> : null}
+                      {isInstalling
+                        ? tt("mods.installing")
+                        : tt("mods.quickInstall")}
                     </button>
                   )}
                   {isInstalledInProfile && (
@@ -184,9 +211,7 @@ export function CatalogGrid({
           </div>
         )}
         {!loading && projects.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-black/30 px-4 py-6 text-center text-xs text-white/60">
-            {emptyMessage}
-          </div>
+          <EmptyState title={emptyMessage} compact />
         )}
       </div>
       {totalHits > pageSize && (

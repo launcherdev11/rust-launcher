@@ -5,6 +5,9 @@
     "change": "Cambiar",
     "save": "Ahorrar",
     "loading": "Cargando…",
+    "working": "Espera…",
+    "sending": "Enviando…",
+    "goToAccounts": "Ir a Cuentas",
     "search": "Buscar…",
     "yes": "Sí",
     "no": "No",
@@ -81,6 +84,7 @@
     "downloadFailedCurseforge": "No se pudo descargar el archivo CurseForge.",
     "curseforgeModpackHint": "Modpack de CurseForge guardado como archivo. La importación automática de .mrpack solo está disponible para Modrinth.",
     "quickInstall": "Instalar",
+    "installing": "Instalando…",
     "source": {
       "catalog": "Catálogo",
       "favorites": "Favoritos",
@@ -291,7 +295,8 @@
         "label": "Iniciar al encender el sistema:"
       },
       "splitView": {
-        "label": "Modo de pestaña de doble panel:"
+        "label": "Modo de pestaña de doble panel:",
+        "hint": "Arrastra una pestaña (Jugar, Mods, Modpacks, Ajustes) al borde de la ventana para abrir un segundo panel."
       },
       "disableAnimations": {
         "label": "Desactivar animaciones:"
@@ -943,6 +948,11 @@
     "incomingTitle": "Solicitudes",
     "incomingCount": "Solicitudes · {{count}}",
     "signInFirst": "Inicia sesión primero en la pestaña Cuentas.",
+    "authGateTitle": "Se necesita una cuenta 16Launcher",
+    "authGateBody": "Amigos, estado en línea y salas están disponibles tras iniciar sesión en la cuenta de plataforma.",
+    "emptyTitle": "Aún no hay amigos",
+    "emptyBody": "Escribe un apodo arriba y envía una solicitud — o invita a tus amigos a crear una cuenta 16Launcher.",
+    "emptyFocusAdd": "Añadir amigo",
     "noIncoming": "No hay solicitudes nuevas.",
     "accept": "Aceptar",
     "reject": "Rechazar",
@@ -1009,8 +1019,15 @@
     "statYours": "Tus salas",
     "statFriends": "Salas de amigos",
     "signInFirst": "Inicia sesión primero en la pestaña Cuentas.",
+    "authGateTitle": "Se necesita una cuenta 16Launcher",
+    "authGateBody": "Crear salas y jugar con amigos está disponible tras iniciar sesión en la cuenta de plataforma.",
+    "emptyTitle": "Aún no hay salas",
+    "emptyBody": "Crea una sala o únete por nombre — tus amigos podrán unirse.",
+    "emptyCreateCta": "Crear sala",
     "noRooms": "Vacío — crea una sala o únete por nombre.",
     "noFriendsRooms": "Ningún amigo está alojando una sala ahora.",
+    "creating": "Creando…",
+    "joining": "Uniéndose…",
     "youOwner": "Dueño",
     "youMember": "Miembro",
     "ownedBy": "Anfitrión: {{nick}}",
@@ -1266,7 +1283,11 @@
         "bottom": "Abajo",
         "center": "Pantalla completa"
       },
-      "closePane": "Quitar este panel"
+      "closePane": "Quitar este panel",
+      "tooNarrow": "La ventana es demasiado estrecha para dos paneles. Ensánchala.",
+      "tooNarrowBanner": "Los dos paneles están ocultos mientras la ventana mide menos de 960px. Ensánchala para restaurar el split.",
+      "dragHint": "{{tab}} — arrastra al borde de la ventana para un segundo panel",
+      "dragSidebarHint": "Split: arrastra una pestaña de la barra al borde del área de trabajo"
     },
     "launcherVersionTitle": "Versión del iniciador {{version}}",
     "sessionNotifications": {

@@ -12,8 +12,53 @@ body {
   margin: 0;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.45;
   color: #ffffff;
   background-color: #050609;
+}
+
+.ui-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.ui-subtitle {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ui-section {
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ui-body {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.ui-meta {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ui-caption {
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .no-number-spin {
@@ -64,8 +109,8 @@ body {
   white-space: nowrap;
   border-radius: 0.5rem;
   background: rgba(0, 0, 0, 0.92);
-  padding: 0.35rem 0.55rem;
-  font-size: 0.7rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.92);
   opacity: 0;
@@ -74,6 +119,22 @@ body {
     opacity 120ms ease-out,
     transform 120ms ease-out;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.sidebar-label {
+  max-width: 3.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.sidebar-item-active .sidebar-label {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .group:hover > .sidebar-tooltip,

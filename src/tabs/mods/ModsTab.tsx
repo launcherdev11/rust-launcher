@@ -163,6 +163,7 @@ export function ModsTab({
   const [modpackImportBusy, setModpackImportBusy] = useState(false);
   const [modpackImportProgress, setModpackImportProgress] =
     useState<MrpackImportProgressPayload | null>(null);
+  const [installingKey, setInstallingKey] = useState<string | null>(null);
 
   const [installedFilenames, setInstalledFilenames] = useState<Set<string>>(
     new Set(),
@@ -842,12 +843,17 @@ export function ModsTab({
 
   const handleCatalogVersionDownload = useCallback(
     async (v: CatalogVersion, projectKeyOverride?: string | null) => {
-      await downloadCatalogVersion(
-        v,
-        buildDownloadDeps(
-          projectKeyOverride !== undefined ? projectKeyOverride : selectedKey,
-        ),
-      );
+      const projectKey =
+        projectKeyOverride !== undefined ? projectKeyOverride : selectedKey;
+      if (projectKey) setInstallingKey(projectKey);
+      try {
+        await downloadCatalogVersion(
+          v,
+          buildDownloadDeps(projectKey),
+        );
+      } finally {
+        setInstallingKey(null);
+      }
     },
     [buildDownloadDeps, selectedKey],
   );
@@ -855,8 +861,9 @@ export function ModsTab({
   const handleQuickInstall = useCallback(
     async (key?: string) => {
       const targetKey = key ?? selectedKey;
-      if (!targetKey) return;
+      if (!targetKey || installingKey) return;
 
+      setInstallingKey(targetKey);
       try {
         const latest = await resolveLatestCompatibleVersion({
           projectKey: targetKey,
@@ -871,18 +878,24 @@ export function ModsTab({
           showNotification("warning", tt("mods.noAvailableVersions"));
           return;
         }
-        await handleCatalogVersionDownload(latest, targetKey);
+        await downloadCatalogVersion(
+          latest,
+          buildDownloadDeps(targetKey),
+        );
       } catch (e) {
         console.error(e);
         showNotification("error", tt("mods.noAvailableVersions"));
+      } finally {
+        setInstallingKey(null);
       }
     },
     [
+      buildDownloadDeps,
       catalogVersions,
       contentProvider,
       contentType,
       gameVersion,
-      handleCatalogVersionDownload,
+      installingKey,
       loader,
       selectedKey,
       showNotification,
@@ -1048,6 +1061,7 @@ export function ModsTab({
             onDownloadVersion={(v) => void handleCatalogVersionDownload(v)}
             onCancelModpackImport={() => void handleCancelModpackImport()}
             canQuickInstall={contentType !== "modpack" || contentProvider === "modrinth"}
+            installBusy={Boolean(selectedKey && installingKey === selectedKey)}
           />
         ) : (
           <CatalogGrid
@@ -1059,6 +1073,7 @@ export function ModsTab({
             provider={contentProvider}
             selectedKey={selectedKey}
             installedKeys={installedProjectKeys}
+            installingKey={installingKey}
             contentTypeIsModpack={contentType === "modpack"}
             activeProfileId={activeProfileId}
             onSelect={(key) => void openProject(key)}

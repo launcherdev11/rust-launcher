@@ -5,6 +5,9 @@
     "change": "Ändern",
     "save": "Speichern",
     "loading": "Laden…",
+    "working": "Bitte warten…",
+    "sending": "Senden…",
+    "goToAccounts": "Zu Konten",
     "search": "Suchen…",
     "yes": "Ja",
     "no": "NEIN",
@@ -81,6 +84,7 @@
     "downloadFailedCurseforge": "Die CurseForge-Datei konnte nicht heruntergeladen werden.",
     "curseforgeModpackHint": "CurseForge-Modpack als Archiv gespeichert. Der automatische .mrpack-Import ist nur für Modrinth verfügbar.",
     "quickInstall": "Installieren",
+    "installing": "Installieren…",
     "source": {
       "catalog": "Katalog",
       "favorites": "Favoriten",
@@ -291,7 +295,8 @@
         "label": "Beim Systemstart starten:"
       },
       "splitView": {
-        "label": "Dual-Panee-Tab-Modus:"
+        "label": "Dual-Panee-Tab-Modus:",
+        "hint": "Ziehen Sie einen Tab (Spielen, Mods, Modpacks, Einstellungen) an den Fensterrand, um ein zweites Panel zu öffnen."
       },
       "disableAnimations": {
         "label": "Animationen deaktivieren:"
@@ -943,6 +948,11 @@
     "incomingTitle": "Anfragen",
     "incomingCount": "Anfragen · {{count}}",
     "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an.",
+    "authGateTitle": "16Launcher-Konto erforderlich",
+    "authGateBody": "Freunde, Online-Status und Räume sind nach der Anmeldung am Plattformkonto verfügbar.",
+    "emptyTitle": "Noch keine Freunde",
+    "emptyBody": "Gib oben einen Spitznamen ein und sende eine Anfrage — oder lade Freunde ein, ein 16Launcher-Konto zu erstellen.",
+    "emptyFocusAdd": "Freund hinzufügen",
     "noIncoming": "Keine neuen Anfragen.",
     "accept": "Annehmen",
     "reject": "Ablehnen",
@@ -1009,8 +1019,15 @@
     "statYours": "Deine Räume",
     "statFriends": "Freundesräume",
     "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an.",
+    "authGateTitle": "16Launcher-Konto erforderlich",
+    "authGateBody": "Räume erstellen und mit Freunden spielen ist nach der Anmeldung am Plattformkonto verfügbar.",
+    "emptyTitle": "Noch keine Räume",
+    "emptyBody": "Erstelle einen Raum oder tritt per Name bei — Freunde können beitreten.",
+    "emptyCreateCta": "Raum erstellen",
     "noRooms": "Leer — erstelle einen Raum oder tritt per Name bei.",
     "noFriendsRooms": "Keine Freunde hosten gerade einen Raum.",
+    "creating": "Erstellen…",
+    "joining": "Beitreten…",
     "youOwner": "Besitzer",
     "youMember": "Mitglied",
     "ownedBy": "Host: {{nick}}",
@@ -1266,7 +1283,11 @@
         "bottom": "Unten",
         "center": "Vollbild"
       },
-      "closePane": "Entfernen Sie diesen Bereich"
+      "closePane": "Entfernen Sie diesen Bereich",
+      "tooNarrow": "Fenster ist zu schmal für zwei Panels. Verbreitern Sie das Fenster.",
+      "tooNarrowBanner": "Zwei Panels sind ausgeblendet, solange das Fenster unter 960px ist. Verbreitern Sie es, um den Split wiederherzustellen.",
+      "dragHint": "{{tab}} — an den Fensterrand ziehen für ein zweites Panel",
+      "dragSidebarHint": "Split: Sidebar-Tab an den Rand des Arbeitsbereichs ziehen"
     },
     "launcherVersionTitle": "Launcher-Version {{version}}",
     "sessionNotifications": {

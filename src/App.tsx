@@ -126,6 +126,7 @@ import {
   tabAfterClosingSplitPane,
   tabPaneRole,
   TAB_DRAG_THRESHOLD_PX,
+  TAB_SPLIT_MIN_WIDTH_PX,
   TAB_SPLIT_RATIO_MAX,
   TAB_SPLIT_RATIO_MIN,
   type SplittableTabId,
@@ -1225,8 +1226,20 @@ function App() {
 
   const splitViewEnabled = settings?.split_view_enabled ?? false;
   const animationsDisabled = settings?.animations_disabled ?? false;
+
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : TAB_SPLIT_MIN_WIDTH_PX,
+  );
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const splitTooNarrow = viewportWidth < TAB_SPLIT_MIN_WIDTH_PX;
+  const canUseSplitView = splitViewEnabled && !splitTooNarrow;
+
   const effectiveTabSplit =
-    splitViewEnabled && tabSplitLayout ? tabSplitLayout : null;
+    canUseSplitView && tabSplitLayout ? tabSplitLayout : null;
 
   const playConsoleHotkeysRef = useRef<PlayConsoleHotkeyActions | null>(null);
   const modpackHotkeysRef = useRef<ModpackHotkeyActions | null>(null);
@@ -1281,11 +1294,11 @@ function App() {
   }, [splitViewEnabled, tabSplitLayout]);
 
   useEffect(() => {
-    if (!splitViewEnabled) return;
+    if (!canUseSplitView) return;
     if (tabSplitLayout) return;
     const saved = loadTabSplitLayout();
     if (saved) setTabSplitLayout(saved);
-  }, [splitViewEnabled, tabSplitLayout]);
+  }, [canUseSplitView, tabSplitLayout]);
 
   const setActiveItemWithSound = useCallback(
     (next: SidebarItemId) => {
@@ -1359,6 +1372,12 @@ function App() {
         return;
       }
 
+      if (splitTooNarrow) {
+        tabDropZoneRef.current = null;
+        showNotification("warning", tt("app.splitView.tooNarrow"));
+        return;
+      }
+
       sidebarDragConsumedRef.current = true;
       const mainEl = mainSplitRef.current;
       if (!mainEl) {
@@ -1381,7 +1400,15 @@ function App() {
       setTabSplitLayout(layout);
       setActiveItemWithSound(focusedTab);
     },
-    [activeItem, effectiveTabSplit, setActiveItemWithSound, splitViewEnabled],
+    [
+      activeItem,
+      effectiveTabSplit,
+      setActiveItemWithSound,
+      showNotification,
+      splitTooNarrow,
+      splitViewEnabled,
+      tt,
+    ],
   );
 
   const cleanupSidebarTabDragListeners = useCallback(() => {
@@ -1401,7 +1428,7 @@ function App() {
 
   const handleSidebarTabPointerDown = useCallback(
     (tab: SplittableTabId, e: ReactPointerEvent<HTMLButtonElement>) => {
-      if (!splitViewEnabled || e.button !== 0) return;
+      if (!canUseSplitView || e.button !== 0) return;
       // Don't preventDefault on pointerdown — on Linux/WebKit that blocks click.
       // Drag activation still works via move threshold below.
       cleanupSidebarTabDragListeners();
@@ -1453,20 +1480,22 @@ function App() {
         window.removeEventListener("pointercancel", onEnd);
       };
     },
-    [cleanupSidebarTabDragListeners, finishTabDrag, splitViewEnabled, updateTabDragPointer],
+    [cleanupSidebarTabDragListeners, finishTabDrag, canUseSplitView, updateTabDragPointer],
   );
 
   useEffect(() => () => cleanupSidebarTabDragListeners(), [cleanupSidebarTabDragListeners]);
 
   const sidebarIconClass = useCallback(
     (tab: SplittableTabId) => {
-      if (activeItem === tab) return "sidebar-icon-active";
-      if (effectiveTabSplit && tabPaneRole(tab, effectiveTabSplit)) {
-        return "sidebar-icon-split-pane";
+      const parts: string[] = [];
+      if (activeItem === tab) parts.push("sidebar-icon-active");
+      else if (effectiveTabSplit && tabPaneRole(tab, effectiveTabSplit)) {
+        parts.push("sidebar-icon-split-pane");
       }
-      return "";
+      if (canUseSplitView) parts.push("sidebar-icon-splittable");
+      return parts.join(" ");
     },
-    [activeItem, effectiveTabSplit],
+    [activeItem, canUseSplitView, effectiveTabSplit],
   );
 
   const onTabSplitDividerPointerDown = useCallback(
@@ -5054,7 +5083,7 @@ function App() {
           data-tour-id="tour-sidebar"
           className={
             sidebarHorizontal
-              ? `relative z-40 mx-3 flex h-[5.25rem] shrink-0 flex-row items-center justify-between gap-4 overflow-visible rounded-3xl bg-black/55 px-4 py-3 backdrop-blur-lg ${
+              ? `relative z-40 mx-3 flex h-[6.25rem] shrink-0 flex-row items-center justify-between gap-4 overflow-visible rounded-3xl bg-black/55 px-4 py-2.5 backdrop-blur-lg ${
                   sidebarPosition === "top" ? "mt-3 w-[calc(100%-1.5rem)]" : "mb-3 w-[calc(100%-1.5rem)]"
                 }`
               : "relative z-40 m-3 flex w-20 shrink-0 flex-col justify-between overflow-visible rounded-3xl bg-black/55 px-3 py-6 backdrop-blur-lg"
@@ -5097,6 +5126,8 @@ function App() {
               const tabId = item.id as SplittableTabId;
               const splitRole =
                 effectiveTabSplit && tabPaneRole(tabId, effectiveTabSplit);
+              const isActive = activeItem === tabId;
+              const label = tt(item.labelKey);
               const tooltipSide =
                 sidebarHorizontal
                   ? sidebarPosition === "bottom"
@@ -5108,7 +5139,11 @@ function App() {
               return (
               <div
                 key={item.id}
-                className="group relative flex h-10 w-10 shrink-0 items-center justify-center"
+                className={[
+                  "group relative flex shrink-0 items-center justify-center",
+                  sidebarHorizontal ? "h-auto w-[3.6rem] flex-col gap-1" : "h-10 w-10",
+                  isActive ? "sidebar-item-active" : "",
+                ].join(" ")}
                 data-tour-id={TOUR_SIDEBAR_TARGET_IDS[item.id]}
               >
                 <button
@@ -5131,7 +5166,12 @@ function App() {
                     }
                     activateSidebarTab(tabId);
                   }}
-                  aria-label={tt(item.labelKey)}
+                  aria-label={label}
+                  title={
+                    canUseSplitView
+                      ? tt("app.splitView.dragHint", { tab: label })
+                      : label
+                  }
                   ref={(el) => {
                     sidebarButtonRefs.current[item.id] = el;
                   }}
@@ -5157,7 +5197,13 @@ function App() {
                     )}
                   </div>
                 </button>
-                <span className={`sidebar-tooltip ${tooltipSide}`}>{tt(item.labelKey)}</span>
+                {sidebarHorizontal ? (
+                  <span className="sidebar-label" aria-hidden="true">
+                    {label}
+                  </span>
+                ) : (
+                  <span className={`sidebar-tooltip ${tooltipSide}`}>{label}</span>
+                )}
                 {splitRole ? (
                   <button
                     type="button"
@@ -5257,20 +5303,26 @@ function App() {
                   : sidebarPosition === "right"
                     ? "right-full top-1/2 mr-2 -translate-y-1/2"
                     : "left-full top-1/2 ml-2 -translate-y-1/2";
+              const label = tt(item.labelKey);
+              const isActive = activeItem === item.id;
               return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveItemWithSound(item.id)}
-                aria-label={tt(item.labelKey)}
+                aria-label={label}
                 ref={(el) => {
                   sidebarButtonRefs.current[item.id] = el;
                 }}
-                className="interactive-press group relative flex h-10 w-10 shrink-0 items-center justify-center"
+                className={[
+                  "interactive-press group relative flex shrink-0 items-center justify-center",
+                  sidebarHorizontal ? "w-[3.6rem] flex-col gap-1" : "h-10 w-10",
+                  isActive ? "sidebar-item-active" : "",
+                ].join(" ")}
               >
                 <div
-                  className={`sidebar-icon flex items-center justify-center ${
-                    activeItem === item.id
+                  className={`sidebar-icon flex h-10 w-10 items-center justify-center ${
+                    isActive
                       ? "sidebar-icon-active"
                       : "bg-black/40 hover:bg-black/70"
                   }`}
@@ -5283,7 +5335,13 @@ function App() {
                     />
                   ) : null}
                 </div>
-                <span className={`sidebar-tooltip ${tooltipSide}`}>{tt(item.labelKey)}</span>
+                {sidebarHorizontal ? (
+                  <span className="sidebar-label" aria-hidden="true">
+                    {label}
+                  </span>
+                ) : (
+                  <span className={`sidebar-tooltip ${tooltipSide}`}>{label}</span>
+                )}
               </button>
               );
             })}
@@ -5294,15 +5352,24 @@ function App() {
               ref={(el) => {
                 sidebarButtonRefs.current.accounts = el;
               }}
-              className="interactive-press group relative flex h-10 w-10 shrink-0 items-center justify-center"
+              className={[
+                "interactive-press group relative flex shrink-0 items-center justify-center",
+                sidebarHorizontal ? "w-[3.6rem] flex-col gap-1" : "h-10 w-10",
+                activeItem === "accounts" ? "sidebar-item-active" : "",
+              ].join(" ")}
             >
               <div
-                className={`sidebar-icon flex items-center justify-center rounded-full ${
+                className={`sidebar-icon flex h-10 w-10 items-center justify-center rounded-full ${
                   activeItem === "accounts" ? "sidebar-icon-active" : "bg-black/40 hover:bg-black/70"
                 }`}
               >
                 <ProfileIcon />
               </div>
+              {sidebarHorizontal ? (
+                <span className="sidebar-label" aria-hidden="true">
+                  {tt("app.accounts.sidebarTooltip")}
+                </span>
+              ) : (
               <span
                 className={`sidebar-tooltip ${
                   sidebarHorizontal
@@ -5316,6 +5383,7 @@ function App() {
               >
                 {tt("app.accounts.sidebarTooltip")}
               </span>
+              )}
             </button>
           </div>
         </aside>
@@ -5326,6 +5394,22 @@ function App() {
             tabDrag ? "select-none" : ""
           }`}
         >
+          {splitViewEnabled && splitTooNarrow ? (
+            <div
+              className="mb-2 shrink-0 rounded-full border border-amber-400/30 bg-amber-500/15 px-3 py-1.5 text-center text-caption text-amber-100/90"
+              role="status"
+            >
+              {tt("app.splitView.tooNarrowBanner")}
+            </div>
+          ) : null}
+          {splitViewEnabled && !splitTooNarrow && !effectiveTabSplit && !tabDrag ? (
+            <div
+              className="pointer-events-none mb-2 shrink-0 text-center text-caption text-white/40"
+              aria-hidden="true"
+            >
+              {tt("app.splitView.dragSidebarHint")}
+            </div>
+          ) : null}
           {tabDrag ? (
             <div
               className="tab-drag-ghost"
@@ -5363,6 +5447,7 @@ function App() {
               onLaunchToServer={handleLaunchToServer}
               onPresenceContextChange={setRoomPresenceContext}
               onRoomLaunchContextChange={setLaunchPresenceContext}
+              onOpenAccounts={() => setActiveItemWithSound("accounts")}
             />
           </div>
           {activeItem === "friends" ? (
@@ -5371,6 +5456,7 @@ function App() {
                 showNotification={showNotification}
                 language={language}
                 onOpenRooms={() => setActiveItemWithSound("rooms")}
+                onOpenAccounts={() => setActiveItemWithSound("accounts")}
               />
             </div>
           ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
@@ -5504,7 +5590,7 @@ function App() {
               {renderMainTabContent(singleMainTab)}
             </div>
           )}
-          {tabDrag && splitViewEnabled ? (
+          {tabDrag && canUseSplitView ? (
             <TabSplitDropOverlay zone={tabDropZone} labels={splitDropZoneLabels} />
           ) : null}
         </main>

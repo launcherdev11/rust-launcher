@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
+import { BannerSkeleton, Spinner } from "../components/ui";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 import {
@@ -476,11 +477,7 @@ export function PlayTab({
     <>
       <div className={bannerClass}>
         {bannerLoading ? (
-          <div className="flex h-full w-full items-center justify-center">
-            <span className="text-sm font-medium tracking-wide text-white/70">
-              {tt("play.banner.loading")}
-            </span>
-          </div>
+          <BannerSkeleton />
         ) : bannerError ? (
           <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
             <span className="text-sm font-medium tracking-wide text-red-300">
@@ -520,12 +517,13 @@ export function PlayTab({
                       type="button"
                       disabled={isLaunching || isInstalling}
                       onClick={() => void onPlayServer(bannerServerIp)}
-                      className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs font-semibold text-white shadow-soft ${primaryColorClasses} ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white shadow-soft ${primaryColorClasses} ${
                         isLaunching || isInstalling
                           ? "cursor-not-allowed opacity-60"
                           : "interactive-press hover:opacity-90"
                       }`}
                     >
+                      {isLaunching ? <Spinner className="h-3.5 w-3.5" /> : null}
                       {tt("play.banner.play")}
                     </button>
                   )}
@@ -713,8 +711,12 @@ export function PlayTab({
                   type="button"
                   onClick={handlePrimaryClick}
                   disabled={isLaunching}
-                  className={`rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses} ${isLaunching ? "" : "interactive-press"}`}
+                  aria-busy={isLaunching || undefined}
+                  className={`inline-flex items-center justify-center gap-2 rounded-full px-12 py-3 text-sm font-semibold tracking-wide text-white shadow-soft transition-colors sm:px-16 ${primaryColorClasses} ${
+                    isLaunching ? "cursor-not-allowed" : "interactive-press"
+                  }`}
                 >
+                  {isLaunching ? <Spinner className="h-4 w-4" /> : null}
                   {primaryLabel}
                 </button>
               )}

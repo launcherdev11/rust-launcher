@@ -172,7 +172,7 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "launcher.splitView",
     tab: "launcher",
-    keys: ["settings.launcher.splitView.label"],
+    keys: ["settings.launcher.splitView.label", "settings.launcher.splitView.hint"],
   },
   {
     id: "launcher.disableAnimations",
@@ -2833,6 +2833,7 @@ export function SettingsTab({
                 />
                 )}
                 {showSetting("launcher.splitView") && (
+                <div className="flex flex-col gap-1.5">
                 <SettingsToggle
                   label={tt("settings.launcher.splitView.label")}
                   yesLabel={tt("settings.common.toggle.on")}
@@ -2840,6 +2841,10 @@ export function SettingsTab({
                   value={settings?.split_view_enabled ?? false}
                   onChange={(v) => updateSettings({ split_view_enabled: v })}
                 />
+                <p className="ui-meta pl-0.5 pr-1">
+                  {tt("settings.launcher.splitView.hint")}
+                </p>
+                </div>
                 )}
                 {showSetting("launcher.disableAnimations") && (
                 <SettingsToggle
