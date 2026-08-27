@@ -304,6 +304,38 @@ const RECOMMENDED_EXPORT_TOP = new Set([
 ]);
 
 const MINIMAL_EXPORT_TOP = new Set(["mods", "config", "options.txt"]);
+
+const EXPORT_QUICK_FOLDERS = [
+  "mods",
+  "config",
+  "resourcepacks",
+  "shaderpacks",
+  "datapacks",
+  "options.txt",
+  "servers.dat",
+] as const;
+
+function filterExportFileTree(nodes: FileNode[], query: string): FileNode[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return nodes;
+
+  const filterNode = (n: FileNode): FileNode | null => {
+    const selfMatch =
+      n.name.toLowerCase().includes(q) || n.path.toLowerCase().includes(q);
+    if (n.is_dir) {
+      if (selfMatch) return n;
+      const kids = (n.children ?? [])
+        .map(filterNode)
+        .filter((c): c is FileNode => c != null);
+      if (kids.length === 0) return null;
+      return { ...n, children: kids };
+    }
+    return selfMatch ? n : null;
+  };
+
+  return nodes.map(filterNode).filter((n): n is FileNode => n != null);
+}
+
 type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
 type LastPlayedUpdatedPayload = { profile_id: string; last_played_at: number };
 
@@ -713,7 +745,9 @@ export function ModpackTab({
   const [exportOverrideCount, setExportOverrideCount] = useState(0);
   const [exportSpeedLabel, setExportSpeedLabel] = useState<string>("");
   const [collapsedExportPaths, setCollapsedExportPaths] = useState<Set<string>>(new Set());
+  const [exportSearchQuery, setExportSearchQuery] = useState("");
   const lastProgressRef = useRef<{ t: number; bytes: number } | null>(null);
+  const previewRequestIdRef = useRef(0);
   const exportFormatTabRefs = useRef<
     Partial<Record<"mrpack" | "zip", HTMLButtonElement | null>>
   >({});
@@ -1451,6 +1485,7 @@ export function ModpackTab({
       setExportTreeProfileId(profileId);
       setSelectedExportPaths(getDefaultSelectedPaths(tree));
       setCollapsedExportPaths(new Set());
+      setExportSearchQuery("");
       setIgnorePatternsText(DEFAULT_EXPORT_IGNORES);
     } catch (e) {
       console.error(e);
@@ -1473,21 +1508,26 @@ export function ModpackTab({
     setExportSpeedLabel("");
     lastProgressRef.current = null;
     setPreviewResult(null);
+    setExportSearchQuery("");
     await loadExportTree(selectedProfile.id, exportTreeProfileId !== selectedProfile.id);
   }
 
-  async function handlePreviewExport() {
+  async function handlePreviewExport(opts?: { silent?: boolean }) {
     if (!selectedProfile) return;
     const selected = Array.from(selectedExportPaths);
     if (selected.length === 0) {
-      showNotification(
-        "warning",
-        tt("modpacks.export.selectAtLeastOnePath"),
-      );
+      setPreviewResult(null);
+      if (!opts?.silent) {
+        showNotification(
+          "warning",
+          tt("modpacks.export.selectAtLeastOnePath"),
+        );
+      }
       return;
     }
+    const requestId = ++previewRequestIdRef.current;
     setPreviewLoading(true);
-    setPreviewResult(null);
+    if (!opts?.silent) setPreviewResult(null);
     try {
       const res = await invoke<PreviewResult>("preview_export", {
         buildId: selectedProfile.id,
@@ -1495,15 +1535,21 @@ export function ModpackTab({
         ignores: parseIgnorePatterns(ignorePatternsText),
         format: exportFormat,
       });
+      if (requestId !== previewRequestIdRef.current) return;
       setPreviewResult(res);
     } catch (e) {
+      if (requestId !== previewRequestIdRef.current) return;
       console.error(e);
-      showNotification(
-        "error",
-        tt("modpacks.export.previewFailed"),
-      );
+      if (!opts?.silent) {
+        showNotification(
+          "error",
+          tt("modpacks.export.previewFailed"),
+        );
+      }
     } finally {
-      setPreviewLoading(false);
+      if (requestId === previewRequestIdRef.current) {
+        setPreviewLoading(false);
+      }
     }
   }
 
@@ -2111,6 +2157,65 @@ export function ModpackTab({
       window.removeEventListener("resize", scheduleUpdate);
     };
   }, [isExportOpen, exportFormat]);
+
+  const filteredExportTree = useMemo(() => {
+    if (!exportTree) return null;
+    return filterExportFileTree(exportTree, exportSearchQuery);
+  }, [exportTree, exportSearchQuery]);
+
+  const exportSelectionStats = useMemo(() => {
+    if (!exportTree) return { count: 0, bytes: 0 };
+    let count = 0;
+    let bytes = 0;
+    const walk = (nodes: FileNode[]) => {
+      for (const n of nodes) {
+        if (n.is_dir) {
+          if (n.children?.length) walk(n.children);
+        } else if (
+          selectedExportPaths.has(n.path) ||
+          pathHasSelectedAncestor(n.path, selectedExportPaths)
+        ) {
+          count += 1;
+          bytes += n.size;
+        }
+      }
+    };
+    walk(exportTree);
+    return { count, bytes };
+  }, [exportTree, selectedExportPaths]);
+
+  const exportQuickNodes = useMemo(() => {
+    if (!exportTree) return [] as FileNode[];
+    return EXPORT_QUICK_FOLDERS.map(
+      (name) => exportTree.find((n) => n.name === name) ?? null,
+    ).filter((n): n is FileNode => n != null);
+  }, [exportTree]);
+
+  const selectedExportPathsKey = useMemo(
+    () => Array.from(selectedExportPaths).sort().join("\n"),
+    [selectedExportPaths],
+  );
+
+  useEffect(() => {
+    if (!isExportOpen || exportBusy || exportTreeLoading || !selectedProfile || !exportTree) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void handlePreviewExport({ silent: true });
+    }, 450);
+    return () => window.clearTimeout(timer);
+    // handlePreviewExport reads latest selection/format/ignores from this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional debounce keys
+  }, [
+    isExportOpen,
+    exportBusy,
+    exportTreeLoading,
+    selectedProfile?.id,
+    selectedExportPathsKey,
+    ignorePatternsText,
+    exportFormat,
+    exportTree,
+  ]);
 
   useLayoutEffect(() => {
     let raf = 0;
@@ -6696,6 +6801,54 @@ export function ModpackTab({
                   </button>
                 </div>
 
+                {exportQuickNodes.length > 0 && (
+                  <>
+                    <div className="mt-4 text-xs font-semibold text-white/80">
+                      {tt("modpacks.exportModal.quickFolders")}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {exportQuickNodes.map((node) => {
+                        const folderState = node.is_dir ? getFolderCheckState(node) : null;
+                        const active = node.is_dir
+                          ? folderState === "all"
+                          : isExportPathSelected(node.path);
+                        const partial = folderState === "some";
+                        return (
+                          <button
+                            key={node.path}
+                            type="button"
+                            disabled={exportBusy}
+                            onClick={() => setExportNodeChecked(node, !active)}
+                            className={`interactive-press rounded-full px-3 py-1 text-[11px] font-semibold transition-colors disabled:opacity-60 ${
+                              active
+                                ? "text-black"
+                                : partial
+                                  ? "text-white"
+                                  : "bg-white/10 text-white/75 hover:bg-white/20 hover:text-white"
+                            }`}
+                            style={
+                              active
+                                ? {
+                                    backgroundColor: "var(--accent-color)",
+                                  }
+                                : partial
+                                  ? {
+                                      backgroundColor:
+                                        "color-mix(in srgb, var(--accent-color) 35%, transparent)",
+                                      boxShadow:
+                                        "inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 55%, transparent)",
+                                    }
+                                  : undefined
+                            }
+                          >
+                            {node.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
                 <div className="mt-4 text-xs font-semibold text-white/80">
                   {tt("modpacks.exportModal.ignorePatterns")}
                 </div>
@@ -6713,8 +6866,16 @@ export function ModpackTab({
 
               <div className="rounded-2xl border border-white/12 bg-black/35 px-4 py-3 lg:col-span-2">
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-xs font-semibold text-white/80">
-                    {tt("modpacks.exportModal.buildFiles")}
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white/80">
+                      {tt("modpacks.exportModal.buildFiles")}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-white/55">
+                      {tt("modpacks.exportModal.selectedSummary", {
+                        count: String(exportSelectionStats.count),
+                        size: formatByteSize(language, exportSelectionStats.bytes),
+                      })}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -6746,12 +6907,24 @@ export function ModpackTab({
                   </div>
                 </div>
 
+                <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/12 bg-black/40 px-3 py-2">
+                  <SearchIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                  <input
+                    type="search"
+                    value={exportSearchQuery}
+                    disabled={exportBusy || exportTreeLoading}
+                    onChange={(e) => setExportSearchQuery(e.target.value)}
+                    placeholder={tt("modpacks.exportModal.searchPlaceholder")}
+                    className="min-w-0 flex-1 bg-transparent text-xs text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-60"
+                  />
+                </div>
+
                 <div className="custom-scrollbar max-h-[360px] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-2">
                   {exportTreeLoading ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
                       {tt("modpacks.exportModal.scanning")}
                     </div>
-                  ) : !exportTree ? (
+                  ) : !exportTree || !filteredExportTree ? (
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
                       {tt("modpacks.exportModal.noData")}
                     </div>
@@ -6759,20 +6932,44 @@ export function ModpackTab({
                     <div className="flex h-24 items-center justify-center text-xs text-white/60">
                       {tt("modpacks.exportModal.emptyFolder")}
                     </div>
+                  ) : filteredExportTree.length === 0 ? (
+                    <div className="flex h-24 items-center justify-center text-xs text-white/60">
+                      {tt("modpacks.exportModal.noSearchResults")}
+                    </div>
                   ) : (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-0.5">
                       {(function renderNodes(nodes: FileNode[], depth: number): ReactNode[] {
+                        const searchActive = exportSearchQuery.trim().length > 0;
                         return nodes.flatMap((n) => {
                           const folderState = n.is_dir ? getFolderCheckState(n) : null;
                           const checked = n.is_dir
                             ? folderState === "all"
                             : isExportPathSelected(n.path);
-                          const isCollapsed = collapsedExportPaths.has(n.path);
+                          const rowHighlighted = n.is_dir
+                            ? folderState === "all" || folderState === "some"
+                            : checked;
+                          const rowPartial = folderState === "some";
+                          const isCollapsed =
+                            !searchActive && collapsedExportPaths.has(n.path);
                           const row = (
                             <label
                               key={n.path}
-                              className="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-2 py-1 hover:bg-white/5"
-                              style={{ paddingLeft: 8 + depth * 14 }}
+                              className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl px-2 py-1.5 transition-colors ${
+                                rowHighlighted ? "" : "hover:bg-white/5"
+                              }`}
+                              style={{
+                                paddingLeft: 8 + depth * 14,
+                                ...(rowHighlighted
+                                  ? {
+                                      backgroundColor: rowPartial
+                                        ? "color-mix(in srgb, var(--accent-color) 14%, transparent)"
+                                        : "color-mix(in srgb, var(--accent-color) 26%, transparent)",
+                                      boxShadow: rowPartial
+                                        ? "inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 28%, transparent)"
+                                        : "inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 45%, transparent)",
+                                    }
+                                  : {}),
+                              }}
                             >
                               <span className="flex min-w-0 items-center gap-2">
                                 {n.is_dir ? (
@@ -6816,15 +7013,27 @@ export function ModpackTab({
                                   className="accent-checkbox"
                                 />
                                 {n.is_dir ? (
-                                  <FolderIcon className="h-4 w-4 opacity-90" />
+                                  <FolderIcon
+                                    className={`h-4 w-4 ${rowHighlighted ? "opacity-100" : "opacity-80"}`}
+                                  />
                                 ) : (
-                                  <FileIcon className="h-4 w-4 opacity-90" />
+                                  <FileIcon
+                                    className={`h-4 w-4 ${rowHighlighted ? "opacity-100" : "opacity-80"}`}
+                                  />
                                 )}
-                                <span className="truncate text-xs text-white/85">
+                                <span
+                                  className={`truncate text-xs ${
+                                    rowHighlighted ? "font-medium text-white" : "text-white/85"
+                                  }`}
+                                >
                                   {n.name}
                                 </span>
                               </span>
-                              <span className="shrink-0 text-[11px] text-white/55">
+                              <span
+                                className={`shrink-0 text-[11px] ${
+                                  rowHighlighted ? "text-white/70" : "text-white/55"
+                                }`}
+                              >
                                 {formatByteSize(language, n.size)}
                               </span>
                             </label>
@@ -6836,7 +7045,7 @@ export function ModpackTab({
                               : [];
                           return [row, ...children];
                         });
-                      })(exportTree, 0)}
+                      })(filteredExportTree, 0)}
                     </div>
                   )}
                 </div>
