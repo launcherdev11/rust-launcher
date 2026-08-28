@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   closeRoom,
   createRoom,
+  getRoom,
   getRoomSession,
   inviteToRoom,
   joinRoom,
@@ -220,6 +221,26 @@ export function RoomsTab({
     };
   }, [syncAuth]);
 
+  const mergeRoomIntoLists = useCallback((room: Room) => {
+    const patch = (prev: Room[]) =>
+      prev.map((item) => (item.id === room.id ? { ...item, ...room } : item));
+    setRooms(patch);
+    setFriendsRooms(patch);
+  }, []);
+
+  const refreshRoomDetail = useCallback(
+    async (roomId: string): Promise<Room | null> => {
+      try {
+        const room = await getRoom(roomId);
+        mergeRoomIntoLists(room);
+        return room;
+      } catch {
+        return null;
+      }
+    },
+    [mergeRoomIntoLists],
+  );
+
   const reloadRooms = useCallback(async () => {
     const [mine, friendsOwned, friendList] = await Promise.all([
       listRooms(),
@@ -276,6 +297,7 @@ export function RoomsTab({
       ) {
         void reloadRooms().catch(() => {});
         if (selectedRoomId) {
+          void refreshRoomDetail(selectedRoomId);
           void getRoomSession(selectedRoomId)
             .then(setSelectedRoomSession)
             .catch(() => {});
@@ -284,12 +306,36 @@ export function RoomsTab({
     };
     window.addEventListener(WS_EVENT, onWs);
     return () => window.removeEventListener(WS_EVENT, onWs);
-  }, [reloadRooms, selectedRoomId]);
+  }, [reloadRooms, refreshRoomDetail, selectedRoomId]);
 
-  const selectedRoom = rooms.find((r) => r.id === selectedRoomId) ?? null;
+  useEffect(() => {
+    if (!managing || !selectedRoomId) return;
+    let cancelled = false;
+    void refreshRoomDetail(selectedRoomId);
+    const timer = window.setInterval(() => {
+      if (!cancelled) void refreshRoomDetail(selectedRoomId);
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [managing, refreshRoomDetail, selectedRoomId]);
+
+  const selectedRoom =
+    rooms.find((r) => r.id === selectedRoomId) ??
+    friendsRooms.find((r) => r.id === selectedRoomId) ??
+    null;
   const isOwner = selectedRoom?.owner_user_id === userId;
   const selectedRoomSessionStartedAt =
     selectedRoomSession?.started_at ?? selectedRoom?.session_started_at ?? null;
+
+  useEffect(() => {
+    if (!managing || !selectedRoom) return;
+    const members = selectedRoom.members ?? [];
+    if (selectedRoom.member_count >= 2 && members.length < 2) {
+      void refreshRoomDetail(selectedRoom.id);
+    }
+  }, [managing, refreshRoomDetail, selectedRoom]);
 
   useEffect(() => {
     if (!selectedRoom) setManaging(false);

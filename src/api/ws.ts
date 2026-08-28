@@ -122,7 +122,7 @@ export type WsClientMessage =
       type: "ice_candidate";
       payload: { to_user_id: string; room_id: string; candidate: IceCandidateDto };
     }
-  | { type: "peer_ready"; payload: { room_id: string } }
+  | { type: "peer_ready"; payload: { room_id: string; user_id?: string } }
   | { type: "connection_failed"; payload: { room_id: string; reason?: string } }
   | {
       type: "connection_established";

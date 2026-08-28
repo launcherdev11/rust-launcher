@@ -61,7 +61,7 @@ export function startPeerSignaling(opts: Options): {
 
   const announceReady = () => {
     if (disposed || channelOpen) return;
-    sendWsMessage({ type: "peer_ready", payload: { room_id: opts.roomId } });
+    sendWsMessage({ type: "peer_ready", payload: { room_id: opts.roomId, user_id: opts.localUserId } });
   };
 
   const renegotiateFromPeerReady = () => {
