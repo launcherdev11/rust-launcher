@@ -2997,7 +2997,7 @@ function App() {
       default:
         details = t(language, "app.discord.play");
     }
-    invoke("discord_presence_update", { details, state }).catch(() => {});
+    invoke("discord_presence_update", { details, state, tab: activeItem }).catch(() => {});
   }, [activeItem, language, discordModsTitle, activeInstanceProfile?.name]);
 
   useEffect(() => {

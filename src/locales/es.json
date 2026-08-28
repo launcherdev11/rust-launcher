@@ -1076,6 +1076,7 @@
     "p2pLabel": "Enlace",
     "p2pReady": "listo",
     "p2pConnecting": "conectando…",
+    "p2pReconnecting": "reconectando…",
     "p2pWaiting": "esperando jugador",
     "bridgeLabel": "puente",
     "channelOpen": "canal abierto",

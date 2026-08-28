@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiRequest, getApiBaseUrl, getStoredAccessToken } from "./client";
 import { ensureValidAccessToken } from "./auth";
 
 export type RoomMember = {
@@ -289,11 +289,9 @@ export async function joinRoom(
     body.room_id = trimmed;
     if (password) body.password = password;
   } else if (trimmed) {
-    // Display name (public rooms) or name + password (private rooms).
     body.name = trimmed;
     if (password) body.password = password;
   } else if (password) {
-    // Password-only lookup for private rooms.
     body.password = password;
   }
 
@@ -314,6 +312,21 @@ export async function leaveRoom(roomId: string, kickUserId?: string): Promise<vo
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function leaveRoomBestEffort(roomId: string): void {
+  if (!roomId) return;
+  const token = getStoredAccessToken();
+  if (!token) return;
+  void apiRequest(`${getApiBaseUrl()}/rooms/leave`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ room_id: roomId }),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 export async function inviteToRoom(roomId: string, nickname: string): Promise<Room> {

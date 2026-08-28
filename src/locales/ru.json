@@ -1080,6 +1080,7 @@
     "p2pLabel": "Связь",
     "p2pReady": "готово",
     "p2pConnecting": "подключение…",
+    "p2pReconnecting": "переподключение…",
     "p2pWaiting": "ждём игрока",
     "bridgeLabel": "мост",
     "channelOpen": "канал открыт",

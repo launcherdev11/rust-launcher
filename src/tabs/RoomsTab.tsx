@@ -6,6 +6,7 @@ import {
   inviteToRoom,
   joinRoom,
   leaveRoom,
+  leaveRoomBestEffort,
   listFriendsRooms,
   listRooms,
   type Room,
@@ -293,6 +294,14 @@ export function RoomsTab({
   useEffect(() => {
     if (!selectedRoom) setManaging(false);
   }, [selectedRoom]);
+
+  useEffect(() => {
+    if (!managing || !selectedRoomId || !userId || isOwner) return;
+    const roomId = selectedRoomId;
+    const onPageHide = () => leaveRoomBestEffort(roomId);
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, [managing, selectedRoomId, userId, isOwner]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -873,6 +882,7 @@ export function RoomsTab({
   );
 
   const p2pReady = peerLink.status === "connected" && peerLink.channelOpen;
+  const p2pFailed = peerLink.status === "failed" || peerLink.status === "closed";
   const expectedPeers = expectedPeerIds.length;
   const connectedPeers = connectedPeerIds.length;
   const linkKind =
@@ -892,6 +902,12 @@ export function RoomsTab({
       return `${tt("rooms.p2pReady")}${kind}`;
     }
     if (expectedPeers === 0) return tt("rooms.p2pWaiting");
+    if (p2pFailed) {
+      if (connectedPeers > 0 && expectedPeers > 1) {
+        return `${tt("rooms.p2pReconnecting")} (${connectedPeers}/${expectedPeers})`;
+      }
+      return tt("rooms.p2pReconnecting");
+    }
     if (connectedPeers > 0 && expectedPeers > 1) {
       return `${tt("rooms.p2pConnecting")} (${connectedPeers}/${expectedPeers})`;
     }
@@ -1153,7 +1169,11 @@ export function RoomsTab({
                     <span className="ui-caption">{tt("rooms.p2pLabel")}</span>
                     <span
                       className={`truncate text-xs font-semibold ${
-                        p2pReady ? "text-emerald-300/90" : "text-white/70"
+                        p2pReady
+                          ? "text-emerald-300/90"
+                          : p2pFailed
+                            ? "text-amber-300/90"
+                            : "text-white/70"
                       }`}
                     >
                       {p2pStatusLabel}

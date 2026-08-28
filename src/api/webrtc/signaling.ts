@@ -41,6 +41,7 @@ export function startPeerSignaling(opts: Options): {
   let peerReadyTimer: ReturnType<typeof setInterval> | null = null;
 
   const emit = (partial: Partial<PeerLinkState>) => {
+    if (disposed) return;
     if (partial.channelOpen === true) channelOpen = true;
     if (partial.status === "closed" || partial.status === "failed") {
       channelOpen = false;
@@ -175,16 +176,18 @@ export function startPeerSignaling(opts: Options): {
     } else if (detail.type === "peer_leave") {
       const p = detail.payload;
       if (p.room_id === opts.roomId && p.user_id === opts.peerUserId) {
-        session?.close();
+        channelOpen = false;
         emit({ status: "closed", channelOpen: false });
         opts.onSession?.(null);
+        opts.onRequestRestart?.();
       }
     } else if (detail.type === "room_member_left") {
       const p = detail.payload;
       if (p.room_id === opts.roomId && p.user_id === opts.peerUserId) {
-        session?.close();
+        channelOpen = false;
         emit({ status: "closed", channelOpen: false });
         opts.onSession?.(null);
+        opts.onRequestRestart?.();
       }
     }
   };

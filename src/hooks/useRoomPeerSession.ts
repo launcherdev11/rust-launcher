@@ -188,7 +188,6 @@ export function useRoomPeerSession(
       peerId,
       (reconnectAttemptRef.current.get(peerId) ?? 0) + 1,
     );
-    setReconnectTick((n) => n + 1);
   };
 
   const requestRestartPreferRelay = (peerId: string) => {
@@ -252,6 +251,15 @@ export function useRoomPeerSession(
               const session = sessionsByPeerRef.current[peerUserId];
               if (session) onPeerChannelOpenRef.current?.(peerUserId, session);
             }
+          } else if (
+            (state.status === "failed" || state.status === "closed") &&
+            handlesRef.current.has(peerUserId)
+          ) {
+            queueMicrotask(() => {
+              if (channelOpenRef.current.get(peerUserId)) return;
+              if (!handlesRef.current.has(peerUserId)) return;
+              requestRestartPreferRelay(peerUserId);
+            });
           }
         },
         onSession: (session) => {
@@ -296,11 +304,19 @@ export function useRoomPeerSession(
 
     for (const peerId of expectedPeerIds) {
       const link = peerLinks[peerId];
-      clearTimeout(connectingTimerRef.current.get(peerId));
-      connectingTimerRef.current.delete(peerId);
+      const inFlight = link && !link.channelOpen &&
+        (link.status === "preparing" || link.status === "connecting");
 
-      if (!link || link.channelOpen) continue;
-      if (link.status !== "preparing" && link.status !== "connecting") continue;
+      if (!inFlight) {
+        const t = connectingTimerRef.current.get(peerId);
+        if (t) {
+          clearTimeout(t);
+          connectingTimerRef.current.delete(peerId);
+        }
+        continue;
+      }
+
+      if (connectingTimerRef.current.has(peerId)) continue;
 
       const timeoutMs = forceRelayRef.current.has(peerId)
         ? RELAY_CONNECTING_TIMEOUT_MS
@@ -310,13 +326,6 @@ export function useRoomPeerSession(
         setTimeout(() => requestRestartPreferRelay(peerId), timeoutMs),
       );
     }
-
-    return () => {
-      for (const peerId of expectedPeerIds) {
-        const t = connectingTimerRef.current.get(peerId);
-        if (t) clearTimeout(t);
-      }
-    };
   }, [peerLinks, expectedKey, wsStatus, reconnectTick]);
 
   useEffect(() => {

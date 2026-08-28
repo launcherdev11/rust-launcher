@@ -189,8 +189,8 @@ export async function fetchGameVersions(
     signal,
   });
   if (!res.ok) throw new Error(`Modrinth HTTP ${res.status}`);
-  const data: { version: string }[] = await res.json();
+  const data: { version: string; version_type: string }[] = await res.json();
   return data
-    .map((t) => t.version)
-    .filter((v) => /^1\.\d+(\.\d+)?$/.test(v));
+    .filter((t) => t.version_type === "release")
+    .map((t) => t.version);
 }

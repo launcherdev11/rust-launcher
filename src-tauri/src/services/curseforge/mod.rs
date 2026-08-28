@@ -235,9 +235,31 @@ fn loaders_from_filename(file_name: &str) -> Vec<String> {
 
 fn is_minecraft_release_version(version: &str) -> bool {
     let mut parts = version.split('.');
-    let major = parts.next();
-    let minor = parts.next();
-    major == Some("1") && minor.is_some_and(|m| m.chars().all(|c| c.is_ascii_digit()))
+    let major = match parts.next() {
+        Some(v) => v,
+        None => return false,
+    };
+    let minor = match parts.next() {
+        Some(v) => v,
+        None => return false,
+    };
+    if !major.chars().all(|c| c.is_ascii_digit())
+        || !minor.chars().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    if let Some(patch) = parts.next() {
+        if !patch.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+        if parts.next().is_some() {
+            return false;
+        }
+    } else if parts.next().is_some() {
+        return false;
+    }
+    let major_num: u32 = major.parse().unwrap_or(0);
+    major_num == 1 || major_num >= 20
 }
 
 fn mod_loader_type(loader: &str) -> Option<u8> {

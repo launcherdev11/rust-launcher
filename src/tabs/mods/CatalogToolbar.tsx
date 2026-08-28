@@ -1,4 +1,11 @@
-import type { ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
 import type {
   CatalogSort,
   CatalogSourceTab,
@@ -241,6 +248,79 @@ export function CatalogToolbar({
   );
 }
 
+const DROPDOWN_MENU_CLASS =
+  "custom-scrollbar max-h-64 overflow-y-auto rounded-2xl border border-white/12 bg-[#121212] p-1 text-xs shadow-soft";
+
+function AnchoredDropdown({
+  open,
+  anchorRef,
+  onClose,
+  widthClass,
+  children,
+}: {
+  open: boolean;
+  anchorRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+  widthClass: string;
+  children: ReactNode;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (anchorRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, anchorRef, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={`fixed z-[1000] ${widthClass} ${DROPDOWN_MENU_CLASS}`}
+      style={{ top: pos.top, left: pos.left, minWidth: pos.width }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 function VersionLoaderControls({
   tt,
   gameVersion,
@@ -270,6 +350,9 @@ function VersionLoaderControls({
   onRequestUnlock: () => void;
   activeProfileId?: string | null;
 }): ReactNode {
+  const versionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const loaderButtonRef = useRef<HTMLButtonElement | null>(null);
+
   return (
     <div className="relative ml-auto flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-white/12 bg-black/40 px-3 shadow-soft backdrop-blur-xl">
       <span className="mr-1 text-[11px] uppercase tracking-[0.16em] text-gray-400">
@@ -277,6 +360,7 @@ function VersionLoaderControls({
       </span>
       <div className="relative">
         <button
+          ref={versionButtonRef}
           type="button"
           onClick={() => {
             if (versionLoaderLocked) onRequestUnlock();
@@ -295,30 +379,34 @@ function VersionLoaderControls({
             <span className="text-[10px] text-gray-400">▾</span>
           )}
         </button>
-        {isVersionDropdownOpen && gameVersions.length > 0 && (
-          <div className="absolute left-0 top-full z-[100] mt-1 max-h-64 w-32 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-            {gameVersions.map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => {
-                  onGameVersionChange(v);
-                  setIsVersionDropdownOpen(false);
-                }}
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
-                  gameVersion === v
-                    ? "bg-white/90 text-black"
-                    : "text-white/80 hover:bg-white/10"
-                }`}
-              >
-                <span>{v}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <AnchoredDropdown
+          open={isVersionDropdownOpen && gameVersions.length > 0}
+          anchorRef={versionButtonRef}
+          onClose={() => setIsVersionDropdownOpen(false)}
+          widthClass="w-32"
+        >
+          {gameVersions.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => {
+                onGameVersionChange(v);
+                setIsVersionDropdownOpen(false);
+              }}
+              className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                gameVersion === v
+                  ? "bg-white/90 font-semibold text-black"
+                  : "text-white hover:bg-white/10"
+              }`}
+            >
+              <span>{v}</span>
+            </button>
+          ))}
+        </AnchoredDropdown>
       </div>
       <div className="relative">
         <button
+          ref={loaderButtonRef}
           type="button"
           onClick={() => {
             if (versionLoaderLocked) onRequestUnlock();
@@ -355,33 +443,36 @@ function VersionLoaderControls({
             {tt("common.change")}
           </button>
         )}
-        {isLoaderDropdownOpen && (
-          <div className="absolute left-0 top-full z-[100] mt-1 max-h-64 w-36 overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
-            {[
-              { id: "forge" as const, label: "Forge" },
-              { id: "fabric" as const, label: "Fabric" },
-              { id: "quilt" as const, label: "Quilt" },
-              { id: "neoforge" as const, label: "NeoForge" },
-              { id: "any" as const, label: tt("mods.loaderAll") },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => {
-                  onLoaderChange(opt.id);
-                  setIsLoaderDropdownOpen(false);
-                }}
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
-                  loader === opt.id
-                    ? "bg-white/90 text-black"
-                    : "text-white/80 hover:bg-white/10"
-                }`}
-              >
-                <span>{opt.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <AnchoredDropdown
+          open={isLoaderDropdownOpen}
+          anchorRef={loaderButtonRef}
+          onClose={() => setIsLoaderDropdownOpen(false)}
+          widthClass="w-36"
+        >
+          {[
+            { id: "forge" as const, label: "Forge" },
+            { id: "fabric" as const, label: "Fabric" },
+            { id: "quilt" as const, label: "Quilt" },
+            { id: "neoforge" as const, label: "NeoForge" },
+            { id: "any" as const, label: tt("mods.loaderAll") },
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => {
+                onLoaderChange(opt.id);
+                setIsLoaderDropdownOpen(false);
+              }}
+              className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+                loader === opt.id
+                  ? "bg-white/90 font-semibold text-black"
+                  : "text-white hover:bg-white/10"
+              }`}
+            >
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </AnchoredDropdown>
       </div>
     </div>
   );

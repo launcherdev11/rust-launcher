@@ -1080,6 +1080,7 @@
     "p2pLabel": "Link",
     "p2pReady": "ready",
     "p2pConnecting": "connecting…",
+    "p2pReconnecting": "reconnecting…",
     "p2pWaiting": "waiting for player",
     "bridgeLabel": "bridge",
     "channelOpen": "channel open",
