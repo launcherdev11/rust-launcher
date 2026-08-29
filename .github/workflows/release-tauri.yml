@@ -76,6 +76,7 @@ jobs:
           fi
 
       - name: Build and create GitHub release
+        id: tauri_release
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

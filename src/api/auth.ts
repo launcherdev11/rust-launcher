@@ -251,7 +251,16 @@ export function mapAuthErrorMessage(
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   const lower = raw.toLowerCase();
-  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("error sending request") ||
+    lower.includes("dns error") ||
+    lower.includes("connection refused") ||
+    lower.includes("connection reset") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout")
+  ) {
     return t("platform.errors.connectionFailed");
   }
   if (lower.includes("not found")) {

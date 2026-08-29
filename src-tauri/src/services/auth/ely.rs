@@ -48,7 +48,7 @@ async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
 
     let asset = release.assets.into_iter()
         .find(|a| { let n = a.name.to_ascii_lowercase(); n.ends_with(".jar") && n.contains("authlib-injector") })
-        .ok_or("Р’ СЂРµР»РёР·Рµ РЅРµ РЅР°Р№РґРµРЅ authlib-injector.jar")?;
+        .ok_or("В релизе не найден authlib-injector.jar")?;
 
     let jar_resp = client.get(&asset.browser_download_url).send().await.map_err(|e| e.to_string())?;
     let bytes = jar_resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
@@ -66,9 +66,9 @@ where T: for<'de> Deserialize<'de> {
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_else(|_| "<no body>".into());
-        return Err(format!("{err_ctx}: {} вЂ” {}", status, text));
+        return Err(format!("{err_ctx}: {} — {}", status, text));
     }
-    resp.json::<T>().await.map_err(|e| format!("РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР° {err_ctx}: {e}"))
+    resp.json::<T>().await.map_err(|e| format!("Ошибка парсинга {err_ctx}: {e}"))
 }
 
 
@@ -185,7 +185,7 @@ pub async fn yggdrasil_authenticate(username: &str, password: &str, client_token
         if err.error == "ForbiddenOperationException" && err.error_message.contains("two factor") {
             return Err("ELYBY_2FA_REQUIRED".into());
         }
-        return Err(format!("РћС€РёР±РєР° Ely.by: {} вЂ” {}", err.error, err.error_message));
+        return Err(format!("Ошибка Ely.by: {} — {}", err.error, err.error_message));
     }
     Err(format!("Ely.by authenticate error {}: {}", status, text))
 }
@@ -239,7 +239,7 @@ pub async fn ensure_authlib_injector() -> Result<std::path::PathBuf, String> {
     tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
     let bytes = download_authlib_injector_jar_bytes().await?;
     if bytes.len() < 2 || &bytes[..2] != b"PK" {
-        return Err("РЎРєР°С‡Р°РЅРЅС‹Р№ С„Р°Р№Р» РЅРµ СЏРІР»СЏРµС‚СЃСЏ valid JAR.".into());
+        return Err("Скачанный файл не является корректным JAR.".into());
     }
     tokio::fs::write(&jar_path, &bytes).await.map_err(|e| e.to_string())?;
     Ok(jar_path)
@@ -247,8 +247,8 @@ pub async fn ensure_authlib_injector() -> Result<std::path::PathBuf, String> {
 
 
 async fn handle_oauth_callback_internal(app: &AppHandle, code: String, state: String) -> Result<(), String> {
-    let saved = take_oauth_state().ok_or("OAuth2 state РЅРµ РЅР°Р№РґРµРЅ")?;
-    if saved != state { return Err("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ state".into()); }
+    let saved = take_oauth_state().ok_or("OAuth2 state не найден")?;
+    if saved != state { return Err("Некорректный state".into()); }
 
     let token = exchange_code_for_token(code).await?;
     let account = fetch_account_info(&token.access_token).await?;
@@ -310,9 +310,9 @@ async fn try_process_oauth_connection(app: &AppHandle, mut stream: tokio::net::T
 
     if let Some(err) = parse_query_param(query, "error") {
         let desc = parse_query_param(query, "error_description").unwrap_or_default();
-        let msg = format!("Ely.by: {err} вЂ” {desc}");
+        let msg = format!("Ely.by: {err} — {desc}");
         let _ = app.emit("ely-login-failed", msg.clone());
-        write_html(&mut stream, "Error", &format!("<h3>РћС€РёР±РєР°</h3><p>{}</p>", html_escape(&msg))).await;
+        write_html(&mut stream, "Ошибка", &format!("<h3>Ошибка</h3><p>{}</p>", html_escape(&msg))).await;
         return Ok(true);
     }
 
@@ -320,11 +320,11 @@ async fn try_process_oauth_connection(app: &AppHandle, mut stream: tokio::net::T
     let state = parse_query_param(query, "state").ok_or("No state")?;
 
     match handle_oauth_callback_internal(app, code, state).await {
-        Ok(_) => write_html(&mut stream, "Success", "<h3>РђРІС‚РѕСЂРёР·Р°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°.</h3>").await,
+        Ok(_) => write_html(&mut stream, "Готово", "<h3>Авторизация завершена.</h3><p>Можно закрыть эту вкладку и вернуться в лаунчер.</p>").await,
         Err(e) => {
             eprintln!("[ElyAuth] Callback error: {e}");
             let _ = app.emit("ely-login-failed", e.clone());
-            write_html(&mut stream, "Error", &format!("<h3>РћС€РёР±РєР° РІС…РѕРґР°</h3><p>{}</p>", html_escape(&e))).await;
+            write_html(&mut stream, "Ошибка", &format!("<h3>Ошибка входа</h3><p>{}</p>", html_escape(&e))).await;
         }
     }
     Ok(true)
@@ -334,7 +334,7 @@ async fn run_local_oauth_server_async(app: AppHandle) {
     let l4 = match TcpListener::bind("127.0.0.1:25568").await {
         Ok(l) => l,
         Err(e) => {
-            let msg = format!("РџРѕСЂС‚ 25568 Р·Р°РЅСЏС‚: {e}");
+            let msg = format!("Порт 25568 занят: {e}");
             eprintln!("[ElyAuth] {msg}");
             let _ = app.emit("ely-login-failed", msg);
             return;
@@ -346,7 +346,7 @@ async fn run_local_oauth_server_async(app: AppHandle) {
 
     loop {
         if start.elapsed() >= max_wait {
-            let _ = app.emit("ely-login-failed", "Р’СЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РёСЃС‚РµРєР»Рѕ.");
+            let _ = app.emit("ely-login-failed", "Время ожидания истекло.");
             return;
         }
         let remaining = max_wait - start.elapsed();
@@ -359,7 +359,7 @@ async fn run_local_oauth_server_async(app: AppHandle) {
         };
 
         match tokio::time::timeout(remaining, accept_fut).await {
-            Err(_) => { let _ = app.emit("ely-login-failed", "РўР°Р№РјР°СѓС‚"); return; }
+            Err(_) => { let _ = app.emit("ely-login-failed", "Таймаут"); return; }
             Ok(Err(e)) => { eprintln!("[ElyAuth] Accept: {e}"); continue; }
             Ok(Ok((stream, _))) => {
                 if let Err(e) = try_process_oauth_connection(&app, stream).await {

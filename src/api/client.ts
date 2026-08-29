@@ -15,16 +15,48 @@ export class ApiError extends Error {
 }
 
 const DEFAULT_API_BASE_URL = "https://api.16-launcher.ru";
+const API_REQUEST_MAX_ATTEMPTS = 3;
+const API_REQUEST_RETRY_DELAY_MS = 750;
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-export function apiRequest(input: string, init?: RequestInit): Promise<Response> {
-  if (isTauriRuntime()) {
-    return tauriFetch(input, init);
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableTransportError(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes("error sending request") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("dns") ||
+    msg.includes("connection") ||
+    msg.includes("timed out") ||
+    msg.includes("timeout")
+  );
+}
+
+export async function apiRequest(input: string, init?: RequestInit): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= API_REQUEST_MAX_ATTEMPTS; attempt++) {
+    try {
+      if (isTauriRuntime()) {
+        return await tauriFetch(input, init);
+      }
+      return await fetch(input, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= API_REQUEST_MAX_ATTEMPTS || !isRetryableTransportError(error)) {
+        throw error;
+      }
+      await sleep(API_REQUEST_RETRY_DELAY_MS * attempt);
+    }
   }
-  return fetch(input, init);
+  throw lastError;
 }
 
 export function getApiBaseUrl(): string {

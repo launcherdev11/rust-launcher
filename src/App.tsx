@@ -46,6 +46,10 @@ import {
   readCachedLauncherBanners,
   type LauncherBannerData,
 } from "./lib/launcherBanners";
+import {
+  buildLauncherNewsUrls,
+  fetchFirstAvailableMirror,
+} from "./lib/remoteMirrors";
 import { DeleteIcon } from "./components/delete_icon";
 import {
   ProfileInfoIcon,
@@ -625,12 +629,6 @@ function splitTitleAndSubtitle(textMsg: string): { title: string; subtitle?: str
   if (parts.length === 1) return { title: parts[0] };
   return { title: parts[0], subtitle: parts.slice(1).join("\n") };
 }
-
-const NOTIFICATIONS_CACHE_BUST = `?t=${Date.now()}`;
-const REMOTE_NOTIFICATIONS_URLS = [
-  `https://raw.githubusercontent.com/16steyy/16Launcher-News/main/notifications.json${NOTIFICATIONS_CACHE_BUST}`,
-  `https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/notifications.json${NOTIFICATIONS_CACHE_BUST}`,
-];
 
 const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
 const TELEGRAM_LINK = "https://t.me/of16launcher";
@@ -2461,35 +2459,18 @@ function App() {
     (async () => {
       try {
         let raw: unknown = null;
-        let lastError: unknown = null;
-
-        for (const url of REMOTE_NOTIFICATIONS_URLS) {
-          const requestController = new AbortController();
-          const timeoutId = window.setTimeout(() => requestController.abort(), 6500);
-
-          try {
-            const response = await fetch(url, {
-              signal: requestController.signal,
-              cache: "no-store",
-            });
-
-            if (!response.ok) {
-              throw new Error(`Failed to load notifications: ${response.status}`);
-            }
-
-            const text = await response.text();
-            const sanitized = text.replace(/,\s*([}\]])/g, "$1");
-            raw = JSON.parse(sanitized) as unknown;
-            break;
-          } catch (e) {
-            lastError = e;
-          } finally {
-            window.clearTimeout(timeoutId);
+        try {
+          const response = await fetchFirstAvailableMirror(
+            buildLauncherNewsUrls("notifications.json"),
+            { signal: controller.signal },
+          );
+          const text = await response.text();
+          const sanitized = text.replace(/,\s*([}\]])/g, "$1");
+          raw = JSON.parse(sanitized) as unknown;
+        } catch (e) {
+          if (!controller.signal.aborted) {
+            console.warn("Remote notifications failed to load:", e);
           }
-        }
-
-        if (!raw) {
-          console.warn("Remote notifications failed to load:", lastError);
           return;
         }
 

@@ -1,6 +1,6 @@
 [package]
 name = "mc16launcher"
-version = "3.2.6"
+version = "3.2.7"
 description = "An optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings."
 authors = ["16steyy"]
 edition = "2021"
@@ -42,6 +42,11 @@ base64 = "0.22"
 discord-rich-presence = "1.1.0"
 image = "0.25"
 url = "2"
-tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
 open = "5"
+
+[target.'cfg(windows)'.dependencies]
+tauri-plugin-http = { version = "2", features = ["native-tls"] }
+
+[target.'cfg(not(windows))'.dependencies]
+tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
 

@@ -1212,6 +1212,7 @@
     "verificationStepLabel": "Schritt 2 von 2",
     "verificationTitle": "E-Mail bestätigen",
     "verificationHint": "Wir haben einen Code an {{email}} gesendet. Geben Sie ihn unten ein, um die Registrierung abzuschließen.",
+    "emailSpamHint": "Wenn die E-Mail nicht im Posteingang ist, prüfen Sie den Spam-Ordner.",
     "launcherNickname": "Spitzname des Launchers",
     "inGameNickname": "Spitzname im Spiel",
     "newNicknamePlaceholder": "Neuer Spitzname",

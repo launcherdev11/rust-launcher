@@ -1220,6 +1220,7 @@
     "verificationStepLabel": "Шаг 2 из 2",
     "verificationTitle": "Подтвердите email",
     "verificationHint": "Мы отправили код на {{email}}. Введите его ниже, чтобы завершить регистрацию.",
+    "emailSpamHint": "Если письма нет во «Входящих», проверьте папку «Спам».",
     "launcherNickname": "Ник лаунчера",
     "inGameNickname": "Игровой ник",
     "newNicknamePlaceholder": "Новый никнейм",

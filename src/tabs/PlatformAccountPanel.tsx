@@ -644,6 +644,9 @@ export function PlatformAccountPanel({
                 <p className="mt-2 text-sm leading-relaxed text-white/65">
                   {tt("platform.verificationHint", { email: authIdentifier.trim() })}
                 </p>
+                <p className="mt-1 text-xs text-white/45">
+                  {tt("platform.emailSpamHint")}
+                </p>
 
                 <div className="mx-auto mt-5 max-w-[280px]">
                   <label className="sr-only" htmlFor="signup-verification-code">
@@ -762,6 +765,11 @@ export function PlatformAccountPanel({
                     mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail")
                   }
                 />
+                {mode === "signup" && emailVerificationRequired ? (
+                  <span className="text-[11px] font-normal normal-case tracking-normal text-white/45">
+                    {tt("platform.emailSpamHint")}
+                  </span>
+                ) : null}
               </label>
 
               {mode === "signup" ? (
@@ -815,9 +823,16 @@ export function PlatformAccountPanel({
                   </span>
                 </label>
               ) : (
-                <p className="text-[11px] leading-relaxed text-white/45">
-                  <PrivacyInlineText language={language} messageKey="platform.privacyLoginNotice" />
-                </p>
+                <div className="flex flex-col gap-1">
+                  <p className="text-[11px] leading-relaxed text-white/45">
+                    <PrivacyInlineText language={language} messageKey="platform.privacyLoginNotice" />
+                  </p>
+                  {emailVerificationRequired ? (
+                    <p className="text-[11px] leading-relaxed text-white/45">
+                      {tt("platform.emailSpamHint")}
+                    </p>
+                  ) : null}
+                </div>
               )}
 
               <button

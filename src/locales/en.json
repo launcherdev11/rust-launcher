@@ -1220,6 +1220,7 @@
     "verificationStepLabel": "Step 2 of 2",
     "verificationTitle": "Confirm your email",
     "verificationHint": "We sent a code to {{email}}. Enter it below to finish registration.",
+    "emailSpamHint": "If you don't see the email in your inbox, check your spam folder.",
     "launcherNickname": "Launcher nickname",
     "inGameNickname": "In-game nickname",
     "newNicknamePlaceholder": "New nickname",

@@ -1212,6 +1212,7 @@
     "verificationStepLabel": "Paso 2 de 2",
     "verificationTitle": "Confirma tu correo",
     "verificationHint": "Enviamos un código a {{email}}. Introdúcelo abajo para terminar el registro.",
+    "emailSpamHint": "Si no ves el correo en la bandeja de entrada, revisa la carpeta de spam.",
     "launcherNickname": "Apodo del lanzador",
     "inGameNickname": "Apodo en el juego",
     "newNicknamePlaceholder": "Nuevo apodo",

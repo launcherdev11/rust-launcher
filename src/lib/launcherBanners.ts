@@ -1,4 +1,9 @@
 import { readDataCache, writeDataCache } from "./launcherDataCache";
+import {
+  buildLauncherNewsUrls,
+  fetchFirstAvailableMirror,
+  resolveLauncherNewsAssetUrl,
+} from "./remoteMirrors";
 
 export type LauncherBannerData = {
   type?: string;
@@ -14,15 +19,12 @@ type LauncherBannerResponse =
   | LauncherBannerData[]
   | { banners: LauncherBannerData[] };
 
-export const BANNER_BASE_URL =
-  "https://raw.githubusercontent.com/16steyy/16Launcher-News/main/";
+export { BANNER_BASE_URL } from "./remoteMirrors";
 
 const BANNER_CACHE_KEY = "play-banners";
 
 export function resolveBannerImageUrl(url: string): string {
-  if (!url) return url;
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${BANNER_BASE_URL}${url.replace(/^\.?\//, "")}`;
+  return resolveLauncherNewsAssetUrl(url);
 }
 
 export function normalizeBannerServerIp(raw: unknown): string {
@@ -98,51 +100,24 @@ function normalizeBanners(raw: LauncherBannerResponse): LauncherBannerData[] {
 export async function fetchLauncherBanners(
   signal?: AbortSignal,
 ): Promise<LauncherBannerData[]> {
-  const cacheBust = `?t=${Date.now()}`;
-  const urls = [
-    `https://raw.githubusercontent.com/16steyy/16Launcher-News/main/banner.json${cacheBust}`,
-    `https://cdn.jsdelivr.net/gh/16steyy/16Launcher-News@main/banner.json${cacheBust}`,
-  ];
-
-  let lastError: unknown = null;
-
-  for (const url of urls) {
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
-    try {
-      const response = await fetch(url, {
-        signal,
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to load banner: ${response.status}`);
-      }
-      const text = await response.text();
-      let parsed: LauncherBannerData[];
-      try {
-        parsed = normalizeBanners(parseBannerJson(text));
-      } catch (parseErr) {
-        const loose = text.replace(/"(\s*\r?\n\s*)"/g, '",$1"');
-        parsed = normalizeBanners(JSON.parse(loose) as LauncherBannerResponse);
-        if (!parsed.length) throw parseErr;
-      }
-      if (parsed.length > 0) {
-        writeDataCache(BANNER_CACHE_KEY, parsed);
-        return parsed;
-      }
-      throw new Error("Invalid banner format");
-    } catch (err) {
-      if (signal?.aborted) {
-        throw err instanceof DOMException
-          ? err
-          : new DOMException("Aborted", "AbortError");
-      }
-      lastError = err;
-    }
+  const response = await fetchFirstAvailableMirror(
+    buildLauncherNewsUrls("banner.json"),
+    { signal },
+  );
+  const text = await response.text();
+  let parsed: LauncherBannerData[];
+  try {
+    parsed = normalizeBanners(parseBannerJson(text));
+  } catch (parseErr) {
+    const loose = text.replace(/"(\s*\r?\n\s*)"/g, '",$1"');
+    parsed = normalizeBanners(JSON.parse(loose) as LauncherBannerResponse);
+    if (!parsed.length) throw parseErr;
   }
-
-  throw lastError ?? new Error("Failed to load banner from all sources");
+  if (!parsed.length) {
+    throw new Error("Invalid banner format");
+  }
+  writeDataCache(BANNER_CACHE_KEY, parsed);
+  return parsed;
 }
 
 export function createFallbackUpdatePopupBanner(): LauncherBannerData {
