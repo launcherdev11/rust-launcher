@@ -39,7 +39,6 @@ src-tauri/WixTools/
 .env.*
 !.env.example
 !**/.env.example
-!deploy/env.example
 *.pem
 *.key
 *.p12
