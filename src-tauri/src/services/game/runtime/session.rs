@@ -130,6 +130,26 @@ async fn xbl_authenticate(msa_token: &str) -> Result<(String, String), String> {
     Ok((xbl_body.Token, uhs))
 }
 
+pub(crate) async fn validate_mc_access_token(token: &str) -> bool {
+    let token = token.trim();
+    if token.is_empty() || token == "offline" || token == "0" {
+        return false;
+    }
+    let client = http_client(false);
+    match client
+        .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(token)
+        .send()
+        .await
+    {
+        Ok(resp) => resp.status().is_success(),
+        Err(e) => {
+            eprintln!("[MSAuth] validate_mc_access_token network error: {e}");
+            false
+        }
+    }
+}
+
 pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, String, String)>, String> {
     let profile = read_profile_from_disk().unwrap_or_default();
     let has_refresh = profile

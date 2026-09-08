@@ -578,7 +578,7 @@
     "changeVersion": {
       "button": "Profilversion ändern",
       "title": "Profilversion ändern",
-      "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Kompatible Inhalte von Modrinth und CurseForge werden automatisch aktualisiert.",
+      "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Kompatible Inhalte von Modrinth und CurseForge werden automatisch aktualisiert. Mods ohne Version für die neue Minecraft-Version werden deaktiviert und in einer Warnung angezeigt.",
       "currentVersion": "Aktuelle Version",
       "gameVersionLabel": "Neue Minecraft-Version",
       "loaderVersionLabel": "Loader-Version",
@@ -587,6 +587,9 @@
       "migrating": "Migration…",
       "success": "Profilversion geändert.",
       "successWithContentUpdates": "Profilversion geändert. Inhaltsdateien aktualisiert: {{count}}.",
+      "successWithIncompatible": "Profilversion geändert. Keine Version für neue Minecraft-Version (deaktiviert): {{mods}}{{more}}",
+      "successWithUpdatesAndIncompatible": "Profilversion geändert. Dateien aktualisiert: {{count}}. Keine Version für neue Minecraft-Version (deaktiviert): {{mods}}{{more}}",
+      "incompatibleMore": " und {{count}} weitere",
       "failed": "Profilversion konnte nicht geändert werden: {{msg}}",
       "sameVersion": "Wählen Sie eine andere Minecraft- oder Loader-Version.",
       "selectLoaderVersion": "Wählen Sie eine Loader-Version aus."

@@ -557,7 +557,7 @@
     "changeVersion": {
       "button": "Change profile version",
       "title": "Change profile version",
-      "description": "Mods, resource packs, shaders, and worlds stay in this profile and remain available after the version change. The selected Minecraft and loader versions will be installed. Compatible content from Modrinth and CurseForge will be updated automatically.",
+      "description": "Mods, resource packs, shaders, and worlds stay in this profile and remain available after the version change. The selected Minecraft and loader versions will be installed. Compatible content from Modrinth and CurseForge will be updated automatically. Mods without a release for the new Minecraft version will be disabled and listed in a warning.",
       "currentVersion": "Current version",
       "gameVersionLabel": "New Minecraft version",
       "loaderVersionLabel": "Loader version",
@@ -566,6 +566,9 @@
       "migrating": "Migrating…",
       "success": "Profile version changed.",
       "successWithContentUpdates": "Profile version changed. Content files updated: {{count}}.",
+      "successWithIncompatible": "Profile version changed. No release for the new Minecraft version (disabled): {{mods}}{{more}}",
+      "successWithUpdatesAndIncompatible": "Profile version changed. Files updated: {{count}}. No release for the new Minecraft version (disabled): {{mods}}{{more}}",
+      "incompatibleMore": " and {{count}} more",
       "failed": "Failed to change profile version: {{msg}}",
       "sameVersion": "Choose a different Minecraft or loader version.",
       "selectLoaderVersion": "Select a loader version."

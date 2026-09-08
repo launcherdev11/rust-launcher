@@ -77,6 +77,16 @@ pub struct ProfileContentUpdate {
     pub latest_sha1: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileIncompatibleContent {
+    pub filename: String,
+    pub enabled: bool,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyProfileContentUpdate {

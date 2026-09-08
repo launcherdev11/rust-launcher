@@ -254,6 +254,13 @@ type ProfileContentUpdate = {
   latestSha1?: string | null;
 };
 
+type ProfileIncompatibleContent = {
+  filename: string;
+  enabled: boolean;
+  title: string;
+  projectId?: string | null;
+};
+
 type FileNode = {
   path: string;
   name: string;
@@ -1980,7 +1987,7 @@ export function ModpackTab({
         gameVersion: migrateGameVersion,
         loaderVersion,
       });
-      const contentUpdatesApplied = await applyContentUpdatesAfterVersionChange(updated.id);
+      const contentResult = await applyContentUpdatesAfterVersionChange(updated.id);
       setProfiles((prev) => {
         const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
         onProfilesChange?.(next);
@@ -1989,11 +1996,41 @@ export function ModpackTab({
       onProfileSelectionChange?.(updated);
       await refreshItems(selectedProfile.id, contentTab);
       setIsChangeVersionOpen(false);
-      if (contentUpdatesApplied > 0) {
+      const incompatibleNames = contentResult.incompatible
+        .map((m) => m.title || m.filename)
+        .filter(Boolean);
+      if (contentResult.updated > 0 && incompatibleNames.length > 0) {
+        showNotification(
+          "warning",
+          tt("modpacks.changeVersion.successWithUpdatesAndIncompatible", {
+            count: contentResult.updated,
+            mods: incompatibleNames.slice(0, 8).join(", "),
+            more:
+              incompatibleNames.length > 8
+                ? tt("modpacks.changeVersion.incompatibleMore", {
+                    count: incompatibleNames.length - 8,
+                  })
+                : "",
+          }),
+        );
+      } else if (contentResult.updated > 0) {
         showNotification(
           "success",
           tt("modpacks.changeVersion.successWithContentUpdates", {
-            count: contentUpdatesApplied,
+            count: contentResult.updated,
+          }),
+        );
+      } else if (incompatibleNames.length > 0) {
+        showNotification(
+          "warning",
+          tt("modpacks.changeVersion.successWithIncompatible", {
+            mods: incompatibleNames.slice(0, 8).join(", "),
+            more:
+              incompatibleNames.length > 8
+                ? tt("modpacks.changeVersion.incompatibleMore", {
+                    count: incompatibleNames.length - 8,
+                  })
+                : "",
           }),
         );
       } else {
@@ -3401,7 +3438,9 @@ export function ModpackTab({
     }
   }
 
-  async function applyContentUpdatesAfterVersionChange(profileId: string): Promise<number> {
+  async function applyContentUpdatesAfterVersionChange(
+    profileId: string,
+  ): Promise<{ updated: number; incompatible: ProfileIncompatibleContent[] }> {
     const categories = ["mods", "resourcepacks", "shaderpacks"] as const;
     let total = 0;
     for (const category of categories) {
@@ -3428,7 +3467,35 @@ export function ModpackTab({
         console.warn(`Content update failed for ${category}:`, e);
       }
     }
-    return total;
+
+    const incompatible: ProfileIncompatibleContent[] = [];
+    try {
+      const mods = await invoke<ProfileIncompatibleContent[]>(
+        "check_profile_incompatible_content",
+        {
+          profileId,
+          category: "mods",
+        },
+      );
+      for (const mod of mods) {
+        incompatible.push(mod);
+        if (!mod.enabled) continue;
+        try {
+          await invoke("set_profile_item_enabled", {
+            id: profileId,
+            category: "mods",
+            filename: mod.filename,
+            enabled: false,
+          });
+        } catch (e) {
+          console.warn(`Failed to disable incompatible mod ${mod.filename}:`, e);
+        }
+      }
+    } catch (e) {
+      console.warn("Incompatible mods check failed:", e);
+    }
+
+    return { updated: total, incompatible };
   }
 
   async function handleCheckContentUpdates() {

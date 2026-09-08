@@ -41,7 +41,7 @@
 
 ## Quick Start
 
-1. **Download** the launcher from our [official website](https://16luncher.ru)
+1. **Download** the launcher from our [official website](https://16-launcher.ru)
 2. **Install** following the instructions for your operating system
 3. **Select** your preferred Minecraft version
 4. **Click Play** and enjoy!

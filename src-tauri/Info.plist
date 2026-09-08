@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A Minecraft mod (for example Simple Voice Chat) wants to access your microphone.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>A Minecraft mod wants to access your camera.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Minecraft uses the local network to find and connect to LAN servers.</string>
+</dict>
+</plist>

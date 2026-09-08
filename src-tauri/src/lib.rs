@@ -53,8 +53,8 @@ use services::curseforge::{
 };
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
-    download_modrinth_with_dependencies, resolve_modrinth_required_dependencies,
-    resolve_profile_item_metadata,
+    check_profile_incompatible_content, download_modrinth_with_dependencies,
+    resolve_modrinth_required_dependencies, resolve_profile_item_metadata,
 };
 use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
 use commands::{
@@ -237,6 +237,7 @@ pub fn run() {
             download_modrinth_with_dependencies,
             resolve_modrinth_required_dependencies,
             check_profile_content_updates,
+            check_profile_incompatible_content,
             apply_profile_content_updates,
             resolve_profile_item_metadata,
             download_modrinth_modpack_and_import,

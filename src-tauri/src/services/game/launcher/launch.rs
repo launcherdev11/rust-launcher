@@ -13,6 +13,7 @@ use crate::models::events::{
 };
 use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
+use crate::services::auth::microsoft::MS_CLIENT_ID;
 use crate::services::game::accounts::{get_profile, save_full_profile};
 use crate::services::game::arguments::{
     resolve_arguments, strip_legacy_server_args, strip_quick_play_game_args,
@@ -32,6 +33,7 @@ use crate::services::game::runtime::{
     build_java_command, ensure_forge_ignore_list_includes_vanilla_client_jar,
     ensure_forge_safe_opens, ensure_lwjgl_fallback_for_modern_versions, ensure_library_artifacts_present_for_launch,
     ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args,
+    validate_mc_access_token,
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
     resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version, resolve_natives_extract_dir,
@@ -603,13 +605,8 @@ pub async fn launch_game(
             .as_deref()
             .map(|s| !s.is_empty())
             .unwrap_or(false);
-        let has_cached_mc = profile
-            .mc_access_token
-            .as_deref()
-            .map(|s| !s.is_empty())
-            .unwrap_or(false);
-        let should_refresh_ms =
-            (has_ms_token || has_ms_refresh) && (is_friend_world_join || !has_cached_mc);
+        let should_refresh_ms = has_ms_token || has_ms_refresh;
+        let mut ms_refresh_error: Option<String> = None;
 
         if should_refresh_ms {
             match ensure_ms_minecraft_session().await {
@@ -636,18 +633,17 @@ pub async fn launch_game(
                 Ok(None) => {}
                 Err(e) => {
                     eprintln!("[Launch] ensure_ms_minecraft_session: {e}");
-                    if is_friend_world_join {
-                        write_launch_auth_dump(
-                            &game_dir,
-                            &version_id,
-                            &server_address,
-                            "microsoft",
-                            "msa",
-                            false,
-                            false,
-                            "friend_world_ms_refresh_failed_try_cache",
-                        );
-                    }
+                    ms_refresh_error = Some(e);
+                    write_launch_auth_dump(
+                        &game_dir,
+                        &version_id,
+                        &server_address,
+                        "microsoft",
+                        "msa",
+                        false,
+                        false,
+                        "ms_refresh_failed_try_validate_cache",
+                    );
                 }
             }
         }
@@ -659,23 +655,34 @@ pub async fn launch_game(
                 profile.mc_access_token.as_ref(),
             ) {
                 if !mc_access_token.is_empty() {
-                    apply_ms_session(
-                        &mut auth_name,
-                        &mut auth_uuid,
-                        &mut auth_token,
-                        &mut user_type,
-                        &mut auth_is_mojang,
-                        &mut auth_uuid_nodash,
-                        &mut legacy_session,
-                        mc_name.clone(),
-                        mc_uuid.clone(),
-                        mc_access_token.clone(),
-                    );
+                    let cache_ok = if ms_refresh_error.is_some() {
+                        validate_mc_access_token(mc_access_token).await
+                    } else if should_refresh_ms {
+                        false
+                    } else {
+                        true
+                    };
+                    if cache_ok {
+                        apply_ms_session(
+                            &mut auth_name,
+                            &mut auth_uuid,
+                            &mut auth_token,
+                            &mut user_type,
+                            &mut auth_is_mojang,
+                            &mut auth_uuid_nodash,
+                            &mut legacy_session,
+                            mc_name.clone(),
+                            mc_uuid.clone(),
+                            mc_access_token.clone(),
+                        );
+                    } else if ms_refresh_error.is_some() {
+                        eprintln!("[Launch] cached mc_access_token is invalid");
+                    }
                 }
             }
         }
 
-        if is_friend_world_join && !auth_is_mojang && should_refresh_ms {
+        if should_refresh_ms && !auth_is_mojang {
             write_launch_auth_dump(
                 &game_dir,
                 &version_id,
@@ -684,13 +691,19 @@ pub async fn launch_game(
                 "msa",
                 false,
                 false,
-                "blocked_friend_world_ms_refresh_failed",
+                if is_friend_world_join {
+                    "blocked_friend_world_ms_refresh_failed"
+                } else {
+                    "blocked_ms_session_unavailable"
+                },
             );
-            return Err(
-                "Не удалось обновить сессию Microsoft для входа в мир друга. \
+            let detail = ms_refresh_error
+                .as_deref()
+                .unwrap_or("сессия Microsoft недоступна");
+            return Err(format!(
+                "Не удалось обновить сессию Microsoft ({detail}). \
                  Войдите снова через Microsoft на вкладке Аккаунты."
-                    .to_string(),
-            );
+            ));
         }
     }
 
@@ -728,22 +741,23 @@ pub async fn launch_game(
                 authlib_injector_path = Some(path);
             }
             Err(e) => {
-                if is_friend_world_join {
-                    write_launch_auth_dump(
-                        &game_dir,
-                        &version_id,
-                        &server_address,
-                        auth_mode,
-                        &user_type,
-                        has_access_token,
-                        false,
-                        "blocked_friend_world_authlib_missing",
-                    );
-                    return Err(format!(
-                        "Для Ely при входе в мир друга нужен authlib-injector: {e}"
-                    ));
-                }
-                eprintln!("[ElyAuth] Не удалось подготовить authlib-injector: {e}");
+                write_launch_auth_dump(
+                    &game_dir,
+                    &version_id,
+                    &server_address,
+                    auth_mode,
+                    &user_type,
+                    has_access_token,
+                    false,
+                    if is_friend_world_join {
+                        "blocked_friend_world_authlib_missing"
+                    } else {
+                        "blocked_ely_authlib_missing"
+                    },
+                );
+                return Err(format!(
+                    "Для аккаунта Ely.by нужен authlib-injector: {e}"
+                ));
             }
         }
     }
@@ -831,7 +845,14 @@ pub async fn launch_game(
             .replace("${auth_session}", &legacy_session)
             .replace("${session}", &legacy_session)
             .replace("${sessionId}", &legacy_session)
-            .replace("${clientid}", ELY_CLIENT_ID)
+            .replace(
+                "${clientid}",
+                if auth_is_mojang {
+                    MS_CLIENT_ID
+                } else {
+                    ELY_CLIENT_ID
+                },
+            )
             .replace("${auth_xuid}", "")
             .replace("${user_type}", &user_type)
             .replace("${version_type}", "release")
