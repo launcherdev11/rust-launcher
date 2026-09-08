@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Search } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { InputClearButton } from "../components/ui";
 import { JavaSettingsTab } from "./JavaSettings";
 import { clearLauncherAvatarCache } from "../lib/avatar";
 import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
@@ -2000,8 +2001,13 @@ export function SettingsTab({
                 value={settingsSearch}
                 onChange={(e) => setSettingsSearch(e.target.value)}
                 placeholder={tt("settings.search.placeholder")}
-                className="w-full bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+                className="min-w-0 w-full bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
                 aria-label={tt("settings.search.placeholder")}
+              />
+              <InputClearButton
+                value={settingsSearch}
+                onClear={() => setSettingsSearch("")}
+                aria-label={tt("common.clear")}
               />
             </label>
           </div>
@@ -2397,31 +2403,41 @@ export function SettingsTab({
                         className="absolute left-0 z-30 mt-1 w-full rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
                       >
                         <div className="px-1 pb-1">
-                          <input
-                            ref={versionFilterInputRef}
-                            type="text"
-                            value={versionFilterQuery}
-                            onChange={(e) => setVersionFilterQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                setIsVersionFilterDropdownOpen(false);
-                                return;
-                              }
-                              if (e.key === "Enter") {
-                                const q = versionFilterQuery.trim().toLowerCase();
-                                const exact = q
-                                  ? versionFilterOptions.find((v) => v.id.toLowerCase() === q)
-                                  : null;
-                                const chosen = exact ?? versionFilterOptions[0] ?? null;
-                                if (chosen) {
-                                  setSelectedVersionFilterId(chosen.id);
+                          <div className="relative">
+                            <input
+                              ref={versionFilterInputRef}
+                              type="text"
+                              value={versionFilterQuery}
+                              onChange={(e) => setVersionFilterQuery(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
                                   setIsVersionFilterDropdownOpen(false);
+                                  return;
                                 }
-                              }
-                            }}
-                            placeholder={tt("play.version.searchPlaceholder")}
-                            className="h-8 w-full rounded-lg border border-white/15 bg-black/40 px-3 text-xs text-white/90 placeholder:text-white/35 outline-none focus:border-white/35"
-                          />
+                                if (e.key === "Enter") {
+                                  const q = versionFilterQuery.trim().toLowerCase();
+                                  const exact = q
+                                    ? versionFilterOptions.find((v) => v.id.toLowerCase() === q)
+                                    : null;
+                                  const chosen = exact ?? versionFilterOptions[0] ?? null;
+                                  if (chosen) {
+                                    setSelectedVersionFilterId(chosen.id);
+                                    setIsVersionFilterDropdownOpen(false);
+                                  }
+                                }
+                              }}
+                              placeholder={tt("play.version.searchPlaceholder")}
+                              className={`h-8 w-full rounded-lg border border-white/15 bg-black/40 px-3 text-xs text-white/90 placeholder:text-white/35 outline-none focus:border-white/35 ${
+                                versionFilterQuery ? "pr-8" : ""
+                              }`}
+                            />
+                            <InputClearButton
+                              value={versionFilterQuery}
+                              onClear={() => setVersionFilterQuery("")}
+                              className="absolute right-1 top-1/2 -translate-y-1/2"
+                              aria-label={tt("common.clear")}
+                            />
+                          </div>
                         </div>
                         <div ref={versionFilterListRef} className="max-h-[240px] overflow-y-auto px-1 pb-1">
                           <button
@@ -3008,31 +3024,41 @@ export function SettingsTab({
                               <span className="font-mono text-[11px] text-white/85">
                                 {settings?.background_accent_color ?? "#0b1530"}
                               </span>
-                              <input
-                                type="text"
-                                maxLength={7}
-                                value={accentInput}
-                                onChange={(e) => setAccentInput(e.target.value)}
-                                onBlur={(e) => {
-                                  const raw = e.target.value.trim();
-                                  if (!raw) {
-                                    const fallback = settings?.background_accent_color ?? "#0b1530";
-                                    setAccentInput(fallback);
-                                    return;
-                                  }
-                                  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-                                  const match = /^#[0-9a-fA-F]{6}$/.test(withHash);
-                                  if (!match) {
-                                    const fallback = settings?.background_accent_color ?? "#0b1530";
-                                    setAccentInput(fallback);
-                                    return;
-                                  }
-                                  const normalized = withHash.toLowerCase();
-                                  setAccentInput(normalized);
-                                  updateSettings({ background_accent_color: normalized });
-                                }}
-                                className="h-6 w-[7.25rem] rounded-lg border border-white/25 bg-black/60 px-2 text-[11px] font-mono text-white/85 outline-none focus:border-white/50"
-                              />
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  maxLength={7}
+                                  value={accentInput}
+                                  onChange={(e) => setAccentInput(e.target.value)}
+                                  onBlur={(e) => {
+                                    const raw = e.target.value.trim();
+                                    if (!raw) {
+                                      const fallback = settings?.background_accent_color ?? "#0b1530";
+                                      setAccentInput(fallback);
+                                      return;
+                                    }
+                                    const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+                                    const match = /^#[0-9a-fA-F]{6}$/.test(withHash);
+                                    if (!match) {
+                                      const fallback = settings?.background_accent_color ?? "#0b1530";
+                                      setAccentInput(fallback);
+                                      return;
+                                    }
+                                    const normalized = withHash.toLowerCase();
+                                    setAccentInput(normalized);
+                                    updateSettings({ background_accent_color: normalized });
+                                  }}
+                                  className={`h-6 w-[7.25rem] rounded-lg border border-white/25 bg-black/60 px-2 text-[11px] font-mono text-white/85 outline-none focus:border-white/50 ${
+                                    accentInput ? "pr-7" : ""
+                                  }`}
+                                />
+                                <InputClearButton
+                                  value={accentInput}
+                                  onClear={() => setAccentInput("")}
+                                  className="absolute right-0.5 top-1/2 h-5 w-5 -translate-y-1/2"
+                                  aria-label={tt("common.clear")}
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>

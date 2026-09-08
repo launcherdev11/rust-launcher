@@ -28,6 +28,7 @@ import {
   type Language,
 } from "../i18n";
 import { DeleteIcon } from "../components/delete_icon";
+import { InputClearButton } from "../components/ui";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
 import { resolveIconSrc } from "../lib/profile-icon";
 import {
@@ -336,7 +337,11 @@ function filterExportFileTree(nodes: FileNode[], query: string): FileNode[] {
   return nodes.map(filterNode).filter((n): n is FileNode => n != null);
 }
 
-type PlaytimeUpdatedPayload = { profile_id: string; delta_seconds: number };
+type PlaytimeUpdatedPayload = {
+  profile_id: string;
+  delta_seconds: number;
+  total_seconds?: number;
+};
 type LastPlayedUpdatedPayload = { profile_id: string; last_played_at: number };
 
 const loaderLabels: Record<LoaderId, string> = {
@@ -586,6 +591,8 @@ export function ModpackTab({
   >({});
   const [loadingProfiles, setLoadingProfiles] = useState(() => !(initialProfiles && initialProfiles.length > 0));
   const profilesLoadedRef = useRef(false);
+  const onProfilesChangeRef = useRef(onProfilesChange);
+  onProfilesChangeRef.current = onProfilesChange;
   const [search, setSearch] = useState("");
   const [createName, setCreateName] = useState("");
   const createNameUserEdited = useRef(false);
@@ -2377,18 +2384,23 @@ export function ModpackTab({
     const unlistenPlaytime = listen<PlaytimeUpdatedPayload>(
       "playtime-updated",
       (event) => {
-        const { profile_id } = event.payload;
+        const { profile_id, total_seconds } = event.payload;
         void (async () => {
           try {
-            const seconds = await invoke<number>(
-              "get_profile_play_time_seconds",
-              { profile_id },
-            );
-            setProfiles((prev) =>
-              prev.map((p) =>
+            const seconds =
+              typeof total_seconds === "number" && Number.isFinite(total_seconds)
+                ? Math.max(0, Math.floor(total_seconds))
+                : await invoke<number>("get_profile_play_time_seconds", {
+                    profile_id,
+                  });
+            setProfiles((prev) => {
+              const next = prev.map((p) =>
                 p.id === profile_id ? { ...p, play_time_seconds: seconds } : p,
-              ),
-            );
+              );
+              writeDataCache("profiles", next);
+              onProfilesChangeRef.current?.(next);
+              return next;
+            });
           } catch (e) {
             console.error(e);
           }
@@ -2399,11 +2411,14 @@ export function ModpackTab({
       "last-played-updated",
       (event) => {
         const { profile_id, last_played_at } = event.payload;
-        setProfiles((prev) =>
-          prev.map((p) =>
+        setProfiles((prev) => {
+          const next = prev.map((p) =>
             p.id === profile_id ? { ...p, last_played_at } : p,
-          ),
-        );
+          );
+          writeDataCache("profiles", next);
+          onProfilesChangeRef.current?.(next);
+          return next;
+        });
       },
     );
     return () => {
@@ -3955,7 +3970,12 @@ export function ModpackTab({
               placeholder={tt("modpacks.list.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
+              className="min-w-0 w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
+            />
+            <InputClearButton
+              value={search}
+              onClear={() => setSearch("")}
+              aria-label={tt("common.clear")}
             />
           </div>
           <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto">
@@ -4279,19 +4299,32 @@ export function ModpackTab({
               <label className="mb-1 block text-xs font-medium text-white/70">
                 {tt("modpacks.create.nameLabel")}
               </label>
-              <input
-                type="text"
-                value={createName}
-                onChange={(e) => {
-                  createNameUserEdited.current = true;
-                  setCreateName(e.target.value.slice(0, 50));
-                }}
-                maxLength={50}
-                placeholder={
-                  tt("modpacks.create.namePlaceholder")
-                }
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={createName}
+                  onChange={(e) => {
+                    createNameUserEdited.current = true;
+                    setCreateName(e.target.value.slice(0, 50));
+                  }}
+                  maxLength={50}
+                  placeholder={
+                    tt("modpacks.create.namePlaceholder")
+                  }
+                  className={`w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none ${
+                    createName ? "pr-9" : ""
+                  }`}
+                />
+                <InputClearButton
+                  value={createName}
+                  onClear={() => {
+                    createNameUserEdited.current = true;
+                    setCreateName("");
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  aria-label={tt("common.clear")}
+                />
+              </div>
               <span className="mt-0.5 block text-[10px] text-white/50">
                 {createName.length}/50
               </span>
@@ -4706,15 +4739,25 @@ export function ModpackTab({
                 {tt("modpacks.externalImport.path")}
               </label>
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={externalImportPath}
-                  onChange={(e) => setExternalImportPath(e.target.value)}
-                  placeholder={
-                    tt("modpacks.externalImport.pathPlaceholder")
-                  }
-                  className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none"
-                />
+                <div className="relative min-w-0 flex-1">
+                  <input
+                    type="text"
+                    value={externalImportPath}
+                    onChange={(e) => setExternalImportPath(e.target.value)}
+                    placeholder={
+                      tt("modpacks.externalImport.pathPlaceholder")
+                    }
+                    className={`min-w-0 w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none ${
+                      externalImportPath ? "pr-9" : ""
+                    }`}
+                  />
+                  <InputClearButton
+                    value={externalImportPath}
+                    onClear={() => setExternalImportPath("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                    aria-label={tt("common.clear")}
+                  />
+                </div>
                 <button
                   type="button"
                   disabled={externalImportScanBusy || externalImportBusy}
@@ -4743,13 +4786,23 @@ export function ModpackTab({
           {externalImportInstances.length > 0 && (
             <div className="mt-4 flex flex-col gap-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <input
-                  type="text"
-                  value={externalImportSearch}
-                  onChange={(e) => setExternalImportSearch(e.target.value)}
-                  placeholder={tt("common.search")}
-                  className="w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none sm:w-72"
-                />
+                <div className="relative w-full sm:w-72">
+                  <input
+                    type="text"
+                    value={externalImportSearch}
+                    onChange={(e) => setExternalImportSearch(e.target.value)}
+                    placeholder={tt("common.search")}
+                    className={`w-full rounded-2xl border border-white/15 bg-black/60 px-3 py-2 text-xs text-white/90 placeholder:text-white/35 focus:outline-none ${
+                      externalImportSearch ? "pr-9" : ""
+                    }`}
+                  />
+                  <InputClearButton
+                    value={externalImportSearch}
+                    onClear={() => setExternalImportSearch("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                    aria-label={tt("common.clear")}
+                  />
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-semibold text-white/60">
                     {tt("modpacks.externalImport.sort")}
@@ -4903,20 +4956,30 @@ export function ModpackTab({
                 profile={selectedProfile}
                 refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
               />
-              <input
-                autoFocus
-                type="text"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    void handleRenameConfirm();
-                  } else if (e.key === "Escape") {
-                    setIsRenaming(false);
-                  }
-                }}
-                className="min-w-0 flex-1 rounded-xl border border-white/30 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none"
-              />
+              <div className="relative min-w-0 flex-1">
+                <input
+                  autoFocus
+                  type="text"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void handleRenameConfirm();
+                    } else if (e.key === "Escape") {
+                      setIsRenaming(false);
+                    }
+                  }}
+                  className={`min-w-0 w-full rounded-xl border border-white/30 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none ${
+                    renameValue ? "pr-9" : ""
+                  }`}
+                />
+                <InputClearButton
+                  value={renameValue}
+                  onClear={() => setRenameValue("")}
+                  className="absolute right-1 top-1/2 -translate-y-1/2"
+                  aria-label={tt("common.clear")}
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => void handleRenameConfirm()}
@@ -5087,7 +5150,12 @@ export function ModpackTab({
                 placeholder={tt("modpacks.manage.searchFiles")}
                 value={itemsSearch}
                 onChange={(e) => setItemsSearch(e.target.value)}
-                className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
+                className="min-w-0 w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
+              />
+              <InputClearButton
+                value={itemsSearch}
+                onClear={() => setItemsSearch("")}
+                aria-label={tt("common.clear")}
               />
             </div>
             <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto lg:flex-nowrap">
@@ -5849,14 +5917,24 @@ export function ModpackTab({
               <span className="mb-1.5 block text-xs font-medium text-white/60">
                 {tt("modpacks.groups.nameLabel")}
               </span>
-              <input
-                type="text"
-                value={groupFormName}
-                onChange={(e) => setGroupFormName(e.target.value)}
-                placeholder={tt("modpacks.groups.namePlaceholder")}
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-white/30"
-                autoFocus
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={groupFormName}
+                  onChange={(e) => setGroupFormName(e.target.value)}
+                  placeholder={tt("modpacks.groups.namePlaceholder")}
+                  className={`w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-1 focus:ring-white/30 ${
+                    groupFormName ? "pr-9" : ""
+                  }`}
+                  autoFocus
+                />
+                <InputClearButton
+                  value={groupFormName}
+                  onClear={() => setGroupFormName("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  aria-label={tt("common.clear")}
+                />
+              </div>
             </label>
 
             <div className="mb-3">
@@ -6852,13 +6930,24 @@ export function ModpackTab({
                 <div className="mt-4 text-xs font-semibold text-white/80">
                   {tt("modpacks.exportModal.ignorePatterns")}
                 </div>
-                <textarea
-                  value={ignorePatternsText}
-                  disabled={exportBusy}
-                  onChange={(e) => setIgnorePatternsText(e.target.value)}
-                  placeholder={"*.log\ncache/\nsaves/"}
-                  className="custom-scrollbar mt-2 h-28 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none"
-                />
+                <div className="relative mt-2">
+                  <textarea
+                    value={ignorePatternsText}
+                    disabled={exportBusy}
+                    onChange={(e) => setIgnorePatternsText(e.target.value)}
+                    placeholder={"*.log\ncache/\nsaves/"}
+                    className={`custom-scrollbar h-28 w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/35 focus:border-white/35 focus:outline-none ${
+                      ignorePatternsText ? "pr-9" : ""
+                    }`}
+                  />
+                  <InputClearButton
+                    value={ignorePatternsText}
+                    onClear={() => setIgnorePatternsText("")}
+                    disabled={exportBusy}
+                    className="absolute right-2 top-2"
+                    aria-label={tt("common.clear")}
+                  />
+                </div>
                 <div className="mt-2 text-[11px] text-white/55">
                   {tt("modpacks.exportModal.ignoreHint")}
                 </div>
@@ -6916,6 +7005,12 @@ export function ModpackTab({
                     onChange={(e) => setExportSearchQuery(e.target.value)}
                     placeholder={tt("modpacks.exportModal.searchPlaceholder")}
                     className="min-w-0 flex-1 bg-transparent text-xs text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-60"
+                  />
+                  <InputClearButton
+                    value={exportSearchQuery}
+                    onClear={() => setExportSearchQuery("")}
+                    disabled={exportBusy || exportTreeLoading}
+                    aria-label={tt("common.clear")}
                   />
                 </div>
 

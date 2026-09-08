@@ -45,6 +45,7 @@ import {
   ActionButton,
   AuthGate,
   EmptyState,
+  InputClearButton,
   Modal,
   Panel,
   RoomCardSkeleton,
@@ -1241,14 +1242,25 @@ export function RoomsTab({
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                       <label className="flex flex-1 flex-col gap-1">
                         <span className="text-[11px] font-semibold text-white/45">{tt("rooms.lanPort")}</span>
-                        <input
-                          type="text"
-                          value={lanPortInput}
-                          onChange={(e) => setLanPortInput(e.target.value)}
-                          className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-                          placeholder="25565"
-                          disabled={tunnelBusy}
-                        />
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={lanPortInput}
+                            onChange={(e) => setLanPortInput(e.target.value)}
+                            className={`rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-sm text-white outline-none focus:border-emerald-400/30 ${
+                              lanPortInput ? "pr-9" : ""
+                            }`}
+                            placeholder="25565"
+                            disabled={tunnelBusy}
+                          />
+                          <InputClearButton
+                            value={lanPortInput}
+                            onClear={() => setLanPortInput("")}
+                            disabled={tunnelBusy}
+                            className="absolute right-1 top-1/2 -translate-y-1/2"
+                            aria-label={tt("common.clear")}
+                          />
+                        </div>
                       </label>
                       <button
                         type="button"

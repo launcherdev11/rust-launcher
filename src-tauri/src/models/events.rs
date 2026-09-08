@@ -34,6 +34,7 @@ pub struct GameConsoleLinePayload {
 pub struct PlaytimeUpdatedPayload {
     pub profile_id: String,
     pub delta_seconds: u64,
+    pub total_seconds: u64,
 }
 
 #[derive(Debug, Serialize, Clone)]

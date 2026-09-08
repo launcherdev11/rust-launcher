@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AccountAvatar } from "../components/account_avatar";
 import { AccountSkinPreview } from "../components/account_skin_preview";
 import { DeleteIcon } from "../components/delete_icon";
+import { InputClearButton } from "../components/ui";
 import { useT, type Language } from "../i18n";
 import type { ProfileAvatarInput } from "../lib/avatar";
 import { PlatformAccountPanel } from "./PlatformAccountPanel";
@@ -279,30 +280,43 @@ export function AccountsTab({
                     {tt("platform.inGameNickname")}
                   </p>
                   {headerNicknameEditing && !isAuthorized ? (
-                    <input
-                      type="text"
-                      autoFocus
-                      value={nicknameDraft}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setNicknameDraft(v);
-                        setProfile((p) => ({ ...p, nickname: v }));
-                      }}
-                      onFocus={() => {
-                        nicknameInputFocusedRef.current = true;
-                      }}
-                      onBlur={(e) => void handleHeaderNicknameBlur(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.currentTarget.blur();
-                        if (e.key === "Escape") {
-                          setNicknameDraft(offlineNickname);
-                          setProfile((p) => ({ ...p, nickname: offlineNickname }));
-                          setHeaderNicknameEditing(false);
-                        }
-                      }}
-                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none"
-                      placeholder={tt("app.accounts.nicknamePlaceholder")}
-                    />
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={nicknameDraft}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setNicknameDraft(v);
+                          setProfile((p) => ({ ...p, nickname: v }));
+                        }}
+                        onFocus={() => {
+                          nicknameInputFocusedRef.current = true;
+                        }}
+                        onBlur={(e) => void handleHeaderNicknameBlur(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                          if (e.key === "Escape") {
+                            setNicknameDraft(offlineNickname);
+                            setProfile((p) => ({ ...p, nickname: offlineNickname }));
+                            setHeaderNicknameEditing(false);
+                          }
+                        }}
+                        className={`min-w-0 w-full bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none ${
+                          nicknameDraft ? "pr-7" : ""
+                        }`}
+                        placeholder={tt("app.accounts.nicknamePlaceholder")}
+                      />
+                      <InputClearButton
+                        value={nicknameDraft}
+                        onClear={() => {
+                          setNicknameDraft("");
+                          setProfile((p) => ({ ...p, nickname: "" }));
+                        }}
+                        className="absolute right-0 top-1/2 -translate-y-1/2"
+                        aria-label={tt("common.clear")}
+                      />
+                    </div>
                   ) : (
                     <p className="truncate text-sm font-semibold text-white/95">{gameNicknameDisplay}</p>
                   )}

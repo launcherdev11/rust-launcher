@@ -1,8 +1,8 @@
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::sync::atomic::Ordering;
-use std::time::SystemTime;
+use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::app::paths::{game_root_dir, launcher_data_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
@@ -24,8 +24,9 @@ use crate::services::game::core::{
 };
 use crate::services::game::console::log_to_console;
 use crate::services::game::profiles::{
-    add_play_time_seconds_to_profile, load_selected_instance_settings, read_selected_profile_id,
-    record_profile_last_played, selected_instance_dir,
+    finish_playtime_session, flush_active_playtime, load_selected_instance_settings,
+    read_selected_profile_id, record_profile_last_played, selected_instance_dir,
+    start_playtime_session,
 };
 use crate::services::game::runtime::{
     build_java_command, ensure_forge_ignore_list_includes_vanilla_client_jar,
@@ -34,11 +35,13 @@ use crate::services::game::runtime::{
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
     resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version, resolve_natives_extract_dir,
-    forge_java_runtime_for_mc_version,
+    forge_java_runtime_for_mc_version, uses_natives_subdirectories,
 };
 use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
 use crate::services::game::settings as settings_service;
-use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID};
+use crate::services::game::state::{
+    BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID, REOPEN_LAUNCHER_ON_GAME_EXIT,
+};
 use crate::services::game::version_types::*;
 use crate::services::game::versions::get_mojang_version_url;
 
@@ -318,16 +321,24 @@ pub async fn launch_game(
     let mut seen_paths = std::collections::HashSet::<String>::new();
     let mut ga_to_index = std::collections::HashMap::<String, usize>::new();
     let mut ga_to_version = std::collections::HashMap::<String, String>::new();
+    let classpath_includes_natives = uses_natives_subdirectories(&effective_jar_version);
     for lib in &detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
         if let Some(ref a) = lib.downloads.artifact {
-            if is_probably_native_jar_path(&a.path) {
+            let is_native_jar = is_probably_native_jar_path(&a.path);
+            if is_native_jar && !classpath_includes_natives {
                 continue;
             }
             let path = libs_root.join(&a.path);
             let key = path.to_str().unwrap_or("").replace('\\', "/");
+            if is_native_jar || lib.name.matches(':').count() >= 3 {
+                if seen_paths.insert(key) {
+                    classpath.push(path);
+                }
+                continue;
+            }
             let ga_key = {
                 let mut parts = lib.name.split(':');
                 match (parts.next(), parts.next()) {
@@ -852,9 +863,17 @@ pub async fn launch_game(
             ]
         } else if is_fabric {
             let game_jar = jar_path.to_str().unwrap_or("").replace('\\', "/");
+            let fabric_library_path = if uses_natives_subdirectories(&effective_jar_version) {
+                natives_dir
+                    .join("java")
+                    .to_string_lossy()
+                    .into_owned()
+            } else {
+                natives_str.to_string()
+            };
             let mut base = vec![
                 format!("-Dfabric.gameJarPath={game_jar}"),
-                "-Djava.library.path=".to_string() + natives_str,
+                format!("-Djava.library.path={fabric_library_path}"),
                 "-cp".to_string(),
                 classpath_str.clone(),
             ];
@@ -1162,8 +1181,6 @@ pub async fn launch_game(
     crate::services::game::runtime::apply_linux_display_env(&mut cmd);
     hide_console(&mut cmd);
 
-    let play_start_time = SystemTime::now();
-
     let mut child = cmd.spawn().map_err(|e| {
 
         if e.kind() == ErrorKind::PermissionDenied {
@@ -1236,14 +1253,38 @@ pub async fn launch_game(
         });
     }
 
-    let profile_id_for_playtime = playtime_profile_id;
-    let started_at = play_start_time;
+    if let Some(ref profile_id) = playtime_profile_id {
+        start_playtime_session(profile_id);
+    }
+
     let app_clone_for_playtime = app.clone();
     std::thread::spawn(move || {
-        let exit_code = child
-            .wait()
-            .ok()
-            .and_then(|status| status.code());
+        const PLAYTIME_FLUSH_INTERVAL: Duration = Duration::from_secs(30);
+        let mut last_flush_at = Instant::now();
+
+        let exit_code = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status.code(),
+                Ok(None) => {
+                    if last_flush_at.elapsed() >= PLAYTIME_FLUSH_INTERVAL {
+                        if let Some((profile_id, delta_seconds, total_seconds)) =
+                            flush_active_playtime()
+                        {
+                            let payload = PlaytimeUpdatedPayload {
+                                profile_id,
+                                delta_seconds,
+                                total_seconds,
+                            };
+                            let _ = app_clone_for_playtime.emit(EVENT_PLAYTIME_UPDATED, payload);
+                        }
+                        last_flush_at = Instant::now();
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+                Err(_) => break None,
+            }
+        };
+
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
 
         let _ = app_clone_for_playtime.emit(
@@ -1251,28 +1292,28 @@ pub async fn launch_game(
             GameProcessExitedPayload { exit_code },
         );
 
-        if let Some(profile_id) = profile_id_for_playtime {
-            let delta_secs = started_at
-                .elapsed()
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            if delta_secs > 0 {
-                if add_play_time_seconds_to_profile(&profile_id, delta_secs).is_ok() {
-                    let payload = PlaytimeUpdatedPayload {
-                        profile_id,
-                        delta_seconds: delta_secs,
-                    };
-                    let _ = app_clone_for_playtime.emit(
-                        EVENT_PLAYTIME_UPDATED,
-                        payload,
-                    );
-                }
+        if let Some((profile_id, delta_seconds, total_seconds)) = finish_playtime_session() {
+            let payload = PlaytimeUpdatedPayload {
+                profile_id,
+                delta_seconds,
+                total_seconds,
+            };
+            let _ = app_clone_for_playtime.emit(EVENT_PLAYTIME_UPDATED, payload);
+        }
+
+        if REOPEN_LAUNCHER_ON_GAME_EXIT.swap(false, Ordering::SeqCst) {
+            if let Some(window) = app_clone_for_playtime.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
             }
         }
     });
 
     if settings.close_launcher_on_game_start && join_address.is_none() {
-        app.exit(0);
+        REOPEN_LAUNCHER_ON_GAME_EXIT.store(true, Ordering::SeqCst);
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
     }
 
     Ok(())

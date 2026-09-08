@@ -1427,8 +1427,6 @@ function App() {
   const handleSidebarTabPointerDown = useCallback(
     (tab: SplittableTabId, e: ReactPointerEvent<HTMLButtonElement>) => {
       if (!canUseSplitView || e.button !== 0) return;
-      // Don't preventDefault on pointerdown — on Linux/WebKit that blocks click.
-      // Drag activation still works via move threshold below.
       cleanupSidebarTabDragListeners();
 
       const pointerId = e.pointerId;
@@ -2218,8 +2216,35 @@ function App() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    void listen<{ profile_id: string; delta_seconds: number }>("playtime-updated", (event) => {
+    void listen<{
+      profile_id: string;
+      delta_seconds: number;
+      total_seconds?: number;
+    }>("playtime-updated", (event) => {
+      const profileId = event.payload?.profile_id;
       const delta = Number(event.payload?.delta_seconds ?? 0);
+      const totalRaw = event.payload?.total_seconds;
+      const total =
+        totalRaw != null && Number.isFinite(Number(totalRaw))
+          ? Math.max(0, Math.floor(Number(totalRaw)))
+          : null;
+      if (!profileId) return;
+
+      setKnownProfiles((prev) => {
+        const next = prev.map((p) => {
+          if (p.id !== profileId) return p;
+          const nextSeconds =
+            total != null
+              ? total
+              : Number.isFinite(delta) && delta > 0
+                ? (p.play_time_seconds ?? 0) + Math.floor(delta)
+                : p.play_time_seconds;
+          return { ...p, play_time_seconds: nextSeconds };
+        });
+        writeDataCache("profiles", next);
+        return next;
+      });
+
       if (!Number.isFinite(delta) || delta <= 0) return;
       if (!getStoredAccessToken()) return;
       void reportStats({ playtime_seconds_delta: Math.floor(delta) }).catch(() => {});

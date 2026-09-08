@@ -400,19 +400,21 @@ pub fn load_selected_instance_settings() -> Result<Option<(String, InstanceSetti
     Ok(Some((id, settings)))
 }
 
-pub fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Result<(), String> {
+pub fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Result<u64, String> {
+    if delta_secs == 0 {
+        return get_profile_play_time_seconds_inner(profile_id);
+    }
+
     let cfg_path = instance_config_path(profile_id)?;
     if !cfg_path.exists() {
-        return Ok(());
+        return Err(format!("config.json не найден для профиля {profile_id}"));
     }
 
     let text = std::fs::read_to_string(&cfg_path)
         .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
 
-    let mut cfg: InstanceConfig = match serde_json::from_str(&text) {
-        Ok(c) => c,
-        Err(_) => return Ok(()),
-    };
+    let mut cfg: InstanceConfig = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
 
     cfg.play_time_seconds = cfg.play_time_seconds.saturating_add(delta_secs);
 
@@ -422,7 +424,66 @@ pub fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Re
     std::fs::write(&cfg_path, new_text)
         .map_err(|e| format!("Ошибка записи config.json для playtime: {e}"))?;
 
-    Ok(())
+    Ok(cfg.play_time_seconds)
+}
+
+struct ActivePlaytimeSession {
+    profile_id: String,
+    started: std::time::Instant,
+    flushed_secs: u64,
+}
+
+static ACTIVE_PLAYTIME: std::sync::Mutex<Option<ActivePlaytimeSession>> =
+    std::sync::Mutex::new(None);
+
+pub fn start_playtime_session(profile_id: &str) {
+    if let Ok(mut guard) = ACTIVE_PLAYTIME.lock() {
+        *guard = Some(ActivePlaytimeSession {
+            profile_id: profile_id.to_string(),
+            started: std::time::Instant::now(),
+            flushed_secs: 0,
+        });
+    }
+}
+
+pub fn flush_active_playtime() -> Option<(String, u64, u64)> {
+    let mut guard = ACTIVE_PLAYTIME.lock().ok()?;
+    let session = guard.as_mut()?;
+    let elapsed = session.started.elapsed().as_secs();
+    if elapsed <= session.flushed_secs {
+        return None;
+    }
+    let delta = elapsed - session.flushed_secs;
+    match add_play_time_seconds_to_profile(&session.profile_id, delta) {
+        Ok(total) => {
+            session.flushed_secs = elapsed;
+            Some((session.profile_id.clone(), delta, total))
+        }
+        Err(e) => {
+            eprintln!("[Playtime] flush failed: {e}");
+            None
+        }
+    }
+}
+
+pub fn finish_playtime_session() -> Option<(String, u64, u64)> {
+    let result = flush_active_playtime();
+    if let Ok(mut guard) = ACTIVE_PLAYTIME.lock() {
+        *guard = None;
+    }
+    result
+}
+
+fn get_profile_play_time_seconds_inner(profile_id: &str) -> Result<u64, String> {
+    let cfg_path = instance_config_path(profile_id)?;
+    if !cfg_path.exists() {
+        return Ok(0);
+    }
+    let text = std::fs::read_to_string(&cfg_path)
+        .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
+    let cfg: InstanceConfig = serde_json::from_str(&text)
+        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
+    Ok(cfg.play_time_seconds)
 }
 
 pub fn record_profile_last_played(profile_id: &str) -> Result<u64, String> {
@@ -1249,15 +1310,7 @@ pub fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
 
 #[command]
 pub fn get_profile_play_time_seconds(profile_id: String) -> Result<u64, String> {
-    let cfg_path = instance_config_path(&profile_id)?;
-    if !cfg_path.exists() {
-        return Ok(0);
-    }
-    let text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
-    let cfg: InstanceConfig = serde_json::from_str(&text)
-        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
-    Ok(cfg.play_time_seconds)
+    get_profile_play_time_seconds_inner(&profile_id)
 }
 
 #[command]

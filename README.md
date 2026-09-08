@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://16-launcher.ru"><img src="public/launcher-assets/readme.png" alt="16Launcher"></a>
+  <a href="https://16-launcher.ru"><img src="public/launcher-assets/readme.png" alt="1м "></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
   <em>Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.</em>

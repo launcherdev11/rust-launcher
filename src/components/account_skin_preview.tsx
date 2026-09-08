@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { IdleAnimation, SkinViewer } from "skinview3d";
+import { InputClearButton } from "./ui";
 import {
   DEFAULT_SKIN_URL,
   applyMcSkinByUsername,
@@ -573,20 +574,33 @@ export function AccountSkinPreview({
                   void handleApplySkinByUsername();
                 }}
               >
-                <input
-                  type="text"
-                  autoFocus
-                  value={skinUsernameDraft}
-                  onChange={(event) => {
-                    setSkinUsernameDraft(event.target.value);
-                    if (skinLookupError) setSkinLookupError(null);
-                  }}
-                  placeholder={skinByUsernamePlaceholder}
-                  disabled={skinLookupLoading}
-                  spellCheck={false}
-                  autoComplete="off"
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/35 px-2.5 py-1.5 text-xs text-white/90 outline-none transition placeholder:text-white/30 focus:border-emerald-400/35 disabled:opacity-60"
-                />
+                <div className="relative min-w-0 flex-1">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={skinUsernameDraft}
+                    onChange={(event) => {
+                      setSkinUsernameDraft(event.target.value);
+                      if (skinLookupError) setSkinLookupError(null);
+                    }}
+                    placeholder={skinByUsernamePlaceholder}
+                    disabled={skinLookupLoading}
+                    spellCheck={false}
+                    autoComplete="off"
+                    className={`min-w-0 w-full rounded-lg border border-white/10 bg-black/35 px-2.5 py-1.5 text-xs text-white/90 outline-none transition placeholder:text-white/30 focus:border-emerald-400/35 disabled:opacity-60 ${
+                      skinUsernameDraft ? "pr-8" : ""
+                    }`}
+                  />
+                  <InputClearButton
+                    value={skinUsernameDraft}
+                    onClear={() => {
+                      setSkinUsernameDraft("");
+                      if (skinLookupError) setSkinLookupError(null);
+                    }}
+                    disabled={skinLookupLoading}
+                    className="absolute right-1 top-1/2 -translate-y-1/2"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={skinLookupLoading || !skinUsernameDraft.trim()}

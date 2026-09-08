@@ -11,4 +11,5 @@ export {
   Skeleton,
 } from "./Skeleton";
 export { Spinner } from "./Spinner";
+export { InputClearButton, clearInputValue } from "./InputClearButton";
 export { TextField } from "./TextField";

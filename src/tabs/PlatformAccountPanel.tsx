@@ -18,8 +18,9 @@ import {
   type PlatformUser,
 } from "../api/auth";
 import { ApiError, getStoredAccessToken } from "../api/client";
-import { useT, type Language } from "../i18n";
+import { InputClearButton } from "../components/ui";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
+import { useT, type Language } from "../i18n";
 import { PRIVACY_POLICY_URL } from "../lib/legal";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -549,19 +550,29 @@ export function PlatformAccountPanel({
           <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
             {tt("platform.accountManagement")}
           </p>
-          <input
-            type="text"
-            value={nicknameDraft}
-            onChange={(e) => setNicknameDraft(e.target.value)}
-            onFocus={() => {
-              nicknameDraftFocusedRef.current = true;
-            }}
-            onBlur={() => {
-              nicknameDraftFocusedRef.current = false;
-            }}
-            className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
-            placeholder={tt("platform.newNicknamePlaceholder")}
-          />
+          <div className="relative mt-2">
+            <input
+              type="text"
+              value={nicknameDraft}
+              onChange={(e) => setNicknameDraft(e.target.value)}
+              onFocus={() => {
+                nicknameDraftFocusedRef.current = true;
+              }}
+              onBlur={() => {
+                nicknameDraftFocusedRef.current = false;
+              }}
+              className={`h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30 ${
+                nicknameDraft ? "pr-9" : ""
+              }`}
+              placeholder={tt("platform.newNicknamePlaceholder")}
+            />
+            <InputClearButton
+              value={nicknameDraft}
+              onClear={() => setNicknameDraft("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2"
+              aria-label={tt("common.clear")}
+            />
+          </div>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
@@ -596,13 +607,23 @@ export function PlatformAccountPanel({
                 <p className="text-[11px] leading-relaxed text-rose-100/80">
                   {tt("platform.deleteAccountHint")}
                 </p>
-                <input
-                  type={showDeletePassword ? "text" : "password"}
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm text-white outline-none focus:border-rose-400/40"
-                  placeholder={tt("platform.passwordPlaceholder")}
-                />
+                <div className="relative">
+                  <input
+                    type={showDeletePassword ? "text" : "password"}
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className={`h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm text-white outline-none focus:border-rose-400/40 ${
+                      deletePassword ? "pr-9" : ""
+                    }`}
+                    placeholder={tt("platform.passwordPlaceholder")}
+                  />
+                  <InputClearButton
+                    value={deletePassword}
+                    onClear={() => setDeletePassword("")}
+                    className="absolute right-1 top-1/2 -translate-y-1/2"
+                    aria-label={tt("common.clear")}
+                  />
+                </div>
                 <button
                   type="button"
                   disabled={deletingAccount || loading}
@@ -652,25 +673,35 @@ export function PlatformAccountPanel({
                   <label className="sr-only" htmlFor="signup-verification-code">
                     {tt("platform.verificationCodeLabel")}
                   </label>
-                  <input
-                    id="signup-verification-code"
-                    ref={codeInputRef}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={verificationCode}
-                    onChange={(e) =>
-                      setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && verificationCode.length === 6) {
-                        void handleAuth();
+                  <div className="relative">
+                    <input
+                      id="signup-verification-code"
+                      ref={codeInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={verificationCode}
+                      onChange={(e) =>
+                        setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))
                       }
-                    }}
-                    className="h-14 w-full rounded-2xl border border-emerald-400/25 bg-black/45 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:border-emerald-400/50 focus:bg-black/55"
-                    placeholder="••••••"
-                    maxLength={6}
-                  />
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && verificationCode.length === 6) {
+                          void handleAuth();
+                        }
+                      }}
+                      className={`h-14 w-full rounded-2xl border border-emerald-400/25 bg-black/45 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:border-emerald-400/50 focus:bg-black/55 ${
+                        verificationCode ? "pr-10" : ""
+                      }`}
+                      placeholder="••••••"
+                      maxLength={6}
+                    />
+                    <InputClearButton
+                      value={verificationCode}
+                      onClear={() => setVerificationCode("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2"
+                      aria-label={tt("common.clear")}
+                    />
+                  </div>
                   <div className="mt-3 flex justify-center gap-1.5">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <span
@@ -756,15 +787,25 @@ export function PlatformAccountPanel({
 
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
                 {mode === "signup" ? tt("platform.emailLabel") : tt("platform.emailOrNicknameLabel")}
-                <input
-                  type="text"
-                  value={authIdentifier}
-                  onChange={(e) => setAuthIdentifier(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-                  placeholder={
-                    mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail")
-                  }
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={authIdentifier}
+                    onChange={(e) => setAuthIdentifier(e.target.value)}
+                    className={`w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 ${
+                      authIdentifier ? "pr-9" : ""
+                    }`}
+                    placeholder={
+                      mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail")
+                    }
+                  />
+                  <InputClearButton
+                    value={authIdentifier}
+                    onClear={() => setAuthIdentifier("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                    aria-label={tt("common.clear")}
+                  />
+                </div>
                 {mode === "signup" && emailVerificationRequired ? (
                   <span className="text-[11px] font-normal normal-case tracking-normal text-white/45">
                     {tt("platform.emailSpamHint")}
@@ -775,13 +816,23 @@ export function PlatformAccountPanel({
               {mode === "signup" ? (
                 <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
                   {tt("platform.nicknameLabel")}
-                  <input
-                    type="text"
-                    value={signupNickname}
-                    onChange={(e) => setSignupNickname(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30"
-                    placeholder={tt("platform.enterNickname")}
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={signupNickname}
+                      onChange={(e) => setSignupNickname(e.target.value)}
+                      className={`w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 ${
+                        signupNickname ? "pr-9" : ""
+                      }`}
+                      placeholder={tt("platform.enterNickname")}
+                    />
+                    <InputClearButton
+                      value={signupNickname}
+                      onClear={() => setSignupNickname("")}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                      aria-label={tt("common.clear")}
+                    />
+                  </div>
                 </label>
               ) : null}
 
@@ -792,8 +843,16 @@ export function PlatformAccountPanel({
                     type={showPassword ? "text" : "password"}
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 pr-11 text-sm text-white outline-none focus:border-emerald-400/30"
+                    className={`h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-emerald-400/30 ${
+                      authPassword ? "pr-[4.5rem]" : "pr-11"
+                    }`}
                     placeholder={tt("platform.passwordPlaceholder")}
+                  />
+                  <InputClearButton
+                    value={authPassword}
+                    onClear={() => setAuthPassword("")}
+                    className="absolute right-10 top-1/2 -translate-y-1/2"
+                    aria-label={tt("common.clear")}
                   />
                   <button
                     type="button"
@@ -883,19 +942,29 @@ export function PlatformAccountPanel({
               {tt("platform.accountManagement")}
             </p>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="text"
-                value={nicknameDraft}
-                onChange={(e) => setNicknameDraft(e.target.value)}
-                onFocus={() => {
-                  nicknameDraftFocusedRef.current = true;
-                }}
-                onBlur={() => {
-                  nicknameDraftFocusedRef.current = false;
-                }}
-                className="h-10 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30"
-                placeholder={tt("platform.newNicknamePlaceholder")}
-              />
+              <div className="relative min-w-0 flex-1">
+                <input
+                  type="text"
+                  value={nicknameDraft}
+                  onChange={(e) => setNicknameDraft(e.target.value)}
+                  onFocus={() => {
+                    nicknameDraftFocusedRef.current = true;
+                  }}
+                  onBlur={() => {
+                    nicknameDraftFocusedRef.current = false;
+                  }}
+                  className={`h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-emerald-400/30 ${
+                    nicknameDraft ? "pr-9" : ""
+                  }`}
+                  placeholder={tt("platform.newNicknamePlaceholder")}
+                />
+                <InputClearButton
+                  value={nicknameDraft}
+                  onClear={() => setNicknameDraft("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  aria-label={tt("common.clear")}
+                />
+              </div>
               <button
                 type="button"
                 disabled={loading || linking !== null || providerLoginBusy}
@@ -936,9 +1005,17 @@ export function PlatformAccountPanel({
                       type={showDeletePassword ? "text" : "password"}
                       value={deletePassword}
                       onChange={(e) => setDeletePassword(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 pr-11 text-sm text-white outline-none focus:border-rose-400/40"
+                      className={`h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-rose-400/40 ${
+                        deletePassword ? "pr-[4.5rem]" : "pr-11"
+                      }`}
                       placeholder={tt("platform.passwordPlaceholder")}
                       autoComplete="current-password"
+                    />
+                    <InputClearButton
+                      value={deletePassword}
+                      onClear={() => setDeletePassword("")}
+                      className="absolute right-10 top-1/2 -translate-y-1/2"
+                      aria-label={tt("common.clear")}
                     />
                     <button
                       type="button"

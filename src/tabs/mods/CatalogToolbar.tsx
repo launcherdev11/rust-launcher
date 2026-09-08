@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { InputClearButton } from "../../components/ui";
 import type {
   CatalogSort,
   CatalogSourceTab,
@@ -199,6 +200,11 @@ export function CatalogToolbar({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-white/40 focus:outline-none"
+          />
+          <InputClearButton
+            value={search}
+            onClear={() => onSearchChange("")}
+            aria-label={tt("common.clear")}
           />
         </div>
         <div className="flex h-10 shrink-0 items-center gap-1 rounded-2xl border border-white/20 bg-black/40 p-1">

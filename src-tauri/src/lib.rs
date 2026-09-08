@@ -359,6 +359,7 @@ pub fn run() {
                     }
                 }
                 tauri::RunEvent::Exit => {
+                    let _ = services::game::profiles::finish_playtime_session();
                     discord_presence_shutdown();
                 }
                 _ => {}

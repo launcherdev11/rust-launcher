@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { InputClearButton } from "../components/ui";
 import { useT, type Language } from "../i18n";
 type NotificationKind = "info" | "success" | "error" | "warning";
 
@@ -403,18 +404,28 @@ export function JavaSettingsTab({
               )}
             </select>
             <div className="flex items-center gap-2 flex-nowrap">
-              <input
-                type="text"
-                value={effectiveSettings.java_path ?? ""}
-                onChange={(e) =>
-                  updateField(
-                    "java_path",
-                    e.target.value.trim().length === 0 ? null : e.target.value,
-                  )
-                }
-                placeholder={tt("javaSettings.javaPath.placeholder")}
-                className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/35 focus:outline-none"
-              />
+              <div className="relative min-w-0 flex-1">
+                <input
+                  type="text"
+                  value={effectiveSettings.java_path ?? ""}
+                  onChange={(e) =>
+                    updateField(
+                      "java_path",
+                      e.target.value.trim().length === 0 ? null : e.target.value,
+                    )
+                  }
+                  placeholder={tt("javaSettings.javaPath.placeholder")}
+                  className={`w-full rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/35 focus:outline-none ${
+                    effectiveSettings.java_path ? "pr-9" : ""
+                  }`}
+                />
+                <InputClearButton
+                  value={effectiveSettings.java_path ?? ""}
+                  onClear={() => updateField("java_path", null)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  aria-label={tt("common.clear")}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleDetectJava}
@@ -505,13 +516,23 @@ export function JavaSettingsTab({
                     <label className="mb-1 block text-[11px] uppercase tracking-[0.12em] text-white/60">
                       MIN (Xms)
                     </label>
-                    <input
-                      type="text"
-                      value={effectiveSettings.xms ?? ""}
-                      onChange={(e) => updateField("xms", e.target.value || null)}
-                      placeholder={tt("javaSettings.memory.xmsPlaceholder")}
-                      className="w-full rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/40 focus:outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={effectiveSettings.xms ?? ""}
+                        onChange={(e) => updateField("xms", e.target.value || null)}
+                        placeholder={tt("javaSettings.memory.xmsPlaceholder")}
+                        className={`w-full rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/40 focus:outline-none ${
+                          effectiveSettings.xms ? "pr-9" : ""
+                        }`}
+                      />
+                      <InputClearButton
+                        value={effectiveSettings.xms ?? ""}
+                        onClear={() => updateField("xms", null)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                        aria-label={tt("common.clear")}
+                      />
+                    </div>
                     {validation.xmsError && (
                       <p className="mt-1 text-[11px] text-red-300">{validation.xmsError}</p>
                     )}
@@ -520,13 +541,23 @@ export function JavaSettingsTab({
                     <label className="mb-1 block text-[11px] uppercase tracking-[0.12em] text-white/60">
                       MAX (Xmx)
                     </label>
-                    <input
-                      type="text"
-                      value={effectiveSettings.xmx ?? ""}
-                      onChange={(e) => updateField("xmx", e.target.value || null)}
-                      placeholder={tt("javaSettings.memory.xmxPlaceholder")}
-                      className="w-full rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/40 focus:outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={effectiveSettings.xmx ?? ""}
+                        onChange={(e) => updateField("xmx", e.target.value || null)}
+                        placeholder={tt("javaSettings.memory.xmxPlaceholder")}
+                        className={`w-full rounded-xl border border-white/20 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/40 focus:outline-none ${
+                          effectiveSettings.xmx ? "pr-9" : ""
+                        }`}
+                      />
+                      <InputClearButton
+                        value={effectiveSettings.xmx ?? ""}
+                        onClear={() => updateField("xmx", null)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                        aria-label={tt("common.clear")}
+                      />
+                    </div>
                     {validation.xmxError && (
                       <p className="mt-1 text-[11px] text-red-300">{validation.xmxError}</p>
                     )}
@@ -574,15 +605,25 @@ export function JavaSettingsTab({
                     {tt("javaSettings.jvmArgs.hint")}
                   </span>
                 </div>
-                <textarea
-                  value={effectiveSettings.jvm_args ?? ""}
-                  onChange={(e) => updateField("jvm_args", e.target.value || null)}
-                  rows={7}
-                  className="w-full rounded-2xl border border-white/15 bg-black/50 px-3 py-2 text-xs font-mono text-white placeholder:text-white/30 focus:border-white/35 focus:outline-none"
-                  placeholder={
-                    tt("javaSettings.jvmArgs.placeholder")
-                  }
-                />
+                <div className="relative">
+                  <textarea
+                    value={effectiveSettings.jvm_args ?? ""}
+                    onChange={(e) => updateField("jvm_args", e.target.value || null)}
+                    rows={7}
+                    className={`w-full rounded-2xl border border-white/15 bg-black/50 px-3 py-2 text-xs font-mono text-white placeholder:text-white/30 focus:border-white/35 focus:outline-none ${
+                      effectiveSettings.jvm_args ? "pr-9" : ""
+                    }`}
+                    placeholder={
+                      tt("javaSettings.jvmArgs.placeholder")
+                    }
+                  />
+                  <InputClearButton
+                    value={effectiveSettings.jvm_args ?? ""}
+                    onClear={() => updateField("jvm_args", null)}
+                    className="absolute right-2 top-2"
+                    aria-label={tt("common.clear")}
+                  />
+                </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/65">
                   <span className="text-white/80">
                     {tt("javaSettings.jvmArgs.placeholdersLabel")}

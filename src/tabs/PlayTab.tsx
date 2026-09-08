@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { ProfileInstanceIcon } from "../components/profile_instance_icon";
-import { BannerSkeleton, Spinner } from "../components/ui";
+import { BannerSkeleton, InputClearButton, Spinner } from "../components/ui";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 import {
@@ -581,35 +581,45 @@ export function PlayTab({
               {isVersionDropdownOpen && versions.length > 0 && (
                 <div className="absolute left-0 bottom-full mb-2 z-30 w-64 rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
                   <div className="px-2 pt-2 pb-1">
-                    <input
-                      ref={versionInputRef}
-                      type="text"
-                      value={versionQuery}
-                      onChange={(e) => setVersionQuery(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          setIsVersionDropdownOpen(false);
-                          return;
-                        }
-                        if (e.key === "Enter") {
-                          const q = versionQuery.trim().toLowerCase();
-                          if (!q) return;
-                          const exact =
-                            versions.find((v) => v.id.toLowerCase() === q) ??
-                            versions.find(
-                              (v) => versionDisplayName(v).toLowerCase() === q,
-                            );
-                          const first = filteredVersions[0];
-                          const chosen = exact ?? first;
-                          if (chosen) {
-                            setSelectedVersion(chosen);
+                    <div className="relative">
+                      <input
+                        ref={versionInputRef}
+                        type="text"
+                        value={versionQuery}
+                        onChange={(e) => setVersionQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
                             setIsVersionDropdownOpen(false);
+                            return;
                           }
-                        }
-                      }}
-                      placeholder={tt("play.version.searchPlaceholder")}
-                      className="h-8 w-full rounded-xl border border-white/15 bg-black/40 px-3 text-xs text-white/90 placeholder:text-white/35 outline-none focus:border-white/35"
-                    />
+                          if (e.key === "Enter") {
+                            const q = versionQuery.trim().toLowerCase();
+                            if (!q) return;
+                            const exact =
+                              versions.find((v) => v.id.toLowerCase() === q) ??
+                              versions.find(
+                                (v) => versionDisplayName(v).toLowerCase() === q,
+                              );
+                            const first = filteredVersions[0];
+                            const chosen = exact ?? first;
+                            if (chosen) {
+                              setSelectedVersion(chosen);
+                              setIsVersionDropdownOpen(false);
+                            }
+                          }
+                        }}
+                        placeholder={tt("play.version.searchPlaceholder")}
+                        className={`h-8 w-full rounded-xl border border-white/15 bg-black/40 px-3 text-xs text-white/90 placeholder:text-white/35 outline-none focus:border-white/35 ${
+                          versionQuery ? "pr-8" : ""
+                        }`}
+                      />
+                      <InputClearButton
+                        value={versionQuery}
+                        onClear={() => setVersionQuery("")}
+                        className="absolute right-1 top-1/2 -translate-y-1/2"
+                        aria-label={tt("common.clear")}
+                      />
+                    </div>
                     {snapshotHintVisible && (
                       <div className="mt-1 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
                         {tt("play.version.snapshotHint")}

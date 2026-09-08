@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub(crate) static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
 pub(crate) static GAME_PROCESS_PID: AtomicU64 = AtomicU64::new(0);
+pub(crate) static REOPEN_LAUNCHER_ON_GAME_EXIT: AtomicBool = AtomicBool::new(false);
 
 pub const VERSION_MANIFEST_URL: &str =
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
