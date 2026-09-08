@@ -227,8 +227,9 @@ export function AccountsTab({
   return (
     <>
       <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-4 overflow-y-auto py-1 lg:gap-4 lg:overflow-hidden">
-        <header className="relative shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md glass-panel">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.18),transparent_55%)]" />
+        <header className="relative shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0c1210]/90 via-black/45 to-[#0a0e18]/90 shadow-xl backdrop-blur-md glass-panel">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.22),transparent_55%)]" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_top_right,rgba(56,189,248,0.1),transparent_60%)]" />
           <div className="relative flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 sm:px-5">
             <div className="flex min-w-0 flex-1 items-center gap-3.5">
               <button

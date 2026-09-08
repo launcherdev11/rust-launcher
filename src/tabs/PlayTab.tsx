@@ -101,6 +101,7 @@ type PlayTabProps = {
   language: Language;
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
+  showLauncherBanners?: boolean;
   fillPane?: boolean;
   onPlayServer?: (serverAddress: string) => void | Promise<void>;
   profiles?: PlayHomeProfile[];
@@ -153,6 +154,7 @@ export function PlayTab({
   language,
   installedVersionIds,
   showSnapshots,
+  showLauncherBanners = true,
   fillPane = false,
   onPlayServer,
   profiles = [],
@@ -214,11 +216,20 @@ export function PlayTab({
   const bannerServerIp = currentBanner ? bannerServerAddress(currentBanner) : "";
 
   useEffect(() => {
+    if (!showLauncherBanners) {
+      setBanners([]);
+      setBannerLoading(false);
+      setBannerError(false);
+      return;
+    }
+
     const cached = readCachedLauncherBanners(300_000)?.filter(isCarouselBanner);
     if (cached?.length) {
       setBanners(cached);
       setActiveBannerIndex(0);
       setBannerLoading(false);
+    } else {
+      setBannerLoading(true);
     }
 
     const controller = new AbortController();
@@ -251,7 +262,7 @@ export function PlayTab({
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [showLauncherBanners]);
 
   useEffect(() => {
     if (banners.length <= 1) return;
@@ -475,6 +486,7 @@ export function PlayTab({
 
   const shell = (
     <>
+      {showLauncherBanners ? (
       <div className={bannerClass}>
         {bannerLoading ? (
           <BannerSkeleton />
@@ -550,6 +562,7 @@ export function PlayTab({
           </div>
         )}
       </div>
+      ) : null}
 
       {homeCards}
 

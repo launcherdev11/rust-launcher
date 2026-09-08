@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { IdleAnimation, SkinViewer } from "skinview3d";
+import { IdleAnimation, WalkingAnimation, SkinViewer } from "skinview3d";
+import {
+  Color,
+  DirectionalLight,
+  HemisphereLight,
+  PointLight,
+  type Light,
+} from "three";
 import { InputClearButton } from "./ui";
 import {
   DEFAULT_SKIN_URL,
@@ -238,9 +245,65 @@ export function AccountSkinPreview({
       height,
     });
     viewer.autoRotate = false;
-    viewer.zoom = 0.82;
-    viewer.animation = new IdleAnimation();
-    viewer.playerObject.rotation.y = Math.PI * 0.22;
+    viewer.zoom = 0.9;
+    viewer.fov = 48;
+
+    viewer.globalLight.intensity = 0.55;
+    viewer.globalLight.color = new Color(0xd8e4ff);
+    viewer.cameraLight.intensity = 0.28;
+    viewer.cameraLight.color = new Color(0xfff6ea);
+
+    const extraLights: Light[] = [];
+
+    const hemi = new HemisphereLight(0xe8f0ff, 0x12131a, 0.7);
+    viewer.scene.add(hemi);
+    extraLights.push(hemi);
+
+    const keyLight = new DirectionalLight(0xfff2e0, 1.35);
+    keyLight.position.set(-2.8, 5.2, 4.2);
+    viewer.scene.add(keyLight);
+    extraLights.push(keyLight);
+
+    const fillLight = new DirectionalLight(0x9ec5ff, 0.55);
+    fillLight.position.set(3.4, 1.8, -1.6);
+    viewer.scene.add(fillLight);
+    extraLights.push(fillLight);
+
+    const rimLight = new PointLight(0x34d399, 0.85, 14, 2);
+    rimLight.position.set(0.2, 2.4, -3.8);
+    viewer.scene.add(rimLight);
+    extraLights.push(rimLight);
+
+    const floorGlow = new PointLight(0x10b981, 0.35, 8, 2);
+    floorGlow.position.set(0, -0.6, 1.2);
+    viewer.scene.add(floorGlow);
+    extraLights.push(floorGlow);
+
+    const walk = new WalkingAnimation();
+    walk.speed = 0.5;
+    walk.headBobbing = true;
+    const idle = new IdleAnimation();
+    idle.speed = 0.9;
+    idle.addAnimation((player, progress) => {
+      player.rotation.y = Math.PI * 0.2 + Math.sin(progress * 0.45) * 0.32;
+    });
+
+    let mode: "walk" | "idle" = "walk";
+    viewer.animation = walk;
+    viewer.playerObject.rotation.y = Math.PI * 0.2;
+
+    const cycleAnimation = () => {
+      if (viewer.disposed) return;
+      if (mode === "walk") {
+        mode = "idle";
+        viewer.animation = idle;
+      } else {
+        mode = "walk";
+        viewer.animation = walk;
+      }
+    };
+    const animationCycleId = window.setInterval(cycleAnimation, 9000);
+
     viewerRef.current = viewer;
 
     const resize = () => {
@@ -256,7 +319,12 @@ export function AccountSkinPreview({
     resize();
 
     return () => {
+      window.clearInterval(animationCycleId);
       resizeObserver.disconnect();
+      for (const light of extraLights) {
+        viewer.scene.remove(light);
+        light.dispose();
+      }
       viewer.dispose();
       viewerRef.current = null;
       canvas.remove();
@@ -450,7 +518,7 @@ export function AccountSkinPreview({
       ref={rootRef}
       className={
         className ??
-        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md"
+        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#07080d]/85 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md"
       }
     >
       {onSettingsClick ? (
@@ -553,10 +621,15 @@ export function AccountSkinPreview({
         </div>
       ) : null}
 
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.12),transparent_68%)]"
-        aria-hidden
-      />
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(52,211,153,0.16),transparent_58%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_18%_12%,rgba(56,189,248,0.12),transparent_42%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_86%_18%,rgba(251,191,36,0.08),transparent_40%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
+        <div className="absolute left-1/2 bottom-[10%] h-10 w-[min(70%,18rem)] -translate-x-1/2 rounded-[100%] bg-emerald-400/25 blur-2xl" />
+        <div className="absolute left-1/2 bottom-[12%] h-2 w-[min(42%,10rem)] -translate-x-1/2 rounded-[100%] bg-white/20 blur-md" />
+        <div className="absolute inset-0 shadow-[inset_0_0_90px_rgba(0,0,0,0.5)]" />
+      </div>
       <div ref={containerRef} className="relative min-h-0 flex-1" />
 
       {showCapePicker ? (

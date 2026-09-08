@@ -106,14 +106,12 @@ import {
   t,
   isLanguage,
   readStoredLanguage,
-  languageStoredAtLaunch,
   type Language,
 } from "./i18n";
 import {
   OnboardingFlow,
   ONBOARDING_COMPLETED_STORAGE_KEY,
   ONBOARDING_FORCE_STORAGE_KEY,
-  ONBOARDING_LEGACY_MIGRATED_KEY,
 } from "./onboarding";
 import {
   ProductTour,
@@ -181,6 +179,7 @@ type Settings = {
   minimize_to_tray_on_close: boolean;
   autostart_enabled: boolean;
   animations_disabled: boolean;
+  show_launcher_banners?: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
@@ -2037,9 +2036,22 @@ function App() {
     }
 
     setLanguage(lang);
+
+    let onboardingAlreadyDone = !!settings.onboarding_completed;
     try {
-      window.localStorage.setItem("launcher_language", lang);
+      if (window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY) === "1") {
+        onboardingAlreadyDone = true;
+      }
     } catch {
+    }
+
+    // Persist language only after onboarding so a mid-session reload
+    // doesn't look like a "legacy install" and skip the welcome flow.
+    if (onboardingAlreadyDone) {
+      try {
+        window.localStorage.setItem("launcher_language", lang);
+      } catch {
+      }
     }
 
     if (settings.interface_language !== lang) {
@@ -2282,6 +2294,7 @@ function App() {
     minimize_to_tray_on_close: false,
     autostart_enabled: false,
     animations_disabled: false,
+    show_launcher_banners: true,
     background_accent_color: "#0b1530",
     background_image_url: null,
     background_blur_enabled: true,
@@ -2341,22 +2354,6 @@ function App() {
         void invoke("set_settings", {
           settings: { ...settings, onboarding_completed: true },
         }).catch(() => {});
-        return;
-      }
-
-      const legacyMigrated =
-        window.localStorage.getItem(ONBOARDING_LEGACY_MIGRATED_KEY) === "1";
-      if (!legacyMigrated && languageStoredAtLaunch) {
-        window.localStorage.setItem(ONBOARDING_LEGACY_MIGRATED_KEY, "1");
-        window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-        void invoke("set_settings", {
-          settings: {
-            ...settings,
-            onboarding_completed: true,
-            interface_language: languageStoredAtLaunch,
-          },
-        }).catch(() => {});
-        setOnboardingVisible(false);
         return;
       }
     } catch {
@@ -4290,6 +4287,7 @@ function App() {
               language={language}
               installedVersionIds={installedVersionIdsForDropdown}
               showSnapshots={settings?.show_snapshots ?? false}
+              showLauncherBanners={settings?.show_launcher_banners !== false}
               isConsoleDetached={isConsoleDetached}
               onToggleConsoleDetached={toggleConsoleDetached}
               onPlayServer={handleBannerPlay}

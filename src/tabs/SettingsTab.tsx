@@ -37,6 +37,7 @@ type SettingSearchId =
   | "launcher.autostart"
   | "launcher.splitView"
   | "launcher.disableAnimations"
+  | "launcher.hideBanners"
   | "launcher.language"
   | "launcher.accentColor"
   | "launcher.backgroundImage"
@@ -181,6 +182,14 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     keys: ["settings.launcher.disableAnimations.label"],
   },
   {
+    id: "launcher.hideBanners",
+    tab: "launcher",
+    keys: [
+      "settings.launcher.hideBanners.label",
+      "settings.launcher.hideBanners.hint",
+    ],
+  },
+  {
     id: "launcher.language",
     tab: "launcher",
     keys: ["settings.launcher.interfaceLanguage.label", "settings.card.interfaceLanguage"],
@@ -270,6 +279,7 @@ type Settings = {
   minimize_to_tray_on_close: boolean;
   autostart_enabled: boolean;
   animations_disabled: boolean;
+  show_launcher_banners?: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
@@ -1558,6 +1568,9 @@ export function SettingsTab({
       setSidebarOrder(["play", "settings", "mods", "modpacks"]);
       try {
         window.localStorage.removeItem("sidebar_order");
+        window.localStorage.removeItem("mc16launcher:onboarding_completed");
+        window.localStorage.removeItem("mc16launcher:onboarding_legacy_migrated");
+        window.localStorage.removeItem("mc16launcher:product_tour_completed");
       } catch {
         //ignore
       }
@@ -2797,6 +2810,7 @@ export function SettingsTab({
                 showSetting("launcher.autostart") ||
                 showSetting("launcher.splitView") ||
                 showSetting("launcher.disableAnimations") ||
+                showSetting("launcher.hideBanners") ||
                 showSetting("launcher.language") ||
                 showSetting("launcher.accentColor") ||
                 showSetting("launcher.backgroundImage") ||
@@ -2870,6 +2884,20 @@ export function SettingsTab({
                   value={settings?.animations_disabled ?? false}
                   onChange={(v) => updateSettings({ animations_disabled: v })}
                 />
+                )}
+                {showSetting("launcher.hideBanners") && (
+                <div className="flex flex-col gap-1.5">
+                <SettingsToggle
+                  label={tt("settings.launcher.hideBanners.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={!(settings?.show_launcher_banners ?? true)}
+                  onChange={(v) => updateSettings({ show_launcher_banners: !v })}
+                />
+                <p className="ui-meta pl-0.5 pr-1">
+                  {tt("settings.launcher.hideBanners.hint")}
+                </p>
+                </div>
                 )}
                 {showSetting("launcher.language") && (
                 <div className="flex items-center justify-between gap-4">

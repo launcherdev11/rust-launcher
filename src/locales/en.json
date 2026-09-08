@@ -284,6 +284,10 @@
         "hint": "Drag a tab (Play, Mods, Modpacks, Settings) to a window edge to open a second pane."
       },
       "disableAnimations": { "label": "Disable animations:" },
+      "hideBanners": {
+        "label": "Disable ad banner:",
+        "hint": "Hides the news and banner carousel on the Play tab."
+      },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
       "notifyNewMessage": { "label": "Notify about new messages:" },
       "notifySystemMessage": { "label": "Notify about system messages:" },

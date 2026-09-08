@@ -302,6 +302,10 @@
       "disableAnimations": {
         "label": "Animationen deaktivieren:"
       },
+      "hideBanners": {
+        "label": "Werbebanner deaktivieren:",
+        "hint": "Blendet das Nachrichten- und Bannerkarussell auf dem Spielen-Tab aus."
+      },
       "notifyNewUpdate": {
         "label": "Über neue Launcher-Updates benachrichtigen:"
       },

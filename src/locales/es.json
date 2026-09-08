@@ -302,6 +302,10 @@
       "disableAnimations": {
         "label": "Desactivar animaciones:"
       },
+      "hideBanners": {
+        "label": "Desactivar banner publicitario:",
+        "hint": "Oculta el carrusel de noticias y banners en la pestaña Jugar."
+      },
       "notifyNewUpdate": {
         "label": "Notificar sobre nuevas actualizaciones del lanzador:"
       },
