@@ -71,7 +71,7 @@ function accountKindAvatarClass(kind: string): string {
 
 function PencilIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden="true">
       <path d="M16.84 2.73a2.5 2.5 0 0 1 3.54 3.54l-1.06 1.06-3.54-3.54 1.06-1.06ZM4.92 14.49l9.19-9.19 3.54 3.54-9.19 9.19-3.82.42.42-3.96Z" />
     </svg>
   );
@@ -79,7 +79,7 @@ function PencilIcon() {
 
 function MicrosoftIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" aria-hidden="true">
       <path fill="#f25022" d="M2 2h9.5v9.5H2V2z" />
       <path fill="#00a4ef" d="M12.5 2H22v9.5h-9.5V2z" />
       <path fill="#7fba00" d="M2 12.5H11.5V22H2v-9.5z" />
@@ -90,7 +90,7 @@ function MicrosoftIcon() {
 
 function ElyByIcon() {
   return (
-    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#2d7d46] text-[10px] font-bold text-white">
+    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-[#2d7d46] text-[9px] font-bold text-white">
       E
     </span>
   );
@@ -108,6 +108,14 @@ function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
       <path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+      <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.77 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.68.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.54c.05.24.26.42.5.42h3.84c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.25.12.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z" />
     </svg>
   );
 }
@@ -144,7 +152,7 @@ export function AccountsTab({
 }: AccountsTabProps) {
   const tt = useT(language);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("accounts");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("platform");
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
   const [headerNicknameEditing, setHeaderNicknameEditing] = useState(false);
   const nicknameInputFocusedRef = useRef(false);
@@ -179,8 +187,7 @@ export function AccountsTab({
           setSystemIsSponsor(!!me.is_sponsor);
           if (me.nickname) window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
         })
-        .catch(() => {
-        });
+        .catch(() => {});
     };
     syncSystemNickname();
     window.addEventListener(API_AUTH_CHANGED_EVENT, syncSystemNickname);
@@ -191,7 +198,7 @@ export function AccountsTab({
     };
   }, []);
 
-  const openSettings = (section: SettingsSection = "accounts") => {
+  const openSettings = (section: SettingsSection = "platform") => {
     setSettingsSection(section);
     setSettingsOpen(true);
   };
@@ -219,135 +226,131 @@ export function AccountsTab({
     displayedNickname.trim() || tt("app.accounts.nicknamePlaceholder");
 
   const settingsTabs: { id: SettingsSection; label: string }[] = [
-    { id: "accounts", label: tt("app.accounts.settingsTabAccounts") },
     { id: "platform", label: tt("app.accounts.settingsTabPlatform") },
     { id: "notifications", label: tt("app.accounts.settingsTabNotifications") },
   ];
 
+  const providerBusy = elyLoading || msLoading;
+
   return (
     <>
-      <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-4 overflow-y-auto py-1 lg:gap-4 lg:overflow-hidden">
+      <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-3 overflow-y-auto py-1 xl:gap-4 xl:overflow-hidden">
         <header className="relative shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0c1210]/90 via-black/45 to-[#0a0e18]/90 shadow-xl backdrop-blur-md glass-panel">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.22),transparent_55%)]" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_top_right,rgba(56,189,248,0.1),transparent_60%)]" />
-          <div className="relative flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 sm:px-5">
-            <div className="flex min-w-0 flex-1 items-center gap-3.5">
-              <button
-                type="button"
-                onClick={() => openSettings("platform")}
-                className="interactive-press relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-[#0f2744] shadow-lg transition hover:border-emerald-400/40 hover:bg-[#1e3a5f]"
-                title={tt("app.accounts.accountSettingsTitle")}
-              >
-                <AccountAvatar
-                  username={displayedNickname}
-                  profile={profileAvatarInput}
-                  kind={activeAccountKind}
-                  size={64}
-                  className="h-full w-full rounded-2xl"
-                />
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
-                    {tt("platform.launcherNickname")}
-                  </p>
-                  <span
-                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                      activeAccountKind === "microsoft"
-                        ? "bg-sky-500/25 text-sky-100"
-                        : activeAccountKind === "ely"
-                          ? "bg-[#2d7d46]/35 text-emerald-100"
-                          : "bg-white/10 text-white/55"
-                    }`}
-                  >
-                    {accountKindShortLabel(activeAccountKind)}
-                  </span>
-                </div>
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.2),transparent_55%)]" />
+          <div className="relative flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+            <button
+              type="button"
+              onClick={() => openSettings("platform")}
+              className="interactive-press relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-[#0f2744] shadow-lg transition hover:border-emerald-400/40 hover:bg-[#1e3a5f]"
+              title={tt("app.accounts.accountSettingsTitle")}
+            >
+              <AccountAvatar
+                username={displayedNickname}
+                profile={profileAvatarInput}
+                kind={activeAccountKind}
+                size={56}
+                className="h-full w-full rounded-2xl"
+              />
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
                 {systemNickname ? (
                   <NicknameWithSponsor
                     nickname={systemNickname}
                     isSponsor={systemIsSponsor}
                     sponsorTitle={tt("common.sponsor")}
-                    className="mt-0.5 truncate text-xl font-semibold text-emerald-100/90"
+                    className="truncate text-lg font-semibold text-emerald-100/90"
                     as="p"
                   />
                 ) : (
-                  <p className="mt-0.5 truncate text-xl text-white/40">
+                  <p className="truncate text-lg text-white/40">
                     {tt("app.accounts.systemNicknameSignedOut")}
                   </p>
                 )}
-                <div className="mt-2 flex min-w-0 items-center gap-2">
-                  <p className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-white/45">
-                    {tt("platform.inGameNickname")}
-                  </p>
-                  {headerNicknameEditing && !isAuthorized ? (
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        type="text"
-                        autoFocus
-                        value={nicknameDraft}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setNicknameDraft(v);
-                          setProfile((p) => ({ ...p, nickname: v }));
-                        }}
-                        onFocus={() => {
-                          nicknameInputFocusedRef.current = true;
-                        }}
-                        onBlur={(e) => void handleHeaderNicknameBlur(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") e.currentTarget.blur();
-                          if (e.key === "Escape") {
-                            setNicknameDraft(offlineNickname);
-                            setProfile((p) => ({ ...p, nickname: offlineNickname }));
-                            setHeaderNicknameEditing(false);
-                          }
-                        }}
-                        className={`min-w-0 w-full bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none ${
-                          nicknameDraft ? "pr-7" : ""
-                        }`}
-                        placeholder={tt("app.accounts.nicknamePlaceholder")}
-                      />
-                      <InputClearButton
-                        value={nicknameDraft}
-                        onClear={() => {
-                          setNicknameDraft("");
-                          setProfile((p) => ({ ...p, nickname: "" }));
-                        }}
-                        className="absolute right-0 top-1/2 -translate-y-1/2"
-                        aria-label={tt("common.clear")}
-                      />
-                    </div>
-                  ) : (
-                    <p className="truncate text-sm font-semibold text-white/95">{gameNicknameDisplay}</p>
-                  )}
-                  {!isAuthorized && !headerNicknameEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => setHeaderNicknameEditing(true)}
-                      className="interactive-press rounded-lg p-1.5 text-white/45 transition hover:bg-white/10 hover:text-white/80"
-                      title={tt("app.accounts.editNickname")}
-                    >
-                      <PencilIcon />
-                    </button>
-                  ) : null}
-                </div>
+                <span
+                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                    activeAccountKind === "microsoft"
+                      ? "bg-sky-500/25 text-sky-100"
+                      : activeAccountKind === "ely"
+                        ? "bg-[#2d7d46]/35 text-emerald-100"
+                        : "bg-white/10 text-white/55"
+                  }`}
+                >
+                  {accountKindShortLabel(activeAccountKind)}
+                </span>
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  {tt("platform.inGameNickname")}
+                </span>
+                {headerNicknameEditing && !isAuthorized ? (
+                  <div className="relative min-w-0 flex-1">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={nicknameDraft}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setNicknameDraft(v);
+                        setProfile((p) => ({ ...p, nickname: v }));
+                      }}
+                      onFocus={() => {
+                        nicknameInputFocusedRef.current = true;
+                      }}
+                      onBlur={(e) => void handleHeaderNicknameBlur(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") {
+                          setNicknameDraft(offlineNickname);
+                          setProfile((p) => ({ ...p, nickname: offlineNickname }));
+                          setHeaderNicknameEditing(false);
+                        }
+                      }}
+                      className={`min-w-0 w-full bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none ${
+                        nicknameDraft ? "pr-7" : ""
+                      }`}
+                      placeholder={tt("app.accounts.nicknamePlaceholder")}
+                    />
+                    <InputClearButton
+                      value={nicknameDraft}
+                      onClear={() => {
+                        setNicknameDraft("");
+                        setProfile((p) => ({ ...p, nickname: "" }));
+                      }}
+                      className="absolute right-0 top-1/2 -translate-y-1/2"
+                      aria-label={tt("common.clear")}
+                    />
+                  </div>
+                ) : (
+                  <p className="truncate text-sm font-semibold text-white/90">{gameNicknameDisplay}</p>
+                )}
+                {!isAuthorized && !headerNicknameEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => setHeaderNicknameEditing(true)}
+                    className="interactive-press rounded-lg p-1 text-white/40 transition hover:bg-white/10 hover:text-white/80"
+                    title={tt("app.accounts.editNickname")}
+                  >
+                    <PencilIcon />
+                  </button>
+                ) : null}
               </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-
               <button
                 type="button"
-                disabled={msLoading || elyLoading}
+                disabled={providerBusy}
                 onClick={() => {
                   if (profile.ms_id_token) void onMicrosoftLogout();
                   else void onMicrosoftLogin();
                 }}
-                className={`interactive-press flex h-10 w-10 items-center justify-center rounded-xl border transition disabled:opacity-60 ${
+                className={`interactive-press flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition disabled:opacity-60 ${
                   profile.ms_id_token
-                    ? "border-sky-400/35 bg-sky-500/15 hover:bg-sky-500/25"
-                    : "border-white/10 bg-black/35 opacity-70 hover:bg-black/55 hover:opacity-100"
+                    ? "border-sky-400/35 bg-sky-500/15 text-sky-50 hover:bg-sky-500/25"
+                    : "border-white/10 bg-black/35 text-white/70 hover:bg-black/55 hover:text-white"
                 }`}
                 title={
                   profile.ms_id_token
@@ -356,38 +359,178 @@ export function AccountsTab({
                 }
               >
                 <MicrosoftIcon />
+                <span className="hidden sm:inline">
+                  {profile.ms_id_token ? tt("app.accounts.linkedShort") : "Microsoft"}
+                </span>
               </button>
               <button
                 type="button"
-                disabled={elyLoading || msLoading}
+                disabled={providerBusy}
                 onClick={() => {
                   if (profile.ely_username) void onElyLogout();
                   else void onElyLogin();
                 }}
-                className={`interactive-press flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl border px-2 transition disabled:opacity-60 ${
+                className={`interactive-press flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition disabled:opacity-60 ${
                   profile.ely_username
-                    ? "border-emerald-400/35 bg-[#2d7d46]/90 hover:bg-[#248338]"
-                    : "border-white/10 bg-black/35 opacity-70 hover:bg-black/55 hover:opacity-100"
+                    ? "border-emerald-400/35 bg-[#2d7d46]/90 text-white hover:bg-[#248338]"
+                    : "border-white/10 bg-black/35 text-white/70 hover:bg-black/55 hover:text-white"
                 }`}
                 title={
                   profile.ely_username ? tt("app.accounts.elyLogout") : tt("app.accounts.elyWaiting")
                 }
               >
                 <ElyByIcon />
-                <span className="hidden text-xs font-semibold text-white sm:inline">Ely</span>
+                <span className="hidden sm:inline">
+                  {profile.ely_username ? tt("app.accounts.linkedShort") : "Ely.by"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openSettings("platform")}
+                className="interactive-press flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/35 text-white/70 transition hover:bg-black/55 hover:text-white"
+                title={tt("app.accounts.accountSettingsTitle")}
+              >
+                <GearIcon />
               </button>
             </div>
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-stretch lg:overflow-hidden">
-          <div className="flex min-h-[min(360px,42vh)] min-w-0 flex-col lg:min-h-0">
+        {(elyAuthUrl || msAuthUrl) && (
+          <div className="shrink-0 space-y-2">
+            {elyAuthUrl ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
+                <p className="mb-1.5 text-xs font-medium text-amber-200">
+                  {tt("app.accounts.elyDialogTitle")}
+                </p>
+                <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
+                <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
+              </div>
+            ) : null}
+            {msAuthUrl ? (
+              <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-left">
+                <p className="mb-1.5 text-xs font-medium text-blue-200">
+                  {tt("app.accounts.microsoftSignIn")}
+                </p>
+                <p className="break-all text-xs text-white/90">{msAuthUrl}</p>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(220px,280px)_minmax(0,1.15fr)_minmax(240px,1fr)] xl:items-stretch xl:overflow-hidden xl:gap-4">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md glass-panel">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3.5 py-3">
+              <div className="min-w-0">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
+                  {tt("app.accounts.savedListTitle")}
+                </h2>
+                <p className="mt-0.5 truncate text-[11px] text-white/35">
+                  {tt("app.accounts.savedListHintShort")}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={addingAccount}
+                onClick={() => void onAddAccount()}
+                className="interactive-press flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/35 bg-emerald-600/20 px-2.5 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50"
+                title={tt("app.accounts.addAccount")}
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline xl:inline">{tt("app.accounts.addShort")}</span>
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {launcherAccounts.length === 0 ? (
+                <div className="px-2 py-8 text-center">
+                  <p className="text-sm text-white/45">{tt("app.accounts.emptyList")}</p>
+                  <button
+                    type="button"
+                    disabled={addingAccount}
+                    onClick={() => void onAddAccount()}
+                    className="interactive-press mt-3 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50"
+                  >
+                    {tt("app.accounts.addAccount")}
+                  </button>
+                </div>
+              ) : (
+                <ul className="flex flex-col gap-1.5">
+                  {launcherAccounts.map((acc) => (
+                    <li key={acc.id}>
+                      <div
+                        className={`group flex items-center gap-2 rounded-xl border px-2 py-2 transition ${
+                          acc.is_active
+                            ? "border-emerald-400/35 bg-emerald-500/10"
+                            : "border-transparent bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <AccountAvatar
+                          username={acc.label}
+                          profile={acc.is_active ? profileAvatarInput : undefined}
+                          kind={acc.kind}
+                          size={72}
+                          className={`h-10 w-10 shrink-0 rounded-xl ${accountKindAvatarClass(acc.kind)}`}
+                        />
+                        <button
+                          type="button"
+                          disabled={acc.is_active}
+                          onClick={() => {
+                            if (!acc.is_active) void onSwitchAccount(acc.id);
+                          }}
+                          className="min-w-0 flex-1 rounded-lg text-left transition enabled:cursor-pointer enabled:active:scale-[0.99] disabled:cursor-default"
+                        >
+                          <span className="block truncate text-sm font-semibold text-white/95">
+                            {acc.label}
+                          </span>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                                acc.kind === "microsoft"
+                                  ? "bg-sky-500/25 text-sky-100"
+                                  : acc.kind === "ely"
+                                    ? "bg-[#2d7d46]/35 text-emerald-100"
+                                    : "bg-white/10 text-white/55"
+                              }`}
+                            >
+                              {accountKindShortLabel(acc.kind)}
+                            </span>
+                            {acc.is_active ? (
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-300/90">
+                                {tt("app.accounts.activeBadge")}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingRemoveAccountId(acc.id)}
+                          className="interactive-press shrink-0 rounded-lg p-2 text-white/25 opacity-70 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
+                          title={tt("app.accounts.removeTitle")}
+                        >
+                          <DeleteIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {!isAuthorized ? (
+              <p className="shrink-0 border-t border-white/10 px-3.5 py-2.5 text-[11px] leading-snug text-white/45">
+                {tt("app.accounts.hint")}
+              </p>
+            ) : null}
+          </aside>
+
+          <div className="flex min-h-[min(380px,48vh)] min-w-0 flex-col xl:min-h-0">
             <AccountSkinPreview
               key={`${activeAccountId ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
               profile={profileAvatarInput}
               username={displayedNickname}
               showCapePicker={activeAccountKind === "microsoft" && !!profile.mc_uuid?.trim()}
-              onSettingsClick={() => openSettings("accounts")}
+              onSettingsClick={() => openSettings("platform")}
               settingsTitle={tt("app.accounts.accountSettingsTitle")}
               capePickerTitle={tt("app.accounts.cape.title")}
               capeNoneLabel={tt("app.accounts.cape.none")}
@@ -412,10 +555,20 @@ export function AccountsTab({
               skinLibraryEmpty={tt("app.accounts.skinLibrary.empty")}
               skinLibraryLoading={tt("app.accounts.skinLibrary.loading")}
               skinLibraryError={tt("app.accounts.skinLibrary.error")}
+              animationTitle={tt("app.accounts.animation.title")}
+              animationLabels={{
+                idle: tt("app.accounts.animation.idle"),
+                walk: tt("app.accounts.animation.walk"),
+                run: tt("app.accounts.animation.run"),
+                wave: tt("app.accounts.animation.wave"),
+                crouch: tt("app.accounts.animation.crouch"),
+                fly: tt("app.accounts.animation.fly"),
+                look: tt("app.accounts.animation.look"),
+              }}
             />
           </div>
 
-          <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+          <div className="flex min-h-[220px] min-w-0 flex-col xl:min-h-0 xl:overflow-hidden">
             <AchievementsPanel
               language={language}
               className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-white/10 bg-black/40 px-4 py-4 shadow-xl backdrop-blur-md glass-panel"
@@ -441,7 +594,7 @@ export function AccountsTab({
                 <h2 id="account-settings-title" className="text-base font-semibold text-white/95">
                   {tt("app.accounts.accountSettingsTitle")}
                 </h2>
-                <p className="mt-0.5 text-xs text-white/45">{tt("app.accounts.settingsSubtitle")}</p>
+                <p className="mt-0.5 text-xs text-white/45">{tt("app.accounts.settingsSubtitleShort")}</p>
               </div>
               <button
                 type="button"
@@ -471,165 +624,7 @@ export function AccountsTab({
             </div>
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {settingsSection === "accounts" ? (
-                <>
-                  <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-white/45">
-                          {tt("app.accounts.savedListTitle")}
-                        </h3>
-                        <p className="mt-1 text-xs text-white/40">
-                          {tt("app.accounts.savedListHintShort")}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={addingAccount}
-                        onClick={() => void onAddAccount()}
-                        className="interactive-press flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/35 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50"
-                      >
-                        <PlusIcon className="h-3.5 w-3.5" />
-                        {tt("app.accounts.addAccount")}
-                      </button>
-                    </div>
-                    {launcherAccounts.length === 0 ? (
-                      <p className="py-4 text-center text-sm text-white/45">—</p>
-                    ) : (
-                      <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto">
-                        {launcherAccounts.map((acc) => (
-                          <li
-                            key={acc.id}
-                            className={`flex items-stretch gap-2 rounded-xl border px-2 py-2 transition ${
-                              acc.is_active
-                                ? "border-emerald-400/35 bg-emerald-500/10"
-                                : "border-white/10 bg-black/30 hover:bg-black/50"
-                            }`}
-                          >
-                            <AccountAvatar
-                              username={acc.label}
-                              profile={acc.is_active ? profileAvatarInput : undefined}
-                              kind={acc.kind}
-                              size={88}
-                              className={`h-11 w-11 shrink-0 self-center rounded-full ${accountKindAvatarClass(acc.kind)}`}
-                            />
-                            <button
-                              type="button"
-                              disabled={acc.is_active}
-                              onClick={() => {
-                                if (!acc.is_active) void onSwitchAccount(acc.id);
-                              }}
-                              className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition enabled:cursor-pointer enabled:hover:bg-white/5 enabled:active:scale-[0.99] disabled:cursor-default"
-                            >
-                              <span className="block truncate text-sm font-semibold text-white/95">
-                                {acc.label}
-                              </span>
-                              <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                                <span
-                                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                                    acc.kind === "microsoft"
-                                      ? "bg-sky-500/25 text-sky-100"
-                                      : acc.kind === "ely"
-                                        ? "bg-[#2d7d46]/35 text-emerald-100"
-                                        : "bg-white/10 text-white/55"
-                                  }`}
-                                >
-                                  {accountKindShortLabel(acc.kind)}
-                                </span>
-                                {acc.is_active ? (
-                                  <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-300/90">
-                                    {tt("app.accounts.activeBadge")}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPendingRemoveAccountId(acc.id)}
-                              className="interactive-press shrink-0 self-center rounded-lg p-2.5 text-white/35 hover:bg-red-500/15 hover:text-red-300"
-                              title={tt("app.accounts.removeTitle")}
-                            >
-                              <DeleteIcon className="h-4 w-4" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  {!isAuthorized ? (
-                    <p className="text-center text-sm text-white/70">{tt("app.accounts.hint")}</p>
-                  ) : null}
-
-                  <div>
-                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-white/45">
-                      {tt("app.accounts.providerSignIn")}
-                    </h3>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {profile.ms_id_token ? (
-                        <button
-                          type="button"
-                          onClick={() => void onMicrosoftLogout()}
-                          className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
-                        >
-                          <MicrosoftIcon />
-                          <span>{tt("app.accounts.microsoftLogout")}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void onMicrosoftLogin()}
-                          disabled={elyLoading || msLoading}
-                          className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-[#0078d4]/90 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#106ebe] disabled:opacity-60"
-                        >
-                          <MicrosoftIcon />
-                          <span>{tt("app.accounts.microsoftSignIn")}</span>
-                        </button>
-                      )}
-                      {profile.ely_username ? (
-                        <button
-                          type="button"
-                          onClick={() => void onElyLogout()}
-                          className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/40 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-300"
-                        >
-                          <ElyByIcon />
-                          <span>{tt("app.accounts.elyLogout")}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void onElyLogin()}
-                          disabled={elyLoading}
-                          className="interactive-press flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d7d46] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
-                        >
-                          <ElyByIcon />
-                          <span>{elyLoading ? tt("app.accounts.elyWaiting") : "Ely.by"}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {elyAuthUrl ? (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
-                      <p className="mb-1.5 text-xs font-medium text-amber-200">
-                        {tt("app.accounts.elyDialogTitle")}
-                      </p>
-                      <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
-                      <p className="mt-1.5 text-[11px] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
-                    </div>
-                  ) : null}
-                  {msAuthUrl ? (
-                    <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-left">
-                      <p className="mb-1.5 text-xs font-medium text-blue-200">
-                        {tt("app.accounts.microsoftSignIn")}
-                      </p>
-                      <p className="break-all text-xs text-white/90">{msAuthUrl}</p>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-
-              {settingsSection === "platform" ? (
+              {settingsSection === "accounts" || settingsSection === "platform" ? (
                 <PlatformAccountPanel
                   showNotification={showNotification}
                   language={language}
@@ -643,7 +638,7 @@ export function AccountsTab({
                   }}
                   onMicrosoftLogin={onMicrosoftLogin}
                   onElyLogin={onElyLogin}
-                  providerLoginBusy={elyLoading || msLoading}
+                  providerLoginBusy={providerBusy}
                 />
               ) : null}
 

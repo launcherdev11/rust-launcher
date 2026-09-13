@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { IdleAnimation, WalkingAnimation, SkinViewer } from "skinview3d";
+import {
+  CrouchAnimation,
+  FlyingAnimation,
+  FunctionAnimation,
+  IdleAnimation,
+  RunningAnimation,
+  SkinViewer,
+  WalkingAnimation,
+  WaveAnimation,
+  type PlayerAnimation,
+} from "skinview3d";
 import {
   Color,
   DirectionalLight,
@@ -31,6 +41,78 @@ import {
   type McSkin,
   type SkinModelVariant,
 } from "../lib/skin";
+import { applySkinLayer3D, removeSkinLayer3D } from "../lib/skin_layer_3d";
+
+export type SkinPreviewAnimationId =
+  | "idle"
+  | "walk"
+  | "run"
+  | "wave"
+  | "crouch"
+  | "fly"
+  | "look";
+
+const ANIMATION_CYCLE: SkinPreviewAnimationId[] = [
+  "walk",
+  "idle",
+  "run",
+  "wave",
+  "look",
+  "crouch",
+  "fly",
+];
+
+function createPreviewAnimation(id: SkinPreviewAnimationId): PlayerAnimation {
+  switch (id) {
+    case "walk": {
+      const walk = new WalkingAnimation();
+      walk.speed = 0.55;
+      walk.headBobbing = true;
+      return walk;
+    }
+    case "run": {
+      const run = new RunningAnimation();
+      run.speed = 0.85;
+      return run;
+    }
+    case "wave": {
+      const wave = new WaveAnimation("right");
+      wave.speed = 1.05;
+      return wave;
+    }
+    case "crouch": {
+      const crouch = new CrouchAnimation();
+      crouch.speed = 0.7;
+      crouch.showProgress = true;
+      return crouch;
+    }
+    case "fly": {
+      const fly = new FlyingAnimation();
+      fly.speed = 0.75;
+      return fly;
+    }
+    case "look":
+      return new FunctionAnimation((player, progress) => {
+        const t = progress * 1.15;
+        player.skin.head.rotation.y = Math.sin(t * 0.7) * 0.55;
+        player.skin.head.rotation.x = Math.sin(t * 0.45) * 0.18;
+        player.skin.leftArm.rotation.z = Math.PI * 0.02 + Math.sin(t) * 0.04;
+        player.skin.rightArm.rotation.z = -Math.PI * 0.02 + Math.cos(t) * 0.04;
+        player.skin.leftArm.rotation.x = Math.sin(t * 0.6) * 0.08;
+        player.skin.rightArm.rotation.x = Math.cos(t * 0.6) * 0.08;
+        player.cape.rotation.x = Math.PI * 0.06 + Math.sin(t) * 0.02;
+      });
+    case "idle":
+    default: {
+      const idle = new IdleAnimation();
+      idle.speed = 0.95;
+      idle.addAnimation((player, progress) => {
+        player.rotation.y = Math.PI * 0.2 + Math.sin(progress * 0.45) * 0.28;
+      });
+      return idle;
+    }
+  }
+}
 
 export type AccountSkinPreviewProps = {
   profile: ProfileAvatarInput;
@@ -61,6 +143,8 @@ export type AccountSkinPreviewProps = {
   skinLibraryEmpty?: string;
   skinLibraryLoading?: string;
   skinLibraryError?: string;
+  animationTitle?: string;
+  animationLabels?: Partial<Record<SkinPreviewAnimationId, string>>;
   className?: string;
 };
 
@@ -93,12 +177,18 @@ export function AccountSkinPreview({
   skinLibraryEmpty = "You have no saved skins on this account.",
   skinLibraryLoading = "Loading skins…",
   skinLibraryError = "Failed to load skins.",
+  animationTitle = "Animation",
+  animationLabels,
   className,
 }: AccountSkinPreviewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
   const skinPanelRef = useRef<HTMLDivElement>(null);
+  const animationIdRef = useRef<SkinPreviewAnimationId>("walk");
+  const animationPausedRef = useRef(false);
+  const [animationId, setAnimationId] = useState<SkinPreviewAnimationId>("walk");
+  const [animationMenuOpen, setAnimationMenuOpen] = useState(false);
   const [capePickerOpen, setCapePickerOpen] = useState(false);
   const [skinByUsernameOpen, setSkinByUsernameOpen] = useState(false);
   const [skinUploadOpen, setSkinUploadOpen] = useState(false);
@@ -197,12 +287,15 @@ export function AccountSkinPreview({
   };
 
   useEffect(() => {
-    if (!capePickerOpen && !skinByUsernameOpen && !skinUploadOpen && !skinLibraryOpen) return;
+    if (!capePickerOpen && !skinByUsernameOpen && !skinUploadOpen && !skinLibraryOpen && !animationMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (capePickerOpen && rootRef.current && !rootRef.current.contains(target)) {
         setCapePickerOpen(false);
+      }
+      if (animationMenuOpen && rootRef.current && !rootRef.current.contains(target)) {
+        setAnimationMenuOpen(false);
       }
       if (
         (skinByUsernameOpen || skinUploadOpen || skinLibraryOpen) &&
@@ -218,6 +311,10 @@ export function AccountSkinPreview({
         closeSkinPanels();
         return;
       }
+      if (animationMenuOpen) {
+        setAnimationMenuOpen(false);
+        return;
+      }
       if (capePickerOpen) setCapePickerOpen(false);
     };
     window.addEventListener("pointerdown", onPointerDown);
@@ -226,7 +323,22 @@ export function AccountSkinPreview({
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [capePickerOpen, skinByUsernameOpen, skinUploadOpen, skinLibraryOpen]);
+  }, [capePickerOpen, skinByUsernameOpen, skinUploadOpen, skinLibraryOpen, animationMenuOpen]);
+
+  const applyAnimation = useCallback((id: SkinPreviewAnimationId, opts?: { pauseCycle?: boolean }) => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.disposed) return;
+    if (opts?.pauseCycle !== false) animationPausedRef.current = true;
+    animationIdRef.current = id;
+    setAnimationId(id);
+    viewer.playerObject.resetJoints();
+    viewer.playerObject.position.y = 0;
+    viewer.playerObject.rotation.x = 0;
+    viewer.animation = createPreviewAnimation(id);
+    if (id === "idle" || id === "look" || id === "wave") {
+      viewer.playerObject.rotation.y = Math.PI * 0.2;
+    }
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -248,63 +360,62 @@ export function AccountSkinPreview({
     viewer.zoom = 0.9;
     viewer.fov = 48;
 
-    viewer.globalLight.intensity = 0.55;
-    viewer.globalLight.color = new Color(0xd8e4ff);
-    viewer.cameraLight.intensity = 0.28;
-    viewer.cameraLight.color = new Color(0xfff6ea);
+    viewer.globalLight.intensity = 1.05;
+    viewer.globalLight.color = new Color(0xeef3ff);
+    viewer.cameraLight.intensity = 0.55;
+    viewer.cameraLight.color = new Color(0xfff8ef);
 
     const extraLights: Light[] = [];
 
-    const hemi = new HemisphereLight(0xe8f0ff, 0x12131a, 0.7);
+    const hemi = new HemisphereLight(0xf4f7ff, 0x1a1c24, 1.15);
     viewer.scene.add(hemi);
     extraLights.push(hemi);
 
-    const keyLight = new DirectionalLight(0xfff2e0, 1.35);
-    keyLight.position.set(-2.8, 5.2, 4.2);
+    const keyLight = new DirectionalLight(0xfff5e8, 1.85);
+    keyLight.position.set(-2.4, 5.6, 4.6);
     viewer.scene.add(keyLight);
     extraLights.push(keyLight);
 
-    const fillLight = new DirectionalLight(0x9ec5ff, 0.55);
-    fillLight.position.set(3.4, 1.8, -1.6);
+    const fillLight = new DirectionalLight(0xb8d4ff, 0.95);
+    fillLight.position.set(3.6, 2.2, -1.2);
     viewer.scene.add(fillLight);
     extraLights.push(fillLight);
 
-    const rimLight = new PointLight(0x34d399, 0.85, 14, 2);
-    rimLight.position.set(0.2, 2.4, -3.8);
+    const rimLight = new PointLight(0x5eead4, 1.15, 16, 2);
+    rimLight.position.set(0.2, 2.8, -3.4);
     viewer.scene.add(rimLight);
     extraLights.push(rimLight);
 
-    const floorGlow = new PointLight(0x10b981, 0.35, 8, 2);
-    floorGlow.position.set(0, -0.6, 1.2);
+    const floorGlow = new PointLight(0x34d399, 0.55, 10, 2);
+    floorGlow.position.set(0, -0.4, 1.4);
     viewer.scene.add(floorGlow);
     extraLights.push(floorGlow);
 
-    const walk = new WalkingAnimation();
-    walk.speed = 0.5;
-    walk.headBobbing = true;
-    const idle = new IdleAnimation();
-    idle.speed = 0.9;
-    idle.addAnimation((player, progress) => {
-      player.rotation.y = Math.PI * 0.2 + Math.sin(progress * 0.45) * 0.32;
-    });
-
-    let mode: "walk" | "idle" = "walk";
-    viewer.animation = walk;
-    viewer.playerObject.rotation.y = Math.PI * 0.2;
-
-    const cycleAnimation = () => {
-      if (viewer.disposed) return;
-      if (mode === "walk") {
-        mode = "idle";
-        viewer.animation = idle;
-      } else {
-        mode = "walk";
-        viewer.animation = walk;
-      }
-    };
-    const animationCycleId = window.setInterval(cycleAnimation, 9000);
+    const frontFill = new PointLight(0xffffff, 0.45, 18, 2);
+    frontFill.position.set(0, 3.2, 6.5);
+    viewer.scene.add(frontFill);
+    extraLights.push(frontFill);
 
     viewerRef.current = viewer;
+    viewer.playerObject.rotation.y = Math.PI * 0.2;
+    viewer.animation = createPreviewAnimation(animationIdRef.current);
+
+    let cycleIndex = 0;
+    const cycleAnimation = () => {
+      if (viewer.disposed || animationPausedRef.current) return;
+      cycleIndex = (cycleIndex + 1) % ANIMATION_CYCLE.length;
+      const next = ANIMATION_CYCLE[cycleIndex] ?? "idle";
+      animationIdRef.current = next;
+      setAnimationId(next);
+      viewer.playerObject.resetJoints();
+      viewer.playerObject.position.y = 0;
+      viewer.playerObject.rotation.x = 0;
+      viewer.animation = createPreviewAnimation(next);
+      if (next === "idle" || next === "look" || next === "wave") {
+        viewer.playerObject.rotation.y = Math.PI * 0.2;
+      }
+    };
+    const animationCycleId = window.setInterval(cycleAnimation, 8000);
 
     const resize = () => {
       const nextWidth = container.clientWidth;
@@ -321,6 +432,7 @@ export function AccountSkinPreview({
     return () => {
       window.clearInterval(animationCycleId);
       resizeObserver.disconnect();
+      removeSkinLayer3D(viewer);
       for (const light of extraLights) {
         viewer.scene.remove(light);
         light.dispose();
@@ -344,6 +456,7 @@ export function AccountSkinPreview({
           await viewer.loadSkin(skinOverrideUrl, { ears: false, model: "auto-detect" });
           if (cancelled || viewer.disposed) return;
           viewer.playerObject.ears.visible = false;
+          applySkinLayer3D(viewer);
           return;
         }
 
@@ -357,12 +470,14 @@ export function AccountSkinPreview({
         await viewer.loadSkin(source, { ears: false, model: "auto-detect" });
         if (cancelled || viewer.disposed) return;
         viewer.playerObject.ears.visible = false;
+        applySkinLayer3D(viewer);
       } catch (error) {
         console.debug("[skin] failed to load skin preview", error);
         if (!cancelled && !viewer.disposed) {
           await viewer.loadSkin(DEFAULT_SKIN_URL, { ears: false, model: "auto-detect" });
           if (cancelled || viewer.disposed) return;
           viewer.playerObject.ears.visible = false;
+          applySkinLayer3D(viewer);
         }
       }
     };
@@ -512,13 +627,22 @@ export function AccountSkinPreview({
   };
 
   const selectedCapeId = activeCape?.id ?? null;
+  const animationLabelMap: Record<SkinPreviewAnimationId, string> = {
+    idle: animationLabels?.idle ?? "Idle",
+    walk: animationLabels?.walk ?? "Walk",
+    run: animationLabels?.run ?? "Run",
+    wave: animationLabels?.wave ?? "Wave",
+    crouch: animationLabels?.crouch ?? "Crouch",
+    fly: animationLabels?.fly ?? "Fly",
+    look: animationLabels?.look ?? "Look around",
+  };
 
   return (
     <div
       ref={rootRef}
       className={
         className ??
-        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#07080d]/85 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0a0c12]/85 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md"
       }
     >
       {onSettingsClick ? (
@@ -532,12 +656,62 @@ export function AccountSkinPreview({
         </button>
       ) : null}
 
+      <div
+        className={`absolute left-3 z-10 flex flex-col items-start gap-2 ${
+          onSettingsClick ? "top-14" : "top-3"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            closeSkinPanels();
+            setCapePickerOpen(false);
+            setAnimationMenuOpen((open) => !open);
+          }}
+          className="interactive-press flex h-9 items-center gap-2 rounded-xl border border-white/[0.08] bg-[#16161e]/95 px-3 text-xs font-semibold text-white/90 shadow-[0_4px_16px_rgba(0,0,0,0.35)] transition hover:border-white/[0.12] hover:bg-[#1c1c26]"
+          title={animationTitle}
+          aria-expanded={animationMenuOpen}
+        >
+          <AnimationIcon />
+          <span>{animationLabelMap[animationId]}</span>
+        </button>
+        {animationMenuOpen ? (
+          <div className="w-[11.5rem] overflow-hidden rounded-xl border border-white/[0.07] bg-[#16161e] shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+            <div className="border-b border-white/[0.06] px-3 py-2">
+              <p className="text-[11px] font-semibold text-white/85">{animationTitle}</p>
+            </div>
+            <ul className="max-h-[min(50vh,14rem)] overflow-y-auto py-1">
+              {ANIMATION_CYCLE.map((id) => (
+                <li key={id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyAnimation(id);
+                      setAnimationMenuOpen(false);
+                    }}
+                    className={`interactive-press flex w-full items-center justify-between px-3 py-1.5 text-left text-[11px] font-medium transition ${
+                      animationId === id
+                        ? "bg-emerald-500/[0.1] text-emerald-100"
+                        : "text-white/75 hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <span>{animationLabelMap[id]}</span>
+                    {animationId === id ? <CheckIcon /> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+
       {showCapePicker ? (
         <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
           <button
             type="button"
             onClick={() => {
               closeSkinPanels();
+              setAnimationMenuOpen(false);
               setCapePickerOpen((open) => !open);
             }}
             className="interactive-press flex h-9 items-center gap-2 rounded-xl border border-white/[0.08] bg-[#16161e]/95 px-3 text-xs font-semibold text-white/90 shadow-[0_4px_16px_rgba(0,0,0,0.35)] transition hover:bg-[#1c1c26] hover:border-white/[0.12]"
@@ -622,13 +796,14 @@ export function AccountSkinPreview({
       ) : null}
 
       <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(52,211,153,0.16),transparent_58%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_18%_12%,rgba(56,189,248,0.12),transparent_42%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_86%_18%,rgba(251,191,36,0.08),transparent_40%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
-        <div className="absolute left-1/2 bottom-[10%] h-10 w-[min(70%,18rem)] -translate-x-1/2 rounded-[100%] bg-emerald-400/25 blur-2xl" />
-        <div className="absolute left-1/2 bottom-[12%] h-2 w-[min(42%,10rem)] -translate-x-1/2 rounded-[100%] bg-white/20 blur-md" />
-        <div className="absolute inset-0 shadow-[inset_0_0_90px_rgba(0,0,0,0.5)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(52,211,153,0.22),transparent_58%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_18%_12%,rgba(125,211,252,0.18),transparent_42%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_86%_18%,rgba(251,191,36,0.12),transparent_40%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_70%,rgba(255,255,255,0.06),transparent_45%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+        <div className="absolute left-1/2 bottom-[10%] h-10 w-[min(70%,18rem)] -translate-x-1/2 rounded-[100%] bg-emerald-400/30 blur-2xl" />
+        <div className="absolute left-1/2 bottom-[12%] h-2 w-[min(42%,10rem)] -translate-x-1/2 rounded-[100%] bg-white/25 blur-md" />
+        <div className="absolute inset-0 shadow-[inset_0_0_70px_rgba(0,0,0,0.35)]" />
       </div>
       <div ref={containerRef} className="relative min-h-0 flex-1" />
 
@@ -788,6 +963,7 @@ export function AccountSkinPreview({
               indicator={!!skinOverrideLabel}
               onClick={() => {
                 setCapePickerOpen(false);
+                setAnimationMenuOpen(false);
                 setSkinUploadOpen(false);
                 setSkinLibraryOpen(false);
                 setSkinByUsernameOpen((open) => !open);
@@ -799,6 +975,7 @@ export function AccountSkinPreview({
               active={skinUploadOpen}
               onClick={() => {
                 setCapePickerOpen(false);
+                setAnimationMenuOpen(false);
                 setSkinByUsernameOpen(false);
                 setSkinLibraryOpen(false);
                 setSkinUploadOpen((open) => !open);
@@ -811,6 +988,7 @@ export function AccountSkinPreview({
               indicator={!!activeSkin}
               onClick={() => {
                 setCapePickerOpen(false);
+                setAnimationMenuOpen(false);
                 setSkinByUsernameOpen(false);
                 setSkinUploadOpen(false);
                 setSkinLibraryOpen((open) => !open);
@@ -1088,6 +1266,14 @@ function SkinIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
       <path d="M12 3.5c-1.9 0-3.4 1.5-3.4 3.4S10.1 10.3 12 10.3s3.4-1.5 3.4-3.4S13.9 3.5 12 3.5Zm0 8.2c-3.3 0-6.5 1.8-6.5 4.3v1.7c0 .6.5 1.1 1.1 1.1h10.8c.6 0 1.1-.5 1.1-1.1v-1.7c0-2.5-3.2-4.3-6.5-4.3Z" />
+    </svg>
+  );
+}
+
+function AnimationIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+      <path d="M8.5 5.2v13.6c0 .7.8 1.1 1.4.7l10-6.8c.5-.4.5-1.1 0-1.4l-10-6.8c-.6-.4-1.4 0-1.4.7Z" />
     </svg>
   );
 }
