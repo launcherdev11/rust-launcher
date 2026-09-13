@@ -73,7 +73,7 @@ export function SelectedProfileTitleBar({
 
   return (
     <div
-      className="pointer-events-auto flex min-w-[280px] max-w-[min(480px,calc(100vw-16rem))] items-center gap-2.5 rounded-lg bg-black/30 px-2.5 py-1 shadow-soft backdrop-blur-md"
+      className="pointer-events-auto glass-toolbar flex min-w-[280px] max-w-[min(480px,calc(100vw-16rem))] items-center gap-2.5 rounded-lg px-2.5 py-1"
       data-no-drag
     >
       <button

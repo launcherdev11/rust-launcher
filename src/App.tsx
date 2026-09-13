@@ -4646,11 +4646,11 @@ function App() {
 
       {showHelpModal && (
         <div
-          className="pointer-events-auto fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay pointer-events-auto fixed inset-0 z-[300] flex items-center justify-center"
           onClick={() => setShowHelpModal(false)}
         >
           <div
-            className="glass-panel w-[min(90vw,28rem)] max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 p-5 shadow-xl"
+            className="glass-modal w-[min(90vw,28rem)] max-h-[85vh] overflow-y-auto p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-4">
@@ -4724,11 +4724,11 @@ function App() {
 
       {pendingRemoveAccountId !== null && (
         <div
-          className="pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center"
           onClick={() => setPendingRemoveAccountId(null)}
         >
           <div
-            className="glass-panel pointer-events-auto w-[min(90vw,24rem)] rounded-[22px] border border-white/15 bg-[#14141c]/95 p-5 shadow-2xl"
+            className="glass-modal pointer-events-auto w-[min(90vw,24rem)] p-5"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -4776,7 +4776,7 @@ function App() {
           }}
         >
           <div
-            className="absolute z-[330] w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            className="absolute z-[330] w-56 glass-popover p-1 text-xs text-white"
             style={{ top: pinnedContextMenu.y, left: pinnedContextMenu.x }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => {
@@ -4973,7 +4973,7 @@ function App() {
               />
             </button>
             {accountSwitcherOpen ? (
-              <div className="absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/12 bg-[#14141c] py-1 shadow-2xl">
+              <div className="glass-popover absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden py-1">
                 <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
                   {tt("app.accounts.switcherHeading")}
                 </p>

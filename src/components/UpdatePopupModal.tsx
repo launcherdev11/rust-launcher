@@ -33,12 +33,12 @@ export function UpdatePopupModal({
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[360] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="glass-overlay pointer-events-auto fixed inset-0 z-[360] flex items-center justify-center p-4"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="glass-panel flex w-full max-w-[720px] flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#12121a]/95 shadow-2xl"
+        className="glass-modal flex w-full max-w-[720px] flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

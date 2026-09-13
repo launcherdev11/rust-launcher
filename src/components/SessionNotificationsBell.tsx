@@ -162,7 +162,7 @@ export function SessionNotificationsBell({
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-[100] mt-1.5 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/12 bg-[#14141c] shadow-2xl">
+        <div className="glass-popover absolute right-0 top-full z-[100] mt-1.5 w-[min(320px,calc(100vw-2rem))] overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
               {tt("app.sessionNotifications.heading")}

@@ -127,11 +127,11 @@ export function ScreenshotsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="glass-panel flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+        className="glass-modal flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

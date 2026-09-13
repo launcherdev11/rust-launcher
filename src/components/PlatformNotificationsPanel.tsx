@@ -107,7 +107,7 @@ export function PlatformNotificationsPanel({ showNotification, language }: Props
   };
 
   return (
-    <div className="w-full rounded-2xl border border-white/10 glass-panel bg-black/40 px-5 py-5 shadow-xl backdrop-blur-md">
+    <div className="glass-panel w-full px-5 py-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-white/90">{tt("notifications.title")}</p>

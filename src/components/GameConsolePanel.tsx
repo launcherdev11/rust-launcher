@@ -61,7 +61,7 @@ export function GameConsolePanel({
 
   return (
     <div
-      className={`flex min-h-0 w-full flex-col rounded-2xl border border-white/12 bg-black/65 px-4 py-3 shadow-soft backdrop-blur-xl ${className}`}
+      className={`glass-panel flex min-h-0 w-full flex-col px-4 py-3 ${className}`}
     >
       <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-2">

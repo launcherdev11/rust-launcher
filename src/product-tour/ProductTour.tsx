@@ -406,7 +406,7 @@ export function ProductTour({
           }
         >
           <div
-            className="overflow-hidden rounded-2xl border border-white/15 bg-[#0c0e14]/95 shadow-2xl backdrop-blur-xl"
+            className="glass-modal overflow-hidden"
             style={{
               boxShadow: `0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px ${accentColor}33`,
             }}

@@ -18,14 +18,14 @@ const variantClasses: Record<Variant, string> = {
   primary:
     "accent-bg text-white shadow-soft hover:opacity-90 focus-visible:ring-white/35",
   secondary:
-    "border border-white/20 bg-white/10 text-white shadow-soft hover:bg-white/20 hover:border-white/30",
+    "glass-control text-white hover:border-white/25 hover:bg-white/[0.08]",
   ghost:
     "border border-transparent bg-transparent text-white/70 hover:bg-white/10 hover:text-white",
   danger:
-    "border border-red-500/35 bg-red-600/20 text-red-100 hover:bg-red-600/30",
-  sky: "border border-sky-400/35 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25",
+    "border border-red-400/30 bg-red-500/15 text-red-100 hover:bg-red-500/25",
+  sky: "border border-sky-400/30 bg-sky-500/12 text-sky-100 hover:bg-sky-500/22",
   emerald:
-    "border border-emerald-500/40 bg-emerald-600/25 text-emerald-50 hover:bg-emerald-600/35",
+    "border border-emerald-400/30 bg-emerald-500/15 text-emerald-50 hover:bg-emerald-500/25",
 };
 
 const sizeClasses: Record<Size, string> = {

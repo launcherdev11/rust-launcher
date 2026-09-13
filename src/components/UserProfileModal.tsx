@@ -123,11 +123,11 @@ export function UserProfileModal({
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="glass-overlay pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="glass-panel pointer-events-auto flex max-h-[min(92vh,860px)] w-[min(96vw,52rem)] flex-col overflow-hidden rounded-[22px] border border-white/15 bg-[#14141c]/95 shadow-2xl"
+        className="glass-modal pointer-events-auto flex max-h-[min(92vh,860px)] w-[min(96vw,52rem)] flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

@@ -19,7 +19,7 @@ export function ActiveDownloadsPanel({ jobs, language }: ActiveDownloadsPanelPro
       {jobs.map((job) => (
         <div
           key={job.id}
-          className="pointer-events-auto rounded-xl border border-white/10 bg-black/70 px-3 py-2 shadow-lg backdrop-blur-md"
+          className="pointer-events-auto glass-panel px-3 py-2"
         >
           <div className="flex items-center justify-between gap-2 text-[11px]">
             <span className="min-w-0 truncate font-medium text-white/90">{job.label}</span>

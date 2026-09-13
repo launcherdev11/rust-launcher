@@ -91,7 +91,7 @@ export function ProjectDetailPage({
   if (loading && !detail) {
     return (
       <div
-        className="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-white/12 bg-black/65 p-5 shadow-soft backdrop-blur-xl"
+        className="glass-panel flex min-h-0 flex-1 flex-col gap-4 p-5"
         aria-busy="true"
       >
         <div className="flex items-center gap-3">

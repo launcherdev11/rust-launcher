@@ -4030,7 +4030,7 @@ export function ModpackTab({
         onContextMenuCapture={handleListAreaContextMenuCapture}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
+          <div className="glass-toolbar flex min-w-0 flex-1 basis-[22rem] items-center gap-3 px-4 py-2.5">
             <SearchIcon className="h-4 w-4" />
             <input
               type="text"
@@ -4443,7 +4443,7 @@ export function ModpackTab({
                   <ChevronDown className="h-3 w-3 text-white/60" />
                 </button>
                 {isVersionDropdownOpen && (
-                  <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                  <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover overflow-y-auto p-1 text-xs">
                     {versionsLoading && (
                       <div className="px-3 py-2 text-white/60">
                         {tt("modpacks.common.loading")}
@@ -4529,7 +4529,7 @@ export function ModpackTab({
                     <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
                   </button>
                   {isLoaderVersionDropdownOpen && (
-                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover overflow-y-auto p-1 text-xs">
                       {loaderVersionOptions.length === 0 && !loaderVersionsLoading && (
                         <div className="px-3 py-2 text-white/60">
                           {tt("modpacks.manage.noVersionsForGame")}
@@ -4672,7 +4672,7 @@ export function ModpackTab({
         )}
 
         <div
-          className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/25 bg-black/50 px-6 py-10 text-center text-sm text-white/70 backdrop-blur-xl"
+          className="glass-inset flex flex-col items-center justify-center gap-3 border-dashed px-6 py-10 text-center text-sm text-white/70"
           onDragOver={(e) => {
             e.preventDefault();
           }}
@@ -4700,7 +4700,7 @@ export function ModpackTab({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/15 bg-black/45 px-5 py-4 backdrop-blur-xl">
+        <div className="glass-inset rounded-[1.25rem] px-5 py-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-white">
@@ -5210,7 +5210,7 @@ export function ModpackTab({
         >
           <div className="glass-panel flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:flex-none lg:shrink-0 lg:pr-2 lg:[flex-basis:calc(var(--modpack-main-frac,0.68)*100%)]">
           <div className="mb-3 flex flex-wrap items-center gap-3">
-            <div className="flex min-w-0 flex-1 basis-[18rem] items-center gap-3 rounded-2xl border border-white/15 bg-black/35 px-4 py-2 shadow-soft backdrop-blur-xl">
+            <div className="glass-toolbar flex min-w-0 flex-1 basis-[18rem] items-center gap-3 px-4 py-2">
               <SearchIcon className="h-4 w-4" />
               <input
                 type="text"
@@ -5258,7 +5258,7 @@ export function ModpackTab({
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 {isAddMenuOpen && (
-                  <div className="absolute right-0 z-30 mt-1 w-44 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg">
+                  <div className="absolute right-0 z-30 mt-1 w-44 glass-popover p-1 text-xs text-white">
                   <button
                     type="button"
                     onClick={() => {
@@ -5633,7 +5633,7 @@ export function ModpackTab({
           <span className="pointer-events-none h-24 w-1 rounded-full bg-white/35 shadow-sm" />
         </div>
 
-        <div className="glass-panel relative z-10 flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border border-white/12 bg-black/65 px-3 py-3 shadow-soft backdrop-blur-xl max-h-[min(42rem,calc(100vh-6rem))] lg:sticky lg:top-2 lg:mt-0 lg:min-w-[11rem] lg:flex-1 lg:self-stretch lg:shadow-lg">
+        <div className="glass-panel relative z-10 flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 py-3 max-h-[min(42rem,calc(100vh-6rem))] lg:sticky lg:top-2 lg:mt-0 lg:min-w-[11rem] lg:flex-1 lg:self-stretch">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               <span
@@ -5762,7 +5762,7 @@ export function ModpackTab({
           }}
         >
           <div
-            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            className="absolute z-50 w-56 glass-popover p-1 text-xs text-white"
             style={{ top: contextMenu.y, left: contextMenu.x }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => {
@@ -5894,7 +5894,7 @@ export function ModpackTab({
           }}
         >
           <div
-            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            className="absolute z-50 w-56 glass-popover p-1 text-xs text-white"
             style={{ top: listContextMenu.y, left: listContextMenu.x }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => {
@@ -5927,7 +5927,7 @@ export function ModpackTab({
           }}
         >
           <div
-            className="absolute z-50 w-56 rounded-2xl bg-black/90 p-1 text-xs text-white shadow-soft backdrop-blur-lg"
+            className="absolute z-50 w-56 glass-popover p-1 text-xs text-white"
             style={{ top: groupContextMenu.y, left: groupContextMenu.x }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => {
@@ -5966,14 +5966,14 @@ export function ModpackTab({
 
       {isGroupModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => {
             setEditingGroupId(null);
             setIsGroupModalOpen(false);
           }}
         >
           <div
-            className="glass-panel flex w-full max-w-md flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            className="glass-modal flex w-full max-w-md flex-col p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-4 text-lg font-semibold text-white">
@@ -6113,11 +6113,11 @@ export function ModpackTab({
 
       {pendingDeleteProfileId && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-40 flex items-center justify-center"
           onClick={() => setPendingDeleteProfileId(null)}
         >
           <div
-            className="glass-panel relative w-full max-w-sm rounded-2xl border border-yellow-400/60 bg-black/80 p-5 text-sm text-white shadow-soft"
+            className="glass-modal relative w-full max-w-sm border-yellow-400/60 p-5 text-sm text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center gap-2">
@@ -6167,11 +6167,11 @@ export function ModpackTab({
 
       {BUILD_PRESETS_UI_ENABLED && isPresetsModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setIsPresetsModalOpen(false)}
         >
           <div
-            className="glass-panel flex max-h-[80vh] w-full max-w-lg flex-col rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            className="glass-modal flex max-h-[80vh] w-full max-w-lg flex-col p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -6273,14 +6273,14 @@ export function ModpackTab({
 
       {isContentUpdatesModalOpen && selectedProfile && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => {
             if (contentUpdatesApplying) return;
             setIsContentUpdatesModalOpen(false);
           }}
         >
           <div
-            className="glass-panel w-full max-w-4xl rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            className="glass-modal w-full max-w-4xl p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -6387,11 +6387,11 @@ export function ModpackTab({
 
       {isProfileSettingsOpen && selectedProfile && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
           onClick={closeProfileSettingsModal}
         >
           <div
-            className="glass-panel w-full max-w-3xl rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            className="glass-modal w-full max-w-3xl p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -6668,11 +6668,11 @@ export function ModpackTab({
 
       {isChangeVersionOpen && selectedProfile && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-[60] flex items-center justify-center"
           onClick={closeChangeVersionModal}
         >
           <div
-            className="glass-panel w-full max-w-lg rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            className="glass-modal w-full max-w-lg p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4">
@@ -6707,7 +6707,7 @@ export function ModpackTab({
                     <ChevronDown className="h-3 w-3 text-white/60" />
                   </button>
                   {isMigrateVersionDropdownOpen && (
-                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover overflow-y-auto p-1 text-xs">
                       {migrateVersionsLoading && (
                         <div className="px-3 py-2 text-white/60">
                           {tt("modpacks.common.loading")}
@@ -6775,7 +6775,7 @@ export function ModpackTab({
                       <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
                     </button>
                     {isMigrateLoaderVersionDropdownOpen && (
-                      <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                      <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover overflow-y-auto p-1 text-xs">
                         {migrateLoaderVersionOptions.length === 0 &&
                           !migrateLoaderVersionsLoading && (
                             <div className="px-3 py-2 text-white/60">
@@ -6837,14 +6837,14 @@ export function ModpackTab({
 
       {isExportOpen && selectedProfile && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => {
             if (exportBusy) return;
             setIsExportOpen(false);
           }}
         >
           <div
-            className="glass-panel w-full max-w-5xl max-h-[80vh] overflow-y-auto rounded-3xl border border-white/15 bg-black/70 p-5 shadow-soft"
+            className="glass-modal w-full max-w-5xl max-h-[80vh] overflow-y-auto p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between gap-3">

@@ -161,7 +161,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
   children,
 }) => {
   return (
-    <section className="mb-4 rounded-2xl border border-white/10 bg-white/8 px-6 py-4 shadow-soft backdrop-blur-md">
+    <section className="glass-panel mb-4 px-6 py-4">
       <h2 className="mb-3 text-sm font-semibold text-white/90">{title}</h2>
       <div className="flex flex-col gap-3">{children}</div>
     </section>

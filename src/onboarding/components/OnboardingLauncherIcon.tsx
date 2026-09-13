@@ -22,7 +22,7 @@ export function OnboardingLauncherIcon({ className = "", size = "welcome" }: Pro
   return (
     <div
       className={[
-        "flex items-center justify-center border border-white/12 bg-black/40 shadow-soft backdrop-blur-md",
+        "glass-control flex items-center justify-center",
         s.wrap,
         className,
       ].join(" ")}

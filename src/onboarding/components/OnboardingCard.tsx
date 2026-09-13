@@ -36,10 +36,8 @@ export function OnboardingCard({
       whileHover={interactive && !disabled ? { y: -2 } : undefined}
       whileTap={interactive && !disabled ? { scale: 0.98 } : undefined}
       className={[
-        "rounded-2xl border px-5 py-4 backdrop-blur-xl transition-colors duration-200",
-        selected
-          ? "border-white/25 bg-black/70 shadow-soft"
-          : "border-white/12 bg-black/65 shadow-soft hover:border-white/20 hover:bg-black/75",
+        "glass-panel px-5 py-4 transition-colors duration-200",
+        selected ? "border-white/25" : "hover:border-white/20",
         interactive ? "cursor-pointer" : "",
         disabled ? "cursor-not-allowed opacity-50" : "",
         className,

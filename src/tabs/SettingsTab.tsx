@@ -12,7 +12,7 @@ import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
 
-const SETTINGS_DARK_BOX = "rounded-2xl border border-white/10 bg-black/20 p-3";
+const SETTINGS_DARK_BOX = "glass-inset p-3";
 
 type SettingsTabId = "game" | "versions" | "launcher";
 
@@ -1727,11 +1727,11 @@ export function SettingsTab({
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       {reinstallDialog && (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
           onClick={() => setReinstallDialog(null)}
         >
           <div
-            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            className="glass-modal max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-1 text-sm font-semibold text-white">
@@ -1762,7 +1762,7 @@ export function SettingsTab({
                 <span className="text-[10px] text-white/50">▾</span>
               </button>
               {isReinstallLoaderDropdownOpen && (
-                <div className="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-1 text-xs shadow-soft">
+                <div className="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto glass-popover p-1 text-xs">
                   {reinstallLoaderOptions.map((opt) => (
                     <button
                       key={opt.version}
@@ -1807,11 +1807,11 @@ export function SettingsTab({
       )}
       {simpleDeleteDialog && (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
           onClick={() => setSimpleDeleteDialog(null)}
         >
           <div
-            className="glass-panel w-[min(90vw,24rem)] rounded-[22px] border border-white/15 bg-[#14141c]/95 p-5 shadow-2xl"
+            className="glass-modal w-[min(90vw,24rem)] p-5"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -1851,11 +1851,11 @@ export function SettingsTab({
       )}
       {deleteDialog && (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
           onClick={() => setDeleteDialog(null)}
         >
           <div
-            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            className="glass-modal max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-2 text-sm font-semibold text-white">
@@ -1939,11 +1939,11 @@ export function SettingsTab({
       )}
       {repairPrompt && (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
           onClick={() => setRepairPrompt(null)}
         >
           <div
-            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            className="glass-modal max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-2 text-sm text-white/90">
@@ -2007,7 +2007,7 @@ export function SettingsTab({
           ].join(" ")}
         >
           <div className="flex w-full shrink-0 justify-center">
-            <label className="flex w-full max-w-xl items-center gap-3 rounded-2xl border border-white/15 bg-black/40 px-4 py-2.5 shadow-soft backdrop-blur-xl">
+            <label className="glass-toolbar flex w-full max-w-xl items-center gap-3 px-4 py-2.5">
               <Search className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
               <input
                 type="search"
@@ -2366,7 +2366,7 @@ export function SettingsTab({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
                         transition={{ duration: 0.14, ease: "easeOut" }}
-                        className="absolute left-0 z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                        className="absolute left-0 z-30 mt-1 w-full overflow-hidden glass-popover p-1"
                       >
                         {(["vanilla", "fabric", "quilt", "forge", "neoforge"] as LoaderId[]).map((id) => {
                           const active = versionsLoader === id;
@@ -2413,7 +2413,7 @@ export function SettingsTab({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
                         transition={{ duration: 0.14, ease: "easeOut" }}
-                        className="absolute left-0 z-30 mt-1 w-full rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                        className="absolute left-0 z-30 mt-1 w-full glass-popover p-1"
                       >
                         <div className="px-1 pb-1">
                           <div className="relative">
@@ -2958,7 +2958,7 @@ export function SettingsTab({
                       {settings?.background_accent_color ?? "#0b1530"}
                     </span>
                     {isAccentPickerOpen && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 w-80 rounded-2xl border border-white/15 bg-black/90 px-3 py-3 text-xs text-white shadow-soft backdrop-blur-xl">
+                      <div className="glass-popover absolute right-0 bottom-full z-40 mb-2 w-80 px-3 py-3 text-xs text-white">
                         <div className="mb-2 flex items-center justify-between">
                           <span className="text-[11px] uppercase tracking-[0.16em] text-white/50">
                             {tt("settings.launcher.accentColor.popupTitle")}
@@ -3443,7 +3443,7 @@ export function SettingsTab({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 4, scale: 0.98 }}
                           transition={{ duration: 0.14, ease: "easeOut" }}
-                          className="absolute right-0 z-30 mt-1 w-full min-w-[10rem] overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg"
+                          className="absolute right-0 z-30 mt-1 w-full min-w-[10rem] overflow-hidden glass-popover p-1"
                         >
                           {SIDEBAR_POSITIONS.map((pos) => {
                             const active =
@@ -3601,7 +3601,7 @@ export function SettingsTab({
           </div>
 
           <div className="flex shrink-0 justify-center">
-        <div className="relative flex items-center gap-0 rounded-full border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl overflow-hidden">
+        <div className="glass-chip relative flex items-center gap-0 overflow-hidden p-1">
           <div
             className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white/90 transition-all duration-200 ease-out"
             style={{

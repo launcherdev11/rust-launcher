@@ -149,7 +149,7 @@ function StatCard({
           ? "text-sky-100"
           : "text-white/90";
   return (
-    <div className="glass-panel rounded-2xl border border-white/10 bg-black/40 px-4 py-3.5 shadow-xl backdrop-blur-md">
+    <div className="glass-panel px-4 py-3.5">
       <p className="ui-section">{label}</p>
       <p className={`mt-1 text-2xl font-bold tracking-tight ${tone}`}>{value}</p>
       {hint ? <p className="ui-meta mt-0.5">{hint}</p> : null}

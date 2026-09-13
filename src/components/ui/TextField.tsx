@@ -41,12 +41,11 @@ export const TextField = forwardRef<HTMLInputElement, Props>(function TextField(
         value={value}
         onChange={onChange}
         className={[
-          "ui-body w-full border bg-black/40 text-white outline-none transition-colors",
+          "glass-control ui-body w-full text-white outline-none transition-colors",
           "placeholder:text-white/40",
           "focus:border-white/25",
           "disabled:cursor-not-allowed disabled:opacity-60",
-          pill ? "rounded-full px-4 py-2.5" : "rounded-xl px-3 py-2.5",
-          "border-white/12",
+          pill ? "rounded-full px-4 py-2.5" : "px-3 py-2.5",
           showClear ? "pr-9" : "",
           className,
         ]

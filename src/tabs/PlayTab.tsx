@@ -337,8 +337,8 @@ export function PlayTab({
   }, [isVersionDropdownOpen, filteredVersions.length]);
 
   const bannerClass = fillPane
-    ? "glass-panel relative flex min-h-[7rem] max-h-[min(220px,42%)] w-full max-w-none shrink-0 overflow-hidden rounded-3xl"
-    : "glass-panel relative flex h-[260px] w-full shrink-0 overflow-hidden rounded-3xl";
+    ? "glass-panel relative flex min-h-[7rem] max-h-[min(220px,42%)] w-full max-w-none shrink-0 overflow-hidden"
+    : "glass-panel relative flex h-[260px] w-full shrink-0 overflow-hidden";
 
   const controlsClass = fillPane
     ? "relative mt-2 flex w-full max-w-none shrink-0 justify-center px-2"
@@ -384,7 +384,7 @@ export function PlayTab({
                 key={`empty-${index}`}
                 type="button"
                 onClick={onOpenModpacks}
-                className={`glass-panel group flex min-h-[5.5rem] flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/15 bg-black/25 px-3 py-3 text-center transition-colors hover:border-white/30 hover:bg-black/40 sm:min-h-[6.5rem] ${
+                className={`glass-panel group flex min-h-[5.5rem] flex-col items-center justify-center gap-1.5 border-dashed px-3 py-3 text-center transition-colors hover:border-white/30 sm:min-h-[6.5rem] ${
                   fillPane ? "min-h-0" : ""
                 } ${onOpenModpacks ? "cursor-pointer" : "cursor-default"}`}
               >
@@ -422,7 +422,7 @@ export function PlayTab({
                   onSelectProfile?.(profile.id);
                 }
               }}
-              className={`glass-panel group relative flex min-h-[5.5rem] cursor-pointer items-stretch gap-3 overflow-hidden rounded-2xl px-3 py-3 text-left transition-colors sm:min-h-[6.5rem] sm:px-4 sm:py-3.5 ${
+              className={`glass-panel group relative flex min-h-[5.5rem] cursor-pointer items-stretch gap-3 overflow-hidden px-3 py-3 text-left transition-colors sm:min-h-[6.5rem] sm:px-4 sm:py-3.5 ${
                 fillPane ? "min-h-0" : ""
               } ${
                 isSelected
@@ -592,7 +592,7 @@ export function PlayTab({
               </button>
 
               {isVersionDropdownOpen && versions.length > 0 && (
-                <div className="absolute left-0 bottom-full mb-2 z-30 w-64 rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                <div className="absolute left-0 bottom-full mb-2 z-30 w-64 glass-popover p-1 text-xs">
                   <div className="px-2 pt-2 pb-1">
                     <div className="relative">
                       <input
@@ -763,7 +763,7 @@ export function PlayTab({
               </div>
 
               {isLoaderDropdownOpen && (
-                <div className="absolute right-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] overflow-y-auto rounded-2xl bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+                <div className="absolute right-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] overflow-y-auto glass-popover p-1 text-xs">
                   {(["vanilla", "fabric", "forge", "quilt", "neoforge"] as LoaderId[]).map((id) => {
                     const isActive = loader === id;
                     return (

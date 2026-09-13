@@ -115,11 +115,11 @@ export function ProfileInfoModal({ language, profile, onClose }: ProfileInfoModa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="glass-panel w-full max-w-lg rounded-3xl border border-white/15 bg-black/75 p-5 shadow-soft"
+        className="glass-modal w-full max-w-lg p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

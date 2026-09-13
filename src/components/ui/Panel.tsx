@@ -20,7 +20,7 @@ export function Panel({
   return (
     <div
       className={[
-        "glass-panel rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md",
+        "glass-panel",
         paddingClasses[padding],
         className,
       ]

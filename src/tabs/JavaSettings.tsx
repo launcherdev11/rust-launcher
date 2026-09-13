@@ -674,7 +674,7 @@ export function JavaSettingsTab({
                 </div>
 
                 {validationOutput && (
-                  <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-white/15 bg-black/70 px-3 py-2 text-[11px] text-white/80">
+                  <div className="mt-2 max-h-40 overflow-y-auto glass-inset px-3 py-2 text-[11px] text-white/80">
                     {validationOutput.errors.length > 0 && (
                       <div className="mb-2">
                         <div className="mb-1 font-semibold text-red-300">

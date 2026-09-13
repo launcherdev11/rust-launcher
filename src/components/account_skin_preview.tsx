@@ -642,14 +642,14 @@ export function AccountSkinPreview({
       ref={rootRef}
       className={
         className ??
-        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0a0c12]/85 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        "relative flex h-full min-h-[min(360px,40vh)] w-full flex-col overflow-hidden glass-panel"
       }
     >
       {onSettingsClick ? (
         <button
           type="button"
           onClick={onSettingsClick}
-          className="interactive-press absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/50 backdrop-blur-sm transition hover:bg-black/70"
+          className="interactive-press glass-control absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center transition hover:border-white/20"
           title={settingsTitle}
         >
           <img src="/launcher-assets/settings.png" alt="" className="h-4 w-4 object-contain" />
@@ -668,7 +668,7 @@ export function AccountSkinPreview({
             setCapePickerOpen(false);
             setAnimationMenuOpen((open) => !open);
           }}
-          className="interactive-press flex h-9 items-center gap-2 rounded-xl border border-white/[0.08] bg-[#16161e]/95 px-3 text-xs font-semibold text-white/90 shadow-[0_4px_16px_rgba(0,0,0,0.35)] transition hover:border-white/[0.12] hover:bg-[#1c1c26]"
+          className="interactive-press glass-control flex h-9 items-center gap-2 px-3 text-xs font-semibold text-white/90 transition hover:border-white/20"
           title={animationTitle}
           aria-expanded={animationMenuOpen}
         >
@@ -676,7 +676,7 @@ export function AccountSkinPreview({
           <span>{animationLabelMap[animationId]}</span>
         </button>
         {animationMenuOpen ? (
-          <div className="w-[11.5rem] overflow-hidden rounded-xl border border-white/[0.07] bg-[#16161e] shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+          <div className="glass-popover w-[11.5rem] overflow-hidden">
             <div className="border-b border-white/[0.06] px-3 py-2">
               <p className="text-[11px] font-semibold text-white/85">{animationTitle}</p>
             </div>
@@ -714,7 +714,7 @@ export function AccountSkinPreview({
               setAnimationMenuOpen(false);
               setCapePickerOpen((open) => !open);
             }}
-            className="interactive-press flex h-9 items-center gap-2 rounded-xl border border-white/[0.08] bg-[#16161e]/95 px-3 text-xs font-semibold text-white/90 shadow-[0_4px_16px_rgba(0,0,0,0.35)] transition hover:bg-[#1c1c26] hover:border-white/[0.12]"
+            className="interactive-press glass-control flex h-9 items-center gap-2 px-3 text-xs font-semibold text-white/90 transition hover:border-white/20"
             title={capePickerTitle}
             aria-expanded={capePickerOpen}
           >
@@ -726,7 +726,7 @@ export function AccountSkinPreview({
           </button>
 
           {capePickerOpen ? (
-            <div className="w-[min(100vw-2rem,15.5rem)] overflow-hidden rounded-xl border border-white/[0.07] bg-[#16161e] shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+            <div className="glass-popover w-[min(100vw-2rem,15.5rem)] overflow-hidden">
               <div className="border-b border-white/[0.06] px-3 py-2.5">
                 <p className="text-[11px] font-semibold text-white/85">{capePickerTitle}</p>
                 <p className="mt-0.5 truncate text-[10px] text-white/40">
@@ -1015,7 +1015,7 @@ function SkinPanelShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="w-[min(100vw-2rem,18.5rem)] overflow-hidden rounded-xl border border-white/[0.07] bg-[#16161e] shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+    <div className="glass-popover w-[min(100vw-2rem,18.5rem)] overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold text-white/85">{title}</p>
@@ -1080,7 +1080,7 @@ function SkinActionButton({
       className={`interactive-press flex h-9 items-center gap-2 rounded-xl border px-3 text-xs font-semibold shadow-[0_4px_16px_rgba(0,0,0,0.35)] transition ${
         active
           ? "border-emerald-400/30 bg-[#1c1c26] text-emerald-100/95"
-          : "border-white/[0.08] bg-[#16161e]/95 text-white/90 hover:border-white/[0.12] hover:bg-[#1c1c26]"
+          : "glass-control text-white/90 hover:border-white/20"
       }`}
       title={title}
       aria-expanded={active}

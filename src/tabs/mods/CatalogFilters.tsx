@@ -125,7 +125,7 @@ function SortDropdown({
           <span className="text-[10px] text-white/45">{open ? "▴" : "▾"}</span>
         </button>
         {open && (
-          <div className="absolute left-0 right-0 top-full z-[120] mt-1 overflow-hidden rounded-2xl border border-white/12 bg-black/90 p-1 text-xs shadow-soft backdrop-blur-lg">
+          <div className="absolute left-0 right-0 top-full z-[120] mt-1 overflow-hidden glass-popover p-1 text-xs">
             {SORT_OPTIONS.map((opt) => {
               const active = sort === opt.id;
               return (

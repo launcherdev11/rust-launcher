@@ -1667,7 +1667,7 @@ export function RoomsTab({
               <span className="text-[10px] text-white/50">▾</span>
             </button>
             {isVisibilityDropdownOpen ? (
-              <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-black/90 p-1 shadow-soft backdrop-blur-lg">
+              <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden glass-popover p-1">
                 {(
                   [
                     { value: "public" as const, label: tt("rooms.visibility.public") },

@@ -82,7 +82,7 @@ export function CatalogToolbar({
   return (
     <div className="relative z-[80] mb-3 mt-2 flex flex-col gap-2">
       <div className="flex min-w-0 items-center gap-2">
-        <div className="flex h-10 shrink-0 items-center gap-1 rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl">
+        <div className="glass-toolbar flex h-10 shrink-0 items-center gap-1 p-1">
           {(["modrinth", "curseforge"] as ContentProvider[]).map((provider) => (
             <button
               key={provider}
@@ -102,7 +102,7 @@ export function CatalogToolbar({
         </div>
         <div
           ref={contentTypeTabsRef}
-          className="relative grid h-10 min-w-0 flex-1 grid-cols-4 items-center overflow-hidden rounded-2xl border border-white/12 bg-black/50 p-1 shadow-soft backdrop-blur-xl"
+          className="glass-toolbar relative grid h-10 min-w-0 flex-1 grid-cols-4 items-center overflow-hidden p-1"
         >
           <div
             className="pointer-events-none absolute top-1 bottom-1 rounded-lg bg-white/90 transition-all duration-200 ease-out"
@@ -158,7 +158,7 @@ export function CatalogToolbar({
       </div>
 
       <div className="flex min-w-0 items-center gap-2">
-        <div className="flex h-10 shrink-0 items-center gap-1 rounded-2xl border border-white/12 bg-black/40 p-1">
+        <div className="glass-toolbar flex h-10 shrink-0 items-center gap-1 p-1">
           {(
             [
               ["catalog", "mods.source.catalog"],
@@ -183,12 +183,12 @@ export function CatalogToolbar({
           <button
             type="button"
             onClick={onClearRecent}
-            className="interactive-press h-10 shrink-0 rounded-2xl border border-white/12 bg-black/40 px-3 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white"
+            className="glass-control interactive-press h-10 shrink-0 px-3 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white"
           >
             {tt("mods.recent.clear")}
           </button>
         )}
-        <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-black/40 px-3 shadow-soft backdrop-blur-xl">
+        <div className="glass-toolbar flex h-10 min-w-0 flex-1 items-center gap-2 px-3">
           <img
             src="/launcher-assets/search.png"
             alt=""
@@ -360,7 +360,7 @@ function VersionLoaderControls({
   const loaderButtonRef = useRef<HTMLButtonElement | null>(null);
 
   return (
-    <div className="relative ml-auto flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-white/12 bg-black/40 px-3 shadow-soft backdrop-blur-xl">
+    <div className="glass-toolbar relative ml-auto flex h-10 shrink-0 items-center gap-2 px-3">
       <span className="mr-1 text-[11px] uppercase tracking-[0.16em] text-gray-400">
         {tt("mods.version")}
       </span>
@@ -373,7 +373,7 @@ function VersionLoaderControls({
             else setIsVersionDropdownOpen((c) => !c);
           }}
           disabled={versionLoaderLocked}
-          className={`interactive-press inline-flex min-w-[88px] items-center gap-2 rounded-full border border-white/25 bg-black/70 px-3 py-1 text-xs font-semibold text-white shadow-soft ${
+          className={`interactive-press glass-control inline-flex min-w-[88px] items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-white ${
             versionLoaderLocked
               ? "cursor-not-allowed opacity-70"
               : "hover:border-white/60"
@@ -419,7 +419,7 @@ function VersionLoaderControls({
             else setIsLoaderDropdownOpen((c) => !c);
           }}
           disabled={versionLoaderLocked}
-          className={`interactive-press inline-flex min-w-[96px] items-center gap-2 rounded-full border border-white/25 bg-black/70 px-3 py-1 text-xs font-semibold text-white shadow-soft ${
+          className={`interactive-press glass-control inline-flex min-w-[96px] items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-white ${
             versionLoaderLocked
               ? "cursor-not-allowed opacity-70"
               : "hover:border-white/60"

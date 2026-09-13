@@ -37,13 +37,13 @@ export function Modal({
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="glass-overlay pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center p-4"
       onClick={() => {
         if (!closeDisabled) onClose();
       }}
     >
       <div
-        className={`pointer-events-auto flex max-h-[min(90vh,40rem)] flex-col overflow-hidden rounded-[20px] border border-white/10 bg-[#14141c]/95 shadow-2xl glass-panel ${maxWidthClassName}`}
+        className={`glass-modal pointer-events-auto flex max-h-[min(90vh,40rem)] flex-col overflow-hidden ${maxWidthClassName}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

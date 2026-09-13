@@ -75,7 +75,7 @@ export function CatalogGrid({
   const skeletonCount = layout === "grid" ? 8 : 5;
 
   return (
-    <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/65 p-3 shadow-soft backdrop-blur-xl">
+    <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
         <div className="flex items-center gap-2">
           {error ? <span className="text-rose-300">{error}</span> : null}

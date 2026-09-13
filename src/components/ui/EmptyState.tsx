@@ -20,13 +20,13 @@ export function EmptyState({
   return (
     <div
       className={[
-        "flex flex-col items-center justify-center rounded-xl border border-white/8 bg-black/25 text-center",
+        "glass-inset flex flex-col items-center justify-center text-center",
         compact ? "gap-2 px-4 py-6" : "gap-3 px-5 py-10",
         className,
       ].join(" ")}
     >
       {icon ? (
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-white/55">
+        <div className="glass-control flex h-12 w-12 items-center justify-center text-white/55">
           {icon}
         </div>
       ) : null}

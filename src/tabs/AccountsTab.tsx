@@ -81,8 +81,8 @@ function MicrosoftIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" aria-hidden="true">
       <path fill="#f25022" d="M2 2h9.5v9.5H2V2z" />
-      <path fill="#00a4ef" d="M12.5 2H22v9.5h-9.5V2z" />
-      <path fill="#7fba00" d="M2 12.5H11.5V22H2v-9.5z" />
+      <path fill="#7fba00" d="M12.5 2H22v9.5h-9.5V2z" />
+      <path fill="#00a4ef" d="M2 12.5H11.5V22H2v-9.5z" />
       <path fill="#ffb900" d="M12.5 12.5H22V22h-9.5v-9.5z" />
     </svg>
   );
@@ -235,7 +235,7 @@ export function AccountsTab({
   return (
     <>
       <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-3 overflow-y-auto py-1 xl:gap-4 xl:overflow-hidden">
-        <header className="relative shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0c1210]/90 via-black/45 to-[#0a0e18]/90 shadow-xl backdrop-blur-md glass-panel">
+        <header className="glass-panel relative shrink-0 overflow-hidden">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.2),transparent_55%)]" />
           <div className="relative flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
             <button
@@ -419,7 +419,7 @@ export function AccountsTab({
         )}
 
         <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(220px,280px)_minmax(0,1.15fr)_minmax(240px,1fr)] xl:items-stretch xl:overflow-hidden xl:gap-4">
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-xl backdrop-blur-md glass-panel">
+          <aside className="glass-panel flex min-h-0 flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3.5 py-3">
               <div className="min-w-0">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
@@ -571,7 +571,7 @@ export function AccountsTab({
           <div className="flex min-h-[220px] min-w-0 flex-col xl:min-h-0 xl:overflow-hidden">
             <AchievementsPanel
               language={language}
-              className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-white/10 bg-black/40 px-4 py-4 shadow-xl backdrop-blur-md glass-panel"
+              className="glass-panel flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"
             />
           </div>
         </div>
@@ -579,11 +579,11 @@ export function AccountsTab({
 
       {settingsOpen ? (
         <div
-          className="pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          className="glass-overlay pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center p-4"
           onClick={() => setSettingsOpen(false)}
         >
           <div
-            className="glass-panel pointer-events-auto flex max-h-[min(90vh,820px)] w-[min(96vw,44rem)] flex-col overflow-hidden rounded-[22px] border border-white/15 bg-[#14141c]/95 shadow-2xl"
+            className="glass-modal pointer-events-auto flex max-h-[min(90vh,820px)] w-[min(96vw,44rem)] flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -655,11 +655,11 @@ export function AccountsTab({
 
       {pendingRemoveAccountId !== null ? (
         <div
-          className="pointer-events-auto fixed inset-0 z-[350] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay pointer-events-auto fixed inset-0 z-[350] flex items-center justify-center"
           onClick={() => setPendingRemoveAccountId(null)}
         >
           <div
-            className="glass-panel pointer-events-auto w-[min(90vw,24rem)] rounded-[22px] border border-white/15 bg-[#14141c]/95 p-5 shadow-2xl"
+            className="glass-modal pointer-events-auto w-[min(90vw,24rem)] p-5"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"

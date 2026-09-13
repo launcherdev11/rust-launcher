@@ -923,11 +923,11 @@ export function ModsTab({
     <div className="flex h-full w-full min-h-0 max-w-none flex-col self-stretch">
       {showUnlockConfirm && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="glass-overlay fixed inset-0 z-[200] flex items-center justify-center"
           onClick={() => setShowUnlockConfirm(false)}
         >
           <div
-            className="glass-panel max-w-md rounded-2xl border border-white/15 p-5 shadow-xl"
+            className="glass-modal max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-4 text-sm text-white/90">{tt("mods.unlockConfirm")}</p>

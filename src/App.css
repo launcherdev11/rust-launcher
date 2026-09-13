@@ -1,5 +1,6 @@
 :root {
   --accent-color: #0b1530;
+  --glass-tint: color-mix(in srgb, var(--accent-color) 22%, transparent);
 }
 
 .accent-bg {
@@ -8,22 +9,6 @@
 
 .accent-border {
   border-color: var(--accent-color);
-}
-
-.glass-panel {
-  background: radial-gradient(
-    circle at top left,
-    rgba(11, 21, 48, 0.85),
-    rgba(3, 7, 18, 0.92)
-  );
-}
-
-.glass-chip {
-  background: linear-gradient(
-    135deg,
-    rgba(11, 21, 48, 0.9),
-    rgba(15, 23, 42, 0.95)
-  );
 }
 
 .accent-chip {
@@ -66,34 +51,47 @@
 .sidebar-icon {
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.45);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.55);
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(155deg, var(--glass-tint), transparent 55%),
+    rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transition:
     background-color 0.18s ease-out,
     box-shadow 0.18s ease-out,
     transform 0.18s ease-out,
-    outline-color 0.18s ease-out;
+    outline-color 0.18s ease-out,
+    border-color 0.18s ease-out;
 }
 
 .sidebar-icon:hover {
   transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.7);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 30px rgba(0, 0, 0, 0.55);
 }
 
 .sidebar-icon-active {
-  background: color-mix(in srgb, var(--accent-color) 72%, #020617 28%);
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent-color) 55%, transparent), transparent 60%),
+    color-mix(in srgb, var(--accent-color) 48%, rgba(2, 6, 23, 0.85));
   box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.22),
-    0 0 0 4px color-mix(in srgb, var(--accent-color) 45%, transparent),
-    0 18px 40px rgba(0, 0, 0, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px color-mix(in srgb, var(--accent-color) 35%, transparent),
+    0 16px 36px rgba(0, 0, 0, 0.7);
 }
 
 .sidebar-icon-split-pane {
+  border-color: rgba(255, 255, 255, 0.18);
   box-shadow:
-    0 0 0 1.5px rgba(255, 255, 255, 0.2),
-    0 12px 28px rgba(0, 0, 0, 0.75);
-  background: color-mix(in srgb, var(--accent-color) 35%, #020617 65%);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 28px rgba(0, 0, 0, 0.65);
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent-color) 35%, transparent), transparent 60%),
+    color-mix(in srgb, var(--accent-color) 28%, rgba(2, 6, 23, 0.8));
 }
 
 .sidebar-icon-splittable:not(.sidebar-icon-active):not(.sidebar-icon-split-pane) {
@@ -341,8 +339,11 @@
   justify-content: center;
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--accent-color) 70%, #020617 30%);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.85);
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent-color) 55%, transparent), transparent 60%),
+    color-mix(in srgb, var(--accent-color) 55%, rgba(2, 6, 23, 0.85));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 14px 32px rgba(0, 0, 0, 0.75);
   transform: translate(-50%, -50%);
 }
