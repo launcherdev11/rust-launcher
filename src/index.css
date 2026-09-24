@@ -298,16 +298,25 @@ html.launcher-linux .backdrop-blur-3xl {
   -webkit-backdrop-filter: none !important;
 }
 
+html.launcher-linux .sidebar-icon {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.launcher-linux .blur,
+html.launcher-linux .blur-sm,
+html.launcher-linux .blur-md,
+html.launcher-linux .blur-lg,
+html.launcher-linux .blur-xl,
+html.launcher-linux .blur-2xl,
+html.launcher-linux .blur-3xl {
+  --tw-blur: blur(0) !important;
+  filter: none !important;
+}
+
 html.launcher-linux .interactive-press:hover,
 html.launcher-linux .interactive-press:active {
   transform: none;
-}
-
-html.launcher-linux aside,
-html.launcher-linux .glass-panel,
-html.launcher-linux .tab-animate {
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 
 @keyframes tab-fade-in {
