@@ -238,8 +238,6 @@ pub fn configure_linux_startup() {
     use std::env;
     use std::path::Path;
 
-    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-
     let xdg_session_type = env::var("XDG_SESSION_TYPE")
         .unwrap_or_default()
         .to_ascii_lowercase();
@@ -274,6 +272,22 @@ pub fn configure_linux_startup() {
             env::set_var("WINIT_UNIX_BACKEND", "x11");
         }
     }
+
+    let gdk_backend = env::var("GDK_BACKEND").unwrap_or_default();
+    let gdk_prefers_x11 = gdk_backend
+        .split(',')
+        .next()
+        .unwrap_or("")
+        .eq_ignore_ascii_case("x11");
+    // dma-buf + NVIDIA/Wayland often blacks out the window. On X11 it mainly
+    // adds extra copies and kills animation FPS, so leave it enabled there.
+    if has_nvidia && has_wayland && !gdk_prefers_x11 {
+        set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        eprintln!(
+            "[16Launcher] NVIDIA + Wayland: WEBKIT_DISABLE_DMABUF_RENDERER=1"
+        );
+    }
+    set_env_if_missing("WEBKIT_FORCE_COMPOSITING_MODE", "1");
 
     if is_appimage() {
         configure_appimage_runtime();
