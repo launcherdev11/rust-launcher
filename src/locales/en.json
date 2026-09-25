@@ -277,6 +277,10 @@
         "no": "Main"
       },
       "uiSounds": { "label": "Interface sounds:" },
+      "discordRpc": {
+        "label": "Show Discord activity:",
+        "hint": "Displays your launcher status in Discord (Rich Presence)."
+      },
       "minimizeToTray": { "label": "Minimize to tray on close:" },
       "autostart": { "label": "Launch at system startup:" },
       "splitView": {
@@ -1078,13 +1082,11 @@
     "manageTitle": "Room",
     "roomNameLabel": "Name",
     "roomNamePlaceholder": "For example, Survival with friends",
-    "worldNameLabel": "World name",
-    "worldNamePlaceholder": "Minecraft world display name",
     "loaderLabel": "Loader",
     "versionLabel": "Version",
     "gameMetaTitle": "Room game",
     "gameMetaUnknown": "Version not set",
-    "saveGameMeta": "Save version & world",
+    "saveGameMeta": "Save version",
     "loader": {
       "vanilla": "Vanilla",
       "fabric": "Fabric",
@@ -1521,7 +1523,8 @@
       "modpacks": "Selecting a profile",
       "friends": "Viewing friends",
       "rooms": "In rooms",
-      "accounts": "Managing account"
+      "accounts": "Managing account",
+      "playing": "Playing:"
     },
     "pinnedProfiles": {
       "pinLimit": "You can pin up to 3 profiles.",

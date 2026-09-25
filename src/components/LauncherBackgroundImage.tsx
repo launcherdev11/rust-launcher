@@ -7,6 +7,13 @@ type Props = {
   className?: string;
 };
 
+function backgroundBlurPx(): number {
+  if (typeof document !== "undefined" && document.documentElement.classList.contains("launcher-linux")) {
+    return 10;
+  }
+  return 22;
+}
+
 export function LauncherBackgroundImage({
   imageUrl,
   blurEnabled = true,
@@ -14,6 +21,7 @@ export function LauncherBackgroundImage({
   className = "",
 }: Props) {
   const isAnimated = animated ?? isAnimatedBackgroundPath(imageUrl);
+  const blurPx = backgroundBlurPx();
 
   if (isAnimated) {
     return (
@@ -31,8 +39,8 @@ export function LauncherBackgroundImage({
           <div
             className="absolute inset-0"
             style={{
-              backdropFilter: "blur(22px)",
-              WebkitBackdropFilter: "blur(22px)",
+              backdropFilter: `blur(${blurPx}px)`,
+              WebkitBackdropFilter: `blur(${blurPx}px)`,
             }}
           />
         ) : null}
@@ -41,7 +49,7 @@ export function LauncherBackgroundImage({
   }
 
   const blurStyle = blurEnabled
-    ? { filter: "blur(22px)", transform: "scale(1.08)" }
+    ? { filter: `blur(${blurPx}px)`, transform: "scale(1.08)" }
     : {};
 
   return (

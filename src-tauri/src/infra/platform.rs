@@ -229,7 +229,6 @@ fn configure_appimage_runtime() {
     }
 
     env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
-    set_env_if_missing("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     set_env_if_missing("WEBKIT_USE_SINGLE_WEB_PROCESS", "1");
     set_env_if_missing("GTK_IM_MODULE", "gtk-im-context-simple");
 }

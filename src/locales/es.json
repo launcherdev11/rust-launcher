@@ -289,6 +289,10 @@
       "uiSounds": {
         "label": "Sonidos de la interfaz:"
       },
+      "discordRpc": {
+        "label": "Mostrar actividad de Discord:",
+        "hint": "Muestra el estado del launcher en Discord (Rich Presence)."
+      },
       "minimizeToTray": {
         "label": "Minimizar a la bandeja al cerrar:"
       },
@@ -1487,7 +1491,8 @@
       "modpacks": "Seleccionando un perfil",
       "friends": "Viendo amigos",
       "rooms": "En salas",
-      "accounts": "Administrando cuenta"
+      "accounts": "Administrando cuenta",
+      "playing": "Jugando:"
     },
     "pinnedProfiles": {
       "pinLimit": "Puedes fijar hasta 3 perfiles.",

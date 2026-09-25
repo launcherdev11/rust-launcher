@@ -234,7 +234,7 @@ export function AccountsTab({
 
   return (
     <>
-      <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-3 overflow-y-auto py-1 xl:gap-4 xl:overflow-hidden">
+      <div className="flex min-h-0 w-full max-w-none flex-1 flex-col gap-3 overflow-y-auto py-1 md:gap-4 md:overflow-hidden">
         <header className="glass-panel relative shrink-0 overflow-hidden">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.2),transparent_55%)]" />
           <div className="relative flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
@@ -418,8 +418,8 @@ export function AccountsTab({
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(220px,280px)_minmax(0,1.15fr)_minmax(240px,1fr)] xl:items-stretch xl:overflow-hidden xl:gap-4">
-          <aside className="glass-panel flex min-h-0 flex-col overflow-hidden">
+        <div className="grid gap-3 md:min-h-0 md:flex-1 md:grid-cols-[minmax(180px,240px)_minmax(0,1.15fr)_minmax(180px,1fr)] md:items-stretch md:overflow-hidden md:gap-4">
+          <aside className="glass-panel flex min-h-[200px] flex-col overflow-hidden md:min-h-0">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3.5 py-3">
               <div className="min-w-0">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
@@ -437,7 +437,7 @@ export function AccountsTab({
                 title={tt("app.accounts.addAccount")}
               >
                 <PlusIcon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline xl:inline">{tt("app.accounts.addShort")}</span>
+                <span className="hidden sm:inline">{tt("app.accounts.addShort")}</span>
               </button>
             </div>
 
@@ -524,7 +524,7 @@ export function AccountsTab({
             ) : null}
           </aside>
 
-          <div className="flex min-h-[min(380px,48vh)] min-w-0 flex-col xl:min-h-0">
+          <div className="flex min-h-[min(320px,42vh)] min-w-0 flex-col md:min-h-0">
             <AccountSkinPreview
               key={`${activeAccountId ?? ""}:${profile.ely_username ?? ""}:${profile.mc_uuid ?? ""}:${profile.nickname}`}
               profile={profileAvatarInput}
@@ -558,7 +558,7 @@ export function AccountsTab({
             />
           </div>
 
-          <div className="flex min-h-[220px] min-w-0 flex-col xl:min-h-0 xl:overflow-hidden">
+          <div className="flex min-h-[200px] min-w-0 flex-col md:min-h-0 md:overflow-hidden">
             <AchievementsPanel
               language={language}
               className="glass-panel flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"

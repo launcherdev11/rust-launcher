@@ -80,6 +80,7 @@ type RoomsTabProps = {
   language: Language;
   minecraftAccountKind: "microsoft" | "ely" | "offline" | string;
   gameStatus: GameStatus;
+  tabActive?: boolean;
   onLaunchToServer: (
     serverAddress: string,
     options?: {
@@ -105,8 +106,7 @@ function formatRoomGameMeta(room: Room): string | null {
   const loader = room.loader?.trim();
   const loaderPart =
     loader && loader !== "vanilla" ? `${loader} ${version}` : version;
-  const world = room.world_name?.trim();
-  return world ? `${loaderPart} · ${world}` : loaderPart;
+  return loaderPart;
 }
 
 function decodeJwtSub(token: string): string {
@@ -182,6 +182,7 @@ export function RoomsTab({
   language,
   minecraftAccountKind,
   gameStatus,
+  tabActive = true,
   onLaunchToServer,
   onPresenceContextChange,
   onRoomLaunchContextChange,
@@ -216,7 +217,6 @@ export function RoomsTab({
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createRoomName, setCreateRoomName] = useState("");
-  const [createWorldName, setCreateWorldName] = useState("");
   const [createLoader, setCreateLoader] = useState<RoomLoaderId>("vanilla");
   const [createGameVersion, setCreateGameVersion] = useState("");
   const [createVersions, setCreateVersions] = useState<RoomVersionOption[]>([]);
@@ -227,7 +227,6 @@ export function RoomsTab({
   const visibilityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [editLoader, setEditLoader] = useState<RoomLoaderId>("vanilla");
   const [editGameVersion, setEditGameVersion] = useState("");
-  const [editWorldName, setEditWorldName] = useState("");
   const [editVersions, setEditVersions] = useState<RoomVersionOption[]>([]);
   const [editVersionsLoading, setEditVersionsLoading] = useState(false);
   const appliedRoomGameKeyRef = useRef<string | null>(null);
@@ -394,9 +393,38 @@ export function RoomsTab({
   }, [managing, selectedRoomId, userId, isOwner]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+    if (!tabActive) return;
+
+    const sync = () => setNowMs(Date.now());
+    sync();
+
+    let id: number | null = null;
+    const start = () => {
+      if (id != null) return;
+      id = window.setInterval(sync, 1000);
+    };
+    const stop = () => {
+      if (id == null) return;
+      window.clearInterval(id);
+      id = null;
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        sync();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [tabActive]);
 
   useEffect(() => {
     if (!accessToken || !selectedRoomId) {
@@ -480,7 +508,7 @@ export function RoomsTab({
     }
     onRoomLaunchContextChange({
       kind: "room_world",
-      worldName: selectedRoom.world_name?.trim() || selectedRoom.name?.trim() || null,
+      worldName: selectedRoom.name?.trim() || null,
       startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
     });
     return () => {
@@ -678,7 +706,7 @@ export function RoomsTab({
       const presenceContext: LaunchPresenceContext = {
         kind: "room_world",
         serverAddress,
-        worldName: selectedRoom?.world_name?.trim() || selectedRoom?.name?.trim() || null,
+        worldName: selectedRoom?.name?.trim() || null,
         startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
       };
 
@@ -709,7 +737,6 @@ export function RoomsTab({
 
   const resetCreateForm = () => {
     setCreateRoomName("");
-    setCreateWorldName("");
     setCreateLoader("vanilla");
     setCreateGameVersion("");
     setCreateVersions([]);
@@ -809,7 +836,6 @@ export function RoomsTab({
 
   useEffect(() => {
     if (!selectedRoom) return;
-    setEditWorldName(selectedRoom.world_name?.trim() ?? "");
     setEditLoader(
       isRoomLoaderId(selectedRoom.loader ?? "")
         ? (selectedRoom.loader as RoomLoaderId)
@@ -823,7 +849,6 @@ export function RoomsTab({
     selectedRoom?.id,
     selectedRoom?.game_version,
     selectedRoom?.loader,
-    selectedRoom?.world_name,
   ]);
 
   useEffect(() => {
@@ -872,7 +897,6 @@ export function RoomsTab({
         name: createRoomName.trim() || undefined,
         visibility: createRoomVisibility,
         password: createRoomVisibility === "private" ? password : undefined,
-        worldName: createWorldName.trim() || undefined,
         gameVersion: createGameVersion.trim(),
         loader: createLoader,
       });
@@ -1004,7 +1028,6 @@ export function RoomsTab({
     setSelectedRoomId(room.id);
     setManaging(true);
     applyRoomGameIfNeeded(room);
-    setEditWorldName(room.world_name?.trim() ?? "");
     setEditLoader(isRoomLoaderId(room.loader ?? "") ? (room.loader as RoomLoaderId) : "vanilla");
     setEditGameVersion(room.game_version?.trim() ?? "");
   };
@@ -1160,7 +1183,6 @@ export function RoomsTab({
     setLoading(true);
     try {
       const room = await updateRoom(selectedRoom.id, {
-        worldName: editWorldName.trim(),
         gameVersion: editGameVersion.trim(),
         loader: editLoader,
       });
@@ -1437,16 +1459,6 @@ export function RoomsTab({
                   <p className="text-[11px] font-semibold text-white/45">{tt("rooms.gameMetaTitle")}</p>
                   {isOwner ? (
                     <div className="flex flex-col gap-2">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-[11px] text-white/45">{tt("rooms.worldNameLabel")}</span>
-                        <TextField
-                          type="text"
-                          value={editWorldName}
-                          onChange={(e) => setEditWorldName(e.target.value)}
-                          placeholder={tt("rooms.worldNamePlaceholder")}
-                          disabled={loading}
-                        />
-                      </label>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <label className="flex flex-1 flex-col gap-1">
                           <span className="text-[11px] text-white/45">{tt("rooms.loaderLabel")}</span>
@@ -1909,17 +1921,6 @@ export function RoomsTab({
               placeholder={tt("rooms.roomNamePlaceholder")}
               disabled={loading}
               autoFocus
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="ui-caption font-semibold">{tt("rooms.worldNameLabel")}</span>
-            <TextField
-              type="text"
-              value={createWorldName}
-              onChange={(e) => setCreateWorldName(e.target.value)}
-              placeholder={tt("rooms.worldNamePlaceholder")}
-              disabled={loading}
             />
           </label>
 

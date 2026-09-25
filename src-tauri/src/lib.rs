@@ -56,7 +56,9 @@ use services::modrinth::{
     check_profile_incompatible_content, download_modrinth_with_dependencies,
     resolve_modrinth_required_dependencies, resolve_profile_item_metadata,
 };
-use services::rpc::{discord_presence_update, shutdown as discord_presence_shutdown};
+use services::rpc::{
+    discord_presence_clear, discord_presence_update, shutdown as discord_presence_shutdown,
+};
 use commands::{
     export_build, get_ely_avatar, get_ely_cape, get_ely_skin, get_mc_avatar, get_mc_cape,
     apply_mc_skin_by_username, get_mc_skin, get_mc_skin_by_username, get_mc_texture_data_url,
@@ -168,6 +170,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
+            discord_presence_clear,
             fetch_all_versions,
             fetch_versions_for_loader,
             check_version_files_integrity,

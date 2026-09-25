@@ -32,6 +32,9 @@ pub struct Settings {
     #[serde(default = "default_ui_sounds_enabled")]
     pub ui_sounds_enabled: bool,
 
+    #[serde(default = "default_discord_rpc_enabled")]
+    pub discord_rpc_enabled: bool,
+
     #[serde(default)]
     pub minimize_to_tray_on_close: bool,
 
@@ -86,6 +89,10 @@ pub fn default_ui_sounds_enabled() -> bool {
     true
 }
 
+pub fn default_discord_rpc_enabled() -> bool {
+    true
+}
+
 pub fn default_show_launcher_banners() -> bool {
     true
 }
@@ -111,6 +118,7 @@ impl Default for Settings {
             auto_install_updates: false,
             open_launcher_on_profiles_tab: false,
             ui_sounds_enabled: true,
+            discord_rpc_enabled: true,
             minimize_to_tray_on_close: false,
             autostart_enabled: false,
             animations_disabled: false,

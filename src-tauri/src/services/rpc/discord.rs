@@ -162,6 +162,11 @@ pub fn discord_presence_update(details: String, state: Option<String>, tab: Opti
     push_activity(&mut guard, &app_id, &d, st.as_deref(), tab_id);
 }
 
+#[tauri::command]
+pub fn discord_presence_clear() {
+    shutdown();
+}
+
 pub fn shutdown() {
     let mut guard = match CLIENT.lock() {
         Ok(g) => g,

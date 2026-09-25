@@ -33,6 +33,7 @@ type SettingSearchId =
   | "launcher.updates"
   | "launcher.openOnProfiles"
   | "launcher.uiSounds"
+  | "launcher.discordRpc"
   | "launcher.minimizeToTray"
   | "launcher.autostart"
   | "launcher.splitView"
@@ -164,6 +165,14 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     keys: ["settings.launcher.uiSounds.label"],
   },
   {
+    id: "launcher.discordRpc",
+    tab: "launcher",
+    keys: [
+      "settings.launcher.discordRpc.label",
+      "settings.launcher.discordRpc.hint",
+    ],
+  },
+  {
     id: "launcher.minimizeToTray",
     tab: "launcher",
     keys: ["settings.launcher.minimizeToTray.label"],
@@ -278,6 +287,7 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  discord_rpc_enabled: boolean;
   minimize_to_tray_on_close: boolean;
   autostart_enabled: boolean;
   animations_disabled: boolean;
@@ -2808,6 +2818,7 @@ export function SettingsTab({
                 !settingsSearchActive ||
                 showSetting("launcher.openOnProfiles") ||
                 showSetting("launcher.uiSounds") ||
+                showSetting("launcher.discordRpc") ||
                 showSetting("launcher.minimizeToTray") ||
                 showSetting("launcher.autostart") ||
                 showSetting("launcher.splitView") ||
@@ -2845,6 +2856,20 @@ export function SettingsTab({
                   value={settings?.ui_sounds_enabled ?? true}
                   onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
                 />
+                )}
+                {showSetting("launcher.discordRpc") && (
+                <div className="flex flex-col gap-1.5">
+                <SettingsToggle
+                  label={tt("settings.launcher.discordRpc.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={settings?.discord_rpc_enabled ?? true}
+                  onChange={(v) => updateSettings({ discord_rpc_enabled: v })}
+                />
+                <p className="ui-meta pl-0.5 pr-1">
+                  {tt("settings.launcher.discordRpc.hint")}
+                </p>
+                </div>
                 )}
                 {showSetting("launcher.minimizeToTray") && (
                 <SettingsToggle

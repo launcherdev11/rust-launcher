@@ -177,6 +177,7 @@ type Settings = {
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;
   ui_sounds_enabled: boolean;
+  discord_rpc_enabled: boolean;
   minimize_to_tray_on_close: boolean;
   autostart_enabled: boolean;
   animations_disabled: boolean;
@@ -2291,6 +2292,7 @@ function App() {
     auto_install_updates: false,
     open_launcher_on_profiles_tab: false,
     ui_sounds_enabled: true,
+    discord_rpc_enabled: true,
     minimize_to_tray_on_close: false,
     autostart_enabled: false,
     animations_disabled: false,
@@ -2971,37 +2973,88 @@ function App() {
   }, [activeItem, activeInstanceProfile?.id, refreshSettings]);
 
   useEffect(() => {
+    if (!(settings?.discord_rpc_enabled ?? true)) {
+      invoke("discord_presence_clear").catch(() => {});
+      return;
+    }
+
     let details: string;
     let state: string | null = null;
-    switch (activeItem) {
-      case "play":
-        details = t(language, "app.discord.play");
-        break;
-      case "settings":
-        details = t(language, "app.discord.settings");
-        break;
-      case "mods":
-        details = t(language, "app.discord.mods");
-        if (discordModsTitle) state = discordModsTitle;
-        break;
-      case "modpacks":
-        details = t(language, "app.discord.modpacks");
-        if (activeInstanceProfile?.name) state = activeInstanceProfile.name;
-        break;
-      case "friends":
-        details = t(language, "app.discord.friends");
-        break;
-      case "rooms":
-        details = t(language, "app.discord.rooms");
-        break;
-      case "accounts":
-        details = t(language, "app.discord.accounts");
-        break;
-      default:
-        details = t(language, "app.discord.play");
+    let tab = activeItem;
+
+    if (gameStatus === "running") {
+      const profileName = activeInstanceProfile?.name?.trim() || null;
+      const gameVersion =
+        activeInstanceProfile?.game_version?.trim() ||
+        selectedVersion?.id?.trim() ||
+        null;
+      const loaderId = (activeInstanceProfile?.loader || loader || "").toLowerCase();
+      const loaderLabel =
+        loaderId === "fabric"
+          ? "Fabric"
+          : loaderId === "forge"
+            ? "Forge"
+            : loaderId === "quilt"
+              ? "Quilt"
+              : loaderId === "neoforge"
+                ? "NeoForge"
+                : loaderId === "vanilla"
+                  ? "Vanilla"
+                  : null;
+
+      const metaParts = [loaderLabel, gameVersion].filter(Boolean) as string[];
+      const meta = metaParts.join(" · ");
+      const playingLabel = profileName
+        ? meta
+          ? `${profileName} · ${meta}`
+          : profileName
+        : meta || "Minecraft";
+
+      details = t(language, "app.discord.playing");
+      state = playingLabel;
+      tab = "play";
+    } else {
+      switch (activeItem) {
+        case "play":
+          details = t(language, "app.discord.play");
+          break;
+        case "settings":
+          details = t(language, "app.discord.settings");
+          break;
+        case "mods":
+          details = t(language, "app.discord.mods");
+          if (discordModsTitle) state = discordModsTitle;
+          break;
+        case "modpacks":
+          details = t(language, "app.discord.modpacks");
+          if (activeInstanceProfile?.name) state = activeInstanceProfile.name;
+          break;
+        case "friends":
+          details = t(language, "app.discord.friends");
+          break;
+        case "rooms":
+          details = t(language, "app.discord.rooms");
+          break;
+        case "accounts":
+          details = t(language, "app.discord.accounts");
+          break;
+        default:
+          details = t(language, "app.discord.play");
+      }
     }
-    invoke("discord_presence_update", { details, state, tab: activeItem }).catch(() => {});
-  }, [activeItem, language, discordModsTitle, activeInstanceProfile?.name]);
+    invoke("discord_presence_update", { details, state, tab }).catch(() => {});
+  }, [
+    activeItem,
+    language,
+    discordModsTitle,
+    activeInstanceProfile?.name,
+    activeInstanceProfile?.game_version,
+    activeInstanceProfile?.loader,
+    gameStatus,
+    loader,
+    selectedVersion?.id,
+    settings?.discord_rpc_enabled,
+  ]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -4466,19 +4519,19 @@ function App() {
       <div className="pointer-events-none absolute inset-0 bg-black/55" />
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl"
+          className="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl accent-glow-orb"
           style={{
             background: `radial-gradient(circle at 30% 30%, ${accentColor}80, transparent 70%)`,
           }}
         />
         <div
-          className="absolute top-1/3 -right-32 h-80 w-80 rounded-full blur-3xl"
+          className="absolute top-1/3 -right-32 h-80 w-80 rounded-full blur-3xl accent-glow-orb"
           style={{
             background: `radial-gradient(circle at 70% 30%, ${accentColor}70, transparent 75%)`,
           }}
         />
         <div
-          className="absolute bottom-[-6rem] left-1/4 h-64 w-64 rounded-full blur-3xl"
+          className="absolute bottom-[-6rem] left-1/4 h-64 w-64 rounded-full blur-3xl accent-glow-orb"
           style={{
             background: `radial-gradient(circle at 50% 50%, ${accentColor}75, transparent 75%)`,
           }}
@@ -5479,6 +5532,7 @@ function App() {
               language={language}
               minecraftAccountKind={activeAccountKind}
               gameStatus={gameStatus}
+              tabActive={activeItem === "rooms"}
               onLaunchToServer={handleLaunchToServer}
               onPresenceContextChange={setRoomPresenceContext}
               onRoomLaunchContextChange={setLaunchPresenceContext}

@@ -277,6 +277,10 @@
         "no": "Главная"
       },
       "uiSounds": { "label": "Звук интерфейса:" },
+      "discordRpc": {
+        "label": "Показывать активность в Discord:",
+        "hint": "Отображает статус лаунчера в Discord (Rich Presence)."
+      },
       "minimizeToTray": { "label": "Скрывать в трей при закрытии:" },
       "autostart": { "label": "Запускать при включении системы:" },
       "splitView": {
@@ -1078,13 +1082,11 @@
     "manageTitle": "Комната",
     "roomNameLabel": "Название",
     "roomNamePlaceholder": "Например, Выживание с друзьями",
-    "worldNameLabel": "Название мира",
-    "worldNamePlaceholder": "Как мир называется в Minecraft",
     "loaderLabel": "Загрузчик",
     "versionLabel": "Версия",
     "gameMetaTitle": "Игра в комнате",
     "gameMetaUnknown": "Версия не указана",
-    "saveGameMeta": "Сохранить версию и мир",
+    "saveGameMeta": "Сохранить версию",
     "loader": {
       "vanilla": "Vanilla",
       "fabric": "Fabric",
@@ -1521,7 +1523,8 @@
       "modpacks": "Выбирает профиль",
       "friends": "Смотрит друзей",
       "rooms": "В комнатах",
-      "accounts": "Управляет аккаунтом"
+      "accounts": "Управляет аккаунтом",
+      "playing": "Играет:"
     },
     "pinnedProfiles": {
       "pinLimit": "Можно закрепить не более 3 сборок.",
