@@ -555,16 +555,6 @@ export function AccountsTab({
               skinLibraryEmpty={tt("app.accounts.skinLibrary.empty")}
               skinLibraryLoading={tt("app.accounts.skinLibrary.loading")}
               skinLibraryError={tt("app.accounts.skinLibrary.error")}
-              animationTitle={tt("app.accounts.animation.title")}
-              animationLabels={{
-                idle: tt("app.accounts.animation.idle"),
-                walk: tt("app.accounts.animation.walk"),
-                run: tt("app.accounts.animation.run"),
-                wave: tt("app.accounts.animation.wave"),
-                crouch: tt("app.accounts.animation.crouch"),
-                fly: tt("app.accounts.animation.fly"),
-                look: tt("app.accounts.animation.look"),
-              }}
             />
           </div>
 

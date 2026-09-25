@@ -37,7 +37,7 @@ use crate::services::game::runtime::{
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
     resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version, resolve_natives_extract_dir,
-    forge_java_runtime_for_mc_version, uses_natives_subdirectories,
+    forge_java_runtime_for_mc_version, uses_natives_subdirectories, download_file_checked,
 };
 use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
 use crate::services::game::settings as settings_service;
@@ -471,40 +471,37 @@ pub async fn launch_game(
             }
             if let Some(nat) = resolve_native_artifact(lib, os_name) {
                 let path = libs_root.join(&nat.path);
-                if !path.exists() {
-                    if let Some(parent) = path.parent() {
-                        std::fs::create_dir_all(parent).map_err(|e| {
-                            format!("Не удалось создать папку для natives '{}': {e}", parent.display())
-                        })?;
+                if !path.exists() || tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0) == 0 {
+                    if path.exists() {
+                        let _ = tokio::fs::remove_file(&path).await;
                     }
-                    let nat_url = format!("{}/{}", BMCL_MAVEN_BASE, nat.path);
-                    let mut resp = client
-                        .get(&nat_url)
-                        .send()
-                        .await
-                        .map_err(|e| format!("Ошибка загрузки natives '{}': {e}", nat.path))?;
-                    if !resp.status().is_success() {
-                        return Err(format!(
-                            "Сервер вернул ошибку {} при загрузке natives '{}'",
-                            resp.status(),
-                            nat_url
-                        ));
-                    }
-                    let mut file = std::fs::File::create(&path)
-                        .map_err(|e| format!("Ошибка создания файла natives '{}': {e}", path.display()))?;
-                    while let Some(chunk) = resp
-                        .chunk()
-                        .await
-                        .map_err(|e| format!("Ошибка чтения потока natives '{}': {e}", nat_url))?
-                    {
-                        use std::io::Write;
-                        file.write_all(&chunk)
-                            .map_err(|e| format!("Ошибка записи файла natives '{}': {e}", path.display()))?;
-                    }
+                    let nat_url = if !nat.url.trim().is_empty() {
+                        nat.url.clone()
+                    } else {
+                        format!("{}/{}", BMCL_MAVEN_BASE, nat.path)
+                    };
+                    let total_done = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                    download_file_checked(
+                        &client,
+                        &nat_url,
+                        &path,
+                        nat.sha1.clone(),
+                        &app,
+                        &version_id,
+                        0,
+                        total_done,
+                        DEFAULT_DOWNLOAD_RETRIES,
+                    )
+                    .await?;
                 }
                 let out_dir =
                     resolve_natives_extract_dir(&natives_dir, &version_id, &lib.name, &nat.path);
-                let _ = extract_natives_jar(&path, &out_dir);
+                if let Err(e) = extract_natives_jar(&path, &out_dir) {
+                    eprintln!(
+                        "[Launch] Не удалось распаковать natives {}: {e}",
+                        path.display()
+                    );
+                }
             }
         }
         has_natives_files = natives_dir_has_files(&natives_dir);

@@ -65,8 +65,8 @@ pub use screenshots::{
 pub use settings::{
     detect_java_runtimes, get_effective_settings, get_java_settings,
     get_profile_java_settings, get_settings, get_system_memory_gb, list_installed_java_runtimes,
-    reset_settings_to_default, set_java_settings, set_profile_java_settings, set_settings,
-    validate_java_args,
+    reinstall_java_runtimes, reset_settings_to_default, set_java_settings,
+    set_profile_java_settings, set_settings, validate_java_args, verify_java_runtimes,
 };
 pub use version_remove::{delete_minecraft_installation, get_version_install_details};
 pub use versions::{

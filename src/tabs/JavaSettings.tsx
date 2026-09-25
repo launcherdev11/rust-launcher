@@ -66,6 +66,9 @@ export function JavaSettingsTab({
   const [detecting, setDetecting] = useState(false);
   const [runtimes, setRuntimes] = useState<JavaRuntimeInfo[]>([]);
   const [loadingRuntimes, setLoadingRuntimes] = useState(false);
+  const [verifyingJava, setVerifyingJava] = useState(false);
+  const [reinstallingJava, setReinstallingJava] = useState(false);
+  const [showReinstallJavaDialog, setShowReinstallJavaDialog] = useState(false);
   const [validation, setValidation] = useState<ValidationState>({
     xmsError: null,
     xmxError: null,
@@ -355,6 +358,89 @@ export function JavaSettingsTab({
     }
   };
 
+  const refreshInstalledRuntimes = async () => {
+    try {
+      const installed = await invoke<JavaRuntimeInfo[]>("list_installed_java_runtimes");
+      setRuntimes(installed);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleVerifyJavaFiles = async () => {
+    setVerifyingJava(true);
+    try {
+      const result = await invoke<{
+        is_ok: boolean;
+        checked_files: number;
+        missing_files: number;
+        corrupted_files: number;
+        runtimes_checked: number;
+      }>("verify_java_runtimes");
+
+      if (result.runtimes_checked === 0) {
+        showNotification(
+          "warning",
+          tt("javaSettings.toast.verifyEmpty"),
+        );
+        return;
+      }
+
+      if (result.is_ok) {
+        showNotification(
+          "success",
+          tt("javaSettings.toast.verifyOk", {
+            checked: result.checked_files,
+            runtimes: result.runtimes_checked,
+          }),
+        );
+      } else {
+        showNotification(
+          "warning",
+          tt("javaSettings.toast.verifyProblems", {
+            missing: result.missing_files,
+            corrupted: result.corrupted_files,
+            checked: result.checked_files,
+          }),
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        tt("javaSettings.toast.verifyFailed"),
+      );
+    } finally {
+      setVerifyingJava(false);
+    }
+  };
+
+  const handleConfirmReinstallJava = async () => {
+    setShowReinstallJavaDialog(false);
+    setReinstallingJava(true);
+    try {
+      const installed = await invoke<JavaRuntimeInfo[]>("reinstall_java_runtimes");
+      setRuntimes(installed);
+      showNotification(
+        "success",
+        tt("javaSettings.toast.reinstallOk", {
+          count: installed.length,
+        }),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        tt("javaSettings.toast.reinstallFailed"),
+      );
+      await refreshInstalledRuntimes();
+    } finally {
+      setReinstallingJava(false);
+    }
+  };
+
+  const javaBusy = verifyingJava || reinstallingJava || detecting || loadingRuntimes;
+
   const xmsMb = effectiveSettings.xms ? parseMemoryToMb(effectiveSettings.xms) : null;
   const xmxMb = effectiveSettings.xmx ? parseMemoryToMb(effectiveSettings.xmx) : null;
 
@@ -362,6 +448,42 @@ export function JavaSettingsTab({
 
   return (
     <div className="flex max-h-[clamp(240px,45vh,520px)] flex-col gap-4 overflow-y-auto pr-1">
+      {showReinstallJavaDialog && (
+        <div
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
+          onClick={() => setShowReinstallJavaDialog(false)}
+        >
+          <div
+            className="glass-modal max-w-md p-5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h3 className="mb-1 text-sm font-semibold text-white">
+              {tt("javaSettings.reinstallDialog.title")}
+            </h3>
+            <p className="mb-4 text-xs text-white/70">
+              {tt("javaSettings.reinstallDialog.hint")}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowReinstallJavaDialog(false)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmReinstallJava()}
+                className="interactive-press rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+              >
+                {tt("javaSettings.reinstallDialog.confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {loading ? (
         <div className="flex h-32 items-center justify-center text-sm text-white/70">
           {tt("javaSettings.loading")}
@@ -429,7 +551,7 @@ export function JavaSettingsTab({
               <button
                 type="button"
                 onClick={handleDetectJava}
-                disabled={loadingRuntimes || detecting}
+                disabled={javaBusy}
                 className="interactive-press shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-emerald-500 disabled:opacity-60"
               >
                 {tt("javaSettings.actions.detect")}
@@ -437,10 +559,36 @@ export function JavaSettingsTab({
               <button
                 type="button"
                 onClick={handleBrowseJava}
-                className="interactive-press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                disabled={javaBusy}
+                className="interactive-press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60"
               >
                 {tt("javaSettings.actions.browse")}
               </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleVerifyJavaFiles()}
+                disabled={javaBusy}
+                className="interactive-press rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60"
+              >
+                {verifyingJava
+                  ? tt("javaSettings.actions.verifyChecking")
+                  : tt("javaSettings.actions.verify")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReinstallJavaDialog(true)}
+                disabled={javaBusy}
+                className="interactive-press rounded-xl bg-amber-600/90 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-amber-500 disabled:opacity-60"
+              >
+                {reinstallingJava
+                  ? tt("javaSettings.actions.reinstalling")
+                  : tt("javaSettings.actions.reinstall")}
+              </button>
+              <span className="text-[11px] text-white/45">
+                {tt("javaSettings.runtime.manageHint")}
+              </span>
             </div>
           </div>
 

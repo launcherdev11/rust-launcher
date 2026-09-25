@@ -23,6 +23,9 @@ export type Room = {
   member_count: number;
   created_at?: string;
   session_started_at?: string | null;
+  world_name?: string | null;
+  game_version?: string | null;
+  loader?: string | null;
   members?: RoomMember[];
 };
 
@@ -184,6 +187,16 @@ export function normalizeRoom(input: unknown): Room | null {
       asOptionalTimestampString(asObject(raw.session)?.started_at) ??
       asOptionalTimestampString(asObject(raw.session)?.startedAt) ??
       null,
+    world_name:
+      asOptionalString(raw.world_name) ??
+      asOptionalString(raw.worldName) ??
+      null,
+    game_version:
+      asOptionalString(raw.game_version) ??
+      asOptionalString(raw.gameVersion) ??
+      asOptionalString(raw.version) ??
+      null,
+    loader: asOptionalString(raw.loader) ?? null,
     members,
   };
 }
@@ -239,6 +252,16 @@ export type CreateRoomInput = {
   name?: string;
   visibility?: "public" | "private";
   password?: string;
+  worldName?: string;
+  gameVersion?: string;
+  loader?: string;
+};
+
+export type UpdateRoomInput = {
+  name?: string;
+  worldName?: string;
+  gameVersion?: string;
+  loader?: string;
 };
 
 export async function createRoom(input?: number | CreateRoomInput): Promise<Room> {
@@ -248,6 +271,9 @@ export async function createRoom(input?: number | CreateRoomInput): Promise<Room
     name?: string;
     visibility?: "public" | "private";
     password?: string;
+    world_name?: string;
+    game_version?: string;
+    loader?: string;
   } = {};
   if (typeof input === "number") {
     body.max_players = input;
@@ -264,9 +290,45 @@ export async function createRoom(input?: number | CreateRoomInput): Promise<Room
     if (typeof input.password === "string" && input.password.trim()) {
       body.password = input.password.trim();
     }
+    if (typeof input.worldName === "string" && input.worldName.trim()) {
+      body.world_name = input.worldName.trim();
+    }
+    if (typeof input.gameVersion === "string" && input.gameVersion.trim()) {
+      body.game_version = input.gameVersion.trim();
+    }
+    if (typeof input.loader === "string" && input.loader.trim()) {
+      body.loader = input.loader.trim();
+    }
   }
   const data = await apiFetch<{ room: Room }>("/rooms", {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+  return unwrapRoom(data) ?? data.room;
+}
+
+export async function updateRoom(roomId: string, input: UpdateRoomInput): Promise<Room> {
+  await ensureValidAccessToken();
+  const body: {
+    name?: string;
+    world_name?: string;
+    game_version?: string;
+    loader?: string;
+  } = {};
+  if (typeof input.name === "string") {
+    body.name = input.name.trim();
+  }
+  if (typeof input.worldName === "string") {
+    body.world_name = input.worldName.trim();
+  }
+  if (typeof input.gameVersion === "string" && input.gameVersion.trim()) {
+    body.game_version = input.gameVersion.trim();
+  }
+  if (typeof input.loader === "string" && input.loader.trim()) {
+    body.loader = input.loader.trim();
+  }
+  const data = await apiFetch<{ room: Room }>(`/rooms/${roomId}`, {
+    method: "PATCH",
     body: JSON.stringify(body),
   });
   return unwrapRoom(data) ?? data.room;

@@ -111,9 +111,9 @@ export function ModsTab({
   const [contentType, setContentType] = useState<ModrinthContentType>("mod");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [gameVersion, setGameVersion] = useState("1.20.1");
+  const [gameVersion, setGameVersion] = useState("");
   const [gameVersions, setGameVersions] = useState<string[]>([]);
-  const [loader, setLoader] = useState<LoaderFilter>("forge");
+  const [loader, setLoader] = useState<LoaderFilter>("any");
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
   const [isLoaderDropdownOpen, setIsLoaderDropdownOpen] = useState(false);
   const [sort, setSort] = useState<CatalogSort>(readInitialSort);
@@ -352,7 +352,7 @@ export function ModsTab({
         if (versions.length > 0) {
           setGameVersions(versions);
           setGameVersion((current) =>
-            versions.includes(current) ? current : versions[0],
+            !current || versions.includes(current) ? current : "",
           );
         }
       } catch (e) {

@@ -49,6 +49,9 @@ export type WsEvent =
         join_code?: string | null;
         invite_only?: boolean | null;
         session_started_at?: string | null;
+        world_name?: string | null;
+        game_version?: string | null;
+        loader?: string | null;
       };
     }
   | { type: "room_closed"; payload: { room_id: string } }

@@ -380,7 +380,9 @@ function VersionLoaderControls({
           }`}
           title={versionLoaderLocked ? tt("mods.syncedHint") : undefined}
         >
-          <span className="truncate">{gameVersion || "—"}</span>
+          <span className="truncate">
+            {gameVersion || tt("mods.loaderAny")}
+          </span>
           {!versionLoaderLocked && (
             <span className="text-[10px] text-gray-400">▾</span>
           )}
@@ -391,6 +393,20 @@ function VersionLoaderControls({
           onClose={() => setIsVersionDropdownOpen(false)}
           widthClass="w-32"
         >
+          <button
+            type="button"
+            onClick={() => {
+              onGameVersionChange("");
+              setIsVersionDropdownOpen(false);
+            }}
+            className={`interactive-press flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left transition-colors ${
+              !gameVersion
+                ? "bg-white/90 font-semibold text-black"
+                : "text-white hover:bg-white/10"
+            }`}
+          >
+            <span>{tt("mods.loaderAny")}</span>
+          </button>
           {gameVersions.map((v) => (
             <button
               key={v}

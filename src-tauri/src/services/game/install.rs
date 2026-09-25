@@ -3,21 +3,20 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use futures_util::StreamExt;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::Semaphore;
 
 use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::process::hide_console;
 use crate::infra::http::{http_client, http_client_for_binary_download};
-use crate::models::events::{DownloadProgressPayload, EVENT_DOWNLOAD_PROGRESS};
 use crate::services::game::core::{
-    current_os_name, download_text_with_retries, ensure_fabric_intermediary_library, fabric_library_path,
+    current_os_name, download_text_with_retries, fabric_library_path,
     is_probably_native_jar_path,
     library_applies, resolve_native_artifact, try_fetch_remote_sha1,
 };
 use crate::services::game::console::log_to_console;
 use crate::services::game::runtime::{
-    download_assets, download_file, download_file_checked, download_forge_installer_once,
+    download_assets, download_file_checked, download_forge_installer_once,
     ensure_launcher_profiles_json, extract_natives_jar, file_starts_with_pk,
     forge_installer_url_with_official_maven, forge_java_runtime_for_mc_version,
     parse_forge_id, parse_neoforge_id, resolve_natives_extract_dir, select_latest_quilt_loader,
@@ -174,45 +173,33 @@ pub async fn install_fabric(
     );
 
     let client_jar = root.join(format!("{}.jar", profile.inherits_from));
-    if client_jar.is_file() {
-        log_to_console(
-            &app,
-            &format!(
-                "[Fabric] client.jar уже есть: {}",
-                client_jar.display()
-            ),
-        );
-        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
-    } else {
-        log_to_console(
-            &app,
-            &format!(
-                "[Fabric] Загрузка клиентского JAR в {}",
-                client_jar.display()
-            ),
-        );
-        let _ = download_file(
-            &client,
-            &mojang_dl.client.url,
-            &client_jar,
-            &app,
-            &profile_id,
-            total_size,
-            total_downloaded,
-        )
-        .await?;
-        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
-    }
+    let total_done = Arc::new(AtomicU64::new(total_downloaded));
+    log_to_console(
+        &app,
+        &format!(
+            "[Fabric] Загрузка клиентского JAR в {}",
+            client_jar.display()
+        ),
+    );
+    download_file_checked(
+        &client,
+        &mojang_dl.client.url,
+        &client_jar,
+        mojang_dl.client.sha1.clone(),
+        &app,
+        &profile_id,
+        total_size,
+        total_done.clone(),
+        DEFAULT_DOWNLOAD_RETRIES,
+    )
+    .await?;
+    total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    total_done.store(total_downloaded, Ordering::SeqCst);
 
     let natives_dir = vers_root.join(&profile_id).join("natives");
     tokio::fs::create_dir_all(&natives_dir)
         .await
         .map_err(|e| format!("Не удалось создать папку natives: {e}"))?;
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
 
     log_to_console(&app, "[Fabric] Загрузка библиотек и natives Mojang");
     for lib in &mojang_detail.libraries {
@@ -221,36 +208,27 @@ pub async fn install_fabric(
         }
         if let Some(ref artifact) = lib.downloads.artifact {
             let path = libs_root.join(&artifact.path);
-            if path.exists() {
-                total_downloaded = total_downloaded.saturating_add(artifact.size);
-                if total_size > 0 {
-                    let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                    let _ = app.emit(
-                        EVENT_DOWNLOAD_PROGRESS,
-                        DownloadProgressPayload {
-                            version_id: profile_id.clone(),
-                            downloaded: total_downloaded,
-                            total: total_size,
-                            percent,
-                        },
-                    );
-                }
-            } else {
-                if let Some(parent) = path.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
-                }
-                let _ = download_file(
-                    &client,
-                    &artifact.url,
-                    &path,
-                    &app,
-                    &profile_id,
-                    total_size,
-                    total_downloaded,
-                )
-                .await?;
-                total_downloaded = total_downloaded.saturating_add(artifact.size);
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
             }
+            let expected = match artifact.sha1.clone() {
+                Some(s) => Some(s),
+                None => try_fetch_remote_sha1(&client, &artifact.url).await,
+            };
+            download_file_checked(
+                &client,
+                &artifact.url,
+                &path,
+                expected,
+                &app,
+                &profile_id,
+                total_size,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+            total_downloaded = total_downloaded.saturating_add(artifact.size);
+            total_done.store(total_downloaded, Ordering::SeqCst);
             if is_probably_native_jar_path(&artifact.path) && path.is_file() {
                 extract_version_natives(
                     &path,
@@ -261,54 +239,36 @@ pub async fn install_fabric(
                 );
             }
         }
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let path = libs_root.join(&nat.path);
-                if path.exists() {
-                    total_downloaded = total_downloaded.saturating_add(nat.size);
-                    if total_size > 0 {
-                        let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                        let _ = app.emit(
-                            EVENT_DOWNLOAD_PROGRESS,
-                            DownloadProgressPayload {
-                                version_id: profile_id.clone(),
-                                downloaded: total_downloaded,
-                                total: total_size,
-                                percent,
-                            },
-                        );
-                    }
-                    extract_version_natives(
-                        &path,
-                        &natives_dir,
-                        &profile.inherits_from,
-                        &lib.name,
-                        &nat.path,
-                    );
-                    continue;
-                }
-                if let Some(parent) = path.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
-                }
-                let _ = download_file(
-                    &client,
-                    &nat.url,
-                    &path,
-                    &app,
-                    &profile_id,
-                    total_size,
-                    total_downloaded,
-                )
-                .await?;
-                total_downloaded = total_downloaded.saturating_add(nat.size);
-                extract_version_natives(
-                    &path,
-                    &natives_dir,
-                    &profile.inherits_from,
-                    &lib.name,
-                    &nat.path,
-                );
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let path = libs_root.join(&nat.path);
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
             }
+            let expected = match nat.sha1.clone() {
+                Some(s) => Some(s),
+                None => try_fetch_remote_sha1(&client, &nat.url).await,
+            };
+            download_file_checked(
+                &client,
+                &nat.url,
+                &path,
+                expected,
+                &app,
+                &profile_id,
+                total_size,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+            total_downloaded = total_downloaded.saturating_add(nat.size);
+            total_done.store(total_downloaded, Ordering::SeqCst);
+            extract_version_natives(
+                &path,
+                &natives_dir,
+                &profile.inherits_from,
+                &lib.name,
+                &nat.path,
+            );
         }
     }
 
@@ -322,36 +282,24 @@ pub async fn install_fabric(
             .trim_end_matches('/');
         let lib_url = format!("{url}/{path}");
         let dest = libs_root.join(&path);
-        if dest.exists() {
-            total_downloaded = total_downloaded.saturating_add(lib.size);
-            if total_size > 0 {
-                let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                let _ = app.emit(
-                    EVENT_DOWNLOAD_PROGRESS,
-                    DownloadProgressPayload {
-                        version_id: profile_id.clone(),
-                        downloaded: total_downloaded,
-                        total: total_size,
-                        percent,
-                    },
-                );
-            }
-            continue;
-        }
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
         }
-        let _ = download_file(
+        let expected = try_fetch_remote_sha1(&client, &lib_url).await;
+        download_file_checked(
             &client,
             &lib_url,
             &dest,
+            expected,
             &app,
             &profile_id,
             total_size,
-            total_downloaded,
+            total_done.clone(),
+            DEFAULT_DOWNLOAD_RETRIES,
         )
         .await?;
         total_downloaded = total_downloaded.saturating_add(lib.size);
+        total_done.store(total_downloaded, Ordering::SeqCst);
     }
 
     if let Some(ref asset_index) = mojang_detail.asset_index {
@@ -495,82 +443,62 @@ pub async fn install_quilt(
     );
 
     let client_jar = root.join(format!("{}.jar", profile.inherits_from));
-    if client_jar.is_file() {
-        log_to_console(
-            &app,
-            &format!(
-                "[Quilt] client.jar уже есть: {}",
-                client_jar.display()
-            ),
-        );
-        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
-    } else {
-        log_to_console(
-            &app,
-            &format!(
-                "[Quilt] Загрузка клиентского JAR в {}",
-                client_jar.display()
-            ),
-        );
-        let _ = download_file(
-            &client,
-            &mojang_dl.client.url,
-            &client_jar,
-            &app,
-            &profile_id,
-            total_size,
-            total_downloaded,
-        )
-        .await?;
-        total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
-    }
+    let total_done = Arc::new(AtomicU64::new(total_downloaded));
+    log_to_console(
+        &app,
+        &format!(
+            "[Quilt] Загрузка клиентского JAR в {}",
+            client_jar.display()
+        ),
+    );
+    download_file_checked(
+        &client,
+        &mojang_dl.client.url,
+        &client_jar,
+        mojang_dl.client.sha1.clone(),
+        &app,
+        &profile_id,
+        total_size,
+        total_done.clone(),
+        DEFAULT_DOWNLOAD_RETRIES,
+    )
+    .await?;
+    total_downloaded = total_downloaded.saturating_add(mojang_dl.client.size);
+    total_done.store(total_downloaded, Ordering::SeqCst);
 
     let natives_dir = vers_root.join(&profile_id).join("natives");
     tokio::fs::create_dir_all(&natives_dir)
         .await
         .map_err(|e| format!("Не удалось создать папку natives: {e}"))?;
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
 
+    log_to_console(&app, "[Quilt] Загрузка библиотек и natives Mojang");
     for lib in &mojang_detail.libraries {
         if !library_applies(lib, os_name) {
             continue;
         }
         if let Some(ref artifact) = lib.downloads.artifact {
             let path = libs_root.join(&artifact.path);
-            if path.exists() {
-                total_downloaded = total_downloaded.saturating_add(artifact.size);
-                if total_size > 0 {
-                    let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                    let _ = app.emit(
-                        EVENT_DOWNLOAD_PROGRESS,
-                        DownloadProgressPayload {
-                            version_id: profile_id.clone(),
-                            downloaded: total_downloaded,
-                            total: total_size,
-                            percent,
-                        },
-                    );
-                }
-            } else {
-                if let Some(parent) = path.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
-                }
-                let _ = download_file(
-                    &client,
-                    &artifact.url,
-                    &path,
-                    &app,
-                    &profile_id,
-                    total_size,
-                    total_downloaded,
-                )
-                .await?;
-                total_downloaded = total_downloaded.saturating_add(artifact.size);
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
             }
+            let expected = match artifact.sha1.clone() {
+                Some(s) => Some(s),
+                None => try_fetch_remote_sha1(&client, &artifact.url).await,
+            };
+            download_file_checked(
+                &client,
+                &artifact.url,
+                &path,
+                expected,
+                &app,
+                &profile_id,
+                total_size,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+            total_downloaded = total_downloaded.saturating_add(artifact.size);
+            total_done.store(total_downloaded, Ordering::SeqCst);
             if is_probably_native_jar_path(&artifact.path) && path.is_file() {
                 extract_version_natives(
                     &path,
@@ -581,54 +509,36 @@ pub async fn install_quilt(
                 );
             }
         }
-        if let Some(ref classifiers) = lib.downloads.classifiers {
-            if let Some(nat) = classifiers.get(native_classifier) {
-                let path = libs_root.join(&nat.path);
-                if path.exists() {
-                    total_downloaded = total_downloaded.saturating_add(nat.size);
-                    if total_size > 0 {
-                        let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                        let _ = app.emit(
-                            EVENT_DOWNLOAD_PROGRESS,
-                            DownloadProgressPayload {
-                                version_id: profile_id.clone(),
-                                downloaded: total_downloaded,
-                                total: total_size,
-                                percent,
-                            },
-                        );
-                    }
-                    extract_version_natives(
-                        &path,
-                        &natives_dir,
-                        &profile.inherits_from,
-                        &lib.name,
-                        &nat.path,
-                    );
-                    continue;
-                }
-                if let Some(parent) = path.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
-                }
-                let _ = download_file(
-                    &client,
-                    &nat.url,
-                    &path,
-                    &app,
-                    &profile_id,
-                    total_size,
-                    total_downloaded,
-                )
-                .await?;
-                total_downloaded = total_downloaded.saturating_add(nat.size);
-                extract_version_natives(
-                    &path,
-                    &natives_dir,
-                    &profile.inherits_from,
-                    &lib.name,
-                    &nat.path,
-                );
+        if let Some(nat) = resolve_native_artifact(lib, os_name) {
+            let path = libs_root.join(&nat.path);
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
             }
+            let expected = match nat.sha1.clone() {
+                Some(s) => Some(s),
+                None => try_fetch_remote_sha1(&client, &nat.url).await,
+            };
+            download_file_checked(
+                &client,
+                &nat.url,
+                &path,
+                expected,
+                &app,
+                &profile_id,
+                total_size,
+                total_done.clone(),
+                DEFAULT_DOWNLOAD_RETRIES,
+            )
+            .await?;
+            total_downloaded = total_downloaded.saturating_add(nat.size);
+            total_done.store(total_downloaded, Ordering::SeqCst);
+            extract_version_natives(
+                &path,
+                &natives_dir,
+                &profile.inherits_from,
+                &lib.name,
+                &nat.path,
+            );
         }
     }
 
@@ -642,36 +552,24 @@ pub async fn install_quilt(
             .trim_end_matches('/');
         let lib_url = format!("{url}/{path}");
         let dest = libs_root.join(&path);
-        if dest.exists() {
-            total_downloaded = total_downloaded.saturating_add(lib.size);
-            if total_size > 0 {
-                let percent = total_downloaded as f32 / total_size as f32 * 100.0;
-                let _ = app.emit(
-                    EVENT_DOWNLOAD_PROGRESS,
-                    DownloadProgressPayload {
-                        version_id: profile_id.clone(),
-                        downloaded: total_downloaded,
-                        total: total_size,
-                        percent,
-                    },
-                );
-            }
-            continue;
-        }
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| format!("{e}"))?;
         }
-        let _ = download_file(
+        let expected = try_fetch_remote_sha1(&client, &lib_url).await;
+        download_file_checked(
             &client,
             &lib_url,
             &dest,
+            expected,
             &app,
             &profile_id,
             total_size,
-            total_downloaded,
+            total_done.clone(),
+            DEFAULT_DOWNLOAD_RETRIES,
         )
         .await?;
         total_downloaded = total_downloaded.saturating_add(lib.size);
+        total_done.store(total_downloaded, Ordering::SeqCst);
     }
 
     if let Some(ref asset_index) = mojang_detail.asset_index {

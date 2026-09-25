@@ -33,6 +33,7 @@ import { ModsTab } from "./tabs/ModsTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
 import { RoomsTab } from "./tabs/RoomsTab";
+import type { RoomGameSettings } from "./tabs/RoomsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
@@ -914,6 +915,7 @@ function App() {
     }
     return "vanilla";
   });
+  const pendingRoomGameRef = useRef<RoomGameSettings | null>(null);
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<VersionItem | null>(null);
   const [versionsLoading, setVersionsLoading] = useState(true);
@@ -2045,8 +2047,6 @@ function App() {
     } catch {
     }
 
-    // Persist language only after onboarding so a mid-session reload
-    // doesn't look like a "legacy install" and skip the welcome flow.
     if (onboardingAlreadyDone) {
       try {
         window.localStorage.setItem("launcher_language", lang);
@@ -3015,22 +3015,32 @@ function App() {
         if (loader === "forge") {
           const result = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
           setVersions(result);
+          const pending = pendingRoomGameRef.current;
+          const preferId =
+            pending && pending.loader === "forge" ? pending.gameVersion : null;
           const savedId =
-            typeof window !== "undefined"
+            preferId ??
+            (typeof window !== "undefined"
               ? window.localStorage.getItem("selected_version_id_forge")
-              : null;
+              : null);
           const match = savedId ? result.find((v) => v.id === savedId) : undefined;
           setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
+          if (preferId && match) pendingRoomGameRef.current = null;
           setInstalledGameVersions(new Set());
         } else if (loader === "neoforge") {
           const result = await invoke<NeoForgeVersionSummary[]>("fetch_neoforge_versions");
           setVersions(result);
+          const pending = pendingRoomGameRef.current;
+          const preferId =
+            pending && pending.loader === "neoforge" ? pending.gameVersion : null;
           const savedId =
-            typeof window !== "undefined"
+            preferId ??
+            (typeof window !== "undefined"
               ? window.localStorage.getItem("selected_version_id_neoforge")
-              : null;
+              : null);
           const match = savedId ? result.find((v) => v.id === savedId) : undefined;
           setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
+          if (preferId && match) pendingRoomGameRef.current = null;
           setInstalledGameVersions(new Set());
         } else {
           const filtered = await invoke<VersionSummary[]>("fetch_versions_for_loader", {
@@ -3039,6 +3049,9 @@ function App() {
             showAlpha: settings?.show_alpha_versions ?? false,
           });
           setVersions(filtered);
+          const pending = pendingRoomGameRef.current;
+          const preferId =
+            pending && pending.loader === loader ? pending.gameVersion : null;
           const savedKey =
             loader === "fabric"
               ? "selected_version_id_fabric"
@@ -3046,9 +3059,11 @@ function App() {
                 ? "selected_version_id_quilt"
                 : "selected_version_id_vanilla";
           const savedId =
-            typeof window !== "undefined" ? window.localStorage.getItem(savedKey) : null;
+            preferId ??
+            (typeof window !== "undefined" ? window.localStorage.getItem(savedKey) : null);
           const match = savedId ? filtered.find((v) => v.id === savedId) : undefined;
           setSelectedVersion(match ?? (filtered.length > 0 ? filtered[0] : null));
+          if (preferId && match) pendingRoomGameRef.current = null;
 
           if (loader === "fabric") {
             try {
@@ -3895,6 +3910,22 @@ function App() {
 
     await runVersionInstall();
   };
+
+  const applyRoomGameSettings = useCallback(
+    (settings: RoomGameSettings) => {
+      pendingRoomGameRef.current = settings;
+      if (loader === settings.loader) {
+        const match = versions.find((v) => v.id === settings.gameVersion);
+        if (match) {
+          setSelectedVersion(match);
+          pendingRoomGameRef.current = null;
+          return;
+        }
+      }
+      setLoader(settings.loader);
+    },
+    [loader, versions],
+  );
 
   const handleLaunchToServer = useCallback(
     async (
@@ -5452,6 +5483,7 @@ function App() {
               onPresenceContextChange={setRoomPresenceContext}
               onRoomLaunchContextChange={setLaunchPresenceContext}
               onOpenAccounts={() => setActiveItemWithSound("accounts")}
+              onApplyRoomGameSettings={applyRoomGameSettings}
             />
           </div>
           {activeItem === "friends" ? (

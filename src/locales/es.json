@@ -440,6 +440,14 @@
   "javaSettings": {
     "loading": "Cargando configuración de Java...",
     "description": "Controla qué argumentos Java y JVM utilizará el juego. Cuando los argumentos personalizados están deshabilitados, el iniciador aplica valores predeterminados seguros.",
+    "runtime": {
+      "title": "Runtime de Java",
+      "hint": "De forma predeterminada, el iniciador descarga y usa Java de Mojang para la versión seleccionada de Minecraft.",
+      "auto": "Auto (runtime de Mojang)",
+      "custom": "Ruta de Java personalizada",
+      "profileHint": "Esta configuración solo se aplica a este modpack y anula la configuración global.",
+      "manageHint": "Comprueba y reinstala los runtimes de Java de Mojang que usa el iniciador."
+    },
     "useCustomArgs": {
       "label": "Utilice argumentos JVM personalizados",
       "hint": "Cuando está desactivado, solo se utilizan los valores predeterminados del iniciador."
@@ -479,7 +487,16 @@
       "save": "Ahorrar",
       "cancel": "Cancelar",
       "resetRecommended": "Restablecer a recomendado",
-      "validate": "Validar"
+      "validate": "Validar",
+      "verify": "Verificar archivos",
+      "verifyChecking": "Verificando...",
+      "reinstall": "Reinstalar Java",
+      "reinstalling": "Reinstalando..."
+    },
+    "reinstallDialog": {
+      "title": "¿Reinstalar Java?",
+      "hint": "Los runtimes de Java de Mojang instalados se eliminarán y se descargarán de nuevo. Si aún no hay ninguno, se instalará el conjunto estándar (Java 8, 17, 21 y 25). Puede tardar varios minutos.",
+      "confirm": "Reinstalar"
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -495,7 +512,13 @@
       "validateOk": "Se pasó la validación de argumentos de Java y JVM.",
       "validateErrors": "Errores detectados al validar argumentos de JVM.",
       "validateWarnings": "Validación finalizada con advertencias.",
-      "validateFailed": "No se pudieron validar los argumentos de Java."
+      "validateFailed": "No se pudieron validar los argumentos de Java.",
+      "verifyEmpty": "Aún no hay runtimes de Java de Mojang instalados. Se descargarán al iniciar el juego o con «Reinstalar Java».",
+      "verifyOk": "Los archivos de Java están bien ({{checked}} archivos en {{runtimes}} runtime(s)).",
+      "verifyProblems": "Problemas con Java: faltan {{missing}}, corruptos {{corrupted}} (revisados {{checked}}). Reinstala Java.",
+      "verifyFailed": "No se pudieron verificar los archivos de Java.",
+      "reinstallOk": "Java reinstalada ({{count}} runtime(s)).",
+      "reinstallFailed": "No se pudo reinstalar Java."
     },
     "validation": {
       "invalidFormatXms": "Formato no válido. Ejemplos: 1024M, 2G.",

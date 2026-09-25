@@ -5,7 +5,9 @@ use sysinfo::System;
 use tauri::{command, AppHandle, Manager};
 
 use crate::models::settings::default_interface_language;
-use crate::models::{JavaArgsValidationResult, JavaRuntimeInfo, JavaSettings, Settings};
+use crate::models::{
+    JavaArgsValidationResult, JavaIntegrityCheckResult, JavaRuntimeInfo, JavaSettings, Settings,
+};
 use crate::models::profile::InstanceSettings;
 use crate::services::java as java_service;
 
@@ -273,5 +275,15 @@ pub async fn detect_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
 #[command]
 pub fn list_installed_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
     crate::java_runtime::list_installed_runtimes()
+}
+
+#[command]
+pub async fn verify_java_runtimes() -> Result<JavaIntegrityCheckResult, String> {
+    crate::java_runtime::verify_installed_java_runtimes().await
+}
+
+#[command]
+pub async fn reinstall_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
+    crate::java_runtime::reinstall_java_runtimes().await
 }
 

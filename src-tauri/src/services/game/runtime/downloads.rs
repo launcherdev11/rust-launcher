@@ -286,7 +286,13 @@ pub(crate) async fn download_file_checked(
         }
 
         if path.exists() {
-            if let Some(expected) = expected_sha1.as_ref() {
+            let meta_len = tokio::fs::metadata(path)
+                .await
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if meta_len == 0 {
+                let _ = tokio::fs::remove_file(path).await;
+            } else if let Some(expected) = expected_sha1.as_ref() {
                 let actual = sha1_hex_of_file(path).await?;
                 if actual.eq_ignore_ascii_case(expected) {
                     return Ok(0);

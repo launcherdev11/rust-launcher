@@ -440,6 +440,14 @@
   "javaSettings": {
     "loading": "Java-Einstellungen werden geladen...",
     "description": "Steuern Sie, welche Java- und JVM-Argumente das Spiel verwendet. Wenn benutzerdefinierte Argumente deaktiviert sind, wendet der Launcher sichere Standardwerte an.",
+    "runtime": {
+      "title": "Java-Laufzeit",
+      "hint": "Standardmäßig lädt der Launcher die Mojang-Java für die gewählte Minecraft-Version herunter und verwendet sie.",
+      "auto": "Auto (Mojang-Laufzeit)",
+      "custom": "Eigener Java-Pfad",
+      "profileHint": "Diese Einstellungen gelten nur für dieses Modpack und überschreiben die globalen Einstellungen.",
+      "manageHint": "Prüft und installiert die vom Launcher genutzten Mojang-Java-Runtimes neu."
+    },
     "useCustomArgs": {
       "label": "Verwenden Sie benutzerdefinierte JVM-Argumente",
       "hint": "Wenn diese Option deaktiviert ist, werden nur die Standardeinstellungen des Launchers verwendet."
@@ -479,7 +487,16 @@
       "save": "Speichern",
       "cancel": "Stornieren",
       "resetRecommended": "Zurücksetzen auf empfohlen",
-      "validate": "Bestätigen"
+      "validate": "Bestätigen",
+      "verify": "Dateien prüfen",
+      "verifyChecking": "Prüfung...",
+      "reinstall": "Java neu installieren",
+      "reinstalling": "Neuinstallation..."
+    },
+    "reinstallDialog": {
+      "title": "Java neu installieren?",
+      "hint": "Installierte Mojang-Java-Runtimes werden gelöscht und erneut heruntergeladen. Wenn noch keine installiert sind, wird der Standardensatz (Java 8, 17, 21, 25) installiert. Das kann einige Minuten dauern.",
+      "confirm": "Neu installieren"
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -495,7 +512,13 @@
       "validateOk": "Validierung der Java- und JVM-Argumente bestanden.",
       "validateErrors": "Beim Validieren von JVM-Argumenten wurden Fehler erkannt.",
       "validateWarnings": "Validierung mit Warnungen abgeschlossen.",
-      "validateFailed": "Die Validierung der Java-Argumente ist fehlgeschlagen."
+      "validateFailed": "Die Validierung der Java-Argumente ist fehlgeschlagen.",
+      "verifyEmpty": "Es sind noch keine Mojang-Java-Runtimes installiert. Sie werden beim Spielstart heruntergeladen oder über „Java neu installieren“.",
+      "verifyOk": "Java-Dateien sind in Ordnung ({{checked}} Dateien in {{runtimes}} Runtime(s)).",
+      "verifyProblems": "Java-Probleme: fehlend {{missing}}, beschädigt {{corrupted}} (geprüft {{checked}}). Installieren Sie Java neu.",
+      "verifyFailed": "Java-Dateien konnten nicht geprüft werden.",
+      "reinstallOk": "Java neu installiert ({{count}} Runtime(s)).",
+      "reinstallFailed": "Java konnte nicht neu installiert werden."
     },
     "validation": {
       "invalidFormatXms": "Ungültiges Format. Beispiele: 1024M, 2G.",

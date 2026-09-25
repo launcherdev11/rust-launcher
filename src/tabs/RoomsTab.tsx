@@ -10,6 +10,7 @@ import {
   leaveRoomBestEffort,
   listFriendsRooms,
   listRooms,
+  updateRoom,
   type Room,
   type RoomMember,
   type RoomSession,
@@ -51,6 +52,14 @@ import {
   RoomCardSkeleton,
   TextField,
 } from "../components/ui";
+import { invoke } from "@tauri-apps/api/core";
+
+type RoomLoaderId = "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+
+type RoomVersionOption = {
+  id: string;
+  label: string;
+};
 
 type NotificationKind = "info" | "success" | "error" | "warning";
 type ShowNotificationOptions = { sound?: boolean };
@@ -59,6 +68,11 @@ type AvatarTarget = {
   nickname: string;
   ely_username?: string | null;
   mc_uuid?: string | null;
+};
+
+export type RoomGameSettings = {
+  loader: RoomLoaderId;
+  gameVersion: string;
 };
 
 type RoomsTabProps = {
@@ -76,7 +90,24 @@ type RoomsTabProps = {
   onPresenceContextChange?: (context: RoomPresenceContext | null) => void;
   onRoomLaunchContextChange?: (context: LaunchPresenceContext | null) => void;
   onOpenAccounts?: () => void;
+  onApplyRoomGameSettings?: (settings: RoomGameSettings) => void;
 };
+
+const ROOM_LOADERS: RoomLoaderId[] = ["vanilla", "fabric", "quilt", "forge", "neoforge"];
+
+function isRoomLoaderId(value: string): value is RoomLoaderId {
+  return (ROOM_LOADERS as string[]).includes(value);
+}
+
+function formatRoomGameMeta(room: Room): string | null {
+  const version = room.game_version?.trim();
+  if (!version) return null;
+  const loader = room.loader?.trim();
+  const loaderPart =
+    loader && loader !== "vanilla" ? `${loader} ${version}` : version;
+  const world = room.world_name?.trim();
+  return world ? `${loaderPart} · ${world}` : loaderPart;
+}
 
 function decodeJwtSub(token: string): string {
   const parts = token.split(".");
@@ -155,6 +186,7 @@ export function RoomsTab({
   onPresenceContextChange,
   onRoomLaunchContextChange,
   onOpenAccounts,
+  onApplyRoomGameSettings,
 }: RoomsTabProps) {
   const tt = useT(language);
 
@@ -184,10 +216,21 @@ export function RoomsTab({
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createRoomName, setCreateRoomName] = useState("");
+  const [createWorldName, setCreateWorldName] = useState("");
+  const [createLoader, setCreateLoader] = useState<RoomLoaderId>("vanilla");
+  const [createGameVersion, setCreateGameVersion] = useState("");
+  const [createVersions, setCreateVersions] = useState<RoomVersionOption[]>([]);
+  const [createVersionsLoading, setCreateVersionsLoading] = useState(false);
   const [createRoomVisibility, setCreateRoomVisibility] = useState<"public" | "private">("public");
   const [createRoomPassword, setCreateRoomPassword] = useState("");
   const [isVisibilityDropdownOpen, setIsVisibilityDropdownOpen] = useState(false);
   const visibilityDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [editLoader, setEditLoader] = useState<RoomLoaderId>("vanilla");
+  const [editGameVersion, setEditGameVersion] = useState("");
+  const [editWorldName, setEditWorldName] = useState("");
+  const [editVersions, setEditVersions] = useState<RoomVersionOption[]>([]);
+  const [editVersionsLoading, setEditVersionsLoading] = useState(false);
+  const appliedRoomGameKeyRef = useRef<string | null>(null);
   const [inviteNickname, setInviteNickname] = useState("");
   const [avatarByKey, setAvatarByKey] = useState<Record<string, string>>({});
   const [viewingProfile, setViewingProfile] = useState<UserProfileSeed | null>(null);
@@ -437,7 +480,7 @@ export function RoomsTab({
     }
     onRoomLaunchContextChange({
       kind: "room_world",
-      worldName: selectedRoom.name?.trim() || null,
+      worldName: selectedRoom.world_name?.trim() || selectedRoom.name?.trim() || null,
       startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
     });
     return () => {
@@ -635,7 +678,7 @@ export function RoomsTab({
       const presenceContext: LaunchPresenceContext = {
         kind: "room_world",
         serverAddress,
-        worldName: selectedRoom?.name?.trim() || null,
+        worldName: selectedRoom?.world_name?.trim() || selectedRoom?.name?.trim() || null,
         startedAt: selectedRoomSessionStartedAt ?? new Date().toISOString(),
       };
 
@@ -666,10 +709,63 @@ export function RoomsTab({
 
   const resetCreateForm = () => {
     setCreateRoomName("");
+    setCreateWorldName("");
+    setCreateLoader("vanilla");
+    setCreateGameVersion("");
+    setCreateVersions([]);
     setCreateRoomVisibility("public");
     setCreateRoomPassword("");
     setIsVisibilityDropdownOpen(false);
   };
+
+  const loadVersionsForLoader = useCallback(async (loaderId: RoomLoaderId): Promise<RoomVersionOption[]> => {
+    if (loaderId === "forge") {
+      const result = await invoke<Array<{ id: string; mc_version?: string }>>("fetch_forge_versions");
+      return result.map((v) => ({
+        id: v.id,
+        label: v.mc_version ? `${v.mc_version} (${v.id})` : v.id,
+      }));
+    }
+    if (loaderId === "neoforge") {
+      const result = await invoke<Array<{ id: string; mc_version?: string }>>("fetch_neoforge_versions");
+      return result.map((v) => ({
+        id: v.id,
+        label: v.mc_version ? `${v.mc_version} (${v.id})` : v.id,
+      }));
+    }
+    const filtered = await invoke<Array<{ id: string; version_type?: string }>>("fetch_versions_for_loader", {
+      loader: loaderId,
+      showSnapshots: false,
+      showAlpha: false,
+    });
+    return filtered.map((v) => ({ id: v.id, label: v.id }));
+  }, []);
+
+  useEffect(() => {
+    if (!showCreateModal) return;
+    let cancelled = false;
+    setCreateVersionsLoading(true);
+    void loadVersionsForLoader(createLoader)
+      .then((list) => {
+        if (cancelled) return;
+        setCreateVersions(list);
+        setCreateGameVersion((prev) =>
+          prev && list.some((v) => v.id === prev) ? prev : list[0]?.id ?? "",
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setCreateVersions([]);
+          showNotification("error", e instanceof Error ? e.message : String(e));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCreateVersionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [createLoader, loadVersionsForLoader, showCreateModal, showNotification]);
 
   useEffect(() => {
     if (!showCreateModal || !isVisibilityDropdownOpen) return;
@@ -694,6 +790,65 @@ export function RoomsTab({
     };
   }, [isVisibilityDropdownOpen, showCreateModal]);
 
+  const applyRoomGameIfNeeded = useCallback(
+    (room: Room) => {
+      const version = room.game_version?.trim();
+      const loaderRaw = room.loader?.trim() ?? "vanilla";
+      if (!version || !isRoomLoaderId(loaderRaw)) return;
+      const key = `${room.id}:${loaderRaw}:${version}`;
+      if (appliedRoomGameKeyRef.current === key) return;
+      appliedRoomGameKeyRef.current = key;
+      onApplyRoomGameSettings?.({ loader: loaderRaw, gameVersion: version });
+      showNotification(
+        "info",
+        tt("rooms.toast.versionApplied", { version: `${loaderRaw} ${version}` }),
+      );
+    },
+    [onApplyRoomGameSettings, showNotification, tt],
+  );
+
+  useEffect(() => {
+    if (!selectedRoom) return;
+    setEditWorldName(selectedRoom.world_name?.trim() ?? "");
+    setEditLoader(
+      isRoomLoaderId(selectedRoom.loader ?? "")
+        ? (selectedRoom.loader as RoomLoaderId)
+        : "vanilla",
+    );
+    setEditGameVersion(selectedRoom.game_version?.trim() ?? "");
+    if (managing) applyRoomGameIfNeeded(selectedRoom);
+  }, [
+    applyRoomGameIfNeeded,
+    managing,
+    selectedRoom?.id,
+    selectedRoom?.game_version,
+    selectedRoom?.loader,
+    selectedRoom?.world_name,
+  ]);
+
+  useEffect(() => {
+    if (!managing || !isOwner) return;
+    let cancelled = false;
+    setEditVersionsLoading(true);
+    void loadVersionsForLoader(editLoader)
+      .then((list) => {
+        if (cancelled) return;
+        setEditVersions(list);
+        setEditGameVersion((prev) =>
+          prev && list.some((v) => v.id === prev) ? prev : list[0]?.id ?? prev,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setEditVersions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEditVersionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editLoader, isOwner, loadVersionsForLoader, managing]);
+
   const handleCreate = async () => {
     if (!accessToken) {
       showNotification("warning", tt("rooms.toast.signInFirst"));
@@ -706,6 +861,10 @@ export function RoomsTab({
         return;
       }
     }
+    if (!createGameVersion.trim()) {
+      showNotification("warning", tt("rooms.toast.versionRequired"));
+      return;
+    }
     setBusyAction("create");
     setLoading(true);
     try {
@@ -713,6 +872,9 @@ export function RoomsTab({
         name: createRoomName.trim() || undefined,
         visibility: createRoomVisibility,
         password: createRoomVisibility === "private" ? password : undefined,
+        worldName: createWorldName.trim() || undefined,
+        gameVersion: createGameVersion.trim(),
+        loader: createLoader,
       });
       showNotification("success", tt("rooms.toast.created"));
       resetCreateForm();
@@ -720,6 +882,7 @@ export function RoomsTab({
       await reloadRooms();
       setSelectedRoomId(room.id);
       setManaging(true);
+      applyRoomGameIfNeeded(room);
     } catch (e) {
       showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -749,6 +912,7 @@ export function RoomsTab({
       await reloadRooms();
       setSelectedRoomId(room.id);
       setManaging(true);
+      applyRoomGameIfNeeded(room);
     } catch (e) {
       showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -839,6 +1003,10 @@ export function RoomsTab({
   const openRoom = (room: Room) => {
     setSelectedRoomId(room.id);
     setManaging(true);
+    applyRoomGameIfNeeded(room);
+    setEditWorldName(room.world_name?.trim() ?? "");
+    setEditLoader(isRoomLoaderId(room.loader ?? "") ? (room.loader as RoomLoaderId) : "vanilla");
+    setEditGameVersion(room.game_version?.trim() ?? "");
   };
 
   const inviteableFriends = useMemo(() => {
@@ -982,6 +1150,31 @@ export function RoomsTab({
     }
   };
 
+  const handleSaveRoomGame = async () => {
+    if (!selectedRoom || !isOwner) return;
+    if (!editGameVersion.trim()) {
+      showNotification("warning", tt("rooms.toast.versionRequired"));
+      return;
+    }
+    setBusyAction("update-game");
+    setLoading(true);
+    try {
+      const room = await updateRoom(selectedRoom.id, {
+        worldName: editWorldName.trim(),
+        gameVersion: editGameVersion.trim(),
+        loader: editLoader,
+      });
+      mergeRoomIntoLists(room);
+      applyRoomGameIfNeeded(room);
+      showNotification("success", tt("rooms.toast.gameUpdated"));
+    } catch (e) {
+      showNotification("error", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setLoading(false);
+      setBusyAction(null);
+    }
+  };
+
   const renderMyRoomCard = (room: Room) => {
     const owned = room.owner_user_id === userId;
     const members = room.members ?? [];
@@ -1009,6 +1202,7 @@ export function RoomsTab({
             {formatRoomVisibility(room.visibility, tt)}
             {" · "}
             {owned ? tt("rooms.youOwner") : tt("rooms.youMember")}
+            {formatRoomGameMeta(room) ? ` · ${formatRoomGameMeta(room)}` : ""}
           </p>
         </div>
         <span className="shrink-0 text-xs text-white/35 group-hover:text-emerald-200/80">→</span>
@@ -1055,6 +1249,7 @@ export function RoomsTab({
             {tt("rooms.ownedBy", { nick: ownerNick })}
             {" · "}
             {tt("rooms.players", { count: room.member_count, max: room.max_players })}
+            {formatRoomGameMeta(room) ? ` · ${formatRoomGameMeta(room)}` : ""}
             {sessionPlaytimeSeconds != null
               ? ` · ${formatDurationShort(sessionPlaytimeSeconds, tt)}`
               : ""}
@@ -1119,6 +1314,9 @@ export function RoomsTab({
                 {formatRoomVisibility(selectedRoom.visibility, tt)}
                 {" · "}
                 {shortRoomId(selectedRoom.id)}
+                {formatRoomGameMeta(selectedRoom)
+                  ? ` · ${formatRoomGameMeta(selectedRoom)}`
+                  : ""}
                 {roomConnectAddress ? (
                   <>
                     {" · "}
@@ -1234,6 +1432,69 @@ export function RoomsTab({
 
               <Panel padding="sm">
                 <p className="ui-section">{tt("rooms.worldTitle")}</p>
+
+                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
+                  <p className="text-[11px] font-semibold text-white/45">{tt("rooms.gameMetaTitle")}</p>
+                  {isOwner ? (
+                    <div className="flex flex-col gap-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[11px] text-white/45">{tt("rooms.worldNameLabel")}</span>
+                        <TextField
+                          type="text"
+                          value={editWorldName}
+                          onChange={(e) => setEditWorldName(e.target.value)}
+                          placeholder={tt("rooms.worldNamePlaceholder")}
+                          disabled={loading}
+                        />
+                      </label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <label className="flex flex-1 flex-col gap-1">
+                          <span className="text-[11px] text-white/45">{tt("rooms.loaderLabel")}</span>
+                          <select
+                            value={editLoader}
+                            onChange={(e) => setEditLoader(e.target.value as RoomLoaderId)}
+                            disabled={loading || editVersionsLoading}
+                            className="rounded-lg border border-white/12 bg-black/40 px-2.5 py-2 text-sm text-white outline-none"
+                          >
+                            {ROOM_LOADERS.map((id) => (
+                              <option key={id} value={id}>
+                                {tt(`rooms.loader.${id}`)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-[1.4] flex-col gap-1">
+                          <span className="text-[11px] text-white/45">{tt("rooms.versionLabel")}</span>
+                          <select
+                            value={editGameVersion}
+                            onChange={(e) => setEditGameVersion(e.target.value)}
+                            disabled={loading || editVersionsLoading || editVersions.length === 0}
+                            className="rounded-lg border border-white/12 bg-black/40 px-2.5 py-2 text-sm text-white outline-none"
+                          >
+                            {editVersions.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <ActionButton
+                        size="sm"
+                        variant="secondary"
+                        loading={busyAction === "update-game"}
+                        disabled={loading}
+                        onClick={() => void handleSaveRoomGame()}
+                      >
+                        {tt("rooms.saveGameMeta")}
+                      </ActionButton>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/70">
+                      {formatRoomGameMeta(selectedRoom) ?? tt("rooms.gameMetaUnknown")}
+                    </p>
+                  )}
+                </div>
 
                 {selectedRoom.member_count < 2 ? (
                   <p className="mt-2 text-sm text-white/55">{tt("rooms.waitForPeer")}</p>
@@ -1650,6 +1911,50 @@ export function RoomsTab({
               autoFocus
             />
           </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="ui-caption font-semibold">{tt("rooms.worldNameLabel")}</span>
+            <TextField
+              type="text"
+              value={createWorldName}
+              onChange={(e) => setCreateWorldName(e.target.value)}
+              placeholder={tt("rooms.worldNamePlaceholder")}
+              disabled={loading}
+            />
+          </label>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="ui-caption font-semibold">{tt("rooms.loaderLabel")}</span>
+              <select
+                value={createLoader}
+                onChange={(e) => setCreateLoader(e.target.value as RoomLoaderId)}
+                disabled={loading || createVersionsLoading}
+                className="rounded-xl border border-white/12 bg-black/40 px-3 py-2.5 text-sm text-white outline-none"
+              >
+                {ROOM_LOADERS.map((id) => (
+                  <option key={id} value={id}>
+                    {tt(`rooms.loader.${id}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-[1.4] flex-col gap-1">
+              <span className="ui-caption font-semibold">{tt("rooms.versionLabel")}</span>
+              <select
+                value={createGameVersion}
+                onChange={(e) => setCreateGameVersion(e.target.value)}
+                disabled={loading || createVersionsLoading || createVersions.length === 0}
+                className="rounded-xl border border-white/12 bg-black/40 px-3 py-2.5 text-sm text-white outline-none"
+              >
+                {createVersions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div ref={visibilityDropdownRef} className="relative flex flex-col gap-1">
             <span className="ui-caption font-semibold">{tt("rooms.visibilityLabel")}</span>

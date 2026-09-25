@@ -109,6 +109,8 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
       "javaSettings.javaPath.label",
       "javaSettings.memory.title",
       "javaSettings.jvmArgs.title",
+      "javaSettings.actions.verify",
+      "javaSettings.actions.reinstall",
     ],
   },
   {

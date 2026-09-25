@@ -4,11 +4,22 @@ use std::sync::atomic::AtomicU64;
 use tauri::AppHandle;
 
 use crate::infra::http::http_client_for_binary_download;
-use crate::services::game::core::library_applies;
+use crate::services::game::core::{library_applies, sha1_hex_of_file};
 use crate::services::game::console::log_to_console;
 use crate::services::game::runtime::downloads::download_file_checked;
 use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES};
 use crate::services::game::version_types::Library;
+
+fn lwjgl_native_classifier(os_name: &str) -> &'static str {
+    match (os_name, std::env::consts::ARCH) {
+        ("windows", "aarch64") => "natives-windows-arm64",
+        ("windows", _) => "natives-windows",
+        ("osx", "aarch64") => "natives-macos-arm64",
+        ("osx", _) => "natives-macos",
+        (_, "aarch64") => "natives-linux-arm64",
+        _ => "natives-linux",
+    }
+}
 
 pub(crate) fn natives_dir_has_files(dir: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -93,7 +104,22 @@ pub(crate) async fn ensure_library_artifacts_present_for_launch(
         };
         let path = libs_root.join(&a.path);
         if path.exists() {
-            continue;
+            let meta_len = tokio::fs::metadata(&path)
+                .await
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if meta_len == 0 {
+                let _ = tokio::fs::remove_file(&path).await;
+            } else if let Some(ref expected) = a.sha1 {
+                match sha1_hex_of_file(&path).await {
+                    Ok(actual) if actual.eq_ignore_ascii_case(expected) => continue,
+                    Ok(_) | Err(_) => {
+                        let _ = tokio::fs::remove_file(&path).await;
+                    }
+                }
+            } else {
+                continue;
+            }
         }
 
         let url = if !a.url.trim().is_empty() {
@@ -103,7 +129,7 @@ pub(crate) async fn ensure_library_artifacts_present_for_launch(
         };
 
         eprintln!(
-            "[Launch] Missing library artifact, downloading: {}",
+            "[Launch] Missing/corrupt library artifact, downloading: {}",
             path.display()
         );
         download_file_checked(
@@ -253,22 +279,24 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
         return Ok(());
     }
     let lwjgl_version = "3.3.3";
-    let native_classifier = match os_name {
-        "windows" => "natives-windows",
-        "osx" => "natives-macos",
-        _ => "natives-linux",
-    };
+    let native_classifier = lwjgl_native_classifier(os_name);
     let client = http_client_for_binary_download(true);
     let total_done = Arc::new(AtomicU64::new(0));
     log_to_console(
         app,
         &format!(
-            "[Launch] LWJGL fallback активирован для {version_id}: докачка {lwjgl_version}"
+            "[Launch] LWJGL fallback активирован для {version_id}: докачка {lwjgl_version} ({native_classifier})"
         ),
     );
     for module in lwjgl_fallback_modules() {
         let rel = format!("org/lwjgl/{module}/{lwjgl_version}/{module}-{lwjgl_version}.jar");
         let path = libs_root.join(&rel);
+        if path.exists() {
+            let len = tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0);
+            if len == 0 {
+                let _ = tokio::fs::remove_file(&path).await;
+            }
+        }
         if !path.exists() {
             let url = format!("{BMCL_MAVEN_BASE}/{rel}");
             download_file_checked(
@@ -293,9 +321,18 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
             "org/lwjgl/{module}/{lwjgl_version}/{module}-{lwjgl_version}-{native_classifier}.jar"
         );
         let native_path = libs_root.join(&native_rel);
+        if native_path.exists() {
+            let len = tokio::fs::metadata(&native_path)
+                .await
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if len == 0 {
+                let _ = tokio::fs::remove_file(&native_path).await;
+            }
+        }
         if !native_path.exists() {
             let url = format!("{BMCL_MAVEN_BASE}/{native_rel}");
-            let _ = download_file_checked(
+            download_file_checked(
                 &client,
                 &url,
                 &native_path,
@@ -306,7 +343,7 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
                 total_done.clone(),
                 DEFAULT_DOWNLOAD_RETRIES,
             )
-            .await;
+            .await?;
         }
     }
     Ok(())

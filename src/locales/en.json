@@ -417,7 +417,8 @@
       "hint": "By default the launcher downloads and uses Mojang Java for the selected Minecraft version.",
       "auto": "Auto (Mojang runtime)",
       "custom": "Custom Java path",
-      "profileHint": "These settings apply only to this modpack and override global settings."
+      "profileHint": "These settings apply only to this modpack and override global settings.",
+      "manageHint": "Checks and reinstalls the Mojang Java runtimes used by the launcher."
     },
     "useCustomArgs": {
       "label": "Use custom JVM arguments",
@@ -458,7 +459,16 @@
       "save": "Save",
       "cancel": "Cancel",
       "resetRecommended": "Reset to recommended",
-      "validate": "Validate"
+      "validate": "Validate",
+      "verify": "Verify files",
+      "verifyChecking": "Verifying...",
+      "reinstall": "Reinstall Java",
+      "reinstalling": "Reinstalling..."
+    },
+    "reinstallDialog": {
+      "title": "Reinstall Java?",
+      "hint": "Installed Mojang Java runtimes will be deleted and downloaded again. If none are installed yet, the standard set (Java 8, 17, 21, 25) will be installed. This may take several minutes.",
+      "confirm": "Reinstall"
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -474,7 +484,13 @@
       "validateOk": "Java and JVM arguments validation passed.",
       "validateErrors": "Errors detected while validating JVM arguments.",
       "validateWarnings": "Validation finished with warnings.",
-      "validateFailed": "Failed to validate Java arguments."
+      "validateFailed": "Failed to validate Java arguments.",
+      "verifyEmpty": "No Mojang Java runtimes are installed yet. They will be downloaded when you launch the game, or use Reinstall Java.",
+      "verifyOk": "Java files are OK ({{checked}} files in {{runtimes}} runtime(s)).",
+      "verifyProblems": "Java issues found: missing {{missing}}, corrupted {{corrupted}} (checked {{checked}}). Reinstall Java to fix.",
+      "verifyFailed": "Failed to verify Java files.",
+      "reinstallOk": "Java reinstalled ({{count}} runtime(s)).",
+      "reinstallFailed": "Failed to reinstall Java."
     },
     "validation": {
       "invalidFormatXms": "Invalid format. Examples: 1024M, 2G.",
@@ -1062,6 +1078,20 @@
     "manageTitle": "Room",
     "roomNameLabel": "Name",
     "roomNamePlaceholder": "For example, Survival with friends",
+    "worldNameLabel": "World name",
+    "worldNamePlaceholder": "Minecraft world display name",
+    "loaderLabel": "Loader",
+    "versionLabel": "Version",
+    "gameMetaTitle": "Room game",
+    "gameMetaUnknown": "Version not set",
+    "saveGameMeta": "Save version & world",
+    "loader": {
+      "vanilla": "Vanilla",
+      "fabric": "Fabric",
+      "quilt": "Quilt",
+      "forge": "Forge",
+      "neoforge": "NeoForge"
+    },
     "visibilityLabel": "Privacy",
     "maxPlayersLabel": "Players",
     "publicHint": "Friends will see the room in their list and can join.",
@@ -1131,7 +1161,10 @@
       "invited": "Player invited",
       "kicked": "Member kicked",
       "cannotInviteSelf": "You cannot invite yourself",
-      "passwordRequired": "Private rooms need a password (4–32 chars: letters, digits, - and _)"
+      "passwordRequired": "Private rooms need a password (4–32 chars: letters, digits, - and _)",
+      "versionRequired": "Pick a Minecraft version for the room",
+      "versionApplied": "Room version: {{version}} — switched in Play",
+      "gameUpdated": "Room version and world updated"
     }
   },
   "notifications": {

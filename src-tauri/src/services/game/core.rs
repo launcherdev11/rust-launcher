@@ -59,8 +59,10 @@ pub(crate) fn current_os_name() -> &'static str {
 
 pub(crate) fn current_os_arch() -> &'static str {
     match std::env::consts::ARCH {
-        "x86_64" | "aarch64" => "x86_64",
-        _ => "x86",
+        "x86_64" => "x86_64",
+        "aarch64" => "aarch64",
+        "x86" => "x86",
+        other => other,
     }
 }
 
@@ -199,7 +201,20 @@ pub(crate) fn compare_version_like(a: &str, b: &str) -> std::cmp::Ordering {
 
 pub(crate) fn native_classifier_candidates(lib: &Library, os_name: &str) -> Vec<String> {
     let mut out = Vec::<String>::new();
-    let is_64 = std::env::consts::ARCH == "x86_64";
+    let arch = std::env::consts::ARCH;
+    let is_64 = arch == "x86_64" || arch == "aarch64";
+    let is_arm = arch == "aarch64";
+
+    match (os_name, is_arm) {
+        ("osx", true) => out.push("natives-macos-arm64".to_string()),
+        ("windows", true) => out.push("natives-windows-arm64".to_string()),
+        ("linux", true) => {
+            out.push("natives-linux-arm64".to_string());
+            out.push("natives-linux-aarch64".to_string());
+        }
+        _ => {}
+    }
+
     let base = match os_name {
         "windows" => "natives-windows",
         "osx" => "natives-macos",
@@ -207,7 +222,8 @@ pub(crate) fn native_classifier_candidates(lib: &Library, os_name: &str) -> Vec<
     };
     out.push(base.to_string());
     if os_name == "windows" {
-        if is_64 {
+        if is_arm {
+        } else if is_64 {
             out.push("natives-windows-64".to_string());
             out.push("natives-windows-x86_64".to_string());
         } else {
@@ -221,7 +237,6 @@ pub(crate) fn native_classifier_candidates(lib: &Library, os_name: &str) -> Vec<
             out.push(replaced);
         }
     }
-    out.sort();
     out.dedup();
     out
 }

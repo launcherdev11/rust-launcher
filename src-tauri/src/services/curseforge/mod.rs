@@ -201,7 +201,7 @@ struct CfSortableGameVersion {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CfMinecraftVersion {
-    version: String,
+    version_string: String,
 }
 
 fn class_id_for_content_type(content_type: &str) -> Result<u32, String> {
@@ -314,7 +314,7 @@ pub async fn curseforge_list_minecraft_versions() -> Result<Vec<String>, String>
     let versions: Vec<String> = body
         .data
         .into_iter()
-        .map(|v| v.version)
+        .map(|v| v.version_string)
         .filter(|v| is_minecraft_release_version(v))
         .collect();
     Ok(versions)

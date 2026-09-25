@@ -80,10 +80,11 @@ export async function fetchCurseforgeCategories(
 export async function searchModrinthCatalog(
   params: SearchCatalogParams,
 ): Promise<SearchCatalogResult> {
-  const facets: string[][] = [
-    [`project_type:${params.contentType}`],
-    [`versions:${params.gameVersion}`],
-  ];
+  const facets: string[][] = [[`project_type:${params.contentType}`]];
+
+  if (params.gameVersion.trim()) {
+    facets.push([`versions:${params.gameVersion.trim()}`]);
+  }
 
   if (params.contentType === "mod" && params.loader !== "any") {
     facets.push([`categories:${params.loader}`]);

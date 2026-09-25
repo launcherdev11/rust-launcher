@@ -253,7 +253,7 @@ export class RoomPeerSession {
     if (this.isHost) {
       this.channel = pc.createDataChannel("mc16", { ordered: true });
       this.wireChannel(this.channel);
-      await this.createAndSendOffer();
+      this.callbacks.onStatus("preparing");
     } else {
       pc.ondatachannel = (ev) => {
         this.channel = ev.channel;
@@ -288,21 +288,20 @@ export class RoomPeerSession {
     if (!this.isHost || this.closed || !this.pc) return "noop";
     if (this.channel?.readyState === "open") return "noop";
 
-    const conn = this.pc.connectionState;
-    if (conn === "connecting" || conn === "connected") return "noop";
-    if (this.pc.remoteDescription) {
-      if (conn === "failed" || conn === "disconnected" || conn === "closed") {
+    if (!this.pc.remoteDescription) {
+      try {
+        await this.createAndSendOffer();
+        return "resent";
+      } catch {
         return "restart";
       }
-      return "noop";
     }
 
-    try {
-      await this.createAndSendOffer();
-      return "resent";
-    } catch {
+    const conn = this.pc.connectionState;
+    if (conn === "failed" || conn === "disconnected" || conn === "closed") {
       return "restart";
     }
+    return "noop";
   }
 
   private wireChannel(channel: RTCDataChannel) {

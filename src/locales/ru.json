@@ -417,7 +417,8 @@
       "hint": "По умолчанию лаунчер скачивает и использует Java от Mojang для выбранной версии Minecraft.",
       "auto": "Авто (Mojang runtime)",
       "custom": "Свой путь к Java",
-      "profileHint": "Эти настройки применяются только к этой сборке и перекрывают глобальные."
+      "profileHint": "Эти настройки применяются только к этой сборке и перекрывают глобальные.",
+      "manageHint": "Проверка и переустановка Java runtime от Mojang, которую использует лаунчер."
     },
     "useCustomArgs": {
       "label": "Использовать пользовательские JVM‑аргументы",
@@ -458,7 +459,16 @@
       "save": "Сохранить",
       "cancel": "Отменить",
       "resetRecommended": "Сбросить к рекомендованным",
-      "validate": "Проверить"
+      "validate": "Проверить",
+      "verify": "Проверить файлы",
+      "verifyChecking": "Проверка...",
+      "reinstall": "Переустановить Java",
+      "reinstalling": "Переустановка..."
+    },
+    "reinstallDialog": {
+      "title": "Переустановить Java?",
+      "hint": "Установленные Java runtime от Mojang будут удалены и скачаны заново. Если ничего ещё не установлено, будет скачан стандартный набор (Java 8, 17, 21, 25). Это может занять несколько минут.",
+      "confirm": "Переустановить"
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -474,7 +484,13 @@
       "validateOk": "Проверка Java и JVM‑аргументов не выявила критичных ошибок.",
       "validateErrors": "Обнаружены ошибки при проверке JVM‑аргументов.",
       "validateWarnings": "Проверка завершена с предупреждениями.",
-      "validateFailed": "Не удалось выполнить проверку Java‑аргументов."
+      "validateFailed": "Не удалось выполнить проверку Java‑аргументов.",
+      "verifyEmpty": "Java runtime от Mojang ещё не установлена. Она скачается при запуске игры или через «Переустановить Java».",
+      "verifyOk": "Файлы Java в порядке ({{checked}} файлов в {{runtimes}} runtime).",
+      "verifyProblems": "Проблемы с Java: отсутствует {{missing}}, повреждено {{corrupted}} (проверено {{checked}}). Переустановите Java.",
+      "verifyFailed": "Не удалось проверить файлы Java.",
+      "reinstallOk": "Java переустановлена ({{count}} runtime).",
+      "reinstallFailed": "Не удалось переустановить Java."
     },
     "validation": {
       "invalidFormatXms": "Некорректный формат. Примеры: 1024M, 2G.",
@@ -1062,6 +1078,20 @@
     "manageTitle": "Комната",
     "roomNameLabel": "Название",
     "roomNamePlaceholder": "Например, Выживание с друзьями",
+    "worldNameLabel": "Название мира",
+    "worldNamePlaceholder": "Как мир называется в Minecraft",
+    "loaderLabel": "Загрузчик",
+    "versionLabel": "Версия",
+    "gameMetaTitle": "Игра в комнате",
+    "gameMetaUnknown": "Версия не указана",
+    "saveGameMeta": "Сохранить версию и мир",
+    "loader": {
+      "vanilla": "Vanilla",
+      "fabric": "Fabric",
+      "quilt": "Quilt",
+      "forge": "Forge",
+      "neoforge": "NeoForge"
+    },
     "visibilityLabel": "Приватность",
     "maxPlayersLabel": "Игроков",
     "publicHint": "Друзья увидят комнату в списке и смогут войти.",
@@ -1131,7 +1161,10 @@
       "invited": "Игрок приглашён",
       "kicked": "Участник исключён",
       "cannotInviteSelf": "Нельзя пригласить самого себя",
-      "passwordRequired": "Для приватной комнаты нужен пароль (4–32 символа: буквы, цифры, - и _)"
+      "passwordRequired": "Для приватной комнаты нужен пароль (4–32 символа: буквы, цифры, - и _)",
+      "versionRequired": "Выберите версию Minecraft для комнаты",
+      "versionApplied": "Версия комнаты: {{version}} — переключено во вкладке Play",
+      "gameUpdated": "Версия и мир комнаты обновлены"
     }
   },
   "notifications": {

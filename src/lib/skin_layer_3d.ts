@@ -172,7 +172,7 @@ function buildFacePixels(
         case "right":
           cx = offset.x + halfW + e / 2;
           cy = offset.y + (halfH - (py + 0.5));
-          cz = offset.z + (px + 0.5 - halfD);
+          cz = offset.z + (halfD - (px + 0.5));
           bx = e;
           by = 1;
           bz = 1;
@@ -180,7 +180,7 @@ function buildFacePixels(
         case "left":
           cx = offset.x - halfW - e / 2;
           cy = offset.y + (halfH - (py + 0.5));
-          cz = offset.z + (halfD - (px + 0.5));
+          cz = offset.z + (px + 0.5 - halfD);
           bx = e;
           by = 1;
           bz = 1;
@@ -196,7 +196,7 @@ function buildFacePixels(
         case "bottom":
           cx = offset.x + (px + 0.5 - halfW);
           cy = offset.y - halfH - e / 2;
-          cz = offset.z + (halfD - (py + 0.5));
+          cz = offset.z + (py + 0.5 - halfD);
           bx = 1;
           by = e;
           bz = 1;
@@ -359,7 +359,7 @@ export function applySkinLayer3D(viewer: SkinViewer): void {
       hide: skin.rightLeg.outerLayer,
     },
     {
-      u: 16,
+      u: 0,
       v: 48,
       w: 4,
       h: 12,

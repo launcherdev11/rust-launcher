@@ -50,3 +50,12 @@ pub struct JavaArgsValidationResult {
     pub output: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct JavaIntegrityCheckResult {
+    pub is_ok: bool,
+    pub checked_files: u32,
+    pub missing_files: u32,
+    pub corrupted_files: u32,
+    pub runtimes_checked: u32,
+}
+
