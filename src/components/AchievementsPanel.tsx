@@ -144,56 +144,54 @@ export function AchievementsPanel({
         <p className="mt-3 text-sm text-white/55">{tt("achievements.empty")}</p>
       ) : (
         <div
-          className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}
+          className={`mt-3 grid items-stretch gap-2 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}
         >
           {achievements.map((achievement) => (
             <div
               key={achievement.code}
-              className={`rounded-xl border px-3 py-2.5 transition ${
+              className={`flex h-full gap-2.5 rounded-xl border px-3 py-2.5 transition ${
                 achievement.unlocked
                   ? "border-amber-400/25 bg-amber-500/10"
                   : "border-white/8 bg-black/25 opacity-70"
               }`}
             >
-              <div className="flex items-start gap-2.5">
-                <div
-                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                    achievement.unlocked
-                      ? "bg-amber-500/20 text-amber-200"
-                      : "bg-white/5 text-white/35"
-                  }`}
-                >
-                  <AchievementIcon className="h-4 w-4 object-contain" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white/90">
-                    {localizedAchievementField(
-                      language,
-                      achievement.code,
-                      "title",
-                      achievement.title,
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-xs leading-snug text-white/55">
-                    {localizedAchievementField(
-                      language,
-                      achievement.code,
-                      "description",
-                      achievement.description,
-                    )}
-                  </p>
-                  {achievement.unlocked && achievement.unlocked_at ? (
-                    <p className="mt-1 text-[10px] text-amber-200/70">
-                      {tt("achievements.unlockedAt", {
-                        date: new Date(achievement.unlocked_at).toLocaleDateString(),
-                      })}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">
-                      {tt("achievements.locked")}
-                    </p>
+              <div
+                className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  achievement.unlocked
+                    ? "bg-amber-500/20 text-amber-200"
+                    : "bg-white/5 text-white/35"
+                }`}
+              >
+                <AchievementIcon className="h-4 w-4 object-contain" />
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <p className="min-h-[2.5rem] text-sm font-semibold leading-snug text-white/90 [overflow-wrap:anywhere]">
+                  {localizedAchievementField(
+                    language,
+                    achievement.code,
+                    "title",
+                    achievement.title,
                   )}
-                </div>
+                </p>
+                <p className="mt-0.5 line-clamp-2 min-h-[2rem] text-xs leading-snug text-white/55">
+                  {localizedAchievementField(
+                    language,
+                    achievement.code,
+                    "description",
+                    achievement.description,
+                  )}
+                </p>
+                {achievement.unlocked && achievement.unlocked_at ? (
+                  <p className="mt-auto pt-1.5 whitespace-nowrap text-[10px] text-amber-200/70">
+                    {tt("achievements.unlockedAt", {
+                      date: new Date(achievement.unlocked_at).toLocaleDateString(),
+                    })}
+                  </p>
+                ) : (
+                  <p className="mt-auto pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                    {tt("achievements.locked")}
+                  </p>
+                )}
               </div>
             </div>
           ))}
