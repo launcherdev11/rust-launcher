@@ -6,10 +6,14 @@ use crate::infra::fs_copy::copy_dir_recursive;
 use crate::models::events::{ExternalImportProgressPayload, EVENT_EXTERNAL_IMPORT_PROGRESS};
 use crate::app::paths::instance_dir;
 use crate::models::InstanceProfileSummary;
-use crate::services::game::profiles::{create_profile_impl, delete_profile};
+use crate::services::game::profiles::{
+    consolidate_profile_game_content, create_profile_impl, delete_profile,
+};
 use crate::services::importers::detect::default_launcher_root;
 use crate::services::importers::resolve::normalize_launcher_path;
-use crate::services::importers::scan::{scan_generic_instances, scan_multimc_like_instances};
+use crate::services::importers::scan::{
+    read_instance_loader_meta, scan_generic_instances, scan_multimc_like_instances,
+};
 use crate::services::importers::types::{ExternalLauncherType, ImportableInstance};
 
 fn emit_progress(app: &AppHandle, phase: &str, current: Option<u32>, total: Option<u32>, message: Option<String>) {
@@ -22,86 +26,6 @@ fn emit_progress(app: &AppHandle, phase: &str, current: Option<u32>, total: Opti
             message,
         },
     );
-}
-
-fn dir_is_empty(dir: &Path) -> bool {
-    std::fs::read_dir(dir).ok().and_then(|mut it| it.next()).is_none()
-}
-
-fn copy_dir_contents_recursive(from: &Path, to: &Path) -> Result<(), String> {
-    if !from.is_dir() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(to)
-        .map_err(|e| format!("Не удалось создать папку {}: {e}", to.display()))?;
-    for entry in std::fs::read_dir(from)
-        .map_err(|e| format!("Ошибка чтения {}: {e}", from.display()))?
-    {
-        let entry = entry.map_err(|e| format!("Ошибка чтения {}: {e}", from.display()))?;
-        let src = entry.path();
-        let dst = to.join(entry.file_name());
-        if src.is_dir() {
-            copy_dir_contents_recursive(&src, &dst)?;
-        } else if src.is_file() {
-            if let Some(parent) = dst.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Не удалось создать папку {}: {e}", parent.display()))?;
-            }
-            let _ = std::fs::copy(&src, &dst);
-        }
-    }
-    Ok(())
-}
-
-fn normalize_dot_minecraft_layout(dest: &Path) -> Result<(), String> {
-    let candidates = [dest.join(".minecraft"), dest.join("minecraft")];
-
-    for content_root in candidates {
-        if !content_root.is_dir() {
-            continue;
-        }
-        for (from_name, to_name) in [
-            ("mods", "mods"),
-            ("resourcepacks", "resourcepacks"),
-            ("shaderpacks", "shaderpacks"),
-        ] {
-            let from = content_root.join(from_name);
-            let to = dest.join(to_name);
-            if !from.is_dir() {
-                continue;
-            }
-            if to.is_dir() && !dir_is_empty(&to) {
-                continue;
-            }
-            copy_dir_contents_recursive(&from, &to)?;
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn default_external_launcher_path(launcher_type: ExternalLauncherType) -> Option<String> {
-    default_launcher_root(launcher_type).and_then(|p| p.to_str().map(|s| s.to_string()))
-}
-
-#[tauri::command]
-pub fn list_importable_instances(
-    launcher_type: ExternalLauncherType,
-    base_path: Option<String>,
-) -> Result<Vec<ImportableInstance>, String> {
-    let normalized = normalize_launcher_path(launcher_type, base_path.as_deref())?;
-    let instances_dir = PathBuf::from(&normalized.instances_dir);
-    let launcher_root = PathBuf::from(&normalized.launcher_root);
-    let lt = normalized.launcher_type;
-    match lt {
-        ExternalLauncherType::PrismLauncher | ExternalLauncherType::MultiMC => {
-            scan_multimc_like_instances(lt, Some(launcher_root.as_path()), &instances_dir)
-        }
-        ExternalLauncherType::CurseForge
-        | ExternalLauncherType::ATLauncher
-        | ExternalLauncherType::GDLauncher => scan_generic_instances(lt, &instances_dir),
-        _ => Err("Неподдерживаемый тип лаунчера".to_string()),
-    }
 }
 
 fn copy_instance_payload(src: &Path, dest: &Path) -> Result<(), String> {
@@ -139,6 +63,31 @@ fn copy_instance_payload(src: &Path, dest: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn default_external_launcher_path(launcher_type: ExternalLauncherType) -> Option<String> {
+    default_launcher_root(launcher_type).and_then(|p| p.to_str().map(|s| s.to_string()))
+}
+
+#[tauri::command]
+pub fn list_importable_instances(
+    launcher_type: ExternalLauncherType,
+    base_path: Option<String>,
+) -> Result<Vec<ImportableInstance>, String> {
+    let normalized = normalize_launcher_path(launcher_type, base_path.as_deref())?;
+    let instances_dir = PathBuf::from(&normalized.instances_dir);
+    let launcher_root = PathBuf::from(&normalized.launcher_root);
+    let lt = normalized.launcher_type;
+    match lt {
+        ExternalLauncherType::PrismLauncher | ExternalLauncherType::MultiMC => {
+            scan_multimc_like_instances(lt, Some(launcher_root.as_path()), &instances_dir)
+        }
+        ExternalLauncherType::CurseForge
+        | ExternalLauncherType::ATLauncher
+        | ExternalLauncherType::GDLauncher => scan_generic_instances(lt, &instances_dir),
+        _ => Err("Неподдерживаемый тип лаунчера".to_string()),
+    }
+}
+
+#[tauri::command]
 pub async fn import_selected_external_instance(
     app: AppHandle,
     launcher_type: ExternalLauncherType,
@@ -149,26 +98,47 @@ pub async fn import_selected_external_instance(
     game_version: Option<String>,
     icon_path: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
-    let _normalized = normalize_launcher_path(launcher_type, base_path.as_deref())?;
+    let src = PathBuf::from(&instance_path);
+    if !src.is_dir() {
+        return Err("Папка инстанса не найдена".to_string());
+    }
+
+    if let Some(base) = base_path.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let _ = normalize_launcher_path(launcher_type, Some(base))?;
+    }
 
     emit_progress(&app, "start", None, None, None);
 
+    let disk_meta = read_instance_loader_meta(launcher_type, &src);
+
     let name = display_name
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "Imported profile".to_string());
-    let gv = game_version.unwrap_or_else(|| "unknown".to_string());
-    let ld = loader.unwrap_or_else(|| "vanilla".to_string());
+        .unwrap_or_else(|| {
+            disk_meta
+                .display_name
+                .clone()
+                .unwrap_or_else(|| "Imported profile".to_string())
+        });
 
-    let profile = create_profile_impl(name, gv, ld, None, icon_path, None)?;
+    let gv = game_version
+        .filter(|s| !s.trim().is_empty() && !s.eq_ignore_ascii_case("unknown"))
+        .or(disk_meta.game_version)
+        .unwrap_or_else(|| "unknown".to_string());
+    let ld = loader
+        .filter(|s| !s.trim().is_empty())
+        .or(disk_meta.loader)
+        .unwrap_or_else(|| "vanilla".to_string());
+    let loader_version = disk_meta.loader_version;
+
+    let profile = create_profile_impl(name, gv.clone(), ld, loader_version, icon_path, None)?;
     let profile_id = profile.id.clone();
     let dest = instance_dir(&profile_id)?;
 
-    let src = PathBuf::from(&instance_path);
     let res = (|| -> Result<(), String> {
         emit_progress(&app, "copy", None, None, None);
         copy_instance_payload(&src, &dest)?;
         emit_progress(&app, "layout", None, None, None);
-        normalize_dot_minecraft_layout(&dest)?;
+        consolidate_profile_game_content(&dest, &gv)?;
         Ok(())
     })();
 
@@ -230,16 +200,11 @@ mod tests {
         fs::write(src_mods.join("a.jar"), b"test").unwrap();
 
         let target_mods = dest.join("mods");
-        fs::create_dir_all(&target_mods).unwrap();
-        for e in fs::read_dir(&target_mods).unwrap() {
-            let _ = e;
-            panic!("mods dir should start empty");
-        }
+        assert!(target_mods.is_dir());
 
-        normalize_dot_minecraft_layout(&dest).unwrap();
+        consolidate_profile_game_content(&dest, "1.16.5").unwrap();
         assert!(target_mods.join("a.jar").is_file());
 
         delete_profile(pid).unwrap();
     }
 }
-

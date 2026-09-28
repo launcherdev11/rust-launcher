@@ -58,6 +58,17 @@ pub fn instances_dir_from_root(
     }
 }
 
+fn looks_like_multimc_instances_dir(dir: &Path) -> bool {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    rd.flatten().take(40).any(|e| {
+        let p = e.path();
+        p.is_dir()
+            && (p.join("instance.cfg").is_file() || p.join("mmc-pack.json").is_file())
+    })
+}
+
 pub fn normalize_multimc_like_path(
     launcher_type: ExternalLauncherType,
     input: &Path,
@@ -66,22 +77,21 @@ pub fn normalize_multimc_like_path(
         return Err("Путь не найден. Укажите папку лаунчера или папку instances.".to_string());
     }
 
-    let mut was_instances = false;
-    let mut root = input.to_path_buf();
     let name = input
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_string();
 
-    if name.eq_ignore_ascii_case("instances") {
-        was_instances = true;
-        root = input
+    if name.eq_ignore_ascii_case("instances") || looks_like_multimc_instances_dir(input) {
+        let root = input
             .parent()
             .map(|p| p.to_path_buf())
             .ok_or("Папка instances не должна быть корнем диска.".to_string())?;
+        return Ok((root, input.to_path_buf(), true));
     }
 
+    let root = input.to_path_buf();
     let instances_dir = instances_dir_from_root(launcher_type, &root)
         .ok_or("Не удалось прочитать конфиг лаунчера (InstanceDir).".to_string())?;
 
@@ -92,7 +102,7 @@ pub fn normalize_multimc_like_path(
         );
     }
 
-    Ok((root, instances_dir, was_instances))
+    Ok((root, instances_dir, false))
 }
 
 #[cfg(test)]

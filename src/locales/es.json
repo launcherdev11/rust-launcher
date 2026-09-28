@@ -72,6 +72,7 @@
       "start": "Preparante…",
       "overrides": "Extrayendo…",
       "files": "Descargando archivos…",
+      "done": "Listo",
       "cancelled": "Instalación de Modpack cancelada."
     },
     "noIcon": "Sin icono",
@@ -497,10 +498,18 @@
       "reinstall": "Reinstalar Java",
       "reinstalling": "Reinstalando..."
     },
-    "reinstallDialog": {
-      "title": "¿Reinstalar Java?",
-      "hint": "Los runtimes de Java de Mojang instalados se eliminarán y se descargarán de nuevo. Si aún no hay ninguno, se instalará el conjunto estándar (Java 8, 17, 21 y 25). Puede tardar varios minutos.",
-      "confirm": "Reinstalar"
+    "manageDialog": {
+      "verifyTitle": "¿Qué comprobar?",
+      "verifyHint": "Elige qué versiones del runtime de Java de Mojang comprobar.",
+      "verifyConfirm": "Comprobar",
+      "reinstallTitle": "¿Qué instalar / reinstalar?",
+      "reinstallHint": "Elige versiones de Java. Las instaladas se eliminarán y se descargarán de nuevo; las que falten se instalarán. Puede tardar varios minutos.",
+      "reinstallConfirm": "Reinstalar",
+      "installed": "Instalada",
+      "notInstalled": "No instalada",
+      "selectAll": "Seleccionar todo",
+      "selectNone": "Quitar todo",
+      "noneSelected": "Selecciona al menos una versión de Java."
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -517,7 +526,7 @@
       "validateErrors": "Errores detectados al validar argumentos de JVM.",
       "validateWarnings": "Validación finalizada con advertencias.",
       "validateFailed": "No se pudieron validar los argumentos de Java.",
-      "verifyEmpty": "Aún no hay runtimes de Java de Mojang instalados. Se descargarán al iniciar el juego o con «Reinstalar Java».",
+      "verifyEmpty": "Los runtimes de Java de Mojang seleccionados no están instalados. Se descargarán al iniciar el juego o con «Reinstalar Java».",
       "verifyOk": "Los archivos de Java están bien ({{checked}} archivos en {{runtimes}} runtime(s)).",
       "verifyProblems": "Problemas con Java: faltan {{missing}}, corruptos {{corrupted}} (revisados {{checked}}). Reinstala Java.",
       "verifyFailed": "No se pudieron verificar los archivos de Java.",
@@ -1269,6 +1278,10 @@
     "resendVerificationCode": "Reenviar código",
     "linkMicrosoftTitle": "Inicie sesión con Microsoft y luego haga clic en Vincular nuevamente",
     "linkElyTitle": "Inicie sesión con Ely.by y luego haga clic en Vincular nuevamente",
+    "orDivider": "o",
+    "continueWithDiscord": "Continuar con Discord",
+    "authHintLogin": "Inicia sesión en tu cuenta 16Launcher para sincronizar progreso y amigos.",
+    "authHintSignup": "Crea una cuenta 16Launcher: solo te llevará un par de minutos.",
     "toast": {
       "accountCreated": "Cuenta creada",
       "signedIn": "Sesión iniciada",
@@ -1305,7 +1318,9 @@
       "rateLimited": "Demasiadas solicitudes. Espera un momento.",
       "emailSendFailed": "No se pudo enviar el correo de verificación.",
       "deleteNotAvailable": "La eliminación de cuenta aún no está disponible en el servidor. Hace falta desplegar la API.",
-      "identityAlreadyLinked": "{{provider}} ya está vinculado a otra cuenta de 16Launcher."
+      "identityAlreadyLinked": "{{provider}} ya está vinculado a otra cuenta de 16Launcher.",
+      "discordNotConfigured": "El inicio de sesión con Discord aún no está configurado en el servidor.",
+      "discordFailed": "No se pudo iniciar sesión con Discord. Inténtalo de nuevo."
     }
   },
   "app": {
@@ -1565,6 +1580,27 @@
       "waiting": "Esperando iniciar sesión...",
       "success": "¡Inicio de sesión de Microsoft completo!",
       "errorGeneric": "No se pudo iniciar el inicio de sesión de Microsoft."
+    },
+    "import": {
+      "title": "Traemos tus mundos",
+      "subtitle": "Elige launcher y carpeta — o deja Auto para rutas por defecto",
+      "launcher": "Launcher",
+      "launcherAuto": "Auto · todos los launchers",
+      "path": "Ruta del launcher",
+      "pathPlaceholder": "p. ej. …\\AppData\\Roaming\\PrismLauncher",
+      "pathHint": "Raíz del launcher o carpeta instances / Instances",
+      "browse": "Elegir carpeta",
+      "scan": "Buscar instancias",
+      "scanning": "Buscando…",
+      "emptyTitle": "No hay instancias",
+      "emptyHint": "Elige un launcher, indica la ruta y pulsa Buscar. También puedes importar luego en Builds → Importar.",
+      "cta": "Importar · {{count}}",
+      "skip": "Omitir",
+      "continue": "Continuar",
+      "progress": "{{current}}/{{total}} · {{name}}",
+      "errorGeneric": "No se pudo importar la instancia",
+      "scanFailed": "No se pudo escanear esa ruta",
+      "unknownLauncher": "Otro launcher"
     },
     "finish": {
       "title": "¡Listo!",

@@ -31,9 +31,33 @@ pub(crate) fn build_java_command(
     } else if let Some(custom) = java_settings
         .java_path
         .as_ref()
-        .and_then(|s| if s.trim().is_empty() { None } else { Some(s) })
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
+            }
+        })
     {
-        PathBuf::from(custom)
+        let custom_path = PathBuf::from(custom);
+        let looks_like_bare_command = custom_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|name| {
+                let lower = name.to_ascii_lowercase();
+                (lower == "java" || lower == "java.exe" || lower == "javaw" || lower == "javaw.exe")
+                    && custom_path.parent().map(|p| p.as_os_str().is_empty()).unwrap_or(true)
+            });
+        if looks_like_bare_command || !custom_path.exists() {
+            eprintln!(
+                "[Launch] Кастомный Java путь недоступен ({}), используем runtime лаунчера",
+                custom_path.display()
+            );
+            default_java_path
+        } else {
+            custom_path
+        }
     } else {
         default_java_path
     };

@@ -1696,6 +1696,10 @@ function App() {
   const didApplyStartPageRef = useRef(false);
   const pendingProductTourRef = useRef(false);
   const languageHydratedRef = useRef(false);
+  const settingsRef = useRef<Settings | null>(null);
+  const settingsSaveGenRef = useRef(0);
+  const settingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsSavePendingRef = useRef(false);
 
   const profileAvatarInput = useMemo<ProfileAvatarInput>(
     () => ({
@@ -2308,21 +2312,26 @@ function App() {
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
+    if (settingsSavePendingRef.current) return;
     try {
       const s =
         profileId != null && profileId !== ""
           ? await invoke<Settings>("get_effective_settings", { profileId })
           : await invoke<Settings>("get_settings");
+      if (settingsSavePendingRef.current) return;
       const storedLang = readStoredLanguage();
       if (storedLang && storedLang !== s.interface_language) {
         const synced = { ...s, interface_language: storedLang };
+        settingsRef.current = synced;
         setSettings(synced);
         void invoke("set_settings", { settings: synced }).catch(() => {});
         return;
       }
+      settingsRef.current = s;
       setSettings(s);
     } catch (e) {
       console.error("Не удалось загрузить настройки:", e);
+      settingsRef.current = defaultSettings;
       setSettings(defaultSettings);
     }
   }, []);
@@ -2404,12 +2413,16 @@ function App() {
       setSettings((prev) => {
         snapshotCurrent = prev ?? defaultSettings;
         snapshotNext = { ...snapshotCurrent, ...patch };
+        settingsRef.current = snapshotNext;
         return snapshotNext;
       });
 
       if (patch.open_launcher_on_profiles_tab !== undefined) {
         setActiveItemWithSound(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
       }
+
+      const languageOnly =
+        Object.keys(patch).length === 1 && patch.interface_language !== undefined;
 
       try {
         if (useProfile) {
@@ -2427,19 +2440,37 @@ function App() {
           const nonGamePatch = { ...patch };
           gameFields.forEach((k) => delete nonGamePatch[k]);
           if (Object.keys(nonGamePatch).length > 0) {
+            settingsSavePendingRef.current = true;
+            const gen = ++settingsSaveGenRef.current;
+            const base = settingsRef.current ?? snapshotCurrent;
             await invoke("set_settings", {
-              settings: { ...snapshotCurrent, ...nonGamePatch },
+              settings: { ...base, ...nonGamePatch },
             });
+            if (gen === settingsSaveGenRef.current) {
+              settingsSavePendingRef.current = false;
+            }
           }
         } else {
-          await invoke("set_settings", { settings: snapshotNext });
+          settingsSavePendingRef.current = true;
+          const gen = ++settingsSaveGenRef.current;
+          if (settingsSaveTimerRef.current != null) {
+            clearTimeout(settingsSaveTimerRef.current);
+          }
+          await new Promise<void>((resolve) => {
+            settingsSaveTimerRef.current = setTimeout(() => resolve(), 200);
+          });
+          if (gen !== settingsSaveGenRef.current) return;
+          const toSave = settingsRef.current ?? snapshotNext;
+          await invoke("set_settings", { settings: toSave });
+          if (gen === settingsSaveGenRef.current) {
+            settingsSavePendingRef.current = false;
+          }
         }
-        const languageOnly =
-          Object.keys(patch).length === 1 && patch.interface_language !== undefined;
         if (!languageOnly) {
           showSettingsSavedNotification();
         }
       } catch (e) {
+        settingsSavePendingRef.current = false;
         console.error("Не удалось сохранить настройки:", e);
       }
     },
@@ -4485,13 +4516,13 @@ function App() {
         onLanguagePersist={persistInterfaceLanguage}
         onProfileUpdated={loadProfile}
         onComplete={async () => {
+          pendingProductTourRef.current = true;
           try {
             window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
             window.localStorage.removeItem(ONBOARDING_FORCE_STORAGE_KEY);
           } catch {
           }
           await updateSettings({ onboarding_completed: true });
-          pendingProductTourRef.current = true;
           setOnboardingVisible(false);
         }}
       />

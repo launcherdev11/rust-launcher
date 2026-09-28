@@ -573,36 +573,36 @@ export function AccountsTab({
           onClick={() => setSettingsOpen(false)}
         >
           <div
-            className="glass-modal pointer-events-auto flex max-h-[min(90vh,820px)] w-[min(96vw,44rem)] flex-col overflow-hidden"
+            className="glass-modal pointer-events-auto flex max-h-[min(94vh,920px)] w-[min(96vw,40rem)] min-h-[min(70vh,560px)] flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="account-settings-title"
           >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-6 py-5">
               <div className="min-w-0">
-                <h2 id="account-settings-title" className="text-base font-semibold text-white/95">
+                <h2 id="account-settings-title" className="text-lg font-semibold text-white/95">
                   {tt("app.accounts.accountSettingsTitle")}
                 </h2>
-                <p className="mt-0.5 text-xs text-white/45">{tt("app.accounts.settingsSubtitleShort")}</p>
+                <p className="mt-1 text-sm text-white/45">{tt("app.accounts.settingsSubtitleShort")}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
-                className="interactive-press rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white"
+                className="interactive-press rounded-lg p-2.5 text-white/50 hover:bg-white/10 hover:text-white"
                 aria-label={tt("common.close")}
               >
                 <CloseIcon />
               </button>
             </div>
 
-            <div className="flex shrink-0 gap-1 border-b border-white/10 px-3 pt-3">
+            <div className="flex shrink-0 gap-1 border-b border-white/10 px-4 pt-3">
               {settingsTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setSettingsSection(tab.id)}
-                  className={`interactive-press rounded-t-xl px-3.5 py-2 text-xs font-semibold transition ${
+                  className={`interactive-press rounded-t-xl px-4 py-2.5 text-sm font-semibold transition ${
                     settingsSection === tab.id
                       ? "bg-white/10 text-white"
                       : "text-white/45 hover:bg-white/5 hover:text-white/75"
@@ -613,7 +613,7 @@ export function AccountsTab({
               ))}
             </div>
 
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
               {settingsSection === "accounts" || settingsSection === "platform" ? (
                 <PlatformAccountPanel
                   showNotification={showNotification}

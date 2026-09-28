@@ -21,7 +21,15 @@ pub fn default_launcher_root(launcher_type: ExternalLauncherType) -> Option<Path
                 Some(home.join("AppData").join("Roaming").join("MultiMC"))
             }
             ExternalLauncherType::CurseForge => {
-                Some(home.join("Documents").join("Curse").join("Minecraft"))
+                let overwolf = home.join("curseforge").join("minecraft");
+                if overwolf.is_dir() {
+                    return Some(overwolf);
+                }
+                let legacy = home.join("Documents").join("Curse").join("Minecraft");
+                if legacy.is_dir() {
+                    return Some(legacy);
+                }
+                Some(overwolf)
             }
             ExternalLauncherType::GDLauncher => {
                 if let Some(ad) = appdata {
@@ -87,6 +95,16 @@ pub fn autodetect_launcher_type(base_path: &Path) -> ExternalLauncherType {
             .and_then(|s| s.to_str())
             .map(|s| s.eq_ignore_ascii_case("minecraft"))
             .unwrap_or(false)
+    {
+        return ExternalLauncherType::CurseForge;
+    }
+
+    if base_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .map(|s| s.eq_ignore_ascii_case("Instances"))
+        .unwrap_or(false)
+        && base_path.is_dir()
     {
         return ExternalLauncherType::CurseForge;
     }

@@ -19,7 +19,7 @@ export type AuthTokens = {
 export type PlatformUser = {
   id: string;
   nickname: string;
-  email: string;
+  email?: string | null;
   is_sponsor?: boolean;
 };
 
@@ -162,6 +162,66 @@ export async function registerAndPersist(input: {
   return me;
 }
 
+export async function fetchDiscordAuthStatus(): Promise<{ enabled: boolean }> {
+  return apiFetch("/auth/discord/status", { method: "GET" }, null);
+}
+
+export async function startDiscordAuth(): Promise<{
+  authorize_url: string;
+  session_id: string;
+}> {
+  return apiFetch("/auth/discord/start", { method: "POST" }, null);
+}
+
+type DiscordPollResult =
+  | { status: "pending" }
+  | {
+      status: "ready";
+      access_token: string;
+      refresh_token: string;
+      token_type: string;
+      expires_in: number;
+      is_new_user?: boolean;
+    };
+
+export async function pollDiscordAuth(sessionId: string): Promise<DiscordPollResult> {
+  return apiFetch(`/auth/discord/poll/${encodeURIComponent(sessionId)}`, { method: "GET" }, null);
+}
+
+export async function loginWithDiscordAndPersist(): Promise<{
+  user: PlatformUser;
+  isNewUser: boolean;
+}> {
+  const { authorize_url, session_id } = await startDiscordAuth();
+  await openDiscordAuthorizeUrl(authorize_url);
+
+  const started = Date.now();
+  const timeoutMs = 5 * 60_000;
+  while (Date.now() - started < timeoutMs) {
+    await sleep(1200);
+    const poll = await pollDiscordAuth(session_id);
+    if (poll.status === "pending") continue;
+    persistApiSession(poll.access_token, poll.refresh_token);
+    const me = await fetchMe(poll.access_token);
+    persistNickname(me.nickname);
+    return { user: me, isNewUser: Boolean(poll.is_new_user) };
+  }
+  throw new ApiError(408, "Discord sign-in timed out. Try again.");
+}
+
+async function openDiscordAuthorizeUrl(url: string): Promise<void> {
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 let refreshInFlight: Promise<string | null> | null = null;
 let refreshForcePending = false;
 
@@ -251,6 +311,16 @@ export function mapAuthErrorMessage(
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   const lower = raw.toLowerCase();
+  if (lower.includes("discord auth is not configured")) {
+    return t("platform.errors.discordNotConfigured");
+  }
+  if (
+    lower.includes("discord sign-in timed out") ||
+    lower.includes("discord token exchange failed") ||
+    lower.includes("failed to fetch discord profile")
+  ) {
+    return t("platform.errors.discordFailed");
+  }
   if (
     lower.includes("failed to fetch") ||
     lower.includes("networkerror") ||

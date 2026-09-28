@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 import { AccountSelectionScreen } from "./screens/AccountSelectionScreen";
 import { ElyLoginScreen } from "./screens/ElyLoginScreen";
 import { FinishScreen } from "./screens/FinishScreen";
+import { ImportMigrationScreen } from "./screens/ImportMigrationScreen";
 import { LanguageScreen } from "./screens/LanguageScreen";
 import { MicrosoftLoginScreen } from "./screens/MicrosoftLoginScreen";
 import { WelcomeScreen } from "./screens/WelcomeScreen";
@@ -63,6 +64,10 @@ export function OnboardingFlow({
 
   const stepIndex = stepProgressIndex(step);
 
+  const goImport = useCallback(() => {
+    setStep("import-migration");
+  }, []);
+
   const goFinish = useCallback(() => {
     setStep("finish");
   }, []);
@@ -105,7 +110,7 @@ export function OnboardingFlow({
       });
       setElySuccess(true);
       await onProfileUpdated?.();
-      window.setTimeout(() => goFinish(), 600);
+      window.setTimeout(() => goImport(), 600);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setElyError(msg || tt("onboarding.ely.errorGeneric"));
@@ -126,7 +131,7 @@ export function OnboardingFlow({
         setElyLoading(false);
         setElySuccess(true);
         await onProfileUpdated?.();
-        window.setTimeout(() => goFinish(), 600);
+        window.setTimeout(() => goImport(), 600);
       });
 
       elyListenersRef.current.fail = await listen<string>("ely-login-failed", (e) => {
@@ -160,7 +165,7 @@ export function OnboardingFlow({
         setMsAuthUrl(null);
         setMsSuccess(true);
         await onProfileUpdated?.();
-        window.setTimeout(() => goFinish(), 600);
+        window.setTimeout(() => goImport(), 600);
       });
 
       const url = await invoke<string>("start_ms_oauth", { language });
@@ -185,99 +190,111 @@ export function OnboardingFlow({
   };
 
   const stepView = (() => {
-  switch (step) {
-    case "welcome":
-      return (
-        <WelcomeScreen
-          language={language}
-          stepIndex={stepIndex}
-          accentColor={accentColor}
-          backgroundImageUrl={backgroundImageUrl}
-          onStart={() => setStep("language")}
-        />
-      );
-    case "language":
-      return (
-        <LanguageScreen
-          language={language}
-          selected={selectedLanguage}
-          stepIndex={stepIndex}
-          accentColor={accentColor}
-          backgroundImageUrl={backgroundImageUrl}
-          onSelect={applyLanguage}
-          onBack={() => setStep("welcome")}
-          onNext={() => setStep("account-select")}
-        />
-      );
-    case "account-select":
-      return (
-        <AccountSelectionScreen
-          language={language}
-          stepIndex={stepIndex}
-          accentColor={accentColor}
-          backgroundImageUrl={backgroundImageUrl}
-          onSelectProvider={(provider: AccountProvider) => {
-            setElyError(null);
-            setMsError(null);
-            setElySuccess(false);
-            setMsSuccess(false);
-            setStep(provider === "ely" ? "account-ely" : "account-microsoft");
-          }}
-          onSkip={goFinish}
-          onBack={() => setStep("language")}
-        />
-      );
-    case "account-ely":
-      return (
-        <ElyLoginScreen
-          language={language}
-          stepIndex={stepIndex}
-          accentColor={accentColor}
-          backgroundImageUrl={backgroundImageUrl}
-          loading={elyLoading}
-          error={elyError}
-          success={elySuccess}
-          onBack={() => setStep("account-select")}
-          onLogin={(u, p) => void handleElyPasswordLogin(u, p)}
-          onOAuth={() => void handleElyOAuth()}
-          onSkip={goFinish}
-        />
-      );
-    case "account-microsoft":
-      return (
-        <MicrosoftLoginScreen
-          language={language}
-          stepIndex={stepIndex}
-          accentColor={accentColor}
-          backgroundImageUrl={backgroundImageUrl}
-          loading={msLoading}
-          error={msError}
-          success={msSuccess}
-          authUrl={msAuthUrl}
-          onBack={() => {
-            cleanupMsListener();
-            setMsLoading(false);
-            setMsAuthUrl(null);
-            setStep("account-select");
-          }}
-          onLogin={() => void handleMicrosoftLogin()}
-          onSkip={goFinish}
-        />
-      );
-    case "finish":
-      return (
-        <FinishScreen
-          language={language}
-          stepIndex={stepIndex}
-          accentColor={accentColor}
-          backgroundImageUrl={backgroundImageUrl}
-          finishing={finishing}
-          onFinish={() => void handleFinish()}
-        />
-      );
-    default:
-      return null;
-  }
+    switch (step) {
+      case "welcome":
+        return (
+          <WelcomeScreen
+            language={language}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            onStart={() => setStep("language")}
+          />
+        );
+      case "language":
+        return (
+          <LanguageScreen
+            language={language}
+            selected={selectedLanguage}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            onSelect={applyLanguage}
+            onBack={() => setStep("welcome")}
+            onNext={() => setStep("account-select")}
+          />
+        );
+      case "account-select":
+        return (
+          <AccountSelectionScreen
+            language={language}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            onSelectProvider={(provider: AccountProvider) => {
+              setElyError(null);
+              setMsError(null);
+              setElySuccess(false);
+              setMsSuccess(false);
+              setStep(provider === "ely" ? "account-ely" : "account-microsoft");
+            }}
+            onSkip={goImport}
+            onBack={() => setStep("language")}
+          />
+        );
+      case "account-ely":
+        return (
+          <ElyLoginScreen
+            language={language}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            loading={elyLoading}
+            error={elyError}
+            success={elySuccess}
+            onBack={() => setStep("account-select")}
+            onLogin={(u, p) => void handleElyPasswordLogin(u, p)}
+            onOAuth={() => void handleElyOAuth()}
+            onSkip={goImport}
+          />
+        );
+      case "account-microsoft":
+        return (
+          <MicrosoftLoginScreen
+            language={language}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            loading={msLoading}
+            error={msError}
+            success={msSuccess}
+            authUrl={msAuthUrl}
+            onBack={() => {
+              cleanupMsListener();
+              setMsLoading(false);
+              setMsAuthUrl(null);
+              setStep("account-select");
+            }}
+            onLogin={() => void handleMicrosoftLogin()}
+            onSkip={goImport}
+          />
+        );
+      case "import-migration":
+        return (
+          <ImportMigrationScreen
+            language={language}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            onBack={() => setStep("account-select")}
+            onSkip={goFinish}
+            onContinue={goFinish}
+          />
+        );
+      case "finish":
+        return (
+          <FinishScreen
+            language={language}
+            stepIndex={stepIndex}
+            accentColor={accentColor}
+            backgroundImageUrl={backgroundImageUrl}
+            finishing={finishing}
+            onFinish={() => void handleFinish()}
+          />
+        );
+      default:
+        return null;
+    }
   })();
 
   return (

@@ -72,6 +72,7 @@
       "start": "Подготовка…",
       "overrides": "Распаковка…",
       "files": "Скачивание файлов…",
+      "done": "Готово",
       "cancelled": "Установка сборки отменена."
     },
     "noIcon": "Нет иконки",
@@ -469,10 +470,18 @@
       "reinstall": "Переустановить Java",
       "reinstalling": "Переустановка..."
     },
-    "reinstallDialog": {
-      "title": "Переустановить Java?",
-      "hint": "Установленные Java runtime от Mojang будут удалены и скачаны заново. Если ничего ещё не установлено, будет скачан стандартный набор (Java 8, 17, 21, 25). Это может занять несколько минут.",
-      "confirm": "Переустановить"
+    "manageDialog": {
+      "verifyTitle": "Что проверить?",
+      "verifyHint": "Выберите версии Java runtime от Mojang, файлы которых нужно проверить.",
+      "verifyConfirm": "Проверить",
+      "reinstallTitle": "Что установить / переустановить?",
+      "reinstallHint": "Выберите версии Java. Уже установленные будут удалены и скачаны заново; отсутствующие — установлены. Это может занять несколько минут.",
+      "reinstallConfirm": "Переустановить",
+      "installed": "Установлена",
+      "notInstalled": "Не установлена",
+      "selectAll": "Выбрать все",
+      "selectNone": "Снять все",
+      "noneSelected": "Выберите хотя бы одну версию Java."
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -489,7 +498,7 @@
       "validateErrors": "Обнаружены ошибки при проверке JVM‑аргументов.",
       "validateWarnings": "Проверка завершена с предупреждениями.",
       "validateFailed": "Не удалось выполнить проверку Java‑аргументов.",
-      "verifyEmpty": "Java runtime от Mojang ещё не установлена. Она скачается при запуске игры или через «Переустановить Java».",
+      "verifyEmpty": "Выбранные Java runtime от Mojang не установлены. Они скачаются при запуске игры или через «Переустановить Java».",
       "verifyOk": "Файлы Java в порядке ({{checked}} файлов в {{runtimes}} runtime).",
       "verifyProblems": "Проблемы с Java: отсутствует {{missing}}, повреждено {{corrupted}} (проверено {{checked}}). Переустановите Java.",
       "verifyFailed": "Не удалось проверить файлы Java.",
@@ -1285,6 +1294,10 @@
     "resendVerificationCode": "Отправить код ещё раз",
     "linkMicrosoftTitle": "Нажмите для входа через Microsoft и повторите привязку",
     "linkElyTitle": "Нажмите для входа через Ely.by и повторите привязку",
+    "orDivider": "или",
+    "continueWithDiscord": "Продолжить с Discord",
+    "authHintLogin": "Войдите в аккаунт 16Launcher, чтобы синхронизировать прогресс и друзей.",
+    "authHintSignup": "Создайте аккаунт 16Launcher — это займёт пару минут.",
     "toast": {
       "accountCreated": "Аккаунт создан",
       "signedIn": "Вход выполнен",
@@ -1321,7 +1334,9 @@
       "rateLimited": "Слишком много запросов. Подождите немного.",
       "emailSendFailed": "Не удалось отправить письмо с кодом.",
       "deleteNotAvailable": "Удаление аккаунта на сервере ещё недоступно. Нужен деплой API.",
-      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16Launcher."
+      "identityAlreadyLinked": "{{provider}} уже привязан к другому аккаунту 16Launcher.",
+      "discordNotConfigured": "Вход через Discord пока не настроен на сервере.",
+      "discordFailed": "Не удалось войти через Discord. Попробуйте ещё раз."
     }
   },
   "app": {
@@ -1597,6 +1612,27 @@
       "waiting": "Ожидание входа…",
       "success": "Вход через Microsoft выполнен!",
       "errorGeneric": "Не удалось начать вход через Microsoft."
+    },
+    "import": {
+      "title": "Перенесём ваши сборки",
+      "subtitle": "Укажите лаунчер и папку - или оставьте автопоиск по стандартным путям",
+      "launcher": "Лаунчер",
+      "launcherAuto": "Авто · все лаунчеры",
+      "path": "Путь к лаунчеру",
+      "pathPlaceholder": "Например: …\\AppData\\Roaming\\PrismLauncher",
+      "pathHint": "Корень лаунчера или папка instances / Instances",
+      "browse": "Выбрать папку",
+      "scan": "Найти сборки",
+      "scanning": "Ищем сборки…",
+      "emptyTitle": "Сборок не нашли",
+      "emptyHint": "Выберите лаунчер, укажите путь к его папке и нажмите «Найти сборки». Позже — во вкладке «Сборки» → «Импорт».",
+      "cta": "Импортировать · {{count}}",
+      "skip": "Пропустить",
+      "continue": "Продолжить",
+      "progress": "{{current}}/{{total}} · {{name}}",
+      "errorGeneric": "Не удалось импортировать сборку",
+      "scanFailed": "Не удалось просканировать путь",
+      "unknownLauncher": "Другой лаунчер"
     },
     "finish": {
       "title": "Всё готово!",

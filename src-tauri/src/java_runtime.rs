@@ -574,8 +574,38 @@ pub async fn ensure_java_runtime(major: u8, component: &str) -> Result<PathBuf, 
     ensure_java_runtime_inner(major, component, false).await
 }
 
-pub async fn verify_installed_java_runtimes() -> Result<JavaIntegrityCheckResult, String> {
-    let specs = list_local_runtime_specs()?;
+fn filter_specs_by_majors(
+    specs: Vec<(u8, String)>,
+    majors: Option<&[u8]>,
+) -> Vec<(u8, String)> {
+    let Some(filter) = majors else {
+        return specs;
+    };
+    if filter.is_empty() {
+        return Vec::new();
+    }
+    specs
+        .into_iter()
+        .filter(|(major, _)| filter.contains(major))
+        .collect()
+}
+
+fn default_runtime_specs_for_majors(majors: &[u8]) -> Vec<(u8, String)> {
+    majors
+        .iter()
+        .filter_map(|wanted| {
+            DEFAULT_RUNTIMES
+                .iter()
+                .find(|(major, _)| major == wanted)
+                .map(|(major, component)| (*major, (*component).to_string()))
+        })
+        .collect()
+}
+
+pub async fn verify_installed_java_runtimes(
+    majors: Option<Vec<u8>>,
+) -> Result<JavaIntegrityCheckResult, String> {
+    let specs = filter_specs_by_majors(list_local_runtime_specs()?, majors.as_deref());
     if specs.is_empty() {
         return Ok(JavaIntegrityCheckResult {
             is_ok: true,
@@ -630,17 +660,31 @@ pub async fn verify_installed_java_runtimes() -> Result<JavaIntegrityCheckResult
     })
 }
 
-pub async fn reinstall_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
+pub async fn reinstall_java_runtimes(
+    majors: Option<Vec<u8>>,
+) -> Result<Vec<JavaRuntimeInfo>, String> {
     let _guard = JAVA_INSTALL_LOCK.lock().await;
 
-    let mut specs = list_local_runtime_specs()?;
-    if specs.is_empty() {
-        specs = DEFAULT_RUNTIMES
-            .iter()
-            .map(|(major, component)| (*major, (*component).to_string()))
-            .collect();
-        eprintln!("[Java] Локальных runtime нет — устанавливаем стандартный набор");
-    }
+    let specs = if let Some(filter) = majors.as_deref() {
+        if filter.is_empty() {
+            return Err("Не выбрана ни одна версия Java".to_string());
+        }
+        let selected = default_runtime_specs_for_majors(filter);
+        if selected.is_empty() {
+            return Err("Неизвестные версии Java".to_string());
+        }
+        selected
+    } else {
+        let mut local = list_local_runtime_specs()?;
+        if local.is_empty() {
+            local = DEFAULT_RUNTIMES
+                .iter()
+                .map(|(major, component)| (*major, (*component).to_string()))
+                .collect();
+            eprintln!("[Java] Локальных runtime нет — устанавливаем стандартный набор");
+        }
+        local
+    };
 
     for (major, component) in &specs {
         ensure_java_runtime_inner(*major, component, true).await?;

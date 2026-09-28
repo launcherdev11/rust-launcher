@@ -3086,6 +3086,10 @@ export function ModpackTab({
     }
   }, [externalImportLauncher, externalImportPath]);
 
+  useEffect(() => {
+    void ensureExternalImportPathDefault();
+  }, [externalImportLauncher, ensureExternalImportPathDefault]);
+
   const handleBrowseExternalImportPath = useCallback(async () => {
     try {
       const p = await openFileDialog({ directory: true, multiple: false });
@@ -3127,7 +3131,10 @@ export function ModpackTab({
       setExternalImportProgress(null);
       try {
         const newProfile = await invoke<InstanceProfile>("import_selected_external_instance", {
-          launcherType: externalImportLauncher,
+          launcherType:
+            inst.launcher_type !== "unknown" && inst.launcher_type !== "auto"
+              ? inst.launcher_type
+              : externalImportLauncher,
           basePath: externalImportPath.trim().length ? externalImportPath.trim() : null,
           instancePath: inst.path,
           displayName: inst.display_name,
@@ -4779,12 +4786,12 @@ export function ModpackTab({
                           type="button"
                           onClick={() => {
                             setExternalImportLauncher(opt.id);
+                            setExternalImportPath("");
                             setExternalImportInstances([]);
                             setExternalImportScanError(null);
                             setExternalImportSearch("");
                             setExternalImportSort("name");
                             setIsExternalLauncherDropdownOpen(false);
-                            setTimeout(() => void ensureExternalImportPathDefault(), 0);
                           }}
                           className={`interactive-press flex w-full items-center rounded-xl px-3 py-1.5 text-left transition-colors ${
                             active

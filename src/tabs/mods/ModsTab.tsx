@@ -499,35 +499,38 @@ export function ModsTab({
   }, [contentType, contentProvider, sourceTab]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenMrpack: (() => void) | undefined;
+    let unlistenCf: (() => void) | undefined;
+    const onProgress = (payload: MrpackImportProgressPayload) => {
+      setModpackImportProgress(payload);
+      const jobId = modpackDownloadJobIdRef.current;
+      if (!jobId || !updateDownloadJob) return;
+      if (
+        (payload.phase === "files" || payload.phase === "mods") &&
+        payload.current != null &&
+        payload.total != null &&
+        payload.total > 0
+      ) {
+        updateDownloadJob(jobId, (payload.current / payload.total) * 100);
+      }
+    };
     void (async () => {
       try {
-        unlisten = await listen<MrpackImportProgressPayload>(
+        unlistenMrpack = await listen<MrpackImportProgressPayload>(
           "mrpack-import-progress",
-          (event) => {
-            const payload = event.payload;
-            setModpackImportProgress(payload);
-            const jobId = modpackDownloadJobIdRef.current;
-            if (!jobId || !updateDownloadJob) return;
-            if (
-              payload.phase === "files" &&
-              payload.current != null &&
-              payload.total != null &&
-              payload.total > 0
-            ) {
-              updateDownloadJob(
-                jobId,
-                (payload.current / payload.total) * 100,
-              );
-            }
-          },
+          (event) => onProgress(event.payload),
+        );
+        unlistenCf = await listen<MrpackImportProgressPayload>(
+          "curseforge-install-progress",
+          (event) => onProgress(event.payload),
         );
       } catch (e) {
         console.error(e);
       }
     })();
     return () => {
-      if (unlisten) unlisten();
+      if (unlistenMrpack) unlistenMrpack();
+      if (unlistenCf) unlistenCf();
     };
   }, [updateDownloadJob]);
 
@@ -1077,11 +1080,7 @@ export function ModsTab({
             contentTypeIsModpack={contentType === "modpack"}
             activeProfileId={activeProfileId}
             onSelect={(key) => void openProject(key)}
-            onQuickInstall={
-              contentType === "modpack" && contentProvider === "curseforge"
-                ? undefined
-                : (key) => void handleQuickInstall(key)
-            }
+            onQuickInstall={(key) => void handleQuickInstall(key)}
             page={sourceTab === "catalog" ? page : 0}
             totalHits={
               sourceTab === "catalog"

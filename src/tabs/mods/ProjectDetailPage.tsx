@@ -84,7 +84,8 @@ export function ProjectDetailPage({
     const phase = modpackImportProgress.phase;
     if (phase === "start") return tt("mods.modpackImport.start");
     if (phase === "overrides") return tt("mods.modpackImport.overrides");
-    if (phase === "files") return tt("mods.modpackImport.files");
+    if (phase === "files" || phase === "mods") return tt("mods.modpackImport.files");
+    if (phase === "done") return tt("mods.modpackImport.done");
     return phase;
   })();
 

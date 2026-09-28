@@ -6,6 +6,7 @@ export type OnboardingStep =
   | "account-select"
   | "account-ely"
   | "account-microsoft"
+  | "import-migration"
   | "finish";
 
 export type AccountProvider = "ely" | "microsoft";
@@ -17,10 +18,11 @@ export const ONBOARDING_STEP_ORDER: OnboardingStep[] = [
   "language",
   "account-select",
   "account-ely",
+  "import-migration",
   "finish",
 ];
 
-export const ONBOARDING_TOTAL_STEPS = 5;
+export const ONBOARDING_TOTAL_STEPS = 6;
 
 export function stepProgressIndex(step: OnboardingStep): number {
   switch (step) {
@@ -33,8 +35,10 @@ export function stepProgressIndex(step: OnboardingStep): number {
     case "account-ely":
     case "account-microsoft":
       return 4;
-    case "finish":
+    case "import-migration":
       return 5;
+    case "finish":
+      return 6;
     default:
       return 1;
   }

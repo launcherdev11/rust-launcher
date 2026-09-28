@@ -3,6 +3,7 @@ use serde::Serialize;
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
 pub const EVENT_GAME_CONSOLE_LINE: &str = "game-console-line";
 pub const EVENT_MRPACK_IMPORT_PROGRESS: &str = "mrpack-import-progress";
+pub const EVENT_CURSEFORGE_INSTALL_PROGRESS: &str = "curseforge-install-progress";
 pub const EVENT_EXTERNAL_IMPORT_PROGRESS: &str = "external-import-progress";
 pub const EVENT_PLAYTIME_UPDATED: &str = "playtime-updated";
 pub const EVENT_LAST_PLAYED_UPDATED: &str = "last-played-updated";
@@ -10,6 +11,14 @@ pub const EVENT_GAME_PROCESS_EXITED: &str = "game-process-exited";
 
 #[derive(Debug, Serialize, Clone)]
 pub struct MrpackImportProgressPayload {
+    pub phase: String,
+    pub current: Option<u32>,
+    pub total: Option<u32>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct CurseforgeInstallProgressPayload {
     pub phase: String,
     pub current: Option<u32>,
     pub total: Option<u32>,

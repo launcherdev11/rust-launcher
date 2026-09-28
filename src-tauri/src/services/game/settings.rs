@@ -12,71 +12,154 @@ use crate::models::profile::InstanceSettings;
 use crate::services::java as java_service;
 
 use crate::app::paths::{instance_settings_path, launcher_data_dir, migrate_game_directory_change};
+use crate::infra::fs_atomic::{read_to_string_with_backup, write_atomic};
 use crate::services::game::profiles::read_selected_profile_id;
 
 fn settings_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("settings.json"))
 }
 
+fn game_directory_sidecar_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("game_directory.json"))
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct GameDirectorySidecar {
+    game_directory: Option<String>,
+}
+
+fn load_game_directory_sidecar() -> Option<String> {
+    let path = game_directory_sidecar_path().ok()?;
+    let text = read_to_string_with_backup(&path)?;
+    let parsed: GameDirectorySidecar = serde_json::from_str(&text).ok()?;
+    parsed
+        .game_directory
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn save_game_directory_sidecar(game_directory: Option<&str>) -> Result<(), String> {
+    let path = game_directory_sidecar_path()?;
+    let value = GameDirectorySidecar {
+        game_directory: game_directory
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
+    };
+    let text = serde_json::to_string_pretty(&value)
+        .map_err(|e| format!("Ошибка сериализации game_directory.json: {e}"))?;
+    write_atomic(&path, text)
+}
+
+fn instances_appear_present(game_directory: Option<&str>) -> bool {
+    let Ok(root) = crate::app::game_data_migrate::game_root_from_directory_setting(game_directory)
+    else {
+        return false;
+    };
+    let instances = root.join("instances");
+    let Ok(entries) = std::fs::read_dir(&instances) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        path.is_dir() && path.join("config.json").is_file()
+    })
+}
+
+fn heal_game_directory(settings: &mut Settings) {
+    let current = settings
+        .game_directory
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if instances_appear_present(current) {
+        return;
+    }
+    let Some(sidecar) = load_game_directory_sidecar() else {
+        return;
+    };
+    if current == Some(sidecar.as_str()) {
+        return;
+    }
+    if instances_appear_present(Some(&sidecar)) {
+        settings.game_directory = Some(sidecar);
+    }
+}
+
 pub fn launcher_cache_dir() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("cache"))
 }
 
-fn java_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
-    match app.path().app_config_dir() {
-        Ok(base) => Ok(base.join("16Launcher").join("java-settings.json")),
-        Err(_) => Ok(launcher_data_dir()?.join("java-settings.json")),
-    }
+fn java_settings_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("java-settings.json"))
 }
 
-fn load_java_settings_from_path(path: &Path) -> JavaSettings {
-    match std::fs::read_to_string(path).ok() {
-        Some(text) => serde_json::from_str::<JavaSettings>(&text).unwrap_or_default(),
-        None => JavaSettings::default(),
-    }
+fn legacy_java_settings_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_config_dir()
+        .ok()
+        .map(|base| base.join("16Launcher").join("java-settings.json"))
+}
+
+fn load_java_settings_from_path(path: &Path) -> Option<JavaSettings> {
+    let text = read_to_string_with_backup(path)?;
+    serde_json::from_str::<JavaSettings>(&text).ok()
 }
 
 fn save_java_settings_to_path(path: &Path, settings: &JavaSettings) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Не удалось создать папку настроек Java: {e}"))?;
-    }
     let text = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Ошибка сериализации настроек Java: {e}"))?;
-    std::fs::write(path, text).map_err(|e| format!("Не удалось записать файл настроек Java: {e}"))?;
-    Ok(())
+    write_atomic(path, text)
 }
 
 pub fn load_java_settings(app: &AppHandle) -> JavaSettings {
-    match java_settings_path(app) {
-        Ok(path) => load_java_settings_from_path(&path),
-        Err(_) => JavaSettings::default(),
+    let Ok(path) = java_settings_path() else {
+        return JavaSettings::default();
+    };
+    if let Some(settings) = load_java_settings_from_path(&path) {
+        return settings;
     }
+    if let Some(legacy) = legacy_java_settings_path(app) {
+        if let Some(settings) = load_java_settings_from_path(&legacy) {
+            let _ = save_java_settings_to_path(&path, &settings);
+            return settings;
+        }
+    }
+    JavaSettings::default()
 }
 
 pub fn save_java_settings(app: &AppHandle, settings: &JavaSettings) -> Result<(), String> {
-    let path = java_settings_path(app)?;
+    let _ = app;
+    let path = java_settings_path()?;
     save_java_settings_to_path(&path, settings)
 }
 
 pub fn load_settings_from_disk() -> Settings {
-    match settings_path()
+    let mut settings = settings_path()
         .ok()
-        .and_then(|p| std::fs::read_to_string(p).ok())
-    {
-        Some(text) => serde_json::from_str::<Settings>(&text).unwrap_or_default(),
-        None => Settings::default(),
+        .and_then(|p| read_to_string_with_backup(&p))
+        .and_then(|text| serde_json::from_str::<Settings>(&text).ok())
+        .unwrap_or_default();
+    heal_game_directory(&mut settings);
+    if load_game_directory_sidecar().is_none() {
+        if let Some(dir) = settings
+            .game_directory
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            let _ = save_game_directory_sidecar(Some(dir));
+        }
     }
+    settings
 }
 
 pub fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
     let path = settings_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку настроек: {e}"))?;
-    }
     let text = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Ошибка сериализации настроек: {e}"))?;
-    std::fs::write(&path, text).map_err(|e| format!("Не удалось записать файл настроек: {e}"))?;
+    write_atomic(&path, text)?;
+    let _ = save_game_directory_sidecar(settings.game_directory.as_deref());
     Ok(())
 }
 
@@ -122,8 +205,8 @@ pub fn effective_java_settings_for_profile(app: &AppHandle, profile_id: Option<S
 }
 
 #[command]
-pub fn set_profile_java_settings(profile_id: String, settings: JavaSettings) -> Result<(), String> {
-    let path = instance_settings_path(&profile_id)?;
+pub fn set_profile_java_settings(id: String, settings: JavaSettings) -> Result<(), String> {
+    let path = instance_settings_path(&id)?;
     let mut current = if path.exists() {
         let text = std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
         serde_json::from_str::<InstanceSettings>(&text).map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
@@ -133,10 +216,7 @@ pub fn set_profile_java_settings(profile_id: String, settings: JavaSettings) -> 
     current.java_settings = Some(settings);
     let text =
         serde_json::to_string_pretty(&current).map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
-    }
-    std::fs::write(&path, text).map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
+    write_atomic(&path, text)?;
     Ok(())
 }
 
@@ -278,12 +358,16 @@ pub fn list_installed_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
 }
 
 #[command]
-pub async fn verify_java_runtimes() -> Result<JavaIntegrityCheckResult, String> {
-    crate::java_runtime::verify_installed_java_runtimes().await
+pub async fn verify_java_runtimes(
+    majors: Option<Vec<u8>>,
+) -> Result<JavaIntegrityCheckResult, String> {
+    crate::java_runtime::verify_installed_java_runtimes(majors).await
 }
 
 #[command]
-pub async fn reinstall_java_runtimes() -> Result<Vec<JavaRuntimeInfo>, String> {
-    crate::java_runtime::reinstall_java_runtimes().await
+pub async fn reinstall_java_runtimes(
+    majors: Option<Vec<u8>>,
+) -> Result<Vec<JavaRuntimeInfo>, String> {
+    crate::java_runtime::reinstall_java_runtimes(majors).await
 }
 

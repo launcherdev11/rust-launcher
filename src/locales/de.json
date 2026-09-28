@@ -72,6 +72,7 @@
       "start": "Vorbereiten…",
       "overrides": "Extrahieren…",
       "files": "Dateien werden heruntergeladen…",
+      "done": "Fertig",
       "cancelled": "Modpack-Installation abgebrochen."
     },
     "noIcon": "Kein Symbol",
@@ -497,10 +498,18 @@
       "reinstall": "Java neu installieren",
       "reinstalling": "Neuinstallation..."
     },
-    "reinstallDialog": {
-      "title": "Java neu installieren?",
-      "hint": "Installierte Mojang-Java-Runtimes werden gelöscht und erneut heruntergeladen. Wenn noch keine installiert sind, wird der Standardensatz (Java 8, 17, 21, 25) installiert. Das kann einige Minuten dauern.",
-      "confirm": "Neu installieren"
+    "manageDialog": {
+      "verifyTitle": "Was soll geprüft werden?",
+      "verifyHint": "Wählen Sie, welche Mojang-Java-Runtime-Versionen geprüft werden sollen.",
+      "verifyConfirm": "Prüfen",
+      "reinstallTitle": "Was soll installiert / neu installiert werden?",
+      "reinstallHint": "Wählen Sie Java-Versionen. Installierte werden gelöscht und erneut heruntergeladen; fehlende werden installiert. Das kann einige Minuten dauern.",
+      "reinstallConfirm": "Neu installieren",
+      "installed": "Installiert",
+      "notInstalled": "Nicht installiert",
+      "selectAll": "Alle auswählen",
+      "selectNone": "Auswahl aufheben",
+      "noneSelected": "Wählen Sie mindestens eine Java-Version."
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -517,7 +526,7 @@
       "validateErrors": "Beim Validieren von JVM-Argumenten wurden Fehler erkannt.",
       "validateWarnings": "Validierung mit Warnungen abgeschlossen.",
       "validateFailed": "Die Validierung der Java-Argumente ist fehlgeschlagen.",
-      "verifyEmpty": "Es sind noch keine Mojang-Java-Runtimes installiert. Sie werden beim Spielstart heruntergeladen oder über „Java neu installieren“.",
+      "verifyEmpty": "Die ausgewählten Mojang-Java-Runtimes sind nicht installiert. Sie werden beim Spielstart heruntergeladen oder über „Java neu installieren“.",
       "verifyOk": "Java-Dateien sind in Ordnung ({{checked}} Dateien in {{runtimes}} Runtime(s)).",
       "verifyProblems": "Java-Probleme: fehlend {{missing}}, beschädigt {{corrupted}} (geprüft {{checked}}). Installieren Sie Java neu.",
       "verifyFailed": "Java-Dateien konnten nicht geprüft werden.",
@@ -1269,6 +1278,10 @@
     "resendVerificationCode": "Code erneut senden",
     "linkMicrosoftTitle": "Melden Sie sich bei Microsoft an und klicken Sie dann erneut auf „Verknüpfen“.",
     "linkElyTitle": "Melden Sie sich bei Ely.by an und klicken Sie dann erneut auf „Verknüpfen“.",
+    "orDivider": "oder",
+    "continueWithDiscord": "Mit Discord fortfahren",
+    "authHintLogin": "Melde dich bei deinem 16Launcher-Konto an, um Fortschritt und Freunde zu synchronisieren.",
+    "authHintSignup": "Erstelle ein 16Launcher-Konto — das dauert nur ein paar Minuten.",
     "toast": {
       "accountCreated": "Konto erstellt",
       "signedIn": "Angemeldet",
@@ -1305,7 +1318,9 @@
       "rateLimited": "Zu viele Anfragen. Bitte warten Sie einen Moment.",
       "emailSendFailed": "Bestätigungs-E-Mail konnte nicht gesendet werden.",
       "deleteNotAvailable": "Kontolöschung ist auf dem Server noch nicht verfügbar. API-Deploy erforderlich.",
-      "identityAlreadyLinked": "{{provider}} ist bereits mit einem anderen 16Launcher-Konto verknüpft."
+      "identityAlreadyLinked": "{{provider}} ist bereits mit einem anderen 16Launcher-Konto verknüpft.",
+      "discordNotConfigured": "Discord-Anmeldung ist auf dem Server noch nicht konfiguriert.",
+      "discordFailed": "Discord-Anmeldung fehlgeschlagen. Bitte erneut versuchen."
     }
   },
   "app": {
@@ -1568,6 +1583,27 @@
       "waiting": "Warten auf die Anmeldung…",
       "success": "Microsoft-Anmeldung abgeschlossen!",
       "errorGeneric": "Die Microsoft-Anmeldung konnte nicht gestartet werden."
+    },
+    "import": {
+      "title": "Wir holen Ihre Welten",
+      "subtitle": "Launcher und Ordner wählen — oder Auto für Standardpfade lassen",
+      "launcher": "Launcher",
+      "launcherAuto": "Auto · alle Launcher",
+      "path": "Launcher-Pfad",
+      "pathPlaceholder": "z. B. …\\AppData\\Roaming\\PrismLauncher",
+      "pathHint": "Launcher-Root oder Ordner instances / Instances",
+      "browse": "Ordner wählen",
+      "scan": "Instanzen suchen",
+      "scanning": "Suche…",
+      "emptyTitle": "Keine Instanzen gefunden",
+      "emptyHint": "Launcher wählen, Pfad angeben und Suchen tippen. Später auch unter Modpacks → Import.",
+      "cta": "Importieren · {{count}}",
+      "skip": "Überspringen",
+      "continue": "Weiter",
+      "progress": "{{current}}/{{total}} · {{name}}",
+      "errorGeneric": "Instanz konnte nicht importiert werden",
+      "scanFailed": "Pfad konnte nicht gescannt werden",
+      "unknownLauncher": "Anderer Launcher"
     },
     "finish": {
       "title": "Alles klar!",

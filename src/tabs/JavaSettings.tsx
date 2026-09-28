@@ -34,6 +34,17 @@ type ValidationState = {
   generalError: string | null;
 };
 
+type JavaManageMode = "verify" | "reinstall";
+
+const AVAILABLE_JAVA_MAJORS = [8, 17, 21, 25] as const;
+
+function parseRuntimeMajor(version: string): number | null {
+  const match = version.match(/Java\s+(\d+)/i);
+  if (!match) return null;
+  const major = Number(match[1]);
+  return Number.isFinite(major) ? major : null;
+}
+
 function parseMemoryToMb(raw: string): number | null {
   const s = raw.trim();
   if (!s) return null;
@@ -68,7 +79,8 @@ export function JavaSettingsTab({
   const [loadingRuntimes, setLoadingRuntimes] = useState(false);
   const [verifyingJava, setVerifyingJava] = useState(false);
   const [reinstallingJava, setReinstallingJava] = useState(false);
-  const [showReinstallJavaDialog, setShowReinstallJavaDialog] = useState(false);
+  const [javaManageMode, setJavaManageMode] = useState<JavaManageMode | null>(null);
+  const [selectedJavaMajors, setSelectedJavaMajors] = useState<number[]>([]);
   const [validation, setValidation] = useState<ValidationState>({
     xmsError: null,
     xmxError: null,
@@ -223,9 +235,12 @@ export function JavaSettingsTab({
       );
     } catch (e) {
       console.error(e);
+      const detail = e instanceof Error ? e.message : String(e ?? "");
       showNotification(
         "error",
-        tt("javaSettings.toast.saveFailed"),
+        detail.trim()
+          ? `${tt("javaSettings.toast.saveFailed")} ${detail}`
+          : tt("javaSettings.toast.saveFailed"),
       );
     } finally {
       setSaving(false);
@@ -367,59 +382,108 @@ export function JavaSettingsTab({
     }
   };
 
-  const handleVerifyJavaFiles = async () => {
-    setVerifyingJava(true);
+  const installedJavaMajors = useMemo(() => {
+    const majors = new Set<number>();
+    for (const runtime of runtimes) {
+      if (runtime.source !== "Mojang runtime") continue;
+      const major = parseRuntimeMajor(runtime.version);
+      if (major != null) majors.add(major);
+    }
+    return majors;
+  }, [runtimes]);
+
+  const openJavaManageDialog = async (mode: JavaManageMode) => {
+    let installedMajors = installedJavaMajors;
     try {
-      const result = await invoke<{
-        is_ok: boolean;
-        checked_files: number;
-        missing_files: number;
-        corrupted_files: number;
-        runtimes_checked: number;
-      }>("verify_java_runtimes");
-
-      if (result.runtimes_checked === 0) {
-        showNotification(
-          "warning",
-          tt("javaSettings.toast.verifyEmpty"),
-        );
-        return;
+      const mojangInstalled = await invoke<JavaRuntimeInfo[]>("list_installed_java_runtimes");
+      const majors = new Set<number>();
+      for (const runtime of mojangInstalled) {
+        const major = parseRuntimeMajor(runtime.version);
+        if (major != null) majors.add(major);
       }
-
-      if (result.is_ok) {
-        showNotification(
-          "success",
-          tt("javaSettings.toast.verifyOk", {
-            checked: result.checked_files,
-            runtimes: result.runtimes_checked,
-          }),
-        );
-      } else {
-        showNotification(
-          "warning",
-          tt("javaSettings.toast.verifyProblems", {
-            missing: result.missing_files,
-            corrupted: result.corrupted_files,
-            checked: result.checked_files,
-          }),
-        );
-      }
+      installedMajors = majors;
+      setRuntimes((prev) => {
+        const system = prev.filter((runtime) => runtime.source !== "Mojang runtime");
+        const mojangPaths = new Set(mojangInstalled.map((runtime) => runtime.path));
+        const extraSystem = system.filter((runtime) => !mojangPaths.has(runtime.path));
+        return [...mojangInstalled, ...extraSystem];
+      });
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        tt("javaSettings.toast.verifyFailed"),
-      );
-    } finally {
-      setVerifyingJava(false);
     }
+
+    const preselected = AVAILABLE_JAVA_MAJORS.filter((major) => installedMajors.has(major));
+    setSelectedJavaMajors(
+      preselected.length > 0 ? [...preselected] : [...AVAILABLE_JAVA_MAJORS],
+    );
+    setJavaManageMode(mode);
   };
 
-  const handleConfirmReinstallJava = async () => {
-    setShowReinstallJavaDialog(false);
+  const toggleJavaMajor = (major: number) => {
+    setSelectedJavaMajors((prev) =>
+      prev.includes(major) ? prev.filter((value) => value !== major) : [...prev, major].sort((a, b) => a - b),
+    );
+  };
+
+  const handleConfirmJavaManage = async () => {
+    if (!javaManageMode) return;
+    if (selectedJavaMajors.length === 0) {
+      showNotification("warning", tt("javaSettings.manageDialog.noneSelected"));
+      return;
+    }
+
+    const majors = [...selectedJavaMajors];
+    const mode = javaManageMode;
+    setJavaManageMode(null);
+
+    if (mode === "verify") {
+      setVerifyingJava(true);
+      try {
+        const result = await invoke<{
+          is_ok: boolean;
+          checked_files: number;
+          missing_files: number;
+          corrupted_files: number;
+          runtimes_checked: number;
+        }>("verify_java_runtimes", { majors });
+
+        if (result.runtimes_checked === 0) {
+          showNotification("warning", tt("javaSettings.toast.verifyEmpty"));
+          return;
+        }
+
+        if (result.is_ok) {
+          showNotification(
+            "success",
+            tt("javaSettings.toast.verifyOk", {
+              checked: result.checked_files,
+              runtimes: result.runtimes_checked,
+            }),
+          );
+        } else {
+          showNotification(
+            "warning",
+            tt("javaSettings.toast.verifyProblems", {
+              missing: result.missing_files,
+              corrupted: result.corrupted_files,
+              checked: result.checked_files,
+            }),
+          );
+        }
+      } catch (e) {
+        console.error(e);
+        showNotification("error", tt("javaSettings.toast.verifyFailed"));
+      } finally {
+        setVerifyingJava(false);
+      }
+      return;
+    }
+
     setReinstallingJava(true);
     try {
-      const installed = await invoke<JavaRuntimeInfo[]>("reinstall_java_runtimes");
+      const installed = await invoke<JavaRuntimeInfo[]>("reinstall_java_runtimes", {
+        majors,
+      });
       setRuntimes(installed);
       showNotification(
         "success",
@@ -429,10 +493,7 @@ export function JavaSettingsTab({
       );
     } catch (e) {
       console.error(e);
-      showNotification(
-        "error",
-        tt("javaSettings.toast.reinstallFailed"),
-      );
+      showNotification("error", tt("javaSettings.toast.reinstallFailed"));
       await refreshInstalledRuntimes();
     } finally {
       setReinstallingJava(false);
@@ -448,10 +509,10 @@ export function JavaSettingsTab({
 
   return (
     <div className="flex max-h-[clamp(240px,45vh,520px)] flex-col gap-4 overflow-y-auto pr-1">
-      {showReinstallJavaDialog && (
+      {javaManageMode && (
         <div
           className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
-          onClick={() => setShowReinstallJavaDialog(false)}
+          onClick={() => setJavaManageMode(null)}
         >
           <div
             className="glass-modal max-w-md p-5"
@@ -460,25 +521,79 @@ export function JavaSettingsTab({
             aria-modal="true"
           >
             <h3 className="mb-1 text-sm font-semibold text-white">
-              {tt("javaSettings.reinstallDialog.title")}
+              {javaManageMode === "verify"
+                ? tt("javaSettings.manageDialog.verifyTitle")
+                : tt("javaSettings.manageDialog.reinstallTitle")}
             </h3>
-            <p className="mb-4 text-xs text-white/70">
-              {tt("javaSettings.reinstallDialog.hint")}
+            <p className="mb-3 text-xs text-white/70">
+              {javaManageMode === "verify"
+                ? tt("javaSettings.manageDialog.verifyHint")
+                : tt("javaSettings.manageDialog.reinstallHint")}
             </p>
+            <div className="mb-3 space-y-1.5">
+              {AVAILABLE_JAVA_MAJORS.map((major) => {
+                const installed = installedJavaMajors.has(major);
+                const checked = selectedJavaMajors.includes(major);
+                return (
+                  <label
+                    key={major}
+                    className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/90 hover:bg-black/45"
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="accent-checkbox"
+                        checked={checked}
+                        onChange={() => toggleJavaMajor(major)}
+                      />
+                      <span className="font-semibold">Java {major}</span>
+                    </span>
+                    <span className={installed ? "text-emerald-300/80" : "text-white/40"}>
+                      {installed
+                        ? tt("javaSettings.manageDialog.installed")
+                        : tt("javaSettings.manageDialog.notInstalled")}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mb-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedJavaMajors([...AVAILABLE_JAVA_MAJORS])}
+                className="interactive-press rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+              >
+                {tt("javaSettings.manageDialog.selectAll")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedJavaMajors([])}
+                className="interactive-press rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+              >
+                {tt("javaSettings.manageDialog.selectNone")}
+              </button>
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowReinstallJavaDialog(false)}
+                onClick={() => setJavaManageMode(null)}
                 className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
               >
                 {tt("common.cancel")}
               </button>
               <button
                 type="button"
-                onClick={() => void handleConfirmReinstallJava()}
-                className="interactive-press rounded-xl bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+                onClick={() => void handleConfirmJavaManage()}
+                disabled={selectedJavaMajors.length === 0}
+                className={`interactive-press rounded-xl px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${
+                  javaManageMode === "verify"
+                    ? "bg-white/20 hover:bg-white/30"
+                    : "bg-amber-500 hover:bg-amber-400"
+                }`}
               >
-                {tt("javaSettings.reinstallDialog.confirm")}
+                {javaManageMode === "verify"
+                  ? tt("javaSettings.manageDialog.verifyConfirm")
+                  : tt("javaSettings.manageDialog.reinstallConfirm")}
               </button>
             </div>
           </div>
@@ -568,7 +683,7 @@ export function JavaSettingsTab({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => void handleVerifyJavaFiles()}
+                onClick={() => void openJavaManageDialog("verify")}
                 disabled={javaBusy}
                 className="interactive-press rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60"
               >
@@ -578,7 +693,7 @@ export function JavaSettingsTab({
               </button>
               <button
                 type="button"
-                onClick={() => setShowReinstallJavaDialog(true)}
+                onClick={() => void openJavaManageDialog("reinstall")}
                 disabled={javaBusy}
                 className="interactive-press rounded-xl bg-amber-600/90 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-amber-500 disabled:opacity-60"
               >

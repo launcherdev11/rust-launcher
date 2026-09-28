@@ -134,13 +134,14 @@ fn move_path(from: &Path, to: &Path) -> Result<(), String> {
     }
     if from.is_dir() {
         copy_dir_recursive(from, to)?;
-        fs::remove_dir_all(from)
-            .map_err(|e| format!("Не удалось удалить {} после копирования: {e}", from.display()))?;
     } else {
-        fs::copy(from, to)
-            .map_err(|e| format!("Не удалось скопировать {} → {}: {e}", from.display(), to.display()))?;
-        fs::remove_file(from)
-            .map_err(|e| format!("Не удалось удалить {} после копирования: {e}", from.display()))?;
+        fs::copy(from, to).map_err(|e| {
+            format!(
+                "Не удалось скопировать {} → {}: {e}",
+                from.display(),
+                to.display()
+            )
+        })?;
     }
     Ok(())
 }

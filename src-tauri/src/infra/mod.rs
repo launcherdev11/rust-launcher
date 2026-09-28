@@ -1,6 +1,7 @@
 pub mod autostart;
 pub mod api_base;
 pub mod http;
+pub mod fs_atomic;
 pub mod fs_copy;
 pub mod platform;
 pub mod process;

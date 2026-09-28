@@ -72,6 +72,7 @@
       "start": "Preparing…",
       "overrides": "Extracting…",
       "files": "Downloading files…",
+      "done": "Done",
       "cancelled": "Modpack installation cancelled."
     },
     "noIcon": "No icon",
@@ -469,10 +470,18 @@
       "reinstall": "Reinstall Java",
       "reinstalling": "Reinstalling..."
     },
-    "reinstallDialog": {
-      "title": "Reinstall Java?",
-      "hint": "Installed Mojang Java runtimes will be deleted and downloaded again. If none are installed yet, the standard set (Java 8, 17, 21, 25) will be installed. This may take several minutes.",
-      "confirm": "Reinstall"
+    "manageDialog": {
+      "verifyTitle": "What should be checked?",
+      "verifyHint": "Select which Mojang Java runtime versions to verify.",
+      "verifyConfirm": "Verify",
+      "reinstallTitle": "What should be installed / reinstalled?",
+      "reinstallHint": "Select Java versions. Installed ones will be deleted and downloaded again; missing ones will be installed. This may take several minutes.",
+      "reinstallConfirm": "Reinstall",
+      "installed": "Installed",
+      "notInstalled": "Not installed",
+      "selectAll": "Select all",
+      "selectNone": "Clear all",
+      "noneSelected": "Select at least one Java version."
     },
     "dialog": {
       "javaFilterName": "Java"
@@ -489,7 +498,7 @@
       "validateErrors": "Errors detected while validating JVM arguments.",
       "validateWarnings": "Validation finished with warnings.",
       "validateFailed": "Failed to validate Java arguments.",
-      "verifyEmpty": "No Mojang Java runtimes are installed yet. They will be downloaded when you launch the game, or use Reinstall Java.",
+      "verifyEmpty": "The selected Mojang Java runtimes are not installed. They will download when you launch the game, or use Reinstall Java.",
       "verifyOk": "Java files are OK ({{checked}} files in {{runtimes}} runtime(s)).",
       "verifyProblems": "Java issues found: missing {{missing}}, corrupted {{corrupted}} (checked {{checked}}). Reinstall Java to fix.",
       "verifyFailed": "Failed to verify Java files.",
@@ -1285,6 +1294,10 @@
     "resendVerificationCode": "Resend code",
     "linkMicrosoftTitle": "Sign in with Microsoft, then click Link again",
     "linkElyTitle": "Sign in with Ely.by, then click Link again",
+    "orDivider": "or",
+    "continueWithDiscord": "Continue with Discord",
+    "authHintLogin": "Sign in to your 16Launcher account to sync progress and friends.",
+    "authHintSignup": "Create a 16Launcher account — it only takes a couple of minutes.",
     "toast": {
       "accountCreated": "Account created",
       "signedIn": "Signed in",
@@ -1321,7 +1334,9 @@
       "rateLimited": "Too many requests. Please wait a moment.",
       "emailSendFailed": "Failed to send the verification email.",
       "deleteNotAvailable": "Account deletion is not available on the server yet. API deploy is required.",
-      "identityAlreadyLinked": "{{provider}} is already linked to another 16Launcher account."
+      "identityAlreadyLinked": "{{provider}} is already linked to another 16Launcher account.",
+      "discordNotConfigured": "Discord sign-in is not configured on the server yet.",
+      "discordFailed": "Discord sign-in failed. Please try again."
     }
   },
   "app": {
@@ -1597,6 +1612,27 @@
       "waiting": "Waiting for sign-in…",
       "success": "Microsoft sign-in complete!",
       "errorGeneric": "Could not start Microsoft sign-in."
+    },
+    "import": {
+      "title": "Bring your worlds over",
+      "subtitle": "Pick a launcher and folder — or leave Auto to search default locations",
+      "launcher": "Launcher",
+      "launcherAuto": "Auto · all launchers",
+      "path": "Launcher path",
+      "pathPlaceholder": "e.g. …\\AppData\\Roaming\\PrismLauncher",
+      "pathHint": "Launcher root or the instances / Instances folder",
+      "browse": "Choose folder",
+      "scan": "Find instances",
+      "scanning": "Searching…",
+      "emptyTitle": "No instances found",
+      "emptyHint": "Select a launcher, set its folder path, then tap Find. You can also import later from Builds → Import.",
+      "cta": "Import · {{count}}",
+      "skip": "Skip",
+      "continue": "Continue",
+      "progress": "{{current}}/{{total}} · {{name}}",
+      "errorGeneric": "Could not import the instance",
+      "scanFailed": "Could not scan that path",
+      "unknownLauncher": "Other launcher"
     },
     "finish": {
       "title": "All set!",

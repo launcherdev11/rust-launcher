@@ -50,6 +50,8 @@ use services::auth::{
 use services::curseforge::{
     curseforge_get_mod, curseforge_get_mod_files, curseforge_list_categories,
     curseforge_list_minecraft_versions, curseforge_search_mods, download_curseforge_file,
+    download_curseforge_modpack_and_import, install_curseforge_zip_as_new_profile,
+    install_curseforge_zip_into_profile,
 };
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
@@ -250,6 +252,9 @@ pub fn run() {
             curseforge_list_categories,
             curseforge_list_minecraft_versions,
             download_curseforge_file,
+            download_curseforge_modpack_and_import,
+            install_curseforge_zip_into_profile,
+            install_curseforge_zip_as_new_profile,
             import_mrpack,
             import_mrpack_as_new_profile,
             default_external_launcher_path,

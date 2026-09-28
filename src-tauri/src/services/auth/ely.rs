@@ -33,26 +33,109 @@ pub const YGGDRASIL_INVALIDATE_URL: &str = "https://authserver.ely.by/auth/inval
 pub const REDIRECT_URI: &str = "http://localhost:25568/callback";
 const AUTHLIB_INJECTOR_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest";
+const AUTHLIB_INJECTOR_META_URLS: &[&str] = &[
+    "https://authlib-injector.yushi.moe/artifact/latest.json",
+    "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json",
+];
 
 #[derive(Debug, Deserialize)]
-struct GithubRelease { assets: Vec<GithubReleaseAsset> }
+struct GithubRelease {
+    assets: Vec<GithubReleaseAsset>,
+}
 #[derive(Debug, Deserialize)]
-struct GithubReleaseAsset { name: String, browser_download_url: String }
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuthlibArtifactMeta {
+    download_url: String,
+}
+
+async fn download_jar_bytes(client: &Client, url: &str) -> Result<Vec<u8>, String> {
+    let jar_resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("error sending request for url ({url}): {e}"))?;
+    let status = jar_resp.status();
+    if !status.is_success() {
+        let text = jar_resp.text().await.unwrap_or_else(|_| "<no body>".into());
+        return Err(format!("authlib-injector download {status}: {text}"));
+    }
+    jar_resp
+        .bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("authlib-injector download body: {e}"))
+}
+
+async fn try_download_via_official_meta(client: &Client) -> Result<Vec<u8>, String> {
+    let mut last_err = String::from("no authlib-injector mirrors tried");
+    for meta_url in AUTHLIB_INJECTOR_META_URLS {
+        let meta: AuthlibArtifactMeta = match client.get(*meta_url).send().await {
+            Ok(resp) => match handle_resp(resp, "authlib-injector latest meta").await {
+                Ok(v) => v,
+                Err(e) => {
+                    last_err = e;
+                    continue;
+                }
+            },
+            Err(e) => {
+                last_err = format!("error sending request for url ({meta_url}): {e}");
+                continue;
+            }
+        };
+        match download_jar_bytes(client, &meta.download_url).await {
+            Ok(bytes) if bytes.len() >= 2 && &bytes[..2] == b"PK" => return Ok(bytes),
+            Ok(_) => {
+                last_err = format!("Скачанный файл с {meta_url} не является корректным JAR.");
+            }
+            Err(e) => last_err = e,
+        }
+    }
+    Err(last_err)
+}
+
+async fn try_download_via_github(client: &Client) -> Result<Vec<u8>, String> {
+    let release: GithubRelease = handle_resp(
+        client
+            .get(AUTHLIB_INJECTOR_LATEST_RELEASE_API)
+            .send()
+            .await
+            .map_err(|e| {
+                format!(
+                    "error sending request for url ({AUTHLIB_INJECTOR_LATEST_RELEASE_API}): {e}"
+                )
+            })?,
+        "GitHub API latest release",
+    )
+    .await?;
+
+    let asset = release
+        .assets
+        .into_iter()
+        .find(|a| {
+            let n = a.name.to_ascii_lowercase();
+            n.ends_with(".jar") && n.contains("authlib-injector")
+        })
+        .ok_or("В релизе не найден authlib-injector.jar")?;
+
+    download_jar_bytes(client, &asset.browser_download_url).await
+}
 
 async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
     let client = http_client();
-    let release: GithubRelease = handle_resp(
-        client.get(AUTHLIB_INJECTOR_LATEST_RELEASE_API).send().await.map_err(|e| e.to_string())?,
-        "GitHub API latest release"
-    ).await?;
-
-    let asset = release.assets.into_iter()
-        .find(|a| { let n = a.name.to_ascii_lowercase(); n.ends_with(".jar") && n.contains("authlib-injector") })
-        .ok_or("В релизе не найден authlib-injector.jar")?;
-
-    let jar_resp = client.get(&asset.browser_download_url).send().await.map_err(|e| e.to_string())?;
-    let bytes = jar_resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
-    Ok(bytes)
+    match try_download_via_official_meta(&client).await {
+        Ok(bytes) => Ok(bytes),
+        Err(meta_err) => match try_download_via_github(&client).await {
+            Ok(bytes) => Ok(bytes),
+            Err(gh_err) => Err(format!(
+                "Не удалось скачать authlib-injector (зеркала: {meta_err}; GitHub: {gh_err})"
+            )),
+        },
+    }
 }
 
 static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));

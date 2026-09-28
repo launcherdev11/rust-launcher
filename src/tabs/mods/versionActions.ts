@@ -118,6 +118,40 @@ export async function downloadCatalogVersion(
           name: imported.name ?? imported.id,
         }),
       );
+    } else if (contentType === "modpack" && contentProvider === "curseforge") {
+      const modId = Number(projectKey);
+      if (!modId) return;
+      modpackImportStopReasonRef.current = null;
+      try {
+        await invoke("reset_download_cancel");
+      } catch (resetErr) {
+        console.error(resetErr);
+      }
+      modpackDownloadJobIdRef.current = jobId;
+      setModpackImportBusy(true);
+      setModpackImportProgress({
+        phase: "start",
+        current: undefined,
+        total: undefined,
+        message: undefined,
+      });
+      const imported = await invoke<{ id: string; name: string }>(
+        "download_curseforge_modpack_and_import",
+        {
+          modId,
+          fileId: Number(v.id),
+          filename: v.filename,
+          iconUrl: projectIconUrl ?? null,
+        },
+      );
+      await invoke("set_selected_profile", { id: imported.id });
+      onOpenModpacksTab?.();
+      showNotification(
+        "success",
+        tt("mods.modpackImportSuccess", {
+          name: imported.name ?? imported.id,
+        }),
+      );
     } else if (contentProvider === "curseforge") {
       const modId = Number(projectKey);
       if (!modId) return;
@@ -133,21 +167,19 @@ export async function downloadCatalogVersion(
       }
       showNotification(
         "success",
-        contentType === "modpack"
-          ? tt("mods.curseforgeModpackHint")
-          : activeProfileId
-            ? tt("mods.saveSuccessProfile", { filename: v.filename })
-            : tt("mods.saveSuccessFolder", {
-                filename: v.filename,
-                folder:
-                  contentType === "mod"
-                    ? "mods"
-                    : contentType === "resourcepack"
-                      ? "resourcepacks"
-                      : contentType === "shader"
-                        ? "shaderpacks"
-                        : "modpacks",
-              }),
+        activeProfileId
+          ? tt("mods.saveSuccessProfile", { filename: v.filename })
+          : tt("mods.saveSuccessFolder", {
+              filename: v.filename,
+              folder:
+                contentType === "mod"
+                  ? "mods"
+                  : contentType === "resourcepack"
+                    ? "resourcepacks"
+                    : contentType === "shader"
+                      ? "shaderpacks"
+                      : "modpacks",
+            }),
       );
     } else if (contentType === "mod" && contentProvider === "modrinth") {
       const downloaded = await invoke<{ filename: string; skipped: boolean }[]>(
@@ -241,7 +273,7 @@ export async function downloadCatalogVersion(
     modpackDownloadJobIdRef.current = null;
     modpackImportStopReasonRef.current = null;
     finishDownloadJob?.(jobId);
-    if (contentType === "modpack" && contentProvider === "modrinth") {
+    if (contentType === "modpack") {
       setModpackImportBusy(false);
       setModpackImportProgress(null);
     }

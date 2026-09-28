@@ -4,6 +4,13 @@ use crate::app::paths::{game_root_dir, instance_dir};
 use crate::infra::api_base::curseforge_api_base;
 use crate::infra::http::{http_client, http_client_for_binary_download};
 
+pub mod installer;
+
+pub use installer::{
+    download_curseforge_modpack_and_import, install_curseforge_zip_as_new_profile,
+    install_curseforge_zip_into_profile,
+};
+
 const MINECRAFT_GAME_ID: u32 = 432;
 
 #[derive(Debug, Serialize, Clone)]
@@ -75,8 +82,8 @@ pub struct CurseforgeFileHit {
 }
 
 #[derive(Debug, Deserialize)]
-struct CfApiResponse<T> {
-    data: T,
+pub(crate) struct CfApiResponse<T> {
+    pub(crate) data: T,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,21 +184,21 @@ struct CfModFilesResponse {
     data: Vec<CfFile>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct CfFile {
-    id: u32,
-    display_name: String,
-    file_name: String,
-    download_url: Option<String>,
+pub(crate) struct CfFile {
+    pub(crate) id: u32,
+    pub(crate) display_name: String,
+    pub(crate) file_name: String,
+    pub(crate) download_url: Option<String>,
     #[serde(default)]
-    game_versions: Vec<String>,
+    pub(crate) game_versions: Vec<String>,
     #[serde(default)]
     sortable_game_versions: Vec<CfSortableGameVersion>,
-    file_date: String,
+    pub(crate) file_date: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CfSortableGameVersion {
     #[serde(default)]
@@ -272,11 +279,11 @@ fn mod_loader_type(loader: &str) -> Option<u8> {
     }
 }
 
-fn cf_client() -> Result<reqwest::Client, String> {
+pub(crate) fn cf_client() -> Result<reqwest::Client, String> {
     Ok(http_client(false))
 }
 
-async fn cf_get_json<T: for<'de> Deserialize<'de>>(
+pub(crate) async fn cf_get_json<T: for<'de> Deserialize<'de>>(
     client: &reqwest::Client,
     path_and_query: &str,
 ) -> Result<T, String> {
@@ -559,7 +566,14 @@ pub async fn curseforge_get_mod_files(
     Ok(files)
 }
 
-async fn curseforge_resolve_download_url(mod_id: u32, file_id: u32) -> Result<String, String> {
+pub(crate) async fn curseforge_get_file(mod_id: u32, file_id: u32) -> Result<CfFile, String> {
+    let client = cf_client()?;
+    let path = format!("/mods/{mod_id}/files/{file_id}");
+    let body: CfApiResponse<CfFile> = cf_get_json(&client, &path).await?;
+    Ok(body.data)
+}
+
+pub(crate) async fn curseforge_resolve_download_url(mod_id: u32, file_id: u32) -> Result<String, String> {
     let client = cf_client()?;
     let path = format!("/mods/{mod_id}/files/{file_id}/download-url");
     let body: CfApiResponse<String> = cf_get_json(&client, &path).await?;

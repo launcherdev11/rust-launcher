@@ -10,10 +10,12 @@ import {
   fetchMe,
   linkIdentity,
   loginAndPersist,
+  loginWithDiscordAndPersist,
   logoutAccount,
   mapAuthErrorMessage,
   registerAndPersist,
   sendEmailVerificationCode,
+  fetchDiscordAuthStatus,
   updateNickname,
   type PlatformUser,
 } from "../api/auth";
@@ -142,13 +144,20 @@ export function PlatformAccountPanel({
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+  const [discordEnabled, setDiscordEnabled] = useState(false);
+  const [discordBusy, setDiscordBusy] = useState(false);
   const [linking, setLinking] = useState<null | "ely" | "minecraft">(null);
   const [linkedProviders, setLinkedProviders] = useState({ ely: false, minecraft: false });
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [privacyHighlight, setPrivacyHighlight] = useState(false);
+  const [modeTabIndicator, setModeTabIndicator] = useState({ left: 0, width: 0 });
   const codeInputRef = useRef<HTMLInputElement>(null);
+  const privacyCheckboxRef = useRef<HTMLInputElement>(null);
+  const modeTabsRef = useRef<HTMLDivElement>(null);
+  const modeTabButtonRefs = useRef<Partial<Record<"login" | "signup", HTMLButtonElement | null>>>({});
 
   const launcherNickname = platformUser?.nickname?.trim() || launcherProfile.launcher_nickname?.trim() || "";
   const gameNickname =
@@ -195,6 +204,9 @@ export function PlatformAccountPanel({
     void fetchEmailVerificationStatus()
       .then((status) => setEmailVerificationRequired(Boolean(status.required)))
       .catch(() => setEmailVerificationRequired(false));
+    void fetchDiscordAuthStatus()
+      .then((status) => setDiscordEnabled(Boolean(status.enabled)))
+      .catch(() => setDiscordEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -202,6 +214,7 @@ export function PlatformAccountPanel({
     setCodeSent(false);
     setSignupStep("form");
     setPrivacyAccepted(false);
+    setPrivacyHighlight(false);
   }, [mode]);
 
   useEffect(() => {
@@ -227,6 +240,48 @@ export function PlatformAccountPanel({
     setNicknameDraft(platformUser?.nickname ?? "");
   }, [platformUser?.nickname]);
 
+  useEffect(() => {
+    if (privacyAccepted) setPrivacyHighlight(false);
+  }, [privacyAccepted]);
+
+  useEffect(() => {
+    let raf = 0;
+    const updateModeTabIndicator = () => {
+      const container = modeTabsRef.current;
+      const btn = modeTabButtonRefs.current[mode];
+      if (!container || !btn) return;
+      const containerRect = container.getBoundingClientRect();
+      const btnRect = btn.getBoundingClientRect();
+      setModeTabIndicator({
+        left: btnRect.left - containerRect.left,
+        width: btnRect.width,
+      });
+    };
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateModeTabIndicator);
+    };
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    const containerEl = modeTabsRef.current;
+    let resizeObserver: ResizeObserver | undefined;
+    if (containerEl && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(scheduleUpdate);
+      resizeObserver.observe(containerEl);
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleUpdate);
+      resizeObserver?.disconnect();
+    };
+  }, [mode, accessToken, signupStep]);
+
+  const highlightPrivacyConsent = () => {
+    setPrivacyHighlight(true);
+    privacyCheckboxRef.current?.focus({ preventScroll: true });
+    privacyCheckboxRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
   const validateSignupForm = (): boolean => {
     if (!authIdentifier.trim() || !authIdentifier.includes("@")) {
       showNotification("warning", tt("platform.toast.enterEmailSignup"));
@@ -245,6 +300,7 @@ export function PlatformAccountPanel({
       return false;
     }
     if (!privacyAccepted) {
+      highlightPrivacyConsent();
       showNotification("warning", tt("platform.toast.acceptPrivacy"));
       return false;
     }
@@ -339,6 +395,31 @@ export function PlatformAccountPanel({
       showNotification("error", mapAuthErrorMessage(rawMessage, mode, tt));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDiscordAuth = async () => {
+    if (mode === "signup" && !privacyAccepted) {
+      highlightPrivacyConsent();
+      showNotification("warning", tt("platform.toast.acceptPrivacy"));
+      return;
+    }
+    setDiscordBusy(true);
+    try {
+      const { user, isNewUser } = await loginWithDiscordAndPersist();
+      setPlatformUser(user);
+      setAccessToken(getStoredAccessToken() ?? "");
+      setSignupStep("form");
+      setVerificationCode("");
+      showNotification(
+        "success",
+        isNewUser ? tt("platform.toast.accountCreated") : tt("platform.toast.signedIn"),
+      );
+    } catch (e) {
+      const rawMessage = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
+      showNotification("error", mapAuthErrorMessage(rawMessage, mode, tt));
+    } finally {
+      setDiscordBusy(false);
     }
   };
 
@@ -640,161 +721,182 @@ export function PlatformAccountPanel({
     );
   }
 
-  return (
-    <div
-      data-tour-id="tour-platform-register"
-      className="glass-panel w-full px-6 py-6"
-    >
-      <div className="mb-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-white/45">
-          {tt("platform.accountTitle")}
-        </h2>
-      </div>
+  const inputClassName =
+    "h-12 w-full rounded-2xl border border-white/10 bg-black/35 px-4 text-[15px] text-white outline-none transition placeholder:text-white/30 focus:border-emerald-400/40 focus:bg-black/45";
 
-      {!accessToken ? (
-        <div className="flex flex-col gap-4">
-          {mode === "signup" && signupStep === "verify" ? (
-            <div className="flex flex-col gap-4">
-              <div className="rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-500/10 to-black/20 px-5 py-6 text-center shadow-inner">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
-                  {tt("platform.verificationStepLabel")}
-                </p>
-                <h3 className="mt-2 text-lg font-semibold text-white">
-                  {tt("platform.verificationTitle")}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/65">
-                  {tt("platform.verificationHint", { email: authIdentifier.trim() })}
-                </p>
-                <p className="mt-1 text-xs text-white/45">
-                  {tt("platform.emailSpamHint")}
-                </p>
+  if (!accessToken) {
+    return (
+      <div
+        data-tour-id="tour-platform-register"
+        className="mx-auto flex w-full max-w-lg flex-col gap-6 px-1 py-2"
+      >
+        <div className="min-h-[3.25rem] text-center">
+          <h2 className="text-xl font-semibold tracking-tight text-white">
+            {tt("platform.accountTitle")}
+          </h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-white/50">
+            {mode === "signup" ? tt("platform.authHintSignup") : tt("platform.authHintLogin")}
+          </p>
+        </div>
 
-                <div className="mx-auto mt-5 max-w-[280px]">
-                  <label className="sr-only" htmlFor="signup-verification-code">
-                    {tt("platform.verificationCodeLabel")}
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="signup-verification-code"
-                      ref={codeInputRef}
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      value={verificationCode}
-                      onChange={(e) =>
-                        setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+        {mode === "signup" && signupStep === "verify" ? (
+          <div className="flex flex-col gap-5">
+            <div className="rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-500/10 to-black/20 px-5 py-7 text-center shadow-inner">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
+                {tt("platform.verificationStepLabel")}
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-white">
+                {tt("platform.verificationTitle")}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-white/65">
+                {tt("platform.verificationHint", { email: authIdentifier.trim() })}
+              </p>
+              <p className="mt-1 text-xs text-white/45">{tt("platform.emailSpamHint")}</p>
+
+              <div className="mx-auto mt-6 max-w-[300px]">
+                <label className="sr-only" htmlFor="signup-verification-code">
+                  {tt("platform.verificationCodeLabel")}
+                </label>
+                <div className="relative">
+                  <input
+                    id="signup-verification-code"
+                    ref={codeInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={verificationCode}
+                    onChange={(e) =>
+                      setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && verificationCode.length === 6) {
+                        void handleAuth();
                       }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && verificationCode.length === 6) {
-                          void handleAuth();
-                        }
-                      }}
-                      className={`h-14 w-full rounded-2xl border border-emerald-400/25 bg-black/45 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:border-emerald-400/50 focus:bg-black/55 ${
-                        verificationCode ? "pr-10" : ""
-                      }`}
-                      placeholder="••••••"
-                      maxLength={6}
-                    />
-                    <InputClearButton
-                      value={verificationCode}
-                      onClear={() => setVerificationCode("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2"
-                      aria-label={tt("common.clear")}
-                    />
-                  </div>
-                  <div className="mt-3 flex justify-center gap-1.5">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <span
-                        key={i}
-                        className={`h-1.5 w-6 rounded-full transition ${
-                          verificationCode.length > i ? "bg-emerald-400" : "bg-white/15"
-                        }`}
-                      />
-                    ))}
-                  </div>
+                    }}
+                    className={`h-14 w-full rounded-2xl border border-emerald-400/25 bg-black/45 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:border-emerald-400/50 focus:bg-black/55 ${
+                      verificationCode ? "pr-10" : ""
+                    }`}
+                    placeholder="••••••"
+                    maxLength={6}
+                  />
+                  <InputClearButton
+                    value={verificationCode}
+                    onClear={() => setVerificationCode("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    aria-label={tt("common.clear")}
+                  />
                 </div>
-
-                <button
-                  type="button"
-                  disabled={loading || sendingCode}
-                  onClick={() => void handleSendVerificationCode()}
-                  className="interactive-press mt-4 text-xs font-semibold text-emerald-200/80 underline-offset-2 hover:text-emerald-100 hover:underline disabled:opacity-60"
-                >
-                  {sendingCode
-                    ? tt("common.loading")
-                    : codeSent
-                      ? tt("platform.resendVerificationCode")
-                      : tt("platform.sendVerificationCode")}
-                </button>
+                <div className="mt-3 flex justify-center gap-1.5">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`h-1.5 w-7 rounded-full transition ${
+                        verificationCode.length > i ? "bg-emerald-400" : "bg-white/15"
+                      }`}
+                    />
+                  ))}
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={loading || sendingCode}
-                  onClick={() => {
-                    setSignupStep("form");
-                    setVerificationCode("");
-                  }}
-                  className="interactive-press flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
-                >
-                  {tt("platform.back")}
-                </button>
-                <button
-                  type="button"
-                  disabled={loading || sendingCode || verificationCode.length !== 6}
-                  onClick={() => void handleAuth()}
-                  className="interactive-press flex-[1.4] rounded-xl bg-[#2d7d46] px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
-                >
-                  {loading ? tt("common.loading") : tt("platform.createAccount")}
-                </button>
-              </div>
+              <button
+                type="button"
+                disabled={loading || sendingCode}
+                onClick={() => void handleSendVerificationCode()}
+                className="interactive-press mt-5 text-sm font-semibold text-emerald-200/80 underline-offset-2 hover:text-emerald-100 hover:underline disabled:opacity-60"
+              >
+                {sendingCode
+                  ? tt("common.loading")
+                  : codeSent
+                    ? tt("platform.resendVerificationCode")
+                    : tt("platform.sendVerificationCode")}
+              </button>
             </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  disabled={loading || sendingCode}
-                  onClick={() => {
-                    setMode("login");
-                    setSignupStep("form");
-                  }}
-                  className={`interactive-press rounded-xl border px-4 py-2 text-sm font-semibold ${
-                    mode === "login"
-                      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
-                      : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
-                  }`}
-                >
-                  {tt("platform.signIn")}
-                </button>
-                <button
-                  type="button"
-                  disabled={loading || sendingCode}
-                  onClick={() => {
-                    setMode("signup");
-                    setSignupStep("form");
-                  }}
-                  className={`interactive-press rounded-xl border px-4 py-2 text-sm font-semibold ${
-                    mode === "signup"
-                      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
-                      : "border-white/15 bg-black/30 text-white/70 hover:bg-black/50"
-                  }`}
-                >
-                  {tt("platform.signUp")}
-                </button>
-              </div>
 
-              <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={loading || sendingCode}
+                onClick={() => {
+                  setSignupStep("form");
+                  setVerificationCode("");
+                }}
+                className="interactive-press h-12 flex-1 rounded-2xl border border-white/15 bg-black/30 px-4 text-sm font-semibold text-white/75 hover:bg-black/50 disabled:opacity-60"
+              >
+                {tt("platform.back")}
+              </button>
+              <button
+                type="button"
+                disabled={loading || sendingCode || verificationCode.length !== 6}
+                onClick={() => void handleAuth()}
+                className="interactive-press h-12 flex-[1.5] rounded-2xl bg-[#2d7d46] px-4 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+              >
+                {loading ? tt("common.loading") : tt("platform.createAccount")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5">
+            <div
+              ref={modeTabsRef}
+              role="tablist"
+              aria-label={tt("platform.accountTitle")}
+              className="glass-toolbar relative grid h-11 grid-cols-2 items-center overflow-hidden p-1"
+            >
+              <div
+                className="pointer-events-none absolute top-1 bottom-1 rounded-lg bg-white/90 transition-all duration-200 ease-out"
+                style={{
+                  left: `${modeTabIndicator.left}px`,
+                  width: `${modeTabIndicator.width}px`,
+                  opacity: modeTabIndicator.width > 0 ? 1 : 0,
+                }}
+              />
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "login"}
+                disabled={loading || sendingCode}
+                ref={(el) => {
+                  modeTabButtonRefs.current.login = el;
+                }}
+                onClick={() => {
+                  setMode("login");
+                  setSignupStep("form");
+                }}
+                className={`interactive-press relative z-10 h-full rounded-xl text-sm font-semibold transition-colors ${
+                  mode === "login" ? "text-black" : "text-white/70 hover:text-white"
+                }`}
+              >
+                {tt("platform.signIn")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "signup"}
+                disabled={loading || sendingCode}
+                ref={(el) => {
+                  modeTabButtonRefs.current.signup = el;
+                }}
+                onClick={() => {
+                  setMode("signup");
+                  setSignupStep("form");
+                }}
+                className={`interactive-press relative z-10 h-full rounded-xl text-sm font-semibold transition-colors ${
+                  mode === "signup" ? "text-black" : "text-white/70 hover:text-white"
+                }`}
+              >
+                {tt("platform.signUp")}
+              </button>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="flex flex-col gap-2 text-[11px] font-semibold uppercase tracking-wider text-white/45">
                 {mode === "signup" ? tt("platform.emailLabel") : tt("platform.emailOrNicknameLabel")}
                 <div className="relative">
                   <input
                     type="text"
                     value={authIdentifier}
                     onChange={(e) => setAuthIdentifier(e.target.value)}
-                    className={`w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 ${
-                      authIdentifier ? "pr-9" : ""
-                    }`}
+                    className={`${inputClassName} ${authIdentifier ? "pr-10" : ""}`}
                     placeholder={
                       mode === "signup" ? tt("platform.enterEmail") : tt("platform.enterNicknameOrEmail")
                     }
@@ -802,120 +904,203 @@ export function PlatformAccountPanel({
                   <InputClearButton
                     value={authIdentifier}
                     onClear={() => setAuthIdentifier("")}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
                     aria-label={tt("common.clear")}
                   />
                 </div>
-                {mode === "signup" && emailVerificationRequired ? (
-                  <span className="text-[11px] font-normal normal-case tracking-normal text-white/45">
-                    {tt("platform.emailSpamHint")}
-                  </span>
-                ) : null}
+                <span
+                  className={`text-[11px] font-normal normal-case tracking-normal text-white/45 transition-opacity duration-200 ${
+                    mode === "signup" && emailVerificationRequired
+                      ? "opacity-100"
+                      : "pointer-events-none h-0 overflow-hidden opacity-0"
+                  }`}
+                  aria-hidden={!(mode === "signup" && emailVerificationRequired)}
+                >
+                  {tt("platform.emailSpamHint")}
+                </span>
               </label>
 
-              {mode === "signup" ? (
-                <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-                  {tt("platform.nicknameLabel")}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={signupNickname}
-                      onChange={(e) => setSignupNickname(e.target.value)}
-                      className={`w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/30 ${
-                        signupNickname ? "pr-9" : ""
-                      }`}
-                      placeholder={tt("platform.enterNickname")}
-                    />
-                    <InputClearButton
-                      value={signupNickname}
-                      onClear={() => setSignupNickname("")}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2"
-                      aria-label={tt("common.clear")}
-                    />
-                  </div>
-                </label>
-              ) : null}
-
-              <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-white/45">
-                {tt("platform.passwordLabel")}
-                <div className="relative flex items-center">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className={`h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-emerald-400/30 ${
-                      authPassword ? "pr-[4.5rem]" : "pr-11"
-                    }`}
-                    placeholder={tt("platform.passwordPlaceholder")}
-                  />
-                  <InputClearButton
-                    value={authPassword}
-                    onClear={() => setAuthPassword("")}
-                    className="absolute right-10 top-1/2 -translate-y-1/2"
-                    aria-label={tt("common.clear")}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="interactive-press absolute inset-y-0 right-2 my-auto flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/10"
-                    aria-label={showPassword ? tt("platform.hidePassword") : tt("platform.showPassword")}
-                  >
-                    <img
-                      src={showPassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
-                      alt=""
-                      className="h-4 w-4 object-contain opacity-80"
-                    />
-                  </button>
-                </div>
-              </label>
-
-              {mode === "signup" ? (
-                <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-white/65">
-                  <input
-                    type="checkbox"
-                    checked={privacyAccepted}
-                    onChange={(e) => setPrivacyAccepted(e.target.checked)}
-                    className="accent-checkbox mt-0.5 h-4 w-4 shrink-0"
-                  />
-                  <span>
-                    <PrivacyInlineText language={language} messageKey="platform.privacyConsent" />
-                  </span>
-                </label>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <p className="text-[11px] leading-relaxed text-white/45">
-                    <PrivacyInlineText language={language} messageKey="platform.privacyLoginNotice" />
-                  </p>
-                  {emailVerificationRequired ? (
-                    <p className="text-[11px] leading-relaxed text-white/45">
-                      {tt("platform.emailSpamHint")}
-                    </p>
-                  ) : null}
-                </div>
-              )}
-
-              <button
-                type="button"
-                disabled={loading || sendingCode || (mode === "signup" && !privacyAccepted)}
-                onClick={() => {
-                  if (mode === "signup") void handleSignupNext();
-                  else void handleAuth();
-                }}
-                className="interactive-press w-full rounded-xl bg-[#2d7d46] px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+              <div
+                className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+                  mode === "signup" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
               >
-                {loading || sendingCode
-                  ? tt("common.loading")
-                  : mode === "login"
-                    ? tt("platform.signIn")
-                    : emailVerificationRequired
-                      ? tt("platform.next")
-                      : tt("platform.createAccount")}
-              </button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
+                <div className="min-h-0 overflow-hidden">
+                  <label
+                    className={`mt-5 flex flex-col gap-2 text-[11px] font-semibold uppercase tracking-wider text-white/45 transition-opacity duration-200 ${
+                      mode === "signup" ? "opacity-100" : "opacity-0"
+                    }`}
+                  >
+                    {tt("platform.nicknameLabel")}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={signupNickname}
+                        onChange={(e) => setSignupNickname(e.target.value)}
+                        tabIndex={mode === "signup" ? 0 : -1}
+                        className={`${inputClassName} ${signupNickname ? "pr-10" : ""}`}
+                        placeholder={tt("platform.enterNickname")}
+                      />
+                      <InputClearButton
+                        value={signupNickname}
+                        onClear={() => setSignupNickname("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2"
+                        aria-label={tt("common.clear")}
+                      />
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <label className="flex flex-col gap-2 text-[11px] font-semibold uppercase tracking-wider text-white/45">
+              {tt("platform.passwordLabel")}
+              <div className="relative flex items-center">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && mode === "login") {
+                      void handleAuth();
+                    }
+                  }}
+                  className={`${inputClassName} ${authPassword ? "pr-[4.75rem]" : "pr-12"}`}
+                  placeholder={tt("platform.passwordPlaceholder")}
+                />
+                <InputClearButton
+                  value={authPassword}
+                  onClear={() => setAuthPassword("")}
+                  className="absolute right-11 top-1/2 -translate-y-1/2"
+                  aria-label={tt("common.clear")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="interactive-press absolute inset-y-0 right-2 my-auto flex h-8 w-8 items-center justify-center rounded-lg hover:bg-white/10"
+                  aria-label={showPassword ? tt("platform.hidePassword") : tt("platform.showPassword")}
+                >
+                  <img
+                    src={showPassword ? "/launcher-assets/hide.png" : "/launcher-assets/show.png"}
+                    alt=""
+                    className="h-4 w-4 object-contain opacity-80"
+                  />
+                </button>
+              </div>
+            </label>
+
+            <div className="relative min-h-[3.25rem]">
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl px-2 py-1.5 text-sm leading-relaxed transition-all duration-200 ${
+                  mode === "signup"
+                    ? "relative z-10 opacity-100"
+                    : "pointer-events-none absolute inset-0 opacity-0"
+                } ${
+                  privacyHighlight
+                    ? "bg-amber-500/15 text-amber-50 ring-2 ring-amber-400/70"
+                    : "text-white/65"
+                }`}
+              >
+                <input
+                  ref={privacyCheckboxRef}
+                  type="checkbox"
+                  checked={privacyAccepted}
+                  onChange={(e) => {
+                    setPrivacyAccepted(e.target.checked);
+                    if (e.target.checked) setPrivacyHighlight(false);
+                  }}
+                  tabIndex={mode === "signup" ? 0 : -1}
+                  className={`accent-checkbox mt-0.5 h-4 w-4 shrink-0 transition ${
+                    privacyHighlight ? "outline outline-2 outline-offset-2 outline-amber-400" : ""
+                  }`}
+                />
+                <span>
+                  <PrivacyInlineText language={language} messageKey="platform.privacyConsent" />
+                </span>
+              </label>
+              <div
+                className={`flex flex-col gap-1 transition-opacity duration-200 ${
+                  mode === "login"
+                    ? "relative z-10 opacity-100"
+                    : "pointer-events-none absolute inset-0 opacity-0"
+                }`}
+              >
+                <p className="text-xs leading-relaxed text-white/45">
+                  <PrivacyInlineText language={language} messageKey="platform.privacyLoginNotice" />
+                </p>
+                {emailVerificationRequired ? (
+                  <p className="text-xs leading-relaxed text-white/45">{tt("platform.emailSpamHint")}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={loading || sendingCode}
+              onClick={() => {
+                if (mode === "signup") {
+                  if (!privacyAccepted) {
+                    highlightPrivacyConsent();
+                    showNotification("warning", tt("platform.toast.acceptPrivacy"));
+                    return;
+                  }
+                  void handleSignupNext();
+                } else {
+                  void handleAuth();
+                }
+              }}
+              className="interactive-press mt-1 h-12 w-full rounded-2xl bg-[#2d7d46] px-4 text-[15px] font-semibold text-white shadow-lg transition hover:bg-[#248338] disabled:opacity-60"
+            >
+              {loading || sendingCode
+                ? tt("common.loading")
+                : mode === "login"
+                  ? tt("platform.signIn")
+                  : emailVerificationRequired
+                    ? tt("platform.next")
+                    : tt("platform.createAccount")}
+            </button>
+
+            {discordEnabled ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-xs font-medium lowercase tracking-wide text-white/40">
+                    {tt("platform.orDivider")}
+                  </span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+                <button
+                  type="button"
+                  disabled={loading || sendingCode || discordBusy}
+                  onClick={() => void handleDiscordAuth()}
+                  className="interactive-press flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-[#5865F2]/40 bg-[#5865F2]/18 px-4 text-[15px] font-semibold text-[#d7dbff] transition hover:bg-[#5865F2]/28 disabled:opacity-60"
+                >
+                  <img
+                    src="/launcher-assets/ds.png"
+                    alt=""
+                    className="h-5 w-5 object-contain"
+                    aria-hidden="true"
+                  />
+                  {discordBusy ? tt("common.loading") : tt("platform.continueWithDiscord")}
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-tour-id="tour-platform-register"
+      className="w-full rounded-2xl border border-white/10 bg-black/20 px-6 py-6"
+    >
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold text-white/90">{tt("platform.accountTitle")}</h2>
+      </div>
+
+      <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/45">
@@ -1060,8 +1245,7 @@ export function PlatformAccountPanel({
 
           <div className="h-px w-full bg-white/10" />
           {renderProviderButtons(false)}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

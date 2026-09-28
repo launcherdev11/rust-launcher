@@ -111,7 +111,7 @@ fn merge_instance_content_roots(from_roots: &[PathBuf], profile_dir: &Path) -> R
     Ok(())
 }
 
-fn consolidate_profile_game_content(
+pub(crate) fn consolidate_profile_game_content(
     profile_dir: &Path,
     old_game_version: &str,
 ) -> Result<(), String> {
