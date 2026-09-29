@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { ActionButton } from "../../components/ui/ActionButton";
 
 type Variant = "primary" | "secondary" | "ghost" | "microsoft" | "ely";
 
@@ -8,17 +9,19 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   fullWidth?: boolean;
 };
 
-const variantClasses: Record<Variant, string> = {
-  primary:
-    "accent-bg text-white shadow-soft hover:opacity-90 focus-visible:ring-white/35",
-  secondary:
-    "border border-white/20 bg-white/10 text-white shadow-soft hover:bg-white/20 hover:border-white/30",
-  ghost:
-    "border border-transparent bg-transparent text-white/70 hover:bg-white/10 hover:text-white",
+const providerClasses: Record<"microsoft" | "ely", string> = {
   microsoft:
     "border border-[#0078d4]/60 bg-[#0078d4] text-white shadow-soft hover:bg-[#106ebe]",
   ely: "border border-emerald-500/35 bg-[#2d7d46] text-white shadow-soft hover:bg-[#248338]",
 };
+
+const baseClasses = [
+  "inline-flex items-center justify-center gap-2 font-semibold tracking-wide transition-colors duration-200",
+  "rounded-xl px-4 py-2.5 text-sm",
+  "interactive-press",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:ring-white/35",
+  "disabled:cursor-not-allowed disabled:opacity-45 disabled:transform-none",
+].join(" ");
 
 export function OnboardingButton({
   variant = "primary",
@@ -26,23 +29,40 @@ export function OnboardingButton({
   fullWidth = false,
   className = "",
   disabled,
+  type = "button",
   ...rest
 }: Props) {
+  if (variant === "microsoft" || variant === "ely") {
+    return (
+      <button
+        type={type}
+        disabled={disabled}
+        className={[
+          baseClasses,
+          fullWidth ? "w-full" : "",
+          providerClasses[variant],
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        {...rest}
+      >
+        {children}
+      </button>
+    );
+  }
+
   return (
-    <button
-      type="button"
+    <ActionButton
+      type={type}
+      variant={variant}
+      size="md"
+      fullWidth={fullWidth}
       disabled={disabled}
-      className={[
-        "interactive-press rounded-full px-12 py-3 text-sm font-semibold tracking-wide transition-colors duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
-        "disabled:cursor-not-allowed disabled:opacity-45 disabled:transform-none",
-        fullWidth ? "w-full max-w-md" : "min-w-[9rem]",
-        variantClasses[variant],
-        className,
-      ].join(" ")}
+      className={className}
       {...rest}
     >
       {children}
-    </button>
+    </ActionButton>
   );
 }

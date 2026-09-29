@@ -7,12 +7,12 @@ type Props = {
 
 const sizeClasses = {
   welcome: {
-    wrap: "mb-8 h-24 w-24 rounded-2xl",
-    img: "h-[4.25rem] w-[4.25rem]",
+    wrap: "mb-5 h-14 w-14",
+    img: "h-9 w-9",
   },
   finish: {
-    wrap: "mb-6 h-20 w-20 rounded-2xl",
-    img: "h-14 w-14",
+    wrap: "mb-4 h-12 w-12",
+    img: "h-8 w-8",
   },
 };
 
@@ -27,7 +27,7 @@ export function OnboardingLauncherIcon({ className = "", size = "welcome" }: Pro
         className,
       ].join(" ")}
     >
-      <img src={LAUNCHER_ICON_SRC} alt="" className={`${s.img} object-contain drop-shadow-md`} />
+      <img src={LAUNCHER_ICON_SRC} alt="" className={`${s.img} object-contain`} />
     </div>
   );
 }

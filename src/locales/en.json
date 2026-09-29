@@ -255,7 +255,7 @@
       "installFailed": "Failed to install version {{version}}.",
       "custom": {
         "importButton": "Import custom version",
-        "importJarPrompt": "Select client.jar for this version? (you can skip — the launcher will download it on install)",
+        "importJarPrompt": "Select client.jar for this version? (you can skip - the launcher will download it on install)",
         "importSuccess": "Custom version {{version}} imported. Click Install to download libraries.",
         "importFailed": "Failed to import version: {{msg}}"
       },
@@ -416,7 +416,7 @@
   },
   "javaSettings": {
     "loading": "Loading Java settings...",
-    "description": "Control which Java and JVM arguments the game will use. When custom arguments are disabled, the launcher applies safe default values.",
+    "description": "Which Java and JVM args to use when launching. Without custom args, the launcher defaults apply.",
     "runtime": {
       "title": "Java runtime",
       "hint": "By default the launcher downloads and uses Mojang Java for the selected Minecraft version.",
@@ -826,7 +826,7 @@
       "loadLoaderVersionsFailed": "Failed to load loader versions: {{msg}}",
       "profileImported": "Profile imported.",
       "importProfileFailed": "Import failed: {{msg}}",
-      "noProfilesFound": "No profiles found. Try the launcher's root (not instances) — but instances is supported too."
+      "noProfilesFound": "No profiles found. Try the launcher's root (not instances) - but instances is supported too."
     },
     "manage": {
       "enableItem": "Enable",
@@ -849,9 +849,9 @@
       "splitResizeTitle": "Drag to widen or narrow the list",
       "currentOutput": "Current output",
       "clearOnlyLive": "Clear only applies to current output",
-      "consoleResizeHint": "Drag the bar between the list and console to resize — width is saved. Logs persist; before a new launch, output is archived.",
+      "consoleResizeHint": "Drag the bar between the list and console to resize - width is saved. Logs persist; before a new launch, output is archived.",
       "noVersionsForGame": "No versions for the selected game",
-      "resourcePackOrderHint": "Packs higher in the list override those below — same as in-game",
+      "resourcePackOrderHint": "Packs higher in the list override those below - same as in-game",
       "reorderResourcePacks": "Reorder",
       "reorderResourcePacksDone": "Done",
       "dragToReorder": "Drag to reorder",
@@ -980,17 +980,17 @@
     "incomingTitle": "Requests",
     "incomingCount": "Requests · {{count}}",
     "signInFirst": "Sign in first in the Accounts tab.",
-    "authGateTitle": "16Launcher account required",
-    "authGateBody": "Friends, online status, and rooms are available after you sign in to your platform account.",
+    "authGateTitle": "Sign in",
+    "authGateBody": "Friends and online status need a sign-in from the Accounts tab.",
     "emptyTitle": "No friends yet",
-    "emptyBody": "Enter a nickname above and send a request — or invite friends to create a 16Launcher account.",
+    "emptyBody": "Enter a nickname above and send a request - or invite friends to create a 16Launcher account.",
     "emptyFocusAdd": "Add a friend",
     "noIncoming": "No new requests.",
     "accept": "Accept",
     "reject": "Decline",
     "yourFriends": "Friends",
     "friendsOnline": "{{online}} of {{total}} online",
-    "noFriends": "No friends yet — enter a nickname above and send a request.",
+    "noFriends": "No friends yet - enter a nickname above and send a request.",
     "noSearchResults": "No friends match that search.",
     "statFriends": "Friends",
     "statFriendsHint": "In your list",
@@ -1010,11 +1010,11 @@
     "lastSeenDays": "{{count}} d ago",
     "lastSeenNever": "hasn't been online recently",
     "openRooms": "Go to rooms",
-    "howToTitle": "How it works",
-    "howToStep1": "Enter a 16Launcher nickname and send a request.",
-    "howToStep2": "When they accept, they appear in your list.",
+    "howToTitle": "Friends",
+    "howToStep1": "16Launcher nickname → send a request.",
+    "howToStep2": "After they accept, they show up in the list.",
     "howToStep3": "See who's online and when they last opened the launcher.",
-    "howToStep4": "Join a friend's room right from this tab.",
+    "howToStep4": "Join a friend's room from this tab.",
     "remove": "Remove",
     "removeConfirm": "Remove {{nick}} from friends?",
     "online": "Online",
@@ -1065,12 +1065,12 @@
     "statYours": "Your rooms",
     "statFriends": "Friends' rooms",
     "signInFirst": "Sign in first in the Accounts tab.",
-    "authGateTitle": "16Launcher account required",
-    "authGateBody": "Creating rooms and playing with friends is available after you sign in to your platform account.",
+    "authGateTitle": "Sign in",
+    "authGateBody": "Rooms need a sign-in from the Accounts tab.",
     "emptyTitle": "No rooms yet",
-    "emptyBody": "Create a room or join by name — friends will be able to join you.",
+    "emptyBody": "Create a room or join by name - friends will be able to join you.",
     "emptyCreateCta": "Create a room",
-    "noRooms": "Empty — create a room or join by name.",
+    "noRooms": "Empty - create a room or join by name.",
     "noFriendsRooms": "No friends are hosting a room right now.",
     "creating": "Creating…",
     "joining": "Joining…",
@@ -1115,7 +1115,7 @@
     "membersTitle": "Members",
     "inviteTitle": "Invite",
     "inviteFriendPlaceholder": "Choose a friend…",
-    "inviteEmpty": "All friends are already in the room — or add more on the Friends tab.",
+    "inviteEmpty": "All friends are already in the room - or add more on the Friends tab.",
     "close": "Close",
     "leave": "Leave",
     "kick": "Kick",
@@ -1137,13 +1137,13 @@
     "shareWorld": "Open access",
     "shareWorldWaiting": "Access open",
     "joinWorld": "Join world",
-    "joinWorldLaunching": "Tunnel {{address}} — launching game…",
-    "joinWorldLaunched": "Game → {{address}}. Keep the launcher open — the tunnel runs inside it.",
+    "joinWorldLaunching": "Tunnel {{address}} - launching game…",
+    "joinWorldLaunched": "Game → {{address}}. Keep the launcher open - the tunnel runs inside it.",
     "joinWorldInGameCopied": "Address {{address}} copied. In-game: Multiplayer → Direct Connect.",
     "joinWorldInGame": "Tunnel ready: {{address}}. In-game: Multiplayer → Direct Connect.",
     "hostSteps": "In-game: world → Open to LAN → same port below.",
-    "guestSteps": "When the host opens access — Join world. If the game is already running, the address is copied — connect via Multiplayer → Direct Connect.",
-    "waitForPeer": "Invite a friend — the link appears when they join.",
+    "guestSteps": "When the host opens access - Join world. If the game is already running, the address is copied - connect via Multiplayer → Direct Connect.",
+    "waitForPeer": "Invite a friend - the link appears when they join.",
     "needP2p": "Wait until the link with your friend is ready",
     "visibility": {
       "public": "public",
@@ -1174,7 +1174,7 @@
       "cannotInviteSelf": "You cannot invite yourself",
       "passwordRequired": "Private rooms need a password (4–32 chars: letters, digits, - and _)",
       "versionRequired": "Pick a Minecraft version for the room",
-      "versionApplied": "Room version: {{version}} — switched in Play",
+      "versionApplied": "Room version: {{version}} - switched in Play",
       "gameUpdated": "Room version and world updated"
     }
   },
@@ -1296,8 +1296,8 @@
     "linkElyTitle": "Sign in with Ely.by, then click Link again",
     "orDivider": "or",
     "continueWithDiscord": "Continue with Discord",
-    "authHintLogin": "Sign in to your 16Launcher account to sync progress and friends.",
-    "authHintSignup": "Create a 16Launcher account — it only takes a couple of minutes.",
+    "authHintLogin": "16Launcher sign-in - for friends and rooms.",
+    "authHintSignup": "Create a 16Launcher account.",
     "toast": {
       "accountCreated": "Account created",
       "signedIn": "Signed in",
@@ -1359,7 +1359,7 @@
       "closePane": "Remove this pane",
       "tooNarrow": "Window is too narrow for dual panes. Widen the window.",
       "tooNarrowBanner": "Dual panes are hidden while the window is under 960px. Widen it to restore the split.",
-      "dragHint": "{{tab}} — drag to a window edge for a second pane",
+      "dragHint": "{{tab}} - drag to a window edge for a second pane",
       "dragSidebarHint": "Split: drag a sidebar tab to the edge of the work area"
     },
     "launcherVersionTitle": "Launcher version {{version}}",
@@ -1374,7 +1374,7 @@
       "kindWarning": "Warning",
       "kindSystem": "System",
       "groupBadge": "×{{count}}",
-      "groupHint": "Repeated {{count}} times — grouped"
+      "groupHint": "Repeated {{count}} times - grouped"
     },
     "accounts": {
       "managerTitle": "Account manager",
@@ -1569,9 +1569,9 @@
       "next": "Next"
     },
     "welcome": {
-      "title": "Welcome to 16Launcher!",
-      "subtitle": "Let's set everything up to your taste",
-      "cta": "Let's go!"
+      "title": "16Launcher",
+      "subtitle": "Select basic settings",
+      "cta": "Start"
     },
     "language": {
       "title": "Choose your language",
@@ -1584,7 +1584,7 @@
     },
     "account": {
       "title": "Sign in",
-      "subtitle": "Pick a sign-in method or skip — you can sign in later",
+      "subtitle": "Pick a sign-in method or skip - you can sign in later",
       "elyTitle": "Ely.by",
       "elyDesc": "For Ely profile and Ely.by skins",
       "microsoftTitle": "Microsoft",
@@ -1598,7 +1598,7 @@
       "loginPlaceholder": "Ely.by username",
       "passwordLabel": "Password",
       "passwordPlaceholder": "Password",
-      "securityHint": "Credentials are stored locally on your device and used only for game sign-in.",
+      "securityHint": "Login and password stay on this PC.",
       "submit": "Sign in",
       "oauth": "Sign in via browser (OAuth)",
       "success": "Signed in successfully!",
@@ -1607,15 +1607,15 @@
     "microsoft": {
       "title": "Sign in with Microsoft",
       "subtitle": "Use your official Minecraft account. After clicking the button, Microsoft authorization will open.",
-      "externalHint": "An external browser window will open for secure Microsoft sign-in.",
+      "externalHint": "Sign-in opens in your browser.",
       "cta": "Continue with Microsoft",
       "waiting": "Waiting for sign-in…",
       "success": "Microsoft sign-in complete!",
       "errorGeneric": "Could not start Microsoft sign-in."
     },
     "import": {
-      "title": "Bring your worlds over",
-      "subtitle": "Pick a launcher and folder — or leave Auto to search default locations",
+      "title": "Import instances",
+      "subtitle": "Pick a launcher and folder - or leave Auto to search default locations",
       "launcher": "Launcher",
       "launcherAuto": "Auto · all launchers",
       "path": "Launcher path",
@@ -1635,9 +1635,9 @@
       "unknownLauncher": "Other launcher"
     },
     "finish": {
-      "title": "All set!",
-      "subtitle": "Setup is complete. We'll show you how to use the launcher next.",
-      "cta": "Start the tour"
+      "title": "Ready to play",
+      "subtitle": "Basic setup is done. Next is a short look at the tabs.",
+      "cta": "Show the UI"
     }
   },
   "productTour": {
@@ -1645,48 +1645,48 @@
     "skip": "Skip",
     "back": "Back",
     "next": "Next",
-    "finish": "Got it!",
-    "replay": "Take the tour",
+    "finish": "Got it",
+    "replay": "UI overview",
     "steps": {
       "welcome": {
-        "title": "Welcome to the launcher!",
-        "body": "A quick tour of the essentials: choosing a version, launching the game, managing mods, and signing up on the platform."
+        "title": "Launcher UI",
+        "body": "Quick pass over the tabs: launch, mods, instances, account."
       },
       "sidebar": {
-        "title": "Navigation",
-        "body": "The sidebar is the main menu.\n\n• Play — launch Minecraft\n• Settings — Java, graphics, launcher options\n• Mods — mod catalog\n• Modpacks — your profiles and modpacks"
+        "title": "Sidebar",
+        "body": "Play - launch Minecraft. Settings - Java and appearance. Mods - catalog. Modpacks - your profiles."
       },
       "launch-controls": {
-        "title": "Version, loader & launch",
-        "body": "Left — Minecraft version (release, snapshot, Forge, etc.). Right — mod loader:\n\n• Vanilla — no mods\n• Fabric / Quilt — modern mods\n• Forge / NeoForge — classic mods\n\nThe center button — Install (if missing) or Play."
+        "title": "Version and launch",
+        "body": "Left: Minecraft version. Right: loader (Vanilla, Fabric, Quilt, Forge, NeoForge). Center: Install or Play."
       },
       "profiles": {
-        "title": "Profiles & modpacks",
-        "body": "Recent modpacks appear here — each with its own version, loader, and mods. Click a card to select it, or create a new one in the Modpacks tab."
+        "title": "Recent instances",
+        "body": "Cards below are recent instances. Click to select; create new ones in the Modpacks tab."
       },
       "settings": {
         "title": "Settings",
-        "body": "Configure Java, memory, JVM args, launcher appearance, hotkeys, and more."
+        "body": "Java, memory, JVM args, appearance, and hotkeys."
       },
       "mods": {
-        "title": "Mod catalog",
-        "body": "Search and install mods from Modrinth and CurseForge. Filter by version, loader, and category — mods go straight into the selected profile."
+        "title": "Mods",
+        "body": "Modrinth and CurseForge. Filter by version and loader; installs go into the selected instance."
       },
       "modpacks": {
         "title": "Modpacks",
-        "body": "Create separate profiles for different mod sets. Each profile has its own folder, version, loader, and mod list."
+        "body": "One profile per mod set: its own folder, version, loader, and mod list."
       },
       "mc-account": {
         "title": "Minecraft account",
-        "body": "Switch your game account here — Ely.by or Microsoft. Required for Minecraft login, skins, and multiplayer.\n\nAdd an account in the Profile tab."
+        "body": "Ely.by or Microsoft - for game login, skins, and multiplayer. Add accounts in the Profile tab."
       },
       "platform": {
-        "title": "Platform sign-up",
-        "body": "A 16Launcher platform account unlocks friends, rooms, notifications, and sync.\n\n1. Click Sign up\n2. Enter email, nickname, and password\n3. Confirm your email with the code from the message\n\nAlready have an account? Use Sign in."
+        "title": "16Launcher account",
+        "body": "Needed for friends, rooms, and notifications. Sign up or sign in from the Accounts tab."
       },
       "finish": {
-        "title": "You're all set!",
-        "body": "You know the basics now. Have fun!\n\nReplay the tour anytime — click ? at the top → Take the tour."
+        "title": "That's it",
+        "body": "Replay anytime: ? at the top → UI overview."
       }
     }
   }

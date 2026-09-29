@@ -13,19 +13,19 @@ export function ProgressIndicator({ currentStep, language }: Props) {
   const progress = Math.min(100, (currentStep / ONBOARDING_TOTAL_STEPS) * 100);
 
   return (
-    <div className="flex w-full max-w-md flex-col items-center gap-2">
-      <p className="text-xs font-medium tracking-wide text-white/50">
+    <div className="flex w-full items-center gap-3">
+      <p className="shrink-0 text-xs font-medium text-white/50">
         {tt("onboarding.progress", {
           current: currentStep,
           total: ONBOARDING_TOTAL_STEPS,
         })}
       </p>
-      <div className="h-1 w-full overflow-hidden rounded-full bg-black/40">
+      <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
         <motion.div
           className="h-full rounded-full accent-bg"
           initial={false}
           animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
         />
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown } from "lucide-react";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
 import { InputClearButton } from "../../components/ui/InputClearButton";
@@ -264,24 +264,22 @@ export function ImportMigrationScreen({
       screenKey="import-migration"
       accentColor={accentColor}
       backgroundImageUrl={backgroundImageUrl}
-      showBack={!importing}
-      onBack={onBack}
       hideFooter
     >
-      <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-black/30">
-        <img
-          src="/launcher-assets/download.png"
-          alt=""
-          className="h-7 w-7 object-contain opacity-90"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={importing}
+        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white disabled:opacity-45"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        {tt("onboarding.nav.back")}
+      </button>
 
-      <h1 className="text-xl font-bold text-white sm:text-2xl">{tt("onboarding.import.title")}</h1>
-      <p className="mt-2 mb-4 max-w-md text-sm leading-relaxed text-white/70">
-        {tt("onboarding.import.subtitle")}
-      </p>
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.import.title")}</h1>
+      <p className="mt-1.5 mb-4 text-sm text-white/60">{tt("onboarding.import.subtitle")}</p>
 
-      <div className="flex w-full max-w-md flex-col gap-2.5 text-left">
+      <div className="flex w-full flex-col gap-2.5 text-left">
         <div>
           <label className="mb-1 block text-[11px] font-semibold text-white/55">
             {tt("onboarding.import.launcher")}
@@ -291,13 +289,13 @@ export function ImportMigrationScreen({
               type="button"
               disabled={busy}
               onClick={() => setLauncherMenuOpen((v) => !v)}
-              className="interactive-press flex w-full items-center justify-between gap-2 rounded-2xl border border-white/15 bg-black/45 px-3 py-2.5 text-left text-sm text-white hover:border-white/30 disabled:opacity-60"
+              className="interactive-press glass-control flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:opacity-60"
             >
               <span className="truncate">{launcherLabel(tt, launcherType)}</span>
               <ChevronDown className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
             </button>
             {launcherMenuOpen && (
-              <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-2xl border border-white/15 bg-[#0c1018]/95 p-1 shadow-xl backdrop-blur-md">
+              <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden glass-popover p-1">
                 {LAUNCHER_OPTIONS.map((opt) => {
                   const active = launcherType === opt.id;
                   const label = opt.label ?? (opt.labelKey ? tt(opt.labelKey) : opt.id);
@@ -337,7 +335,7 @@ export function ImportMigrationScreen({
                   setError(null);
                 }}
                 placeholder={tt("onboarding.import.pathPlaceholder")}
-                className={`w-full rounded-2xl border border-white/15 bg-black/45 px-3 py-2.5 text-sm text-white/90 placeholder:text-white/35 focus:outline-none focus:border-white/35 disabled:opacity-60 ${
+                className={`glass-control ui-body w-full px-3 py-2.5 text-white/90 placeholder:text-white/35 focus:outline-none focus:border-white/25 disabled:opacity-60 ${
                   basePath ? "pr-9" : ""
                 }`}
               />
@@ -356,7 +354,7 @@ export function ImportMigrationScreen({
               disabled={busy}
               onClick={() => void handleBrowse()}
               title={tt("onboarding.import.browse")}
-              className="interactive-press flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 hover:bg-white/20 disabled:opacity-60"
+              className="interactive-press glass-control flex h-[42px] w-[42px] shrink-0 items-center justify-center hover:bg-white/10 disabled:opacity-60"
             >
               <img
                 src="/launcher-assets/folder.png"
@@ -381,15 +379,15 @@ export function ImportMigrationScreen({
         </OnboardingButton>
       </div>
 
-      <div className="mt-3 flex max-h-[min(32vh,240px)] w-full max-w-md flex-col gap-2 overflow-y-auto pr-1">
+      <div className="mt-3 flex max-h-[min(32vh,240px)] w-full flex-col gap-2 overflow-y-auto pr-1">
         {scanning && (
-          <div className="w-full rounded-2xl border border-white/12 bg-black/40 px-4 py-3 text-left">
+          <div className="glass-inset w-full px-4 py-3 text-left">
             <p className="text-sm text-white/70">{tt("onboarding.import.scanning")}</p>
           </div>
         )}
 
         {!scanning && hasScanned && instances.length === 0 && (
-          <div className="w-full rounded-2xl border border-white/12 bg-black/40 px-4 py-3 text-left">
+          <div className="glass-inset w-full px-4 py-3 text-left">
             <div className="flex items-start gap-3">
               <img
                 src="/launcher-assets/folder.png"
@@ -426,21 +424,12 @@ export function ImportMigrationScreen({
                 disabled={busy}
                 onClick={() => toggle(inst)}
                 className={[
-                  "interactive-press flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none",
-                  isSelected
-                    ? "border-white/18 bg-black/55"
-                    : "border-white/12 bg-black/40 hover:border-white/22 hover:bg-black/50",
+                  "interactive-press flex w-full items-center gap-3 px-4 py-3 text-left transition-colors focus:outline-none",
+                  isSelected ? "glass-panel" : "glass-inset hover:bg-white/8",
                   busy ? "cursor-not-allowed opacity-50" : "cursor-pointer",
                 ].join(" ")}
               >
-                <div
-                  className={[
-                    "relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border",
-                    isSelected
-                      ? "border-white/15 bg-black/40"
-                      : "border-white/10 bg-black/30",
-                  ].join(" ")}
-                >
+                <div className="glass-control relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
                   <img
                     src={inst.icon_data_uri || "/launcher-assets/modpack_icon.png"}
                     alt=""
@@ -463,12 +452,10 @@ export function ImportMigrationScreen({
           })}
       </div>
 
-      {error && <p className="mt-3 max-w-md text-xs text-amber-200/90">{error}</p>}
-      {progressLabel && (
-        <p className="mt-3 max-w-md text-xs text-white/60">{progressLabel}</p>
-      )}
+      {error && <p className="mt-3 text-xs text-amber-200/90">{error}</p>}
+      {progressLabel && <p className="mt-3 text-xs text-white/60">{progressLabel}</p>}
 
-      <div className="mt-5 flex w-full max-w-md flex-col items-center gap-3">
+      <div className="mt-5 flex w-full flex-col items-center gap-3">
         {instances.length > 0 ? (
           <OnboardingButton
             variant="primary"
@@ -481,7 +468,7 @@ export function ImportMigrationScreen({
               : tt("onboarding.import.cta", { count: selectedList.length })}
           </OnboardingButton>
         ) : null}
-        <OnboardingButton variant="ghost" disabled={importing} onClick={onSkip}>
+        <OnboardingButton variant="ghost" fullWidth disabled={importing} onClick={onSkip}>
           {instances.length > 0
             ? tt("onboarding.import.skip")
             : tt("onboarding.import.continue")}

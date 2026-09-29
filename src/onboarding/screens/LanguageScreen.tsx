@@ -73,10 +73,10 @@ export function LanguageScreen({
       onBack={onBack}
       onNext={onNext}
     >
-      <h1 className="text-xl font-bold text-white sm:text-2xl">{tt("onboarding.language.title")}</h1>
-      <p className="mt-2 mb-6 max-w-sm text-sm text-white/70">{tt("onboarding.language.subtitle")}</p>
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.language.title")}</h1>
+      <p className="mt-1.5 mb-5 text-sm text-white/60">{tt("onboarding.language.subtitle")}</p>
 
-      <div className="flex w-full max-w-md flex-col gap-3">
+      <div className="flex w-full flex-col gap-2">
         {LANGUAGE_OPTIONS.map((opt) => (
           <LanguageOptionCard
             key={opt.code}

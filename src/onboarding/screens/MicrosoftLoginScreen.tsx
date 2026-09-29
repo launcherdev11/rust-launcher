@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
 import { OnboardingButton } from "../components/OnboardingButton";
@@ -20,7 +20,7 @@ type Props = {
 
 function MicrosoftIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
       <rect x="1" y="1" width="10" height="10" fill="#f25022" />
       <rect x="13" y="1" width="10" height="10" fill="#7fba00" />
       <rect x="1" y="13" width="10" height="10" fill="#00a4ef" />
@@ -51,39 +51,41 @@ export function MicrosoftLoginScreen({
       screenKey="account-microsoft"
       accentColor={accentColor}
       backgroundImageUrl={backgroundImageUrl}
-      showBack
-      onBack={onBack}
       hideFooter
     >
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-black/35">
-        <MicrosoftIcon />
-      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={loading}
+        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white disabled:opacity-45"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        {tt("onboarding.nav.back")}
+      </button>
 
-      <h1 className="text-xl font-bold text-white sm:text-2xl">{tt("onboarding.microsoft.title")}</h1>
-      <p className="mt-2 mb-6 max-w-sm text-sm leading-relaxed text-white/70">
-        {tt("onboarding.microsoft.subtitle")}
-      </p>
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.microsoft.title")}</h1>
+      <p className="mt-1.5 mb-4 text-sm text-white/60">{tt("onboarding.microsoft.subtitle")}</p>
 
-      <div className="mb-6 flex w-full max-w-md items-start gap-2 rounded-xl border border-white/12 bg-black/40 px-4 py-3 text-left text-xs text-white/70 shadow-soft">
-        <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-white/55" aria-hidden />
+      <div className="glass-inset mb-5 flex w-full items-start gap-2 px-3 py-2.5 text-xs text-white/60">
+        <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/45" aria-hidden />
         <span>{tt("onboarding.microsoft.externalHint")}</span>
       </div>
 
       {error ? (
-        <div className="mb-4 flex w-full max-w-md items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-left text-sm text-red-200">
+        <div className="mb-3 flex w-full items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>{error}</span>
         </div>
       ) : null}
 
       {success ? (
-        <div className="mb-4 flex w-full max-w-md items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-100">
+        <div className="mb-3 flex w-full items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-100">
           <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
           <span>{tt("onboarding.microsoft.success")}</span>
         </div>
       ) : null}
 
-      <div className="flex w-full max-w-md flex-col gap-3">
+      <div className="flex w-full flex-col gap-2">
         <OnboardingButton
           variant="microsoft"
           fullWidth
@@ -104,7 +106,7 @@ export function MicrosoftLoginScreen({
         </OnboardingButton>
 
         {authUrl && loading ? (
-          <p className="break-all text-left text-[11px] text-white/45">{authUrl}</p>
+          <p className="break-all text-[11px] text-white/40">{authUrl}</p>
         ) : null}
 
         <OnboardingButton variant="ghost" fullWidth onClick={onSkip} disabled={loading}>

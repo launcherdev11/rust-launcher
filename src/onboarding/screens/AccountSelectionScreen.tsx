@@ -1,5 +1,6 @@
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
+import { ArrowLeft } from "lucide-react";
 import { AccountProviderCard } from "../components/AccountProviderCard";
 import { OnboardingButton } from "../components/OnboardingButton";
 import { OnboardingLayout } from "../components/OnboardingLayout";
@@ -7,7 +8,7 @@ import type { AccountProvider } from "../types";
 
 function ElyByIcon() {
   return (
-    <span className="text-lg font-bold text-emerald-300" aria-hidden>
+    <span className="text-xs font-bold text-emerald-300" aria-hidden>
       Ely
     </span>
   );
@@ -15,7 +16,7 @@ function ElyByIcon() {
 
 function MicrosoftIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden>
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
       <rect x="1" y="1" width="10" height="10" fill="#f25022" />
       <rect x="13" y="1" width="10" height="10" fill="#7fba00" />
       <rect x="1" y="13" width="10" height="10" fill="#00a4ef" />
@@ -52,14 +53,21 @@ export function AccountSelectionScreen({
       screenKey="account-select"
       accentColor={accentColor}
       backgroundImageUrl={backgroundImageUrl}
-      showBack
-      onBack={onBack}
       hideFooter
     >
-      <h1 className="text-xl font-bold text-white sm:text-2xl">{tt("onboarding.account.title")}</h1>
-      <p className="mt-2 mb-6 max-w-sm text-sm text-white/70">{tt("onboarding.account.subtitle")}</p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        {tt("onboarding.nav.back")}
+      </button>
 
-      <div className="flex w-full max-w-md flex-col gap-3">
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.account.title")}</h1>
+      <p className="mt-1.5 mb-5 text-sm text-white/60">{tt("onboarding.account.subtitle")}</p>
+
+      <div className="flex w-full flex-col gap-2">
         <AccountProviderCard
           provider="ely"
           icon={<ElyByIcon />}
@@ -78,8 +86,8 @@ export function AccountSelectionScreen({
         />
       </div>
 
-      <div className="mt-8 flex w-full max-w-md flex-col items-center gap-3">
-        <OnboardingButton variant="ghost" onClick={onSkip}>
+      <div className="mt-5 w-full">
+        <OnboardingButton variant="ghost" fullWidth onClick={onSkip}>
           {tt("onboarding.account.skip")}
         </OnboardingButton>
       </div>

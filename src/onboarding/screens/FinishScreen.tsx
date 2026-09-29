@@ -34,19 +34,18 @@ export function FinishScreen({
       hideFooter
     >
       <motion.div
+        className="mx-auto"
         initial={{ scale: 0.92, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
+        transition={{ duration: 0.32, ease: "easeOut" }}
       >
-        <OnboardingLauncherIcon size="finish" className="mx-auto" />
+        <OnboardingLauncherIcon size="finish" />
       </motion.div>
 
-      <h1 className="text-2xl font-bold text-white">{tt("onboarding.finish.title")}</h1>
-      <p className="mt-3 max-w-sm text-base leading-relaxed text-white/70">
-        {tt("onboarding.finish.subtitle")}
-      </p>
+      <h1 className="mt-1 text-center text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.finish.title")}</h1>
+      <p className="mx-auto mt-2 max-w-md text-center text-sm text-white/60">{tt("onboarding.finish.subtitle")}</p>
 
-      <div className="mt-8 w-full max-w-md">
+      <div className="mt-6 w-full">
         <OnboardingButton variant="primary" fullWidth onClick={onFinish} disabled={finishing}>
           {finishing ? tt("common.loading") : tt("onboarding.finish.cta")}
         </OnboardingButton>

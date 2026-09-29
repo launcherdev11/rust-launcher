@@ -1000,14 +1000,14 @@
     "authGateTitle": "Se necesita una cuenta 16Launcher",
     "authGateBody": "Amigos, estado en línea y salas están disponibles tras iniciar sesión en la cuenta de plataforma.",
     "emptyTitle": "Aún no hay amigos",
-    "emptyBody": "Escribe un apodo arriba y envía una solicitud — o invita a tus amigos a crear una cuenta 16Launcher.",
+    "emptyBody": "Escribe un apodo arriba y envía una solicitud - o invita a tus amigos a crear una cuenta 16Launcher.",
     "emptyFocusAdd": "Añadir amigo",
     "noIncoming": "No hay solicitudes nuevas.",
     "accept": "Aceptar",
     "reject": "Rechazar",
     "yourFriends": "Amigos",
     "friendsOnline": "{{online}} de {{total}} en línea",
-    "noFriends": "Aún no hay amigos — escribe un apodo arriba y envía una solicitud.",
+    "noFriends": "Aún no hay amigos - escribe un apodo arriba y envía una solicitud.",
     "noSearchResults": "Ningún amigo coincide con esa búsqueda.",
     "statFriends": "Amigos",
     "statFriendsHint": "En tu lista",
@@ -1071,9 +1071,9 @@
     "authGateTitle": "Se necesita una cuenta 16Launcher",
     "authGateBody": "Crear salas y jugar con amigos está disponible tras iniciar sesión en la cuenta de plataforma.",
     "emptyTitle": "Aún no hay salas",
-    "emptyBody": "Crea una sala o únete por nombre — tus amigos podrán unirse.",
+    "emptyBody": "Crea una sala o únete por nombre - tus amigos podrán unirse.",
     "emptyCreateCta": "Crear sala",
-    "noRooms": "Vacío — crea una sala o únete por nombre.",
+    "noRooms": "Vacío - crea una sala o únete por nombre.",
     "noFriendsRooms": "Ningún amigo está alojando una sala ahora.",
     "creating": "Creando…",
     "joining": "Uniéndose…",
@@ -1106,7 +1106,7 @@
     "membersTitle": "Miembros",
     "inviteTitle": "Invitar",
     "inviteFriendPlaceholder": "Elige un amigo…",
-    "inviteEmpty": "Todos tus amigos ya están en la sala — o añade más en Amigos.",
+    "inviteEmpty": "Todos tus amigos ya están en la sala - o añade más en Amigos.",
     "close": "Cerrar",
     "leave": "Salir",
     "kick": "Expulsar",
@@ -1129,7 +1129,7 @@
     "shareWorldWaiting": "Acceso abierto",
     "joinWorld": "Entrar al mundo",
     "hostSteps": "En el juego: mundo → Open to LAN → mismo puerto abajo.",
-    "guestSteps": "Cuando el anfitrión abra el acceso — Entrar al mundo. Microsoft o Ely necesarios.",
+    "guestSteps": "Cuando el anfitrión abra el acceso - Entrar al mundo. Microsoft o Ely necesarios.",
     "waitForPeer": "Invita a un amigo: el enlace aparece cuando se una.",
     "needP2p": "Espera a que el enlace con tu amigo esté listo",
     "visibility": {
@@ -1343,7 +1343,7 @@
       "closePane": "Quitar este panel",
       "tooNarrow": "La ventana es demasiado estrecha para dos paneles. Ensánchala.",
       "tooNarrowBanner": "Los dos paneles están ocultos mientras la ventana mide menos de 960px. Ensánchala para restaurar el split.",
-      "dragHint": "{{tab}} — arrastra al borde de la ventana para un segundo panel",
+      "dragHint": "{{tab}} - arrastra al borde de la ventana para un segundo panel",
       "dragSidebarHint": "Split: arrastra una pestaña de la barra al borde del área de trabajo"
     },
     "launcherVersionTitle": "Versión del iniciador {{version}}",
@@ -1358,7 +1358,7 @@
       "kindWarning": "Aviso",
       "kindSystem": "Sistema",
       "groupBadge": "×{{count}}",
-      "groupHint": "Se repitió {{count}} veces — agrupado"
+      "groupHint": "Se repitió {{count}} veces - agrupado"
     },
     "accounts": {
       "managerTitle": "Gerente de cuentas",
@@ -1538,7 +1538,7 @@
     },
     "welcome": {
       "title": "¡Bienvenido a 16Launcher!",
-      "subtitle": "Configuremos todo a tu gusto.",
+      "subtitle": "Selecciona la configuración básica",
       "cta": "¡Vamos!"
     },
     "language": {
@@ -1583,7 +1583,7 @@
     },
     "import": {
       "title": "Traemos tus mundos",
-      "subtitle": "Elige launcher y carpeta — o deja Auto para rutas por defecto",
+      "subtitle": "Elige launcher y carpeta - o deja Auto para rutas por defecto",
       "launcher": "Launcher",
       "launcherAuto": "Auto · todos los launchers",
       "path": "Ruta del launcher",
@@ -1622,11 +1622,11 @@
       },
       "sidebar": {
         "title": "Navegación",
-        "body": "La barra lateral es el menú principal.\n\n• Jugar — iniciar Minecraft\n• Ajustes — Java, gráficos, launcher\n• Mods — catálogo de mods\n• Modpacks — perfiles y modpacks"
+        "body": "La barra lateral es el menú principal.\n\n• Jugar - iniciar Minecraft\n• Ajustes - Java, gráficos, launcher\n• Mods - catálogo de mods\n• Modpacks - perfiles y modpacks"
       },
       "launch-controls": {
         "title": "Versión, loader e inicio",
-        "body": "Izquierda — versión de Minecraft. Derecha — loader de mods (Vanilla, Fabric, Forge, etc.).\n\nEl botón central — Instalar o Jugar."
+        "body": "Izquierda - versión de Minecraft. Derecha - loader de mods (Vanilla, Fabric, Forge, etc.).\n\nEl botón central - Instalar o Jugar."
       },
       "profiles": {
         "title": "Perfiles y modpacks",
@@ -1646,7 +1646,7 @@
       },
       "mc-account": {
         "title": "Cuenta de Minecraft",
-        "body": "Cambia tu cuenta de juego — Ely.by o Microsoft. Necesaria para iniciar sesión, skins y multijugador."
+        "body": "Cambia tu cuenta de juego - Ely.by o Microsoft. Necesaria para iniciar sesión, skins y multijugador."
       },
       "platform": {
         "title": "Registro en la plataforma",
@@ -1654,7 +1654,7 @@
       },
       "finish": {
         "title": "¡Listo!",
-        "body": "Ya conoces lo básico. ¡Disfruta!\n\nRepite el tour en cualquier momento — ? arriba → Repetir tour."
+        "body": "Ya conoces lo básico. ¡Disfruta!\n\nRepite el tour en cualquier momento - ? arriba → Repetir tour."
       }
     }
   }

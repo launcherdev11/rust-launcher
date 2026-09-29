@@ -32,7 +32,6 @@ fn check_download_cancelled() -> Result<(), String> {
     }
 }
 
-// ─── Manifest / API types ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,7 +47,6 @@ pub struct Manifest {
     pub author: Option<String>,
     #[serde(default)]
     pub files: Vec<ManifestFile>,
-    /// Имя папки overrides внутри архива (обычно `"overrides"`).
     #[serde(default = "default_overrides")]
     pub overrides: String,
 }
@@ -68,7 +66,6 @@ pub struct ManifestMinecraft {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestModLoader {
-    /// Например `forge-47.2.0` или `fabric-0.15.7`.
     pub id: String,
     #[serde(default)]
     pub primary: bool,
@@ -88,8 +85,6 @@ fn default_required() -> bool {
     true
 }
 
-/// Ответ `GET /mods/{id}/files/{fileId}` (поле `data`).
-/// Оставлен как публичная схема ответа CF API; фактически используем `CfFile` из модуля.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -132,9 +127,7 @@ pub struct InstallProgress {
     pub message: String,
 }
 
-// ─── Loader parsing ─────────────────────────────────────────────────────────
 
-/// Разбирает `forge-47.2.0` / `fabric-0.15.7` / `neoforge-20.4.80` → (loader, version).
 pub fn parse_mod_loader_id(id: &str) -> (String, Option<String>) {
     let lower = id.to_lowercase();
     for prefix in ["neoforge-", "fabric-", "quilt-", "forge-"] {
@@ -167,7 +160,6 @@ pub fn primary_loader(manifest: &Manifest) -> (String, Option<String>, Option<St
     }
 }
 
-// ─── Zip / overrides ────────────────────────────────────────────────────────
 
 fn read_manifest_from_zip(zip_path: &Path) -> Result<(Manifest, PathBuf), String> {
     let file = std::fs::File::open(zip_path)
@@ -221,7 +213,6 @@ fn extract_overrides(zip_path: &Path, overrides_dir_name: &str, dest_root: &Path
         if rel.is_empty() {
             continue;
         }
-        // Защита от path traversal
         let dest = dest_root.join(rel);
         if !dest.starts_with(dest_root) {
             continue;
@@ -239,7 +230,6 @@ fn extract_overrides(zip_path: &Path, overrides_dir_name: &str, dest_root: &Path
     Ok(count)
 }
 
-// ─── Mod downloads ──────────────────────────────────────────────────────────
 
 async fn resolve_mod_download(
     project_id: u32,
@@ -343,7 +333,6 @@ where
     let mods_dir = mods_dir.to_path_buf();
     let concurrency = concurrency.clamp(1, 16);
 
-    // Прогресс через канал: задачи шлют сообщения, ниже читаем их.
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InstallProgress>();
 
     let download_fut = async {
@@ -427,13 +416,6 @@ where
     Ok((ok, failed))
 }
 
-// ─── Core install ───────────────────────────────────────────────────────────
-
-/// Устанавливает сборку CurseForge из `.zip` в уже существующую папку экземпляра.
-///
-/// - Парсит `manifest.json`
-/// - Копирует `overrides/` в `instance_dir`
-/// - Скачивает моды в `instance_dir/mods/`
 pub async fn install_curseforge_zip<F>(
     zip_path: &Path,
     instance_dir: &Path,
@@ -547,9 +529,7 @@ fn emit_progress(app: &AppHandle, p: &InstallProgress) {
     );
 }
 
-// ─── Tauri commands ─────────────────────────────────────────────────────────
 
-/// Установить `.zip` CurseForge в существующий профиль.
 #[tauri::command]
 pub async fn install_curseforge_zip_into_profile(
     app: AppHandle,
@@ -572,7 +552,6 @@ pub async fn install_curseforge_zip_into_profile(
     .await
 }
 
-/// Создать новый профиль и установить в него сборку CurseForge из `.zip`.
 #[tauri::command]
 pub async fn install_curseforge_zip_as_new_profile(
     app: AppHandle,
@@ -696,7 +675,6 @@ async fn save_profile_icon_from_url(profile_id: &str, icon_url: &str) -> Result<
     Ok(())
 }
 
-/// Скачать zip сборки CurseForge по modId/fileId и установить как новый профиль.
 #[tauri::command]
 pub async fn download_curseforge_modpack_and_import(
     app: AppHandle,

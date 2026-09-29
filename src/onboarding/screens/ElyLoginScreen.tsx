@@ -1,6 +1,6 @@
-import { AlertCircle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { InputClearButton } from "../../components/ui";
+import { TextField } from "../../components/ui";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
 import { OnboardingButton } from "../components/OnboardingButton";
@@ -46,71 +46,55 @@ export function ElyLoginScreen({
       screenKey="account-ely"
       accentColor={accentColor}
       backgroundImageUrl={backgroundImageUrl}
-      showBack
-      onBack={onBack}
       hideFooter
     >
-      <h1 className="text-xl font-bold text-white sm:text-2xl">{tt("onboarding.ely.title")}</h1>
-      <p className="mt-2 mb-6 max-w-sm text-sm text-white/70">{tt("onboarding.ely.subtitle")}</p>
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={loading}
+        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white disabled:opacity-45"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        {tt("onboarding.nav.back")}
+      </button>
+
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.ely.title")}</h1>
+      <p className="mt-1.5 mb-5 text-sm text-white/60">{tt("onboarding.ely.subtitle")}</p>
 
       <form
-        className="flex w-full max-w-md flex-col gap-4 text-left"
+        className="flex w-full flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit) onLogin(username.trim(), password);
         }}
       >
-        <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-white/55">{tt("onboarding.ely.loginLabel")}</span>
-          <div className="relative">
-            <input
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={loading || success}
-              className={`rounded-xl border border-white/12 bg-black/35 px-4 py-3 text-sm text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none focus:ring-2 focus:ring-white/15 disabled:opacity-50 ${
-                username ? "pr-10" : ""
-              }`}
-              placeholder={tt("onboarding.ely.loginPlaceholder")}
-            />
-            <InputClearButton
-              value={username}
-              onClear={() => setUsername("")}
-              disabled={loading || success}
-              className="absolute right-2 top-1/2 -translate-y-1/2"
-              aria-label={tt("common.clear")}
-            />
-          </div>
+          <TextField
+            type="text"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            disabled={loading || success}
+            placeholder={tt("onboarding.ely.loginPlaceholder")}
+          />
         </label>
-        <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-white/55">{tt("onboarding.ely.passwordLabel")}</span>
-          <div className="relative">
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading || success}
-              className={`rounded-xl border border-white/12 bg-black/35 px-4 py-3 text-sm text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none focus:ring-2 focus:ring-white/15 disabled:opacity-50 ${
-                password ? "pr-10" : ""
-              }`}
-              placeholder={tt("onboarding.ely.passwordPlaceholder")}
-            />
-            <InputClearButton
-              value={password}
-              onClear={() => setPassword("")}
-              disabled={loading || success}
-              className="absolute right-2 top-1/2 -translate-y-1/2"
-              aria-label={tt("common.clear")}
-            />
-          </div>
+          <TextField
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading || success}
+            placeholder={tt("onboarding.ely.passwordPlaceholder")}
+          />
         </label>
 
-        <p className="text-[11px] leading-relaxed text-white/45">{tt("onboarding.ely.securityHint")}</p>
+        <p className="text-[11px] text-white/45">{tt("onboarding.ely.securityHint")}</p>
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-left text-sm text-red-200">
+          <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>{error}</span>
           </div>
@@ -123,12 +107,7 @@ export function ElyLoginScreen({
           </div>
         ) : null}
 
-        <OnboardingButton
-          type="submit"
-          variant="ely"
-          fullWidth
-          disabled={!canSubmit}
-        >
+        <OnboardingButton type="submit" variant="ely" fullWidth disabled={!canSubmit}>
           {loading ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
