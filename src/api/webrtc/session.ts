@@ -58,6 +58,10 @@ export function lastTurnAvailable(): boolean {
   return iceCache?.turnOk === true;
 }
 
+export function invalidateIceCache(): void {
+  iceCache = null;
+}
+
 async function buildIceServers(): Promise<{ servers: RTCIceServer[]; turnOk: boolean }> {
   if (iceCache && Date.now() - iceCache.at < ICE_CACHE_MS) {
     return iceCache;

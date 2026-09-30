@@ -179,7 +179,6 @@ export function startPeerSignaling(opts: Options): {
         channelOpen = false;
         emit({ status: "closed", channelOpen: false });
         opts.onSession?.(null);
-        opts.onRequestRestart?.();
       }
     } else if (detail.type === "room_member_left") {
       const p = detail.payload;
@@ -187,7 +186,6 @@ export function startPeerSignaling(opts: Options): {
         channelOpen = false;
         emit({ status: "closed", channelOpen: false });
         opts.onSession?.(null);
-        opts.onRequestRestart?.();
       }
     }
   };

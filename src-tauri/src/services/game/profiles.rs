@@ -15,6 +15,7 @@ use crate::app::paths::{
     instance_config_path, instance_dir, instance_settings_path, instances_root_dir,
     selected_profile_path,
 };
+use crate::infra::fs_atomic::{backup_path_for, read_to_string_with_backup, write_atomic};
 use crate::services::game::cache as cache_service;
 use crate::services::game::options_txt::{
     add_resource_pack_to_options, clear_shader_pack_if_matches, merge_resource_pack_order,
@@ -37,6 +38,51 @@ const PROFILE_CONTENT_DIRS: &[&str] = &[
 ];
 
 const PROFILE_CONTENT_FILES: &[&str] = &["options.txt", "optionsshaders.txt", "servers.dat"];
+
+pub(crate) fn read_instance_config(cfg_path: &Path) -> Result<InstanceConfig, String> {
+    let primary = std::fs::read_to_string(cfg_path).ok();
+    if let Some(ref text) = primary {
+        if !text.trim().is_empty() {
+            if let Ok(cfg) = serde_json::from_str::<InstanceConfig>(text) {
+                return Ok(cfg);
+            }
+        }
+    }
+
+    let bak_path = backup_path_for(cfg_path);
+    let bak_text = std::fs::read_to_string(&bak_path).map_err(|bak_err| {
+        if let Some(ref text) = primary {
+            if !text.trim().is_empty() {
+                return format!(
+                    "Ошибка разбора config.json {}: невалидный JSON (backup: {bak_err})",
+                    cfg_path.display()
+                );
+            }
+        }
+        format!(
+            "Не удалось прочитать config.json {}: отсутствует файл и backup ({bak_err})",
+            cfg_path.display()
+        )
+    })?;
+
+    let cfg: InstanceConfig = serde_json::from_str(&bak_text).map_err(|e| {
+        format!(
+            "Ошибка разбора config.json backup {}: {e}",
+            bak_path.display()
+        )
+    })?;
+
+    if let Ok(text) = serde_json::to_string_pretty(&cfg) {
+        let _ = write_atomic(cfg_path, text);
+    }
+    Ok(cfg)
+}
+
+pub(crate) fn write_instance_config(cfg_path: &Path, cfg: &InstanceConfig) -> Result<(), String> {
+    let new_text = serde_json::to_string_pretty(cfg)
+        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
+    write_atomic(cfg_path, new_text)
+}
 
 fn merge_dir_contents_non_destructive(from: &Path, to: &Path) -> Result<(), String> {
     if !from.is_dir() {
@@ -298,18 +344,12 @@ fn image_path_to_data_uri(path: &Path) -> Result<Option<String>, String> {
 
 pub fn set_profile_icon_path(profile_id: &str, icon_path: Option<String>) -> Result<(), String> {
     let cfg_path = instance_config_path(profile_id)?;
-    if !cfg_path.exists() {
+    if !cfg_path.exists() && !backup_path_for(&cfg_path).exists() {
         return Err("config.json сборки не найден".to_string());
     }
-    let text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json: {e}"))?;
-    let mut cfg: InstanceConfig =
-        serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+    let mut cfg = read_instance_config(&cfg_path)?;
     cfg.icon_path = icon_path;
-    let new_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
-    std::fs::write(&cfg_path, new_text)
-        .map_err(|e| format!("Не удалось записать config.json: {e}"))?;
+    write_instance_config(&cfg_path, &cfg)?;
     Ok(())
 }
 
@@ -346,9 +386,7 @@ pub fn profile_icon_file_path(profile_id: &str) -> Option<PathBuf> {
     }
     let cfg_icon = instance_config_path(profile_id)
         .ok()
-        .filter(|p| p.is_file())
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|text| serde_json::from_str::<InstanceConfig>(&text).ok())
+        .and_then(|p| read_instance_config(&p).ok())
         .and_then(|cfg| cfg.icon_path);
     resolve_profile_icon_file(&profile_dir, cfg_icon.as_deref())
 }
@@ -389,9 +427,9 @@ pub fn load_selected_instance_settings() -> Result<Option<(String, InstanceSetti
         None => return Ok(None),
     };
     let path = instance_settings_path(&id)?;
-    let settings = if path.exists() {
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения настроек сборки: {e}"))?;
+    let settings = if path.exists() || backup_path_for(&path).exists() {
+        let text = read_to_string_with_backup(&path)
+            .ok_or_else(|| format!("Ошибка чтения настроек сборки: {}", path.display()))?;
         serde_json::from_str::<InstanceSettings>(&text)
             .map_err(|e| format!("Ошибка разбора настроек сборки: {e}"))?
     } else {
@@ -406,22 +444,15 @@ pub fn add_play_time_seconds_to_profile(profile_id: &str, delta_secs: u64) -> Re
     }
 
     let cfg_path = instance_config_path(profile_id)?;
-    if !cfg_path.exists() {
+    if !cfg_path.exists() && !backup_path_for(&cfg_path).exists() {
         return Err(format!("config.json не найден для профиля {profile_id}"));
     }
 
-    let text = std::fs::read_to_string(&cfg_path)
+    let mut cfg = read_instance_config(&cfg_path)
         .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
 
-    let mut cfg: InstanceConfig = serde_json::from_str(&text)
-        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
-
     cfg.play_time_seconds = cfg.play_time_seconds.saturating_add(delta_secs);
-
-    let new_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json для playtime: {e}"))?;
-
-    std::fs::write(&cfg_path, new_text)
+    write_instance_config(&cfg_path, &cfg)
         .map_err(|e| format!("Ошибка записи config.json для playtime: {e}"))?;
 
     Ok(cfg.play_time_seconds)
@@ -476,26 +507,21 @@ pub fn finish_playtime_session() -> Option<(String, u64, u64)> {
 
 fn get_profile_play_time_seconds_inner(profile_id: &str) -> Result<u64, String> {
     let cfg_path = instance_config_path(profile_id)?;
-    if !cfg_path.exists() {
+    if !cfg_path.exists() && !backup_path_for(&cfg_path).exists() {
         return Ok(0);
     }
-    let text = std::fs::read_to_string(&cfg_path)
+    let cfg = read_instance_config(&cfg_path)
         .map_err(|e| format!("Ошибка чтения config.json для playtime: {e}"))?;
-    let cfg: InstanceConfig = serde_json::from_str(&text)
-        .map_err(|e| format!("Ошибка разбора config.json для playtime: {e}"))?;
     Ok(cfg.play_time_seconds)
 }
 
 pub fn record_profile_last_played(profile_id: &str) -> Result<u64, String> {
     let cfg_path = instance_config_path(profile_id)?;
-    if !cfg_path.exists() {
+    if !cfg_path.exists() && !backup_path_for(&cfg_path).exists() {
         return Ok(0);
     }
 
-    let text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json для last_played_at: {e}"))?;
-
-    let mut cfg: InstanceConfig = match serde_json::from_str(&text) {
+    let mut cfg = match read_instance_config(&cfg_path) {
         Ok(c) => c,
         Err(_) => return Ok(0),
     };
@@ -506,11 +532,7 @@ pub fn record_profile_last_played(profile_id: &str) -> Result<u64, String> {
         .as_secs();
 
     cfg.last_played_at = Some(now);
-
-    let new_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json для last_played_at: {e}"))?;
-
-    std::fs::write(&cfg_path, new_text)
+    write_instance_config(&cfg_path, &cfg)
         .map_err(|e| format!("Ошибка записи config.json для last_played_at: {e}"))?;
 
     Ok(now)
@@ -551,7 +573,7 @@ pub fn set_selected_profile(id: Option<String>) -> Result<(), String> {
         }
         let text = serde_json::to_string_pretty(&obj)
             .map_err(|e| format!("Ошибка сериализации selected_profile.json: {e}"))?;
-        std::fs::write(&path, text)
+        write_atomic(&path, text)
             .map_err(|e| format!("Не удалось записать selected_profile.json: {e}"))?;
     } else if path.exists() {
         std::fs::remove_file(&path)
@@ -574,16 +596,20 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
             continue;
         }
         let config_path = path.join("config.json");
-        if !config_path.exists() {
+        if !config_path.exists() && !backup_path_for(&config_path).exists() {
             continue;
         }
-        let cfg_text = match std::fs::read_to_string(&config_path) {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        let cfg: InstanceConfig = match serde_json::from_str(&cfg_text) {
+        let cfg = match read_instance_config(&config_path) {
             Ok(c) => c,
-            Err(_) => continue,
+            Err(e) => {
+                eprintln!(
+                    "[Profiles] skip instance {}: {e}",
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("<unknown>")
+                );
+                continue;
+            }
         };
         items.push((cfg, path));
     }
@@ -704,8 +730,9 @@ pub fn delete_profile(id: String) -> Result<(), String> {
 #[command]
 pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<(), String> {
     let path = instance_settings_path(&id)?;
-    let mut current = if path.exists() {
-        let text = std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения settings.json: {e}"))?;
+    let mut current = if path.exists() || backup_path_for(&path).exists() {
+        let text = read_to_string_with_backup(&path)
+            .ok_or_else(|| format!("Ошибка чтения settings.json: {}", path.display()))?;
         serde_json::from_str::<InstanceSettings>(&text).map_err(|e| format!("Ошибка разбора settings.json: {e}"))?
     } else {
         InstanceSettings::default()
@@ -740,7 +767,7 @@ pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<()
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
     }
-    std::fs::write(&path, text).map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
+    write_atomic(&path, text).map_err(|e| format!("Не удалось записать settings.json: {e}"))?;
     Ok(())
 }
 
@@ -794,17 +821,14 @@ pub fn change_profile_version(
     }
 
     let cfg_path = instance_config_path(&id)?;
-    if !cfg_path.exists() {
+    if !cfg_path.exists() && !backup_path_for(&cfg_path).exists() {
         return Err("config.json сборки не найден".to_string());
     }
     let profile_dir = cfg_path
         .parent()
         .ok_or_else(|| "Не удалось определить папку сборки".to_string())?;
 
-    let text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json сборки: {e}"))?;
-    let mut cfg: InstanceConfig =
-        serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+    let mut cfg = read_instance_config(&cfg_path)?;
 
     let loader = cfg.loader.trim().to_lowercase();
     let normalized_loader_version = loader_version
@@ -830,10 +854,7 @@ pub fn change_profile_version(
         normalized_loader_version
     };
 
-    let new_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
-    std::fs::write(&cfg_path, new_text)
-        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+    write_instance_config(&cfg_path, &cfg)?;
 
     instance_profile_summary_for_dir(&cfg, profile_dir)
 }
@@ -841,11 +862,10 @@ pub fn change_profile_version(
 #[command]
 pub fn rename_profile(id: String, name: String) -> Result<(), String> {
     let cfg_path = instance_config_path(&id)?;
-    if !cfg_path.exists() {
+    if !cfg_path.exists() && !backup_path_for(&cfg_path).exists() {
         return Err("config.json сборки не найден".to_string());
     }
-    let text = std::fs::read_to_string(&cfg_path).map_err(|e| format!("Ошибка чтения config.json сборки: {e}"))?;
-    let mut cfg: InstanceConfig = serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+    let mut cfg = read_instance_config(&cfg_path)?;
     let old_dir = cfg_path.parent().ok_or_else(|| "Не удалось определить папку сборки".to_string())?;
     let old_dir_name = old_dir
         .file_name()
@@ -854,8 +874,6 @@ pub fn rename_profile(id: String, name: String) -> Result<(), String> {
         .to_string();
 
     cfg.name = name.clone();
-    let new_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
 
     let desired_base = sanitize_instance_folder_name(&name);
     let already_migrated_variant = old_dir_name == desired_base
@@ -879,15 +897,13 @@ pub fn rename_profile(id: String, name: String) -> Result<(), String> {
         if target_dir != old_dir && !target_dir.exists() {
             if std::fs::rename(old_dir, &target_dir).is_ok() {
                 let new_cfg_path = target_dir.join("config.json");
-                std::fs::write(&new_cfg_path, new_text)
-                    .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+                write_instance_config(&new_cfg_path, &cfg)?;
                 return Ok(());
             }
         }
     }
 
-    std::fs::write(&cfg_path, new_text)
-        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+    write_instance_config(&cfg_path, &cfg)?;
     Ok(())
 }
 
@@ -1217,16 +1233,13 @@ pub fn create_profile_impl(
     };
 
     let cfg_path = dir.join("config.json");
-    let cfg_text = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("Ошибка сериализации config.json сборки: {e}"))?;
-    std::fs::write(&cfg_path, cfg_text)
-        .map_err(|e| format!("Не удалось записать config.json сборки: {e}"))?;
+    write_instance_config(&cfg_path, &cfg)?;
 
     let settings_path = dir.join("settings.json");
     let settings = initial_settings.unwrap_or_default();
     let settings_text = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
-    std::fs::write(&settings_path, settings_text)
+    write_atomic(&settings_path, settings_text)
         .map_err(|e| format!("Не удалось записать settings.json сборки: {e}"))?;
 
     let (mods_size, mods_count) = cache_service::dir_size_and_count(&dir.join("mods"));
@@ -1292,9 +1305,7 @@ pub fn get_profile_icon_data_uri(profile_id: String) -> Result<Option<String>, S
 
     let cfg_icon = instance_config_path(&profile_id)
         .ok()
-        .filter(|path| path.is_file())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|text| serde_json::from_str::<InstanceConfig>(&text).ok())
+        .and_then(|path| read_instance_config(&path).ok())
         .and_then(|cfg| cfg.icon_path);
 
     match resolve_profile_icon_file(&profile_dir, cfg_icon.as_deref()) {

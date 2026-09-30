@@ -6,6 +6,7 @@ export type RoomMember = {
   nickname: string;
   role: string;
   is_sponsor?: boolean;
+  online?: boolean;
   ely_username?: string | null;
   mc_uuid?: string | null;
   joined_at?: string;
@@ -108,6 +109,7 @@ function normalizeRoomMember(input: unknown): RoomMember | null {
     role,
     is_sponsor:
       asLooseBoolean(raw.is_sponsor) ?? asLooseBoolean(raw.isSponsor) ?? undefined,
+    online: asLooseBoolean(raw.online) ?? undefined,
     ely_username:
       asOptionalString(raw.ely_username) ?? asOptionalString(raw.elyUsername) ?? null,
     mc_uuid: asOptionalString(raw.mc_uuid) ?? asOptionalString(raw.mcUuid) ?? null,
@@ -412,6 +414,7 @@ export type RoomSession = {
   state: string;
   started_at?: string | null;
   connection_type?: string | null;
+  fail_reason?: string | null;
   created_at: string;
   closed_at?: string | null;
 };
@@ -441,6 +444,8 @@ export function normalizeRoomSession(input: unknown): RoomSession | null {
       null,
     connection_type:
       asOptionalString(raw.connection_type) ?? asOptionalString(raw.connectionType) ?? null,
+    fail_reason:
+      asOptionalString(raw.fail_reason) ?? asOptionalString(raw.failReason) ?? null,
     created_at: createdAt,
     closed_at:
       asOptionalTimestampString(raw.closed_at) ??

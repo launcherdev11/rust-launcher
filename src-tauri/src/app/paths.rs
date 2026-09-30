@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::app::game_data_migrate::{
     game_root_from_directory_setting, migrate_between_game_roots, migrate_game_data_if_needed,
 };
+use crate::infra::fs_atomic::backup_path_for;
 use crate::models::profile::InstanceConfig;
 use crate::services::game::settings as settings_service;
 
@@ -84,6 +85,21 @@ pub fn instances_root_dir() -> Result<PathBuf, String> {
     Ok(game_root_dir()?.join("instances"))
 }
 
+fn try_parse_instance_config(cfg_path: &Path) -> Option<InstanceConfig> {
+    if let Ok(text) = std::fs::read_to_string(cfg_path) {
+        if !text.trim().is_empty() {
+            if let Ok(cfg) = serde_json::from_str::<InstanceConfig>(&text) {
+                return Some(cfg);
+            }
+        }
+    }
+    let bak = backup_path_for(cfg_path);
+    std::fs::read_to_string(bak)
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+        .and_then(|t| serde_json::from_str::<InstanceConfig>(&t).ok())
+}
+
 pub fn instance_dir(id: &str) -> Result<PathBuf, String> {
     let root = instances_root_dir()?;
     let legacy = root.join(id);
@@ -104,16 +120,11 @@ pub fn instance_dir(id: &str) -> Result<PathBuf, String> {
             continue;
         }
         let cfg_path = path.join("config.json");
-        if !cfg_path.is_file() {
+        if !cfg_path.is_file() && !backup_path_for(&cfg_path).is_file() {
             continue;
         }
-        let text = match std::fs::read_to_string(&cfg_path) {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        let cfg = match serde_json::from_str::<InstanceConfig>(&text) {
-            Ok(c) => c,
-            Err(_) => continue,
+        let Some(cfg) = try_parse_instance_config(&cfg_path) else {
+            continue;
         };
         if cfg.id == id {
             return Ok(path);

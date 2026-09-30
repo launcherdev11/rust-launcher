@@ -238,6 +238,7 @@ type ProfileItemMetadata = {
   title?: string | null;
   iconUrl?: string | null;
   iconDataUri?: string | null;
+  source?: string | null;
 };
 
 type ProfileContentUpdate = {
@@ -425,6 +426,78 @@ function RefreshIcon({ className }: IconProps) {
 
 function ModsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/mods.png" className={className} />;
+}
+
+function ProfileItemSourceIcon({
+  source,
+  title,
+}: {
+  source: string;
+  title: string;
+}) {
+  const src =
+    source === "modrinth"
+      ? "/launcher-assets/Modrinth_Logo.png"
+      : source === "curseforge"
+        ? "/launcher-assets/curseforge.png"
+        : null;
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      title={title}
+      className="h-3.5 w-3.5 shrink-0 object-contain opacity-80"
+      aria-hidden="true"
+    />
+  );
+}
+
+function ProfileItemDetails({
+  contentTab,
+  itemName,
+  metadata,
+  titleClassName,
+  subtitleClassName,
+  tt,
+}: {
+  contentTab: ContentTab;
+  itemName: string;
+  metadata?: ProfileItemMetadata | null;
+  titleClassName: string;
+  subtitleClassName: string;
+  tt: (key: string) => string;
+}) {
+  const title = metadata?.title?.trim() || null;
+  const displayTitle = title || itemName;
+  const source = metadata?.source?.trim() || null;
+  const sourceLabel =
+    source === "modrinth"
+      ? tt("mods.provider.modrinth")
+      : source === "curseforge"
+        ? tt("mods.provider.curseforge")
+        : null;
+  const showFilenameSubtitle = Boolean(title && title !== itemName);
+  const showSourceIcon = contentTab === "mods" && Boolean(source && sourceLabel);
+
+  return (
+    <div className="min-w-0">
+      <span className={`flex items-center gap-1 ${titleClassName}`} title={displayTitle}>
+        {showSourceIcon && !showFilenameSubtitle ? (
+          <ProfileItemSourceIcon source={source!} title={sourceLabel!} />
+        ) : null}
+        <span className="min-w-0 truncate">{displayTitle}</span>
+      </span>
+      {showFilenameSubtitle ? (
+        <span className={`flex items-center gap-1 ${subtitleClassName}`} title={itemName}>
+          {showSourceIcon ? (
+            <ProfileItemSourceIcon source={source!} title={sourceLabel!} />
+          ) : null}
+          <span className="min-w-0 truncate">{itemName}</span>
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function ProfileItemIcon({
@@ -5445,25 +5518,14 @@ export function ModpackTab({
                           contentTab={contentTab}
                           metadata={itemMetadataByFilename[item.name]}
                         />
-                        <div className="min-w-0">
-                          <span
-                            className="block max-w-[200px] truncate md:max-w-[320px]"
-                            title={
-                              itemMetadataByFilename[item.name]?.title?.trim() || item.name
-                            }
-                          >
-                            {itemMetadataByFilename[item.name]?.title?.trim() || item.name}
-                          </span>
-                          {itemMetadataByFilename[item.name]?.title?.trim() &&
-                            itemMetadataByFilename[item.name]?.title?.trim() !== item.name && (
-                              <span
-                                className="block max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[320px]"
-                                title={item.name}
-                              >
-                                {item.name}
-                              </span>
-                            )}
-                        </div>
+                        <ProfileItemDetails
+                          contentTab={contentTab}
+                          itemName={item.name}
+                          metadata={itemMetadataByFilename[item.name]}
+                          titleClassName="block max-w-[200px] truncate md:max-w-[320px]"
+                          subtitleClassName="max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[320px]"
+                          tt={tt}
+                        />
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <button
@@ -5543,25 +5605,14 @@ export function ModpackTab({
                         contentTab={contentTab}
                         metadata={itemMetadataByFilename[item.name]}
                       />
-                      <div className="min-w-0">
-                        <span
-                          className="block max-w-[200px] truncate md:max-w-[280px]"
-                          title={
-                            itemMetadataByFilename[item.name]?.title?.trim() || item.name
-                          }
-                        >
-                          {itemMetadataByFilename[item.name]?.title?.trim() || item.name}
-                        </span>
-                        {itemMetadataByFilename[item.name]?.title?.trim() &&
-                          itemMetadataByFilename[item.name]?.title?.trim() !== item.name && (
-                            <span
-                              className="block max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[280px]"
-                              title={item.name}
-                            >
-                              {item.name}
-                            </span>
-                          )}
-                      </div>
+                      <ProfileItemDetails
+                        contentTab={contentTab}
+                        itemName={item.name}
+                        metadata={itemMetadataByFilename[item.name]}
+                        titleClassName="block max-w-[200px] truncate md:max-w-[280px]"
+                        subtitleClassName="max-w-[200px] truncate text-[10px] text-white/45 md:max-w-[280px]"
+                        tt={tt}
+                      />
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <button

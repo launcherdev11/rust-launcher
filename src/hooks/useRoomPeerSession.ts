@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Room } from "../api/rooms";
 import {
   startPeerSignaling,
   type PeerLinkState,
 } from "../api/webrtc/signaling";
-import { lastTurnAvailable, type RoomPeerSession } from "../api/webrtc/session";
-import { WS_STATUS_EVENT, getWsStatus } from "../api/ws";
+import {
+  invalidateIceCache,
+  lastTurnAvailable,
+  type RoomPeerSession,
+} from "../api/webrtc/session";
+import { WS_STATUS_EVENT, getWsStatus, sendWsMessage } from "../api/ws";
 
 const IDLE: PeerLinkState = {
   status: "idle",
@@ -15,6 +19,7 @@ const IDLE: PeerLinkState = {
 };
 
 const MAX_RECONNECT_DELAY_MS = 12_000;
+const MAX_RECONNECT_ATTEMPTS = 12;
 const CONNECTING_TIMEOUT_MS = 12_000;
 const RELAY_CONNECTING_TIMEOUT_MS = 20_000;
 
@@ -22,6 +27,13 @@ type PeerHandle = {
   dispose: () => void;
   peerUserId: string;
 };
+
+function isMemberOnline(room: Room, userId: string): boolean {
+  const member = (room.members ?? []).find((m) => m.user_id === userId);
+  if (!member) return true;
+  if (member.online === false) return false;
+  return true;
+}
 
 function remotePeerIdsFor(room: Room | null, localUserId: string): string[] {
   if (!room || !localUserId) return [];
@@ -31,12 +43,14 @@ function remotePeerIdsFor(room: Room | null, localUserId: string): string[] {
   if (localUserId === room.owner_user_id) {
     return members
       .filter((m) => m.user_id !== localUserId)
+      .filter((m) => m.online !== false)
       .map((m) => m.user_id)
       .sort();
   }
 
   const amMember = members.some((m) => m.user_id === localUserId);
   if (!amMember) return [];
+  if (!isMemberOnline(room, room.owner_user_id)) return [];
   return [room.owner_user_id];
 }
 
@@ -100,6 +114,8 @@ export function useRoomPeerSession(
   peerLinks: Record<string, PeerLinkState>;
   expectedPeerIds: string[];
   connectedPeerIds: string[];
+  offlinePeerIds: string[];
+  reconnectAll: () => void;
 } {
   const [peerLinks, setPeerLinks] = useState<Record<string, PeerLinkState>>({});
   const [sessions, setSessions] = useState<Record<string, RoomPeerSession>>({});
@@ -112,6 +128,7 @@ export function useRoomPeerSession(
   const connectingTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const forceRelayRef = useRef<Set<string>>(new Set());
   const channelOpenRef = useRef<Map<string, boolean>>(new Map());
+  const reportedFailedRef = useRef<Set<string>>(new Set());
   const sessionsByPeerRef = useRef<Record<string, RoomPeerSession>>({});
   const roomRef = useRef(room);
   const onTunnelOpenRef = useRef(callbacks?.onTunnelOpen);
@@ -127,6 +144,23 @@ export function useRoomPeerSession(
     [room, localUserId],
   );
   const expectedKey = expectedPeerIds.join(",");
+
+  const offlinePeerIds = useMemo(() => {
+    if (!room || !localUserId) return [];
+    const members = room.members ?? [];
+    if (localUserId === room.owner_user_id) {
+      return members
+        .filter((m) => m.user_id !== localUserId && m.online === false)
+        .map((m) => m.user_id);
+    }
+    if (
+      members.some((m) => m.user_id === localUserId) &&
+      !isMemberOnline(room, room.owner_user_id)
+    ) {
+      return [room.owner_user_id];
+    }
+    return [];
+  }, [room, localUserId]);
 
   useEffect(() => {
     const onStatus = (ev: Event) => {
@@ -191,12 +225,27 @@ export function useRoomPeerSession(
   };
 
   const requestRestartPreferRelay = (peerId: string) => {
+    invalidateIceCache();
     if (lastTurnAvailable() && !forceRelayRef.current.has(peerId)) {
       forceRelayRef.current.add(peerId);
       console.info("[webrtc] retry via TURN relay", { peerId });
     }
     requestRestart(peerId);
   };
+
+  const reconnectAll = useCallback(() => {
+    invalidateIceCache();
+    for (const peerId of [...handlesRef.current.keys()]) {
+      disposePeer(peerId);
+    }
+    reconnectAttemptRef.current.clear();
+    forceRelayRef.current.clear();
+    reportedFailedRef.current.clear();
+    setPeerLinks({});
+    setSessions({});
+    onSessionResetRef.current?.();
+    setReconnectTick((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     const currentIds = new Set(expectedPeerIds);
@@ -246,6 +295,7 @@ export function useRoomPeerSession(
           if (state.channelOpen) {
             reconnectAttemptRef.current.set(peerUserId, 0);
             forceRelayRef.current.delete(peerUserId);
+            reportedFailedRef.current.delete(peerUserId);
             clearPeerTimers(peerUserId);
             if (!wasOpen) {
               const session = sessionsByPeerRef.current[peerUserId];
@@ -344,6 +394,23 @@ export function useRoomPeerSession(
       if (handlesRef.current.has(peerId)) continue;
 
       const attempt = reconnectAttemptRef.current.get(peerId) ?? 0;
+      if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+        if (!reportedFailedRef.current.has(peerId)) {
+          reportedFailedRef.current.add(peerId);
+          const roomId = roomRef.current?.id;
+          if (roomId) {
+            sendWsMessage({
+              type: "connection_failed",
+              payload: {
+                room_id: roomId,
+                reason: lastTurnAvailable() ? "peer_unreachable" : "turn_unreachable",
+              },
+            });
+          }
+        }
+        continue;
+      }
+
       const delay = Math.min(1500 * (attempt + 1), MAX_RECONNECT_DELAY_MS);
       reconnectTimerRef.current.set(
         peerId,
@@ -377,5 +444,7 @@ export function useRoomPeerSession(
     peerLinks,
     expectedPeerIds,
     connectedPeerIds,
+    offlinePeerIds,
+    reconnectAll,
   };
 }

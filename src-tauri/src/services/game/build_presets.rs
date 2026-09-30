@@ -12,8 +12,8 @@ use crate::app::paths::{
     instance_settings_path,
 };
 use crate::models::build_preset::{BuildPreset, BuildPresetsFile};
-use crate::models::profile::InstanceConfig;
 use crate::models::InstanceSettings;
+use crate::services::game::profiles::read_instance_config;
 
 fn generate_preset_id() -> String {
     rand::thread_rng()
@@ -202,19 +202,17 @@ pub fn create_build_preset_from_profile(profile_id: String, name: String) -> Res
     }
 
     let cfg_path = instance_config_path(&profile_id)?;
-    if !cfg_path.is_file() {
+    if !cfg_path.is_file() && !crate::infra::fs_atomic::backup_path_for(&cfg_path).is_file() {
         return Err("Сборка не найдена.".to_string());
     }
-    let cfg_text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json: {e}"))?;
-    let cfg: InstanceConfig =
-        serde_json::from_str(&cfg_text).map_err(|e| format!("Ошибка разбора config.json: {e}"))?;
+    let cfg = read_instance_config(&cfg_path)?;
 
     let settings = instance_settings_path(&profile_id)
         .ok()
-        .filter(|p| p.is_file())
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|text| serde_json::from_str::<InstanceSettings>(&text).ok());
+        .and_then(|p| {
+            crate::infra::fs_atomic::read_to_string_with_backup(&p)
+                .and_then(|text| serde_json::from_str::<InstanceSettings>(&text).ok())
+        });
 
     let preset_id = generate_preset_id();
     let mut icon_path: Option<String> = None;

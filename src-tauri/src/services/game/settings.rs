@@ -62,7 +62,11 @@ fn instances_appear_present(game_directory: Option<&str>) -> bool {
     };
     entries.flatten().any(|entry| {
         let path = entry.path();
-        path.is_dir() && path.join("config.json").is_file()
+        if !path.is_dir() {
+            return false;
+        }
+        let cfg = path.join("config.json");
+        cfg.is_file() || crate::infra::fs_atomic::backup_path_for(&cfg).is_file()
     })
 }
 

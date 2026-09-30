@@ -622,6 +622,8 @@ export function RoomsTab({
     sessions,
     expectedPeerIds,
     connectedPeerIds,
+    offlinePeerIds,
+    reconnectAll,
   } = useRoomPeerSession(selectedRoom, userId, {
     onTunnelOpen: isOwner ? onTunnelOpen : undefined,
     onSessionReset: resetTunnelState,
@@ -1132,6 +1134,9 @@ export function RoomsTab({
 
   const p2pStatusLabel = (() => {
     if (selectedRoom && selectedRoom.member_count < 2) return tt("rooms.p2pWaiting");
+    if (offlinePeerIds.length > 0 && expectedPeers === 0) {
+      return tt("rooms.p2pPeerOffline");
+    }
     if (p2pReady) {
       const kind = linkKind ? ` · ${linkKind}` : "";
       if (expectedPeers > 1) {
@@ -1434,17 +1439,33 @@ export function RoomsTab({
                   </div>
                   <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/30 px-2.5 py-2">
                     <span className="ui-caption">{tt("rooms.p2pLabel")}</span>
-                    <span
-                      className={`truncate text-xs font-semibold ${
-                        p2pReady
-                          ? "text-emerald-300/90"
-                          : p2pFailed
-                            ? "text-amber-300/90"
-                            : "text-white/70"
-                      }`}
-                    >
-                      {p2pStatusLabel}
-                    </span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={`truncate text-xs font-semibold ${
+                          p2pReady
+                            ? "text-emerald-300/90"
+                            : p2pFailed || offlinePeerIds.length > 0
+                              ? "text-amber-300/90"
+                              : "text-white/70"
+                        }`}
+                      >
+                        {p2pStatusLabel}
+                      </span>
+                      {selectedRoom && selectedRoom.member_count >= 2 ? (
+                        <ActionButton
+                          size="sm"
+                          variant="secondary"
+                          disabled={loading || tunnelBusy}
+                          onClick={() => {
+                            reconnectAll();
+                            void refreshRoomDetail(selectedRoom.id);
+                            showNotification("info", tt("rooms.p2pReconnectToast"));
+                          }}
+                        >
+                          {tt("rooms.p2pReconnect")}
+                        </ActionButton>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 {!mcAuthOnline ? (
@@ -1602,6 +1623,11 @@ export function RoomsTab({
                           />
                           <p className="ui-caption">
                             {m.role === "owner" ? tt("rooms.role.owner") : tt("rooms.role.member")}
+                            {m.online === false
+                              ? ` · ${tt("rooms.memberOffline")}`
+                              : m.online === true
+                                ? ` · ${tt("rooms.memberOnline")}`
+                                : ""}
                           </p>
                         </div>
                       </button>

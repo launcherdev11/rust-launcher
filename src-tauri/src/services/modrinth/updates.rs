@@ -7,7 +7,7 @@ use crate::models::profile::InstanceConfig;
 use crate::services::game::download::save_modrinth_file;
 use crate::services::game::profiles::{
     profile_item_display_name, profile_item_is_disabled, profile_item_stored_name,
-    resolve_profile_item_path,
+    read_instance_config, resolve_profile_item_path,
 };
 
 use crate::infra::api_base::curseforge_api_base;
@@ -33,12 +33,10 @@ struct VersionFilesRequest {
 
 fn load_profile_config(profile_id: &str) -> Result<InstanceConfig, String> {
     let cfg_path = instance_config_path(profile_id)?;
-    if !cfg_path.is_file() {
+    if !cfg_path.is_file() && !crate::infra::fs_atomic::backup_path_for(&cfg_path).is_file() {
         return Err("config.json сборки не найден".to_string());
     }
-    let text = std::fs::read_to_string(&cfg_path)
-        .map_err(|e| format!("Ошибка чтения config.json: {e}"))?;
-    serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора config.json: {e}"))
+    read_instance_config(&cfg_path)
 }
 
 fn modrinth_category_from_profile_category(category: &str) -> Result<&'static str, String> {

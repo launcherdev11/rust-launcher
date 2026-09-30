@@ -222,9 +222,7 @@ fn collect_files(
 }
 
 fn load_cfg(root: &Path) -> Option<InstanceConfig> {
-    std::fs::read_to_string(root.join("config.json"))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+    crate::services::game::profiles::read_instance_config(&root.join("config.json")).ok()
 }
 
 fn content_kind(rel: &str) -> Option<&'static str> {

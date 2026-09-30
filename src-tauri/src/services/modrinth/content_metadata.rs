@@ -33,6 +33,8 @@ struct CachedEntry {
     icon_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon_data_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -133,6 +135,7 @@ fn cached_to_metadata(filename: &str, entry: &CachedEntry) -> ProfileItemMetadat
         title: entry.title.clone(),
         icon_url: entry.icon_url.clone(),
         icon_data_uri: entry.icon_data_uri.clone(),
+        source: entry.source.clone(),
     }
 }
 
@@ -459,8 +462,11 @@ pub async fn resolve_profile_item_metadata(
     for (filename, sha1) in &sha_by_filename {
         if let Some(cached) = cache.entries.get(filename) {
             if cached.sha1 == *sha1 {
+                if cached.source.is_some() {
+                    resolved.insert(filename.clone(), cached.clone());
+                    continue;
+                }
                 resolved.insert(filename.clone(), cached.clone());
-                continue;
             }
         }
         pending_sha.push(sha1.clone());
@@ -514,6 +520,7 @@ pub async fn resolve_profile_item_metadata(
                     title,
                     icon_url,
                     icon_data_uri: None,
+                    source: Some("modrinth".to_string()),
                 },
             );
             still_missing.remove(filename);
@@ -543,6 +550,7 @@ pub async fn resolve_profile_item_metadata(
                             title: Some(title.clone()),
                             icon_url: icon_url.clone(),
                             icon_data_uri: None,
+                            source: Some("curseforge".to_string()),
                         },
                     );
                     still_missing.remove(filename);
@@ -585,6 +593,7 @@ pub async fn resolve_profile_item_metadata(
                     title,
                     icon_url: None,
                     icon_data_uri,
+                    source: None,
                 },
             );
         }
@@ -609,6 +618,7 @@ pub async fn resolve_profile_item_metadata(
                     title: None,
                     icon_url: None,
                     icon_data_uri: None,
+                    source: None,
                 }
             }
         })
