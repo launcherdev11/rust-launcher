@@ -311,6 +311,10 @@
         "label": "Werbebanner deaktivieren:",
         "hint": "Blendet das Nachrichten- und Bannerkarussell auf dem Spielen-Tab aus."
       },
+      "disableThematicDecorations": {
+        "label": "Themen-Dekoration deaktivieren:",
+        "hint": "Blendet die saisonale Launcher-Dekoration aus (verfügbar vom 1. Oktober bis 1. November)."
+      },
       "notifyNewUpdate": {
         "label": "Über neue Launcher-Updates benachrichtigen:"
       },

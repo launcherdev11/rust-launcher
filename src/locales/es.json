@@ -311,6 +311,10 @@
         "label": "Desactivar banner publicitario:",
         "hint": "Oculta el carrusel de noticias y banners en la pestaña Jugar."
       },
+      "disableThematicDecorations": {
+        "label": "Desactivar decoración temática:",
+        "hint": "Oculta la decoración estacional del lanzador (disponible del 1 de octubre al 1 de noviembre)."
+      },
       "notifyNewUpdate": {
         "label": "Notificar sobre nuevas actualizaciones del lanzador:"
       },

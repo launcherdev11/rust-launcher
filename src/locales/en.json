@@ -293,6 +293,10 @@
         "label": "Disable ad banner:",
         "hint": "Hides the news and banner carousel on the Play tab."
       },
+      "disableThematicDecorations": {
+        "label": "Disable thematic decorations:",
+        "hint": "Hides seasonal launcher decorations (available from October 1 to November 1)."
+      },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
       "notifyNewMessage": { "label": "Notify about new messages:" },
       "notifySystemMessage": { "label": "Notify about system messages:" },

@@ -462,3 +462,118 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   right: 0;
 }
 
+.halloween-decor__tint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 120, 30, 0.2) 0%,
+    transparent 42%,
+    rgba(40, 10, 60, 0.12) 100%
+  );
+}
+
+.halloween-decor__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(20, 6, 0, 0.35) 100%
+  );
+}
+
+.halloween-decor__web {
+  position: absolute;
+  width: 14rem;
+  height: 14rem;
+  opacity: 0.9;
+}
+
+.halloween-decor__web--tl {
+  top: 0;
+  left: 0;
+}
+
+.halloween-decor__web--tr {
+  top: 0;
+  right: 0;
+  width: 13rem;
+  height: 13rem;
+}
+
+.halloween-decor__web--br {
+  bottom: 0;
+  right: 0;
+  width: 20rem;
+  height: 20rem;
+  opacity: 0.95;
+}
+
+.halloween-decor__bat {
+  position: absolute;
+  width: 2.75rem;
+  height: auto;
+  opacity: 0.55;
+  animation: halloween-bat-fly 18s ease-in-out infinite;
+}
+
+.halloween-decor__bat--1 {
+  top: 18%;
+  left: -8%;
+  animation-duration: 22s;
+  animation-delay: 0s;
+}
+
+.halloween-decor__bat--2 {
+  top: 42%;
+  left: -10%;
+  width: 2.1rem;
+  opacity: 0.4;
+  animation-duration: 28s;
+  animation-delay: -6s;
+}
+
+.halloween-decor__bat--3 {
+  top: 28%;
+  left: -6%;
+  width: 2.4rem;
+  opacity: 0.48;
+  animation-duration: 25s;
+  animation-delay: -12s;
+  animation-name: halloween-bat-fly-alt;
+}
+
+@keyframes halloween-bat-fly {
+  0% {
+    transform: translate(0, 0) scaleX(1);
+  }
+  45% {
+    transform: translate(112vw, -2.5rem) scaleX(1);
+  }
+  50% {
+    transform: translate(112vw, -2.5rem) scaleX(-1);
+  }
+  95% {
+    transform: translate(-4vw, 1.5rem) scaleX(-1);
+  }
+  100% {
+    transform: translate(-4vw, 1.5rem) scaleX(1);
+  }
+}
+
+@keyframes halloween-bat-fly-alt {
+  0% {
+    transform: translate(0, 0) scaleX(1) rotate(-4deg);
+  }
+  40% {
+    transform: translate(108vw, 2rem) scaleX(1) rotate(3deg);
+  }
+  50% {
+    transform: translate(108vw, 2rem) scaleX(-1) rotate(-2deg);
+  }
+  100% {
+    transform: translate(-6vw, -1rem) scaleX(-1) rotate(2deg);
+  }
+}
+

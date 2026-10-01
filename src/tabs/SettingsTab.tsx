@@ -11,6 +11,7 @@ import { clearLauncherAvatarCache } from "../lib/avatar";
 import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
+import { isSeasonalThemePeriod } from "../lib/seasonalTheme";
 
 const SETTINGS_DARK_BOX = "glass-inset p-3";
 
@@ -39,6 +40,7 @@ type SettingSearchId =
   | "launcher.splitView"
   | "launcher.disableAnimations"
   | "launcher.hideBanners"
+  | "launcher.disableThematicDecorations"
   | "launcher.language"
   | "launcher.accentColor"
   | "launcher.backgroundImage"
@@ -201,6 +203,14 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     ],
   },
   {
+    id: "launcher.disableThematicDecorations",
+    tab: "launcher",
+    keys: [
+      "settings.launcher.disableThematicDecorations.label",
+      "settings.launcher.disableThematicDecorations.hint",
+    ],
+  },
+  {
     id: "launcher.language",
     tab: "launcher",
     keys: ["settings.launcher.interfaceLanguage.label", "settings.card.interfaceLanguage"],
@@ -291,6 +301,7 @@ type Settings = {
   minimize_to_tray_on_close: boolean;
   autostart_enabled: boolean;
   animations_disabled: boolean;
+  thematic_decorations_disabled?: boolean;
   show_launcher_banners?: boolean;
   interface_language?: string;
   background_accent_color: string;
@@ -1698,7 +1709,11 @@ export function SettingsTab({
   const matchedSettingIds = useMemo(() => {
     if (!settingsSearchActive) return null;
     const ids = new Set<SettingSearchId>();
+    const seasonalActive = isSeasonalThemePeriod();
     for (const item of SETTING_SEARCH_CATALOG) {
+      if (item.id === "launcher.disableThematicDecorations" && !seasonalActive) {
+        continue;
+      }
       const haystack = item.keys
         .map((key) => tt(key))
         .join(" ")
@@ -2824,6 +2839,7 @@ export function SettingsTab({
                 showSetting("launcher.splitView") ||
                 showSetting("launcher.disableAnimations") ||
                 showSetting("launcher.hideBanners") ||
+                (isSeasonalThemePeriod() && showSetting("launcher.disableThematicDecorations")) ||
                 showSetting("launcher.language") ||
                 showSetting("launcher.accentColor") ||
                 showSetting("launcher.backgroundImage") ||
@@ -2923,6 +2939,20 @@ export function SettingsTab({
                 />
                 <p className="ui-meta pl-0.5 pr-1">
                   {tt("settings.launcher.hideBanners.hint")}
+                </p>
+                </div>
+                )}
+                {isSeasonalThemePeriod() && showSetting("launcher.disableThematicDecorations") && (
+                <div className="flex flex-col gap-1.5">
+                <SettingsToggle
+                  label={tt("settings.launcher.disableThematicDecorations.label")}
+                  yesLabel={tt("settings.common.toggle.on")}
+                  noLabel={tt("settings.common.toggle.off")}
+                  value={settings?.thematic_decorations_disabled ?? false}
+                  onChange={(v) => updateSettings({ thematic_decorations_disabled: v })}
+                />
+                <p className="ui-meta pl-0.5 pr-1">
+                  {tt("settings.launcher.disableThematicDecorations.hint")}
                 </p>
                 </div>
                 )}

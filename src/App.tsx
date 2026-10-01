@@ -37,7 +37,9 @@ import type { RoomGameSettings } from "./tabs/RoomsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
+import { HalloweenDecorations } from "./components/HalloweenDecorations";
 import { UpdatePopupModal } from "./components/UpdatePopupModal";
+import { shouldShowThematicDecorations } from "./lib/seasonalTheme";
 import { AccountAvatar } from "./components/account_avatar";
 import { AuthProviderWatermark } from "./components/auth_provider_watermark";
 import {
@@ -181,6 +183,7 @@ type Settings = {
   minimize_to_tray_on_close: boolean;
   autostart_enabled: boolean;
   animations_disabled: boolean;
+  thematic_decorations_disabled?: boolean;
   show_launcher_banners?: boolean;
   interface_language?: string;
   background_accent_color: string;
@@ -2300,6 +2303,7 @@ function App() {
     minimize_to_tray_on_close: false,
     autostart_enabled: false,
     animations_disabled: false,
+    thematic_decorations_disabled: false,
     show_launcher_banners: true,
     background_accent_color: "#0b1530",
     background_image_url: null,
@@ -4568,6 +4572,9 @@ function App() {
           }}
         />
       </div>
+      {shouldShowThematicDecorations(settings?.thematic_decorations_disabled) && (
+        <HalloweenDecorations />
+      )}
 
       <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center px-4">
         {notifications.map((n) => {
