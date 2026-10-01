@@ -294,8 +294,8 @@
         "hint": "Hides the news and banner carousel on the Play tab."
       },
       "disableThematicDecorations": {
-        "label": "Disable thematic decorations:",
-        "hint": "Hides seasonal launcher decorations (available from October 1 to November 1)."
+        "label": "Thematic design:",
+        "hint": ""
       },
       "notifyNewUpdate": { "label": "Notify about new launcher updates:" },
       "notifyNewMessage": { "label": "Notify about new messages:" },
@@ -839,6 +839,7 @@
       "backToList": "Back to list",
       "openFolder": "Open folder",
       "exportBuild": "Export build",
+      "backups": "Profile backups",
       "profileSettings": "Profile settings",
       "selectProfile": "Select profile",
       "searchFiles": "Search files...",
@@ -888,7 +889,28 @@
       "unpinFromSidebar": "Unpin from sidebar",
       "deleteProfile": "Delete profile",
       "renameProfile": "Rename profile",
-      "editProfile": "Edit profile"
+      "editProfile": "Edit profile",
+      "createBackup": "Create backup",
+      "manageBackups": "Backups…"
+    },
+    "backups": {
+      "title": "Profile backups",
+      "hint": "Snapshots of “{{name}}”. Restore creates a new profile.",
+      "create": "Create backup",
+      "creating": "Creating…",
+      "created": "Backup created.",
+      "createFailed": "Failed to create backup: {{msg}}",
+      "loadFailed": "Failed to load backups.",
+      "empty": "No backups yet.",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restored": "Restored as “{{name}}”.",
+      "restoreFailed": "Failed to restore backup: {{msg}}",
+      "delete": "Delete",
+      "deleted": "Backup deleted.",
+      "deleteFailed": "Failed to delete backup: {{msg}}",
+      "openFolder": "Open folder",
+      "openFolderFailed": "Failed to open backups folder."
     },
     "deleteConfirm": {
       "title": "Delete confirmation",

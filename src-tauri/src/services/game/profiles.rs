@@ -39,7 +39,7 @@ const PROFILE_CONTENT_DIRS: &[&str] = &[
 
 const PROFILE_CONTENT_FILES: &[&str] = &["options.txt", "optionsshaders.txt", "servers.dat"];
 
-pub(crate) fn read_instance_config(cfg_path: &Path) -> Result<InstanceConfig, String> {
+pub fn read_instance_config(cfg_path: &Path) -> Result<InstanceConfig, String> {
     let primary = std::fs::read_to_string(cfg_path).ok();
     if let Some(ref text) = primary {
         if !text.trim().is_empty() {
@@ -78,7 +78,7 @@ pub(crate) fn read_instance_config(cfg_path: &Path) -> Result<InstanceConfig, St
     Ok(cfg)
 }
 
-pub(crate) fn write_instance_config(cfg_path: &Path, cfg: &InstanceConfig) -> Result<(), String> {
+pub fn write_instance_config(cfg_path: &Path, cfg: &InstanceConfig) -> Result<(), String> {
     let new_text = serde_json::to_string_pretty(cfg)
         .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
     write_atomic(cfg_path, new_text)
@@ -728,7 +728,7 @@ pub fn delete_profile(id: String) -> Result<(), String> {
 }
 
 #[command]
-pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<(), String> {
+pub fn update_profile_settings(id: String, patch: serde_json::Value) -> Result<(), String> {
     let path = instance_settings_path(&id)?;
     let mut current = if path.exists() || backup_path_for(&path).exists() {
         let text = read_to_string_with_backup(&path)
@@ -738,28 +738,48 @@ pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<()
         InstanceSettings::default()
     };
 
-    if let Some(v) = patch.ram_mb {
-        current.ram_mb = Some(v);
+    let patch_obj = patch.as_object();
+
+    if let Some(v) = patch.get("ram_mb").and_then(|x| x.as_u64()) {
+        current.ram_mb = Some(v as u32);
     }
-    if let Some(v) = patch.jvm_args {
-        current.jvm_args = Some(v);
+    if let Some(v) = patch.get("jvm_args") {
+        current.jvm_args = if v.is_null() {
+            None
+        } else {
+            v.as_str().map(|s| s.to_string())
+        };
     }
-    if let Some(v) = patch.java_settings {
-        current.java_settings = Some(v);
+    if let Some(v) = patch.get("java_settings") {
+        current.java_settings = if v.is_null() {
+            None
+        } else {
+            serde_json::from_value(v.clone()).ok()
+        };
     }
-    if let Some(v) = patch.resolution_width {
-        current.resolution_width = Some(v);
+    if patch_obj.map(|o| o.contains_key("resolution_width")).unwrap_or(false) {
+        let v = &patch["resolution_width"];
+        current.resolution_width = if v.is_null() {
+            None
+        } else {
+            v.as_u64().map(|n| n as u32)
+        };
     }
-    if let Some(v) = patch.resolution_height {
-        current.resolution_height = Some(v);
+    if patch_obj.map(|o| o.contains_key("resolution_height")).unwrap_or(false) {
+        let v = &patch["resolution_height"];
+        current.resolution_height = if v.is_null() {
+            None
+        } else {
+            v.as_u64().map(|n| n as u32)
+        };
     }
-    if let Some(v) = patch.show_console_on_launch {
+    if let Some(v) = patch.get("show_console_on_launch").and_then(|x| x.as_bool()) {
         current.show_console_on_launch = Some(v);
     }
-    if let Some(v) = patch.close_launcher_on_game_start {
+    if let Some(v) = patch.get("close_launcher_on_game_start").and_then(|x| x.as_bool()) {
         current.close_launcher_on_game_start = Some(v);
     }
-    if let Some(v) = patch.check_game_processes {
+    if let Some(v) = patch.get("check_game_processes").and_then(|x| x.as_bool()) {
         current.check_game_processes = Some(v);
     }
 
@@ -771,7 +791,7 @@ pub fn update_profile_settings(id: String, patch: InstanceSettings) -> Result<()
     Ok(())
 }
 
-fn instance_profile_summary_for_dir(cfg: &InstanceConfig, path: &Path) -> Result<InstanceProfileSummary, String> {
+pub fn instance_profile_summary_for_dir(cfg: &InstanceConfig, path: &Path) -> Result<InstanceProfileSummary, String> {
     let mods_dir = path.join("mods");
     let res_dir = path.join("resourcepacks");
     let shader_dir = path.join("shaderpacks");

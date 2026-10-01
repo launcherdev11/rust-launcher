@@ -312,7 +312,7 @@
         "hint": "Oculta el carrusel de noticias y banners en la pestaña Jugar."
       },
       "disableThematicDecorations": {
-        "label": "Desactivar decoración temática:",
+        "label": "Diseño temático",
         "hint": "Oculta la decoración estacional del lanzador (disponible del 1 de octubre al 1 de noviembre)."
       },
       "notifyNewUpdate": {
@@ -867,6 +867,7 @@
       "backToList": "volver a la lista",
       "openFolder": "Abrir carpeta",
       "exportBuild": "Exportar compilación",
+      "backups": "Copias de seguridad",
       "profileSettings": "Configuración de perfil",
       "selectProfile": "Seleccionar perfil",
       "searchFiles": "Buscar archivos...",
@@ -916,7 +917,28 @@
       "unpinFromSidebar": "Desanclar de la barra lateral",
       "deleteProfile": "Eliminar perfil",
       "renameProfile": "Cambiar nombre de perfil",
-      "editProfile": "Editar perfil"
+      "editProfile": "Editar perfil",
+      "createBackup": "Crear copia de seguridad",
+      "manageBackups": "Copias…"
+    },
+    "backups": {
+      "title": "Copias de seguridad",
+      "hint": "Instantáneas de «{{name}}». Restaurar crea un perfil nuevo.",
+      "create": "Crear copia",
+      "creating": "Creando…",
+      "created": "Copia creada.",
+      "createFailed": "No se pudo crear la copia: {{msg}}",
+      "loadFailed": "No se pudieron cargar las copias.",
+      "empty": "Aún no hay copias.",
+      "restore": "Restaurar",
+      "restoring": "Restaurando…",
+      "restored": "Restaurado como «{{name}}».",
+      "restoreFailed": "No se pudo restaurar: {{msg}}",
+      "delete": "Eliminar",
+      "deleted": "Copia eliminada.",
+      "deleteFailed": "No se pudo eliminar: {{msg}}",
+      "openFolder": "Abrir carpeta",
+      "openFolderFailed": "No se pudo abrir la carpeta de copias."
     },
     "deleteConfirm": {
       "title": "Eliminar confirmación",

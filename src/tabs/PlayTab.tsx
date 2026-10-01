@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameConsolePanel } from "../components/GameConsolePanel";
-import { ProfileInstanceIcon } from "../components/profile_instance_icon";
+import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
 import { BannerSkeleton, InputClearButton, Spinner } from "../components/ui";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
@@ -430,11 +430,12 @@ export function PlayTab({
                   : "border border-white/10 hover:border-white/25 hover:bg-white/8"
               }`}
             >
+              <ProfileCardIconBackdrop profileId={profile.id} />
               <ProfileInstanceIcon
                 profile={profile}
-                className="h-12 w-12 shrink-0 self-center rounded-xl sm:h-14 sm:w-14"
+                className="relative z-[1] h-12 w-12 shrink-0 self-center rounded-xl sm:h-14 sm:w-14"
               />
-              <div className="min-w-0 flex-1 self-center">
+              <div className="relative z-[1] min-w-0 flex-1 self-center">
                 <div className="truncate text-sm font-semibold text-white">
                   {profile.name}
                 </div>
@@ -463,7 +464,7 @@ export function PlayTab({
                     e.stopPropagation();
                     onPlayProfile(profile.id);
                   }}
-                  className={`interactive-press absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-white opacity-0 shadow-soft transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${primaryColorClasses}`}
+                  className={`interactive-press absolute right-2 top-2 z-[2] inline-flex h-8 w-8 items-center justify-center rounded-full text-white opacity-0 shadow-soft transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${primaryColorClasses}`}
                 >
                   <img
                     src="/launcher-assets/play.png"
@@ -473,7 +474,7 @@ export function PlayTab({
                 </button>
               )}
               {isSelected && (
-                <span className="absolute bottom-2 right-2 rounded-full bg-emerald-500/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                <span className="absolute bottom-2 right-2 z-[2] rounded-full bg-emerald-500/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
                   {tt("play.home.selectedBadge")}
                 </span>
               )}

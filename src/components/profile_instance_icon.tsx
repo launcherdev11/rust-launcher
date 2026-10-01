@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useProfileIconSrc } from "../hooks/useProfileIconSrc";
 import { profileIconInitial } from "../lib/profile-icon";
 
 export type ProfileInstanceIconProps = {
@@ -26,33 +25,9 @@ export function ProfileInstanceIcon({
   editTitle,
   onEditClick,
 }: ProfileInstanceIconProps) {
-  const [iconSrc, setIconSrc] = useState<string | null>(null);
+  const iconSrc = useProfileIconSrc(profile.id, refreshKey);
   const initial = profileIconInitial(profile.name);
   const fitClass = imageFit === "contain" ? "object-contain" : "object-cover";
-
-  useEffect(() => {
-    let cancelled = false;
-    setIconSrc(null);
-
-    void (async () => {
-      try {
-        const uri = await invoke<string | null>("get_profile_icon_data_uri", {
-          profileId: profile.id,
-        });
-        if (!cancelled && uri) {
-          setIconSrc(uri);
-        }
-      } catch {
-        if (!cancelled) {
-          setIconSrc(null);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [profile.id, refreshKey]);
 
   const rootClassName = `relative flex items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-white/15 ${
     editable ? "group cursor-pointer" : ""
@@ -70,7 +45,6 @@ export function ProfileInstanceIcon({
           src={iconSrc}
           alt=""
           className={`absolute inset-0 z-[1] h-full w-full ${fitClass}`}
-          onError={() => setIconSrc(null)}
         />
       ) : null}
       {editable ? (
@@ -101,6 +75,22 @@ export function ProfileInstanceIcon({
   return (
     <div className={rootClassName} title={profile.name}>
       {content}
+    </div>
+  );
+}
+
+export function ProfileCardIconBackdrop({
+  profileId,
+  refreshKey = 0,
+}: {
+  profileId: string;
+  refreshKey?: number;
+}) {
+  const iconSrc = useProfileIconSrc(profileId, refreshKey);
+  if (!iconSrc) return null;
+  return (
+    <div className="profile-card-icon-blur" aria-hidden>
+      <img src={iconSrc} alt="" />
     </div>
   );
 }

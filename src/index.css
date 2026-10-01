@@ -473,6 +473,32 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   );
 }
 
+.profile-card-icon-blur {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.profile-card-icon-blur img {
+  position: absolute;
+  right: -8%;
+  top: 50%;
+  width: 79%;
+  height: 160%;
+  object-fit: cover;
+  transform: translateY(-50%) scale(1.35);
+  filter: blur(10px) saturate(1.25);
+  opacity: 0.38;
+}
+
+html.launcher-linux .profile-card-icon-blur img {
+  filter: blur(12px) saturate(1.15);
+  opacity: 0.28;
+}
+
 .halloween-decor__vignette {
   position: absolute;
   inset: 0;

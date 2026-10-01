@@ -312,8 +312,8 @@
         "hint": "Blendet das Nachrichten- und Bannerkarussell auf dem Spielen-Tab aus."
       },
       "disableThematicDecorations": {
-        "label": "Themen-Dekoration deaktivieren:",
-        "hint": "Blendet die saisonale Launcher-Dekoration aus (verfügbar vom 1. Oktober bis 1. November)."
+        "label": "Thematisches Design:",
+        "hint": ""
       },
       "notifyNewUpdate": {
         "label": "Über neue Launcher-Updates benachrichtigen:"
@@ -867,6 +867,7 @@
       "backToList": "Zurück zur Liste",
       "openFolder": "Ordner öffnen",
       "exportBuild": "Build exportieren",
+      "backups": "Profil-Backups",
       "profileSettings": "Profileinstellungen",
       "selectProfile": "Profil auswählen",
       "searchFiles": "Dateien durchsuchen...",
@@ -916,7 +917,28 @@
       "unpinFromSidebar": "Von der Seitenleiste lösen",
       "deleteProfile": "Profil löschen",
       "renameProfile": "Profil umbenennen",
-      "editProfile": "Profil bearbeiten"
+      "editProfile": "Profil bearbeiten",
+      "createBackup": "Backup erstellen",
+      "manageBackups": "Backups…"
+    },
+    "backups": {
+      "title": "Profil-Backups",
+      "hint": "Snapshots von „{{name}}“. Wiederherstellung erstellt ein neues Profil.",
+      "create": "Backup erstellen",
+      "creating": "Erstellen…",
+      "created": "Backup erstellt.",
+      "createFailed": "Backup fehlgeschlagen: {{msg}}",
+      "loadFailed": "Backups konnten nicht geladen werden.",
+      "empty": "Noch keine Backups.",
+      "restore": "Wiederherstellen",
+      "restoring": "Wiederherstellen…",
+      "restored": "Wiederhergestellt als „{{name}}“.",
+      "restoreFailed": "Wiederherstellung fehlgeschlagen: {{msg}}",
+      "delete": "Löschen",
+      "deleted": "Backup gelöscht.",
+      "deleteFailed": "Löschen fehlgeschlagen: {{msg}}",
+      "openFolder": "Ordner öffnen",
+      "openFolderFailed": "Backup-Ordner konnte nicht geöffnet werden."
     },
     "deleteConfirm": {
       "title": "Bestätigung löschen",

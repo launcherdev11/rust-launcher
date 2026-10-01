@@ -60,6 +60,7 @@ import {
   type ProfileInfoData,
 } from "./components/profile_info_modal";
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
+import { ContextMenuPanel } from "./components/ContextMenuPanel";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import {
@@ -4889,23 +4890,12 @@ function App() {
       />
 
       {pinnedContextMenu && (
-        <div
-          className="fixed inset-0 z-[320]"
-          onClick={() => setPinnedContextMenu(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setPinnedContextMenu(null);
-          }}
+        <ContextMenuPanel
+          x={pinnedContextMenu.x}
+          y={pinnedContextMenu.y}
+          onClose={() => setPinnedContextMenu(null)}
+          zIndex={320}
         >
-          <div
-            className="absolute z-[330] w-56 glass-popover p-1 text-xs text-white"
-            style={{ top: pinnedContextMenu.y, left: pinnedContextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
             <button
               type="button"
               onClick={() => {
@@ -4982,8 +4972,7 @@ function App() {
               <img src="/launcher-assets/edit.png" alt="" className="h-3.5 w-3.5 object-contain" />
               <span>{tt("modpacks.contextMenu.editProfile")}</span>
             </button>
-          </div>
-        </div>
+        </ContextMenuPanel>
       )}
 
       <div

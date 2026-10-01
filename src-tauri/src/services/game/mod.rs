@@ -14,6 +14,8 @@ pub mod runtime;
 pub mod options_txt;
 pub mod profiles;
 pub mod external_import;
+pub mod profile_backups;
+pub mod profile_tools;
 pub mod screenshots;
 pub mod settings;
 pub mod state;
@@ -57,6 +59,14 @@ pub use external_import::{
     default_external_launcher_path,
     import_selected_external_instance,
     list_importable_instances,
+};
+pub use profile_backups::{
+    create_profile_backup, delete_profile_backup, list_profile_backups,
+    open_profile_backups_folder, restore_profile_backup_as_new,
+};
+pub use profile_tools::{
+    cleanup_profile, duplicate_profile, get_profile_disk_usage, get_profile_instance_settings,
+    list_profile_worlds,
 };
 pub use screenshots::{
     delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail, list_screenshots,

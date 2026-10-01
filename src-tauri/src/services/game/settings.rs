@@ -279,6 +279,12 @@ pub fn effective_settings_for_profile(profile_id: Option<String>) -> Settings {
     if let Some(v) = inst.check_game_processes {
         s.check_game_processes = v;
     }
+    if let Some(w) = inst.resolution_width {
+        s.resolution_width = Some(w);
+    }
+    if let Some(h) = inst.resolution_height {
+        s.resolution_height = Some(h);
+    }
     s
 }
 

@@ -29,7 +29,8 @@ import {
 } from "../i18n";
 import { DeleteIcon } from "../components/delete_icon";
 import { InputClearButton } from "../components/ui";
-import { ProfileInstanceIcon } from "../components/profile_instance_icon";
+import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
+import { ContextMenuPanel } from "../components/ContextMenuPanel";
 import { resolveIconSrc } from "../lib/profile-icon";
 import {
   assignProfilesToGroup,
@@ -100,6 +101,15 @@ type InstanceProfile = {
   shaderpacks_count: number;
   total_size_bytes: number;
   directory: string;
+};
+
+type ProfileBackupInfo = {
+  id: string;
+  profile_id: string;
+  created_at: number;
+  size_bytes: number;
+  path: string;
+  profile_name: string;
 };
 
 type ExternalLauncherType =
@@ -414,6 +424,27 @@ function EditIcon({ className }: IconProps) {
 
 function ExportIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/export.png" className={className} />;
+}
+
+function BackupIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path
+        d="M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 15.5V17a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-1.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function PlusIcon({ className }: IconProps) {
@@ -761,6 +792,11 @@ export function ModpackTab({
     x: number;
     y: number;
   } | null>(null);
+  const [backupsModalProfileId, setBackupsModalProfileId] = useState<string | null>(null);
+  const [backupsList, setBackupsList] = useState<ProfileBackupInfo[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [backupCreating, setBackupCreating] = useState(false);
+  const [backupRestoringId, setBackupRestoringId] = useState<string | null>(null);
   const [profileGroups, setProfileGroups] = useState<ProfileGroup[]>(() => loadProfileGroups());
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -1597,6 +1633,82 @@ export function ModpackTab({
     setPreviewResult(null);
     setExportSearchQuery("");
     await loadExportTree(selectedProfile.id, exportTreeProfileId !== selectedProfile.id);
+  }
+
+  async function loadBackupsList(profileId: string) {
+    setBackupsLoading(true);
+    try {
+      const list = await invoke<ProfileBackupInfo[]>("list_profile_backups", { profileId });
+      setBackupsList(list);
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.backups.loadFailed"));
+      setBackupsList([]);
+    } finally {
+      setBackupsLoading(false);
+    }
+  }
+
+  async function openBackupsModal(profileId: string) {
+    setBackupsModalProfileId(profileId);
+    setBackupsList([]);
+    await loadBackupsList(profileId);
+  }
+
+  async function handleCreateBackup(profileId: string) {
+    if (backupCreating) return;
+    setBackupCreating(true);
+    try {
+      await invoke<ProfileBackupInfo>("create_profile_backup", { profileId });
+      showNotification("success", tt("modpacks.backups.created"));
+      if (backupsModalProfileId === profileId) {
+        await loadBackupsList(profileId);
+      }
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      showNotification("error", tt("modpacks.backups.createFailed", { msg }));
+    } finally {
+      setBackupCreating(false);
+    }
+  }
+
+  async function handleRestoreBackup(profileId: string, backupId: string) {
+    if (backupRestoringId) return;
+    setBackupRestoringId(backupId);
+    try {
+      const profile = await invoke<InstanceProfile>("restore_profile_backup_as_new", {
+        profileId,
+        backupId,
+      });
+      showNotification("success", tt("modpacks.backups.restored", { name: profile.name }));
+      await refreshProfiles();
+      setBackupsModalProfileId(null);
+      setSelectedProfileId(profile.id);
+      setActiveView("manage");
+      void invoke("set_selected_profile", { id: profile.id });
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      showNotification("error", tt("modpacks.backups.restoreFailed", { msg }));
+    } finally {
+      setBackupRestoringId(null);
+    }
+  }
+
+  async function handleDeleteBackup(profileId: string, backupId: string) {
+    try {
+      await invoke("delete_profile_backup", { profileId, backupId });
+      showNotification("success", tt("modpacks.backups.deleted"));
+      await loadBackupsList(profileId);
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      showNotification("error", tt("modpacks.backups.deleteFailed", { msg }));
+    }
   }
 
   async function handlePreviewExport(opts?: { silent?: boolean }) {
@@ -3941,7 +4053,7 @@ export function ModpackTab({
           setDragOverGroupId(null);
           profileDragIdsRef.current = [];
         }}
-        className={`relative flex items-center justify-between rounded-2xl border px-4 py-3 shadow-soft transition ${
+        className={`relative flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3 shadow-soft transition ${
           isMultiSelected
             ? "border-sky-400/80 bg-sky-500/10 ring-1 ring-sky-400/40"
             : isSelected
@@ -3973,7 +4085,11 @@ export function ModpackTab({
           });
         }}
       >
-        <div className="flex items-center gap-3">
+        <ProfileCardIconBackdrop
+          profileId={p.id}
+          refreshKey={profileIconRevisions[p.id] ?? 0}
+        />
+        <div className="relative z-[1] flex items-center gap-3">
           <ProfileInstanceIcon
             profile={p}
             refreshKey={profileIconRevisions[p.id] ?? 0}
@@ -4034,7 +4150,7 @@ export function ModpackTab({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="relative z-[1] flex items-center gap-2">
           {isSelected && (
             <button
               type="button"
@@ -5247,6 +5363,17 @@ export function ModpackTab({
             </button>
             <button
               type="button"
+              onClick={() => {
+                if (!selectedProfile) return;
+                void openBackupsModal(selectedProfile.id);
+              }}
+              className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
+              title={tt("modpacks.manage.backups")}
+            >
+              <BackupIcon className="h-3.5 w-3.5 text-white/90" />
+            </button>
+            <button
+              type="button"
               onClick={() => setIsScreenshotsOpen(true)}
               className={`${MANAGE_ICON_BTN_CLASS} bg-white/10 hover:bg-white/20`}
               title={tt("modpacks.screenshots.title")}
@@ -5811,23 +5938,11 @@ export function ModpackTab({
             : renderManageView()}
 
       {contextMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setContextMenu(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setContextMenu(null);
-          }}
+        <ContextMenuPanel
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
         >
-          <div
-            className="absolute z-50 w-56 glass-popover p-1 text-xs text-white"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
             <button
               type="button"
               onClick={() => {
@@ -5879,6 +5994,35 @@ export function ModpackTab({
             >
               <ExportIcon className="h-3.5 w-3.5" />
               <span>{tt("modpacks.actions.createShortcut")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profileId = contextMenu.profileId;
+                setContextMenu(null);
+                void handleCreateBackup(profileId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+              disabled={backupCreating}
+            >
+              <BackupIcon className="h-3.5 w-3.5" />
+              <span>
+                {backupCreating
+                  ? tt("modpacks.backups.creating")
+                  : tt("modpacks.contextMenu.createBackup")}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const profileId = contextMenu.profileId;
+                setContextMenu(null);
+                void openBackupsModal(profileId);
+              }}
+              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+            >
+              <BackupIcon className="h-3.5 w-3.5" />
+              <span>{tt("modpacks.contextMenu.manageBackups")}</span>
             </button>
             <button
               type="button"
@@ -5938,28 +6082,15 @@ export function ModpackTab({
                 {tt("modpacks.contextMenu.renameProfile")}
               </span>
             </button>
-          </div>
-        </div>
+        </ContextMenuPanel>
       )}
 
       {listContextMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setListContextMenu(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setListContextMenu(null);
-          }}
+        <ContextMenuPanel
+          x={listContextMenu.x}
+          y={listContextMenu.y}
+          onClose={() => setListContextMenu(null)}
         >
-          <div
-            className="absolute z-50 w-56 glass-popover p-1 text-xs text-white"
-            style={{ top: listContextMenu.y, left: listContextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
             <button
               type="button"
               onClick={() => {
@@ -5971,28 +6102,15 @@ export function ModpackTab({
               <PlusIcon className="h-3.5 w-3.5" />
               <span>{tt("modpacks.list.createGroupMenu")}</span>
             </button>
-          </div>
-        </div>
+        </ContextMenuPanel>
       )}
 
       {groupContextMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setGroupContextMenu(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setGroupContextMenu(null);
-          }}
+        <ContextMenuPanel
+          x={groupContextMenu.x}
+          y={groupContextMenu.y}
+          onClose={() => setGroupContextMenu(null)}
         >
-          <div
-            className="absolute z-50 w-56 glass-popover p-1 text-xs text-white"
-            style={{ top: groupContextMenu.y, left: groupContextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
             <button
               type="button"
               onClick={() => {
@@ -6018,6 +6136,128 @@ export function ModpackTab({
               <DeleteIcon className="h-3.5 w-3.5" />
               <span>{tt("modpacks.list.deleteGroupMenu")}</span>
             </button>
+        </ContextMenuPanel>
+      )}
+
+      {backupsModalProfileId && (
+        <div
+          className="glass-overlay fixed inset-0 z-50 flex items-center justify-center"
+          onClick={() => {
+            if (backupCreating || backupRestoringId) return;
+            setBackupsModalProfileId(null);
+          }}
+        >
+          <div
+            className="glass-modal flex w-full max-w-lg flex-col p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-white">
+                  {tt("modpacks.backups.title")}
+                </h3>
+                <p className="mt-1 text-xs text-white/55">
+                  {tt("modpacks.backups.hint", {
+                    name:
+                      profiles.find((p) => p.id === backupsModalProfileId)?.name ??
+                      backupsModalProfileId,
+                  })}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBackupsModalProfileId(null)}
+                disabled={Boolean(backupCreating || backupRestoringId)}
+                className="interactive-press rounded-xl bg-white/10 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/20 disabled:opacity-50"
+              >
+                {tt("common.close")}
+              </button>
+            </div>
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleCreateBackup(backupsModalProfileId)}
+                disabled={backupCreating || Boolean(backupRestoringId)}
+                className="interactive-press inline-flex items-center gap-2 rounded-xl accent-bg px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                <BackupIcon className="h-3.5 w-3.5" />
+                {backupCreating
+                  ? tt("modpacks.backups.creating")
+                  : tt("modpacks.backups.create")}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void invoke("open_profile_backups_folder", {
+                    profileId: backupsModalProfileId,
+                  }).catch((e) => {
+                    console.error(e);
+                    showNotification("error", tt("modpacks.backups.openFolderFailed"));
+                  })
+                }
+                className="interactive-press inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/20"
+              >
+                <FolderIcon className="h-3.5 w-3.5" />
+                {tt("modpacks.backups.openFolder")}
+              </button>
+            </div>
+
+            <div className="max-h-[50vh] overflow-y-auto rounded-2xl border border-white/10 bg-black/25 p-2">
+              {backupsLoading ? (
+                <div className="px-2 py-6 text-center text-xs text-white/55">
+                  {tt("modpacks.common.loading")}
+                </div>
+              ) : backupsList.length === 0 ? (
+                <div className="px-2 py-6 text-center text-xs text-white/55">
+                  {tt("modpacks.backups.empty")}
+                </div>
+              ) : (
+                <ul className="flex flex-col gap-1.5">
+                  {backupsList.map((b) => (
+                    <li
+                      key={b.id}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-medium text-white">
+                          {b.id}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-white/55">
+                          {formatByteSize(language, b.size_bytes)}
+                          {" · "}
+                          {new Date(b.created_at * 1000).toLocaleString(localeTag(language))}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleRestoreBackup(backupsModalProfileId, b.id)
+                          }
+                          disabled={backupCreating || Boolean(backupRestoringId)}
+                          className="interactive-press rounded-lg bg-emerald-500/20 px-2 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                        >
+                          {backupRestoringId === b.id
+                            ? tt("modpacks.backups.restoring")
+                            : tt("modpacks.backups.restore")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleDeleteBackup(backupsModalProfileId, b.id)
+                          }
+                          disabled={backupCreating || Boolean(backupRestoringId)}
+                          className="interactive-press rounded-lg bg-red-600/20 px-2 py-1 text-[11px] font-semibold text-red-200 hover:bg-red-600/30 disabled:opacity-50"
+                        >
+                          {tt("modpacks.backups.delete")}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}

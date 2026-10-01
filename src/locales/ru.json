@@ -294,8 +294,8 @@
         "hint": "Скрывает карусель новостей и баннеров на вкладке «Играть»."
       },
       "disableThematicDecorations": {
-        "label": "Выключить тематическое оформление:",
-        "hint": "Скрывает сезонное оформление лаунчера (доступно с 1 октября по 1 ноября)."
+        "label": "Тематическое оформление:",
+        "hint": ""
       },
       "notifyNewUpdate": { "label": "Новое обновление:" },
       "notifyNewMessage": { "label": "Новое сообщение:" },
@@ -839,6 +839,7 @@
       "backToList": "К списку сборок",
       "openFolder": "Открыть папку",
       "exportBuild": "Экспортировать сборку",
+      "backups": "Бэкапы сборки",
       "profileSettings": "Настройки сборки",
       "selectProfile": "Выбрать сборку",
       "searchFiles": "Поиск файлов...",
@@ -888,7 +889,28 @@
       "unpinFromSidebar": "Открепить от сайдбара",
       "deleteProfile": "Удалить сборку",
       "renameProfile": "Редактировать название",
-      "editProfile": "Редактировать сборку"
+      "editProfile": "Редактировать сборку",
+      "createBackup": "Создать бэкап",
+      "manageBackups": "Бэкапы…"
+    },
+    "backups": {
+      "title": "Бэкапы сборки",
+      "hint": "Снимки «{{name}}». Восстановление создаёт новую сборку.",
+      "create": "Создать бэкап",
+      "creating": "Создание…",
+      "created": "Бэкап создан.",
+      "createFailed": "Не удалось создать бэкап: {{msg}}",
+      "loadFailed": "Не удалось загрузить список бэкапов.",
+      "empty": "Бэкапов пока нет.",
+      "restore": "Восстановить",
+      "restoring": "Восстановление…",
+      "restored": "Сборка восстановлена как «{{name}}».",
+      "restoreFailed": "Не удалось восстановить бэкап: {{msg}}",
+      "delete": "Удалить",
+      "deleted": "Бэкап удалён.",
+      "deleteFailed": "Не удалось удалить бэкап: {{msg}}",
+      "openFolder": "Открыть папку",
+      "openFolderFailed": "Не удалось открыть папку бэкапов."
     },
     "deleteConfirm": {
       "title": "Подтверждение удаления",
@@ -900,7 +922,72 @@
       "hint": "Эти параметры применяются только к выбранной сборке и используются при запуске игры.",
       "closeLauncherOnStart": "Закрывать лаунчер при запуске игры:",
       "checkGameProcesses": "Проверять запущенные процессы игры:",
+      "showConsoleOnLaunch": "Показывать консоль при запуске:",
+      "resolution": "Разрешение окна:",
+      "resolutionWidth": "Ширина",
+      "resolutionHeight": "Высота",
+      "resolutionReset": "Как в настройках лаунчера",
       "memoryRam": "Оперативная память:"
+    },
+    "editor": {
+      "nav": {
+        "content": "Контент",
+        "launch": "Запуск",
+        "version": "Версия",
+        "worlds": "Миры и конфиг",
+        "conflicts": "Конфликты",
+        "cleanup": "Хранилище",
+        "backups": "Бэкапы"
+      },
+      "moreActions": "Ещё",
+      "duplicate": "Дублировать сборку",
+      "duplicating": "Копирование…",
+      "duplicated": "Сборка «{{name}}» создана.",
+      "duplicateFailed": "Не удалось дублировать: {{msg}}",
+      "filterAll": "Все",
+      "filterEnabled": "Вкл",
+      "filterDisabled": "Выкл",
+      "filterUpdates": "Обновления",
+      "selectedCount": "Выбрано: {{count}}",
+      "bulkEnable": "Включить",
+      "bulkDisable": "Отключить",
+      "bulkDelete": "Удалить",
+      "bulkDeleteConfirm": "Удалить {{count}} файл(ов)?",
+      "selectAll": "Выбрать все",
+      "clearSelection": "Снять выбор",
+      "worldsEmpty": "Миров пока нет.",
+      "worldsLoading": "Загрузка миров…",
+      "worldsOpen": "Открыть",
+      "openSaves": "Папка saves",
+      "openConfig": "Папка config",
+      "openFailed": "Не удалось открыть папку.",
+      "lastPlayed": "Играли: {{date}}",
+      "backupBeforeChange": "Создать бэкап перед сменой версии",
+      "backupBeforeChangeHint": "Рекомендуется — можно откатить сборку, если что-то пойдёт не так.",
+      "backingUp": "Создание бэкапа…",
+      "cleanupTitle": "Место на диске",
+      "cleanupHint": "Размер папок сборки. Можно очистить логи, кэш и crash-reports.",
+      "cleanupLoading": "Подсчёт…",
+      "cleanupTotal": "Всего: {{size}}",
+      "cleanupCleanable": "Можно очистить",
+      "cleanupRun": "Очистить выбранное",
+      "cleanupRunning": "Очистка…",
+      "cleanupDone": "Освобождено {{size}}.",
+      "cleanupFailed": "Не удалось очистить: {{msg}}",
+      "cleanupNothing": "Нечего очищать.",
+      "folderMods": "Моды",
+      "folderResourcepacks": "Ресурспаки",
+      "folderShaderpacks": "Шейдеры",
+      "folderSaves": "Миры",
+      "folderConfig": "Конфиг",
+      "folderDatapacks": "Датапаки",
+      "folderLogs": "Логи",
+      "folderCrashReports": "Crash-reports",
+      "folderCache": "Кэш",
+      "folderFabric": "Кэш Fabric",
+      "folderOther": "Прочее",
+      "backupsOpen": "Открыть менеджер бэкапов",
+      "beta": "BETA"
     },
     "conflicts": {
       "title": "Конфликты",
@@ -909,7 +996,10 @@
       "none": "Конфликтов не найдено.",
       "actions": {
         "disableExtra": "Отключить лишнее",
-        "keepLatest": "Оставить последнюю"
+        "keepLatest": "Оставить последнюю",
+        "disableWrongLoader": "Отключить чужой загрузчик",
+        "disableAll": "Отключить все",
+        "disableIncompatible": "Отключить"
       },
       "severity": {
         "error": "Ошибка",
@@ -934,6 +1024,11 @@
         "reason": "В сборке выбран {{loader}}, но по имени файла мод похож на вариант: {{variants}}.",
         "solutionPickCorrect": "Поставьте версию мода под {{loader}} (или универсальную сборку).",
         "solutionSwitchLoader": "Или смените загрузчик сборки под этот набор модов."
+      },
+      "incompatible": {
+        "title": "Несовместимо с версией",
+        "reason": "Мод «{{name}}» не подходит под текущую версию Minecraft / загрузчик.",
+        "solutionDisable": "Отключите мод или найдите совместимую версию."
       }
     },
     "exportModal": {
