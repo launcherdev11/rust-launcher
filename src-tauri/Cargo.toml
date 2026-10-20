@@ -1,5 +1,5 @@
 [package]
-name = "mc16launcher"
+name = "nexus-launcher"
 version = "3.2.12"
 description = "An optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings."
 authors = ["16steyy"]
@@ -7,7 +7,7 @@ edition = "2021"
 
 
 [lib]
-name = "mc16launcher_lib"
+name = "nexus_launcher_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -49,4 +49,3 @@ tauri-plugin-http = { version = "2", features = ["native-tls"] }
 
 [target.'cfg(not(windows))'.dependencies]
 tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
-

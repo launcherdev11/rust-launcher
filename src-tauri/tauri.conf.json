@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "16Launcher",
+  "productName": "Nexus Launcher",
   "version": "3.2.12",
-  "identifier": "com.16steyy.16Launcher",
+  "identifier": "com.nexus.nexuslauncher",
 
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,7 +14,7 @@
   "app": {
     "windows": [
       {
-        "title": "16Launcher",
+        "title": "Nexus Launcher",
         "width": 1280,
         "height": 720,
         "resizable": true,
@@ -22,12 +22,12 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://api.16-launcher.ru wss://api.16-launcher.ru https://api.modrinth.com https://account.ely.by https://authserver.ely.by https://skinsystem.ely.by https://vzge.me https://raw.githubusercontent.com https://cdn.jsdelivr.net https://forgemvn.lumintomc.ru https://github.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' https: asset: http://asset.localhost data: blob:; media-src 'self' https: asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; connect-src 'self' https://api.16-launcher.ru wss://api.16-launcher.ru https://api.modrinth.com https://account.ely.by https://authserver.ely.by https://skinsyste[...]",
       "assetProtocol": {
         "enable": true,
         "scope": {
           "requireLiteralLeadingDot": false,
-          "allow": ["$APPDATA/16Launcher/**", "$DATA/16Launcher/**"]
+          "allow": ["$APPDATA/NexusLauncher/**", "$DATA/NexusLauncher/**"]
         }
       }
     }
@@ -48,11 +48,10 @@
       "resources/bootstrap.jar"
     ],
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "public/launcher-assets/icon.png",
+      "public/launcher-assets/readme_icon.png",
+      "public/launcher-assets/readme.png",
+      "public/launcher-assets/icon_old.png"
     ],
     "createUpdaterArtifacts": true,
     "linux": {

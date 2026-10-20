@@ -8,6 +8,7 @@ mod mrpack_open;
 mod profile_launch;
 mod models;
 mod services;
+mod paths_migrate;
 
 use services::background::{get_background_data_uri, set_background_image};
 use services::game::{
@@ -131,12 +132,12 @@ pub fn run() {
         builder = builder
             .plugin(
                 tauri_plugin_autostart::Builder::new()
-                    .app_name("16Launcher")
+                    .app_name("Nexus Launcher")
                     .build(),
             )
             .plugin(
                 tauri_plugin_single_instance::Builder::new()
-                    .dbus_id("com.steyy.mc16launcher")
+                    .dbus_id("com.nexus.nexuslauncher")
                     .callback(|app, args, _cwd| {
                         if let Some(p) = mrpack_open::extract_mrpack_from_os_args(&args) {
                             mrpack_open::emit_mrpack_open_request(
@@ -163,12 +164,16 @@ pub fn run() {
             move |app| {
                 mrpack_open::stash_argv_mrpack_if_any(&pending_mrpack);
                 stash_argv_profile_launch_if_any(&pending_launch);
+                // perform migration from old data folder if needed
+                if let Err(e) = paths_migrate::migrate_16launcher_to_nexus() {
+                    eprintln!("[Nexus Launcher] migration failed: {e}");
+                }
                 if let Err(e) = app::paths::ensure_game_data_layout() {
-                    eprintln!("[16Launcher] game data migration: {e}");
+                    eprintln!("[Nexus Launcher] game data migration: {e}");
                 }
                 infra::window_icon::apply_launcher_icon_to_main_window(app);
                 if let Err(e) = infra::tray::setup_tray(app) {
-                    eprintln!("[16Launcher] tray setup failed: {e}");
+                    eprintln!("[Nexus Launcher] tray setup failed: {e}");
                 }
                 let settings = services::game::settings::load_settings_from_disk();
                 infra::autostart::sync_autostart_from_settings(app.handle(), settings.autostart_enabled);

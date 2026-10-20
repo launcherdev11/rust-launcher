@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://16-launcher.ru"><img src="public/launcher-assets/readme.png" alt="1м "></a>
-  <h1 align="center">16Launcher</h1>
+  <a href="https://16-launcher.ru"><img src="public/launcher-assets/nexus_logo.svg" alt="Nexus Launcher"></a>
+  <h1 align="center">Nexus Launcher</h1>
 <p align="center">
   <em>Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.</em>
 </p>
@@ -24,13 +24,13 @@
 
 ---
     
-**16Launcher** - Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.
+**Nexus Launcher** - Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full.
 
 ## Installation
 
 1. Download the latest installer from [Official website](https://16-launcher.ru)
 2. Run the installer and follow the setup instructions
-3. Launch 16Launcher and start playing!
+3. Launch Nexus Launcher and start playing!
 
 ## Features
 
