@@ -6,8 +6,6 @@ const TAB_SWITCH_MIN_INTERVAL_MS = 120;
 
 let didPrime = false;
 
-// One element per sound. Creating a new Audio per call spawns a media pipeline each time
-// (GStreamer in WebKitGTK), which stalls the UI when tabs are switched quickly.
 const players = new Map<string, HTMLAudioElement>();
 const lastPlayedAt = new Map<string, number>();
 

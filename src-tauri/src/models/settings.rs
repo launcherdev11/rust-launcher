@@ -75,6 +75,9 @@ pub struct Settings {
 
     #[serde(default)]
     pub custom_theme_id: Option<String>,
+
+    #[serde(default)]
+    pub custom_theme_hot_reload: bool,
 }
 
 pub fn default_sidebar_position() -> String {
@@ -142,6 +145,7 @@ impl Default for Settings {
             sidebar_position: default_sidebar_position(),
             onboarding_completed: false,
             custom_theme_id: None,
+            custom_theme_hot_reload: false,
         }
     }
 }

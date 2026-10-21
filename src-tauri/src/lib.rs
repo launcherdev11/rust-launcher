@@ -76,8 +76,10 @@ use profile_launch::{
 };
 use services::shortcuts::create_profile_desktop_shortcut;
 use services::themes::{
-    create_empty_theme, delete_theme, get_theme_css, get_theme_dir, import_theme_zip,
-    list_themes, open_theme_css_file, open_themes_folder, };
+    add_theme_asset, create_empty_theme, delete_theme, duplicate_theme, export_theme_zip,
+    get_theme, get_theme_css, get_theme_dir, import_theme_zip, list_themes, open_theme_css_file,
+    open_theme_folder, open_themes_folder, save_theme, watch_theme,
+};
 
 #[cfg(target_os = "linux")]
 pub fn linux_startup_init() {
@@ -311,6 +313,13 @@ pub fn run() {
             open_themes_folder,
             open_theme_css_file,
             get_theme_dir,
+            get_theme,
+            save_theme,
+            duplicate_theme,
+            export_theme_zip,
+            add_theme_asset,
+            open_theme_folder,
+            watch_theme,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -37,5 +37,9 @@ declare module "lucide-react" {
   export const MoreHorizontal: LucideIcon;
   export const Play: LucideIcon;
   export const X: LucideIcon;
+  export const ImagePlus: LucideIcon;
+  export const PanelLeft: LucideIcon;
+  export const PanelRight: LucideIcon;
+  export const RotateCcw: LucideIcon;
 }
 

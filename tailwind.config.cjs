@@ -28,7 +28,7 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ["Onest Variable", "Onest", "Segoe UI", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)"],
       },
       fontSize: {
         title: ["1.25rem", { lineHeight: "1.25", letterSpacing: "-0.015em" }],

@@ -14,7 +14,7 @@ import {
 import { MotionConfig } from "framer-motion";
 import { flushSync } from "react-dom";
 import { getVersion } from "@tauri-apps/api/app";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -41,6 +41,8 @@ import { LauncherGradientBackground } from "./components/LauncherGradientBackgro
 import { HalloweenDecorations } from "./components/HalloweenDecorations";
 import { UpdatePopupModal } from "./components/UpdatePopupModal";
 import { shouldShowThematicDecorations } from "./lib/seasonalTheme";
+import { applyAccentColor } from "./lib/customTheme";
+import { useCustomTheme } from "./hooks/useCustomTheme";
 import { AccountAvatar } from "./components/account_avatar";
 import { SidebarAccount } from "./components/sidebar_account";
 import { API_AUTH_CHANGED_EVENT, API_NICKNAME_KEY } from "./api/auth";
@@ -198,6 +200,7 @@ type Settings = {
   sidebar_position?: string;
   onboarding_completed?: boolean;
   custom_theme_id?: string | null;
+  custom_theme_hot_reload?: boolean;
 };
 
 const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
@@ -2311,6 +2314,7 @@ function App() {
     onboarding_completed: false,
     interface_language: "ru",
     custom_theme_id: null,
+    custom_theme_hot_reload: false,
   };
 
   const refreshSettings = useCallback(async (profileId?: string | null) => {
@@ -4170,43 +4174,18 @@ function App() {
     })();
   }, [settings?.background_image_url]);
 
+  useLayoutEffect(() => {
+    applyAccentColor(accentColor);
+  }, [accentColor]);
+
+  useCustomTheme(
+    settings?.custom_theme_id ?? null,
+    settings?.custom_theme_hot_reload ?? false,
+  );
+
   useEffect(() => {
-    (async () => {
-      const themeId = settings?.custom_theme_id;
-      const existingStyle = document.getElementById("custom-theme-style");
-      if (!themeId) {
-        existingStyle?.remove();
-        return;
-      }
-      try {
-        let css = await invoke<string>("get_theme_css", { themeId });
-        const themeDir = await invoke<string>("get_theme_dir", { themeId });
-
-        css = css.replace(
-          /url\((['"]?)(?!data:|http:|https:|asset:)(.*?)\1\)/g,
-          (_match, quote, path) => {
-            if (!path || path.trim() === "") return `url(${quote}${path}${quote})`;
-            const separator = themeDir.includes("\\") ? "\\" : "/";
-            const absolutePath =
-              themeDir + separator + path.replace(/[\\/]/g, separator);
-            return `url("${convertFileSrc(absolutePath)}")`;
-          },
-        );
-
-        if (existingStyle) {
-          existingStyle.textContent = css;
-        } else {
-          const style = document.createElement("style");
-          style.id = "custom-theme-style";
-          style.textContent = css;
-          document.head.appendChild(style);
-        }
-      } catch (err) {
-        console.error("Не удалось применить тему:", err);
-        existingStyle?.remove();
-      }
-    })();
-  }, [settings?.custom_theme_id]);
+    document.documentElement.dataset.launcherTab = activeItem;
+  }, [activeItem]);
 
   const backgroundImageUrl = resolveLauncherBackgroundUrl(
     settings?.background_image_url,
@@ -4565,14 +4544,7 @@ function App() {
 
   return (
     <LauncherAnimationScope animationsDisabled={animationsDisabled}>
-    <div
-      className="relative min-h-screen w-full overflow-hidden text-white"
-      style={
-        {
-          "--accent-color": accentColor,
-        } as React.CSSProperties
-      }
-    >
+    <div className="relative min-h-screen w-full overflow-hidden text-white">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         {settings?.background_image_url?.trim() ? (
           <LauncherBackgroundImage

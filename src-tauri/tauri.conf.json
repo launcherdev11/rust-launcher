@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://api.16-launcher.ru wss://api.16-launcher.ru https://api.modrinth.com https://account.ely.by https://authserver.ely.by https://skinsystem.ely.by https://vzge.me https://raw.githubusercontent.com https://cdn.jsdelivr.net https://forgemvn.lumintomc.ru https://github.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' https: asset: http://asset.localhost data: blob:; media-src 'self' https: asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; connect-src 'self' https://api.16-launcher.ru wss://api.16-launcher.ru https://api.modrinth.com https://account.ely.by https://authserver.ely.by https://skinsystem.ely.by https://vzge.me https://raw.githubusercontent.com https://cdn.jsdelivr.net https://forgemvn.lumintomc.ru https://github.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' https: asset: http://asset.localhost data: blob:; media-src 'self' https: asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' asset: http://asset.localhost data:",
       "assetProtocol": {
         "enable": true,
         "scope": {

@@ -12,6 +12,9 @@ import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
 import { playTabSwitchSound } from "../uiSounds";
 import { isVersionInstallConsoleLine } from "../lib/gameConsoleFilter";
 import { isSeasonalThemePeriod } from "../lib/seasonalTheme";
+import { errorMessage, type ThemeInfo } from "../lib/customTheme";
+import { ThemeCard } from "../features/theme-editor/ThemeCard";
+import { ThemeEditorPanel } from "../features/theme-editor/ThemeEditorPanel";
 
 const SETTINGS_DARK_BOX = "glass-inset p-3";
 
@@ -248,13 +251,16 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     tab: "launcher",
     keys: [
       "settings.launcher.customThemes.label",
-      "settings.launcher.customThemes.hint",
       "settings.launcher.customThemes.default",
       "settings.launcher.customThemes.importZip",
       "settings.launcher.customThemes.create",
       "settings.launcher.customThemes.openFolder",
       "settings.launcher.customThemes.editCss",
       "settings.launcher.customThemes.delete",
+      "settings.launcher.customThemes.openEditor",
+      "settings.launcher.customThemes.duplicate",
+      "settings.launcher.customThemes.exportZip",
+      "settings.launcher.customThemes.hotReload.label",
     ],
   },
   {
@@ -325,14 +331,7 @@ type Settings = {
   split_view_enabled: boolean;
   sidebar_position?: string;
   custom_theme_id?: string | null;
-};
-
-type ThemeInfo = {
-  id: string;
-  name: string;
-  author: string;
-  description: string;
-  version: string;
+  custom_theme_hot_reload?: boolean;
 };
 
 const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
@@ -588,6 +587,7 @@ export function SettingsTab({
   const [settingsSearch, setSettingsSearch] = useState("");
   const [installedThemes, setInstalledThemes] = useState<ThemeInfo[]>([]);
   const [themesLoading, setThemesLoading] = useState(false);
+  const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
   const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
   const [isRamEditing, setIsRamEditing] = useState(false);
   const [ramInputMb, setRamInputMb] = useState("");
@@ -3343,57 +3343,40 @@ export function SettingsTab({
                   <label className="text-sm text-white/90">
                     {tt("settings.launcher.customThemes.label")}
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2">
+                    <ThemeCard
+                      name={tt("settings.launcher.customThemes.default")}
+                      subtitle="16Launcher"
+                      selected={!activeThemeId}
+                      disabled={editingThemeId != null}
+                      accentColor={settings?.background_accent_color ?? "#4a22a8"}
                       onClick={() => updateSettings({ custom_theme_id: null })}
-                      className={`interactive-press rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                        !activeThemeId
-                          ? "border-white/40 bg-white/15 text-white"
-                          : "border-white/15 bg-black/30 text-white/75 hover:border-white/20 hover:bg-black/45"
-                      }`}
-                    >
-                      {tt("settings.launcher.customThemes.default")}
-                    </button>
+                    />
                     {installedThemes.map((theme) => (
-                      <button
+                      <ThemeCard
                         key={theme.id}
-                        type="button"
+                        name={theme.name}
+                        subtitle={[
+                          theme.author
+                            ? tt("settings.launcher.customThemes.byAuthor", { author: theme.author })
+                            : "",
+                          theme.version ? `v${theme.version}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        title={theme.description || undefined}
+                        selected={activeThemeId === theme.id}
+                        disabled={editingThemeId != null}
+                        preview={theme.preview}
+                        variables={theme.variables}
+                        accentColor={settings?.background_accent_color ?? "#4a22a8"}
                         onClick={() => updateSettings({ custom_theme_id: theme.id })}
-                        className={`interactive-press rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                          activeThemeId === theme.id
-                            ? "border-white/40 bg-white/15 text-white"
-                            : "border-white/15 bg-black/30 text-white/75 hover:border-white/20 hover:bg-black/45"
-                        }`}
-                        title={
-                          theme.description ||
-                          (theme.author
-                            ? tt("settings.launcher.customThemes.byAuthor", {
-                                author: theme.author,
-                              })
-                            : undefined)
-                        }
-                      >
-                        {theme.name}
-                      </button>
+                      />
                     ))}
-                    {themesLoading && installedThemes.length === 0 && (
-                      <span className="self-center text-xs text-white/45">
-                        {tt("settings.launcher.customThemes.loading")}
-                      </span>
-                    )}
                   </div>
-                  {activeTheme && (
-                    <p className="text-[0.8125rem] text-white/45">
-                      {activeTheme.description ||
-                        (activeTheme.author
-                          ? tt("settings.launcher.customThemes.byAuthor", {
-                              author: activeTheme.author,
-                            })
-                          : "")}
-                      {activeTheme.version
-                        ? ` · v${activeTheme.version}`
-                        : ""}
+                  {themesLoading && installedThemes.length === 0 && (
+                    <p className="text-xs text-white/45">
+                      {tt("settings.launcher.customThemes.loading")}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2">
@@ -3427,13 +3410,11 @@ export function SettingsTab({
                           console.error(e);
                           showNotification(
                             "error",
-                            e instanceof Error
-                              ? e.message
-                              : tt("settings.launcher.customThemes.importFailed"),
+                            errorMessage(e, tt("settings.launcher.customThemes.importFailed")),
                           );
                         }
                       }}
-                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:bg-black/60"
+                      className="btn btn-sm btn-soft"
                     >
                       {tt("settings.launcher.customThemes.importZip")}
                     </button>
@@ -3450,6 +3431,7 @@ export function SettingsTab({
                           });
                           await refreshThemes();
                           updateSettings({ custom_theme_id: created.id });
+                          setEditingThemeId(created.id);
                           showNotification(
                             "success",
                             tt("settings.launcher.customThemes.created", {
@@ -3460,13 +3442,11 @@ export function SettingsTab({
                           console.error(e);
                           showNotification(
                             "error",
-                            e instanceof Error
-                              ? e.message
-                              : tt("settings.launcher.customThemes.createFailed"),
+                            errorMessage(e, tt("settings.launcher.customThemes.createFailed")),
                           );
                         }
                       }}
-                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:bg-black/60"
+                      className="btn btn-sm btn-soft"
                     >
                       {tt("settings.launcher.customThemes.create")}
                     </button>
@@ -3483,12 +3463,32 @@ export function SettingsTab({
                           );
                         }
                       }}
-                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:bg-black/60"
+                      className="btn btn-sm btn-ghost"
                     >
                       {tt("settings.launcher.customThemes.openFolder")}
                     </button>
-                    {activeThemeId && (
-                      <>
+                    <button
+                      type="button"
+                      onClick={() => void refreshThemes()}
+                      className="btn btn-sm btn-ghost"
+                    >
+                      {tt("settings.launcher.customThemes.refresh")}
+                    </button>
+                  </div>
+                  {activeThemeId && (
+                    <div className="glass-inset space-y-3 p-3">
+                      {activeTheme?.description ? (
+                        <p className="text-[0.8125rem] text-white/60">{activeTheme.description}</p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingThemeId(activeThemeId)}
+                          disabled={editingThemeId != null}
+                          className="btn btn-sm btn-tint"
+                        >
+                          {tt("settings.launcher.customThemes.openEditor")}
+                        </button>
                         <button
                           type="button"
                           onClick={async () => {
@@ -3504,9 +3504,77 @@ export function SettingsTab({
                               );
                             }
                           }}
-                          className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:bg-black/60"
+                          className="btn btn-sm btn-soft"
                         >
                           {tt("settings.launcher.customThemes.editCss")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const name = window.prompt(
+                              tt("settings.launcher.customThemes.duplicatePrompt"),
+                              tt("settings.launcher.customThemes.duplicateDefault", {
+                                name: activeTheme?.name ?? activeThemeId,
+                              }),
+                            );
+                            if (!name?.trim()) return;
+                            try {
+                              const copy = await invoke<ThemeInfo>("duplicate_theme", {
+                                themeId: activeThemeId,
+                                name: name.trim(),
+                              });
+                              await refreshThemes();
+                              updateSettings({ custom_theme_id: copy.id });
+                              showNotification(
+                                "success",
+                                tt("settings.launcher.customThemes.duplicated", {
+                                  name: copy.name,
+                                }),
+                              );
+                            } catch (e) {
+                              showNotification(
+                                "error",
+                                errorMessage(e, tt("settings.launcher.customThemes.duplicateFailed")),
+                              );
+                            }
+                          }}
+                          disabled={editingThemeId != null}
+                          className="btn btn-sm btn-soft"
+                        >
+                          {tt("settings.launcher.customThemes.duplicate")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const dest = await saveFile({
+                                defaultPath: `${activeThemeId}.zip`,
+                                filters: [
+                                  {
+                                    name: tt("settings.launcher.customThemes.zipFilterName"),
+                                    extensions: ["zip"],
+                                  },
+                                ],
+                              });
+                              if (!dest) return;
+                              await invoke("export_theme_zip", {
+                                themeId: activeThemeId,
+                                destPath: dest,
+                              });
+                              showNotification(
+                                "success",
+                                tt("settings.launcher.customThemes.exported"),
+                              );
+                            } catch (e) {
+                              showNotification(
+                                "error",
+                                errorMessage(e, tt("settings.launcher.customThemes.exportFailed")),
+                              );
+                            }
+                          }}
+                          className="btn btn-sm btn-soft"
+                        >
+                          {tt("settings.launcher.customThemes.exportZip")}
                         </button>
                         <button
                           type="button"
@@ -3519,6 +3587,7 @@ export function SettingsTab({
                             );
                             if (!ok) return;
                             try {
+                              setEditingThemeId(null);
                               await invoke("delete_theme", { themeId: activeThemeId });
                               await refreshThemes();
                               updateSettings({ custom_theme_id: null });
@@ -3532,22 +3601,38 @@ export function SettingsTab({
                               console.error(e);
                               showNotification(
                                 "error",
-                                e instanceof Error
-                                  ? e.message
-                                  : tt("settings.launcher.customThemes.deleteFailed"),
+                                errorMessage(e, tt("settings.launcher.customThemes.deleteFailed")),
                               );
                             }
                           }}
-                          className="interactive-press rounded-xl bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/30"
+                          className="btn btn-sm btn-danger"
                         >
                           {tt("settings.launcher.customThemes.delete")}
                         </button>
-                      </>
-                    )}
-                  </div>
+                      </div>
+                      <SettingsToggle
+                        label={tt("settings.launcher.customThemes.hotReload.label")}
+                        yesLabel={tt("settings.common.toggle.on")}
+                        noLabel={tt("settings.common.toggle.off")}
+                        value={settings?.custom_theme_hot_reload ?? false}
+                        onChange={(v) => updateSettings({ custom_theme_hot_reload: v })}
+                      />
+                      <p className="text-[0.8125rem] text-white/45">
+                        {tt("settings.launcher.customThemes.hotReload.hint")}
+                      </p>
+                    </div>
+                  )}
                   <p className="text-[0.8125rem] text-white/45">
-                    {tt("settings.launcher.customThemes.hint")}
                   </p>
+                  {editingThemeId && (
+                    <ThemeEditorPanel
+                      themeId={editingThemeId}
+                      tt={tt}
+                      onClose={() => setEditingThemeId(null)}
+                      onSaved={() => void refreshThemes()}
+                      showNotification={showNotification}
+                    />
+                  )}
                 </div>
                 )}
                 {showSetting("launcher.sidebarPosition") && (

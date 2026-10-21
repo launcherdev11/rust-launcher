@@ -568,9 +568,10 @@ html.launcher-linux .dock-backdrop img {
   inset: 0;
   overflow: hidden;
   background:
+    var(--launcher-bg-image, none) center / cover no-repeat,
     radial-gradient(80% 60% at 0% 0%, color-mix(in srgb, var(--accent-color, #4a22a8) 26%, transparent) 0%, transparent 70%),
     radial-gradient(60% 50% at 100% 100%, color-mix(in srgb, var(--accent-color, #4a22a8) 10%, transparent) 0%, transparent 70%),
-    #0b0910;
+    var(--ink-0, #0b0910);
 }
 
 /* Soft vignette keeps the edges dark so content stays readable on top of the haze. */

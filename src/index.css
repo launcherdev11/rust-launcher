@@ -35,6 +35,11 @@
   --glass-shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.4);
   --glass-radius: var(--r-panel);
   --glass-radius-sm: var(--r-control);
+
+  /* Interface font. Custom themes override it (with their own @font-face) instead of patching body. */
+  --font-sans: "Onest Variable", "Onest", "Segoe UI", system-ui, sans-serif;
+  /* Optional image layered over the default background; themes set it as url(...). */
+  --launcher-bg-image: none;
 }
 
 html {
@@ -50,7 +55,7 @@ body,
 
 body {
   margin: 0;
-  font-family: "Onest Variable", "Onest", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.9375rem;
   line-height: 1.45;
   color: var(--fg);
