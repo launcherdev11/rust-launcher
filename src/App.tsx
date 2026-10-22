@@ -1,77 +1,83 @@
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
   lazy,
   Suspense,
   startTransition,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
-import { MotionConfig } from "framer-motion";
-import { flushSync } from "react-dom";
-import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
-import { reportStats } from "./api/stats";
-import { getStoredAccessToken } from "./api/client";
-import { playNotificationSound, playTabSwitchSound, primeUiSounds } from "./uiSounds";
-import {
-  SettingsToggle,
-  SettingsSlider,
-  SettingsCard,
-} from "./settings-ui/SettingsComponents";
+import { playTabSwitchSound } from "./uiSounds";
+import { useT, readStoredLanguage, type Language } from "./i18n";
+import { isSplittableTab, type SplittableTabId } from "./splitView";
+import { OnboardingFlow, ONBOARDING_COMPLETED_STORAGE_KEY, ONBOARDING_FORCE_STORAGE_KEY } from "./onboarding";
+import { ProductTour } from "./product-tour";
+import type { TourTabId } from "./product-tour/types";
 import { ModsTab } from "./tabs/ModsTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
 import { RoomsTab } from "./tabs/RoomsTab";
-import type { RoomCurrentGame, RoomGameSettings } from "./tabs/RoomsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
-import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
-import { LauncherBackgroundImage } from "./components/LauncherBackgroundImage";
-import { LauncherGradientBackground } from "./components/LauncherGradientBackground";
-import { HalloweenDecorations } from "./components/HalloweenDecorations";
-import { UpdatePopupModal } from "./components/UpdatePopupModal";
-import { shouldShowThematicDecorations } from "./lib/seasonalTheme";
-import { applyAccentColor } from "./lib/customTheme";
-import { useCustomTheme } from "./hooks/useCustomTheme";
-import { AccountAvatar } from "./components/account_avatar";
-import { SidebarAccount } from "./components/sidebar_account";
-import { API_AUTH_CHANGED_EVENT, API_NICKNAME_KEY } from "./api/auth";
-import {
-  createFallbackUpdatePopupBanner,
-  fetchLauncherBanners,
-  pickUpdatePopupBanner,
-  readCachedLauncherBanners,
-  type LauncherBannerData,
-} from "./lib/launcherBanners";
-import {
-  buildLauncherNewsUrls,
-  fetchFirstAvailableMirror,
-} from "./lib/remoteMirrors";
-import { DeleteIcon } from "./components/delete_icon";
-import {
-  ProfileInfoIcon,
-  ProfileInfoModal,
-  type ProfileInfoData,
-} from "./components/profile_info_modal";
-import { ProfileInstanceIcon } from "./components/profile_instance_icon";
-import { ContextMenuPanel } from "./components/ContextMenuPanel";
-import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
+import { HotkeysModal } from "./components/HotkeysModal";
+import { SessionNotificationsBell } from "./components/SessionNotificationsBell";
+import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
+import { UpdatePopupModal } from "./components/UpdatePopupModal";
+import { ProfileInfoModal, type ProfileInfoData } from "./components/profile_info_modal";
+import { AccountSwitcher } from "./app/components/AccountSwitcher";
+import { AppSidebar } from "./app/components/AppSidebar";
+import { HelpModal } from "./app/components/HelpModal";
+import { LauncherAnimationScope } from "./app/components/LauncherAnimationScope";
+import { LauncherBackdrop } from "./app/components/LauncherBackdrop";
+import { NotificationToasts } from "./app/components/NotificationToasts";
+import { PinnedProfileMenu, type PinnedProfileMenuState } from "./app/components/PinnedProfileMenu";
+import { RemoveAccountDialog } from "./app/components/RemoveAccountDialog";
+import { SocialPromptCards } from "./app/components/SocialPromptCards";
+import { TabDragGhost } from "./app/components/TabDragGhost";
+import { TabPaneLoading } from "./app/components/TabPaneLoading";
+import { TabSplitPanes } from "./app/components/TabSplitPanes";
+import { TitleBar } from "./app/components/TitleBar";
+import { toInstanceProfileCard } from "./app/profiles";
 import {
-  SessionNotificationsBell,
-  type SessionNotification,
-} from "./components/SessionNotificationsBell";
-import { readDataCache, writeDataCache } from "./lib/launcherDataCache";
+  BOTTOM_SIDEBAR_ITEMS,
+  isReorderableSidebarId,
+  isSidebarHorizontal,
+  parseSidebarPosition,
+} from "./app/sidebar";
+import type { Settings, SettingsTabId, SidebarItemId } from "./app/types";
+import { useDiscordPresence } from "./hooks/useDiscordPresence";
+import { useDownloadJobs } from "./hooks/useDownloadJobs";
+import { useGameConsole } from "./hooks/useGameConsole";
+import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
+import { useGameLaunch } from "./hooks/useGameLaunch";
+import { useGameRunState } from "./hooks/useGameRunState";
+import { useGlobalUiListeners } from "./hooks/useGlobalUiListeners";
+import {
+  useHotkeys,
+  type AppHotkeyActions,
+  type ModpackHotkeyActions,
+  type ModpackNavigationActions,
+  type ModpackViewId,
+  type PlayConsoleHotkeyActions,
+} from "./hooks/useHotkeys";
+import { useInstanceProfiles } from "./hooks/useInstanceProfiles";
+import { useLauncherAccounts } from "./hooks/useLauncherAccounts";
+import { useLauncherAppearance } from "./hooks/useLauncherAppearance";
+import { useLauncherSession } from "./hooks/useLauncherSession";
+import { useLauncherSettings } from "./hooks/useLauncherSettings";
+import { useLauncherUpdater } from "./hooks/useLauncherUpdater";
+import { useNotifications } from "./hooks/useNotifications";
+import { useOnboardingTour } from "./hooks/useOnboardingTour";
+import { useOpenedMrpack } from "./hooks/useOpenedMrpack";
+import { usePlatformNotificationToasts } from "./hooks/usePlatformNotificationToasts";
+import { usePlatformWebSocket } from "./hooks/usePlatformWebSocket";
+import { useRemoteNotices } from "./hooks/useRemoteNotices";
+import { useSidebarLayout } from "./hooks/useSidebarLayout";
+import { useTabSplitView } from "./hooks/useTabSplitView";
+import { useVersionManager } from "./hooks/useVersionManager";
 
 const ModpackTab = lazy(() =>
   import("./tabs/ModpackTab").then((m) => ({ default: m.ModpackTab })),
@@ -79,877 +85,29 @@ const ModpackTab = lazy(() =>
 const SettingsTab = lazy(() =>
   import("./tabs/SettingsTab").then((m) => ({ default: m.SettingsTab })),
 );
-import { useDownloadJobs } from "./hooks/useDownloadJobs";
-import {
-  useHotkeys,
-  type ModpackHotkeyActions,
-  type ModpackNavigationActions,
-  type ModpackViewId,
-  type PlayConsoleHotkeyActions,
-} from "./hooks/useHotkeys";
-import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
-import { usePresenceHeartbeat } from "./hooks/usePresenceHeartbeat";
-import { usePlatformWebSocket } from "./hooks/usePlatformWebSocket";
-import { usePlatformNotificationToasts } from "./hooks/usePlatformNotificationToasts";
-import { useLauncherSession } from "./hooks/useLauncherSession";
-import {
-  isAnimatedBackgroundPath,
-  resolveLauncherBackgroundUrl,
-  shouldLoadBackgroundDataUri,
-} from "./lib/launcherBackground";
-import type { ProfileAvatarInput } from "./lib/avatar";
-import {
-  isGameConsoleLineImportant,
-  isVersionInstallConsoleLine,
-  resetGameConsoleFilter,
-} from "./lib/gameConsoleFilter";
-import { INSTALL_CONSOLE_PROFILE_ID } from "./lib/gameConsoleWindow";
-import {
-  derivePresenceActivity,
-  type LaunchPresenceContext,
-  type RoomPresenceContext,
-} from "./lib/socialActivity";
-import {
-  useT,
-  t,
-  isLanguage,
-  readStoredLanguage,
-  type Language,
-} from "./i18n";
-import {
-  OnboardingFlow,
-  ONBOARDING_COMPLETED_STORAGE_KEY,
-  ONBOARDING_FORCE_STORAGE_KEY,
-} from "./onboarding";
-import {
-  ProductTour,
-  PRODUCT_TOUR_COMPLETED_STORAGE_KEY,
-  PRODUCT_TOUR_FORCE_STORAGE_KEY,
-} from "./product-tour";
-import type { TourAccountsSection, TourTabId } from "./product-tour/types";
-import {
-  applyTabDrop,
-  detectDropZone,
-  isSplittableTab,
-  loadTabSplitLayout,
-  saveTabSplitLayout,
-  tabAfterClosingSplitPane,
-  tabPaneRole,
-  TAB_DRAG_THRESHOLD_PX,
-  TAB_SPLIT_MIN_WIDTH_PX,
-  TAB_SPLIT_RATIO_MAX,
-  TAB_SPLIT_RATIO_MIN,
-  type SplittableTabId,
-  type TabDropZone,
-  type TabSplitLayout,
-} from "./splitView";
 
-type Profile = {
-  nickname: string;
-  ely_username: string | null;
-  ely_uuid: string | null;
-  ms_id_token: string | null;
-  mc_uuid: string | null;
-  mc_username: string | null;
-};
-
-type LauncherAccountSummary = {
-  id: string;
-  label: string;
-  kind: string;
-  is_active: boolean;
-};
-
-type SidebarItemId = "play" | "settings" | "friends" | "rooms" | "mods" | "modpacks" | "accounts";
-type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
-
-type SettingsTabId = "game" | "versions" | "launcher";
-
-type Settings = {
-  game_directory: string | null;
-  ram_mb: number;
-  graphics_adapter: string | null;
-  show_console_on_launch: boolean;
-  close_launcher_on_game_start: boolean;
-  check_game_processes: boolean;
-  resolution_width: number | null;
-  resolution_height: number | null;
-  show_snapshots: boolean;
-  show_alpha_versions: boolean;
-  forge_ipv6_download: boolean;
-  forge_proxy_fallback: boolean;
-  notify_new_update: boolean;
-  notify_new_message: boolean;
-  notify_system_message: boolean;
-  check_updates_on_start: boolean;
-  auto_install_updates: boolean;
-  open_launcher_on_profiles_tab: boolean;
-  ui_sounds_enabled: boolean;
-  discord_rpc_enabled: boolean;
-  minimize_to_tray_on_close: boolean;
-  autostart_enabled: boolean;
-  animations_disabled: boolean;
-  background_animation_disabled?: boolean;
-  thematic_decorations_disabled?: boolean;
-  show_launcher_banners?: boolean;
-  interface_language?: string;
-  background_accent_color: string;
-  background_image_url: string | null;
-  background_blur_enabled: boolean;
-  split_view_enabled: boolean;
-  sidebar_position?: string;
-  onboarding_completed?: boolean;
-  custom_theme_id?: string | null;
-  custom_theme_hot_reload?: boolean;
-};
-
-const SIDEBAR_POSITIONS = ["left", "right", "top", "bottom"] as const;
-type SidebarPosition = (typeof SIDEBAR_POSITIONS)[number];
-
-function parseSidebarPosition(value: string | undefined | null): SidebarPosition {
-  if (value && SIDEBAR_POSITIONS.includes(value as SidebarPosition)) {
-    return value as SidebarPosition;
-  }
-  return "left";
-}
-
-function isSidebarHorizontal(position: SidebarPosition): boolean {
-  return position === "top" || position === "bottom";
-}
-
-function LauncherAnimationScope({
-  animationsDisabled,
-  children,
-}: {
-  animationsDisabled: boolean;
-  children: ReactNode;
-}) {
-  useEffect(() => {
-    document.documentElement.classList.toggle("launcher-no-animations", animationsDisabled);
-    return () => {
-      document.documentElement.classList.remove("launcher-no-animations");
-    };
-  }, [animationsDisabled]);
-
-  return (
-    <MotionConfig reducedMotion={animationsDisabled ? "always" : "user"}>
-      {children}
-    </MotionConfig>
-  );
-}
-
-type InstanceProfileSummary = {
-  id: string;
-  name: string;
-  game_version: string;
-  loader: string;
-  loader_version?: string | null;
-};
-
-type InstanceProfileCard = InstanceProfileSummary & {
-  icon_path: string | null;
-  created_at: number;
-  play_time_seconds: number;
-  last_played_at?: number | null;
-  mods_count: number;
-  resourcepacks_count: number;
-  shaderpacks_count: number;
-  total_size_bytes: number;
-  directory: string;
-};
-
-const SIDEBAR_ICON_PATHS: Partial<Record<SidebarItemId, string>> = {
-  play: "/launcher-assets/play.svg",
-  settings: "/launcher-assets/settings.svg",
-  friends: "/launcher-assets/group.svg",
-  rooms: "/launcher-assets/room.svg",
-  mods: "/launcher-assets/mods.svg",
-  modpacks: "/launcher-assets/modpack_icon.svg",
-};
-
-const NECO_ARC_SECRET_SOUND_SRC =
-  "/launcher-assets/sounds/" + encodeURIComponent("secret (shhh...).mp3");
-const NECO_ARC_SECRET_SOUND_VOLUME = 0.05;
-
-function normalizeNicknameForSecretCheck(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function accountKindAvatarClass(kind: string): string {
-  if (kind === "microsoft") return "bg-sky-600/35 text-sky-100 ring-1 ring-sky-400/25";
-  if (kind === "ely") return "bg-emerald-700/40 text-emerald-100 ring-1 ring-emerald-400/20";
-  return "bg-white/10 text-white/80 ring-1 ring-white/10";
-}
-
-type VersionSummary = {
-  id: string;
-  version_type: string;
-  url: string;
-  release_time: string;
-};
-
-type ForgeVersionSummary = {
-  id: string;
-  mc_version: string;
-  forge_build: string;
-  installer_url: string;
-};
-
-type NeoForgeVersionSummary = {
-  id: string;
-  mc_version: string;
-  neoforge_build: string;
-  installer_url: string;
-};
-
-type VersionItem = VersionSummary | ForgeVersionSummary | NeoForgeVersionSummary;
-
-function isForgeVersion(v: VersionItem): v is ForgeVersionSummary {
-  return "forge_build" in v && "installer_url" in v;
-}
-
-function isNeoForgeVersion(v: VersionItem): v is NeoForgeVersionSummary {
-  return "neoforge_build" in v && "installer_url" in v;
-}
-
-function neoForgeInstallVersionId(v: NeoForgeVersionSummary): string {
-  const fromId = v.id?.trim();
-  if (fromId) return fromId;
-  const mc = v.mc_version?.trim();
-  const build = v.neoforge_build?.trim();
-  if (mc && build) return `${mc}-neoforge-${build}`;
-  throw new Error("invalid NeoForge version");
-}
-
-function versionInstallJobId(versionId: string) {
-  return `version:${versionId}`;
-}
-
-function getVersionLabel(v: VersionItem): string {
-  if (isForgeVersion(v)) {
-    return `Forge ${v.mc_version}-${v.forge_build}`;
-  }
-  if (isNeoForgeVersion(v)) {
-    return `NeoForge ${v.mc_version}-${v.neoforge_build}`;
-  }
-  return v.id;
-}
-
-type DownloadProgressPayload = {
-  version_id: string;
-  downloaded: number;
-  total: number;
-  percent: number;
-};
-
-type GameConsoleLinePayload = {
-  line: string;
-  source: "stdout" | "stderr";
-};
-
-type GameConsoleLine = GameConsoleLinePayload & {
-  id: number;
-};
-
-type GameConsoleSession = {
-  id: string;
-  startedAt: number;
-  endedAt?: number;
-  lines: GameConsoleLine[];
-};
-
-type ProfileConsoleData = {
-  lines: GameConsoleLine[];
-  sessions: GameConsoleSession[];
-};
-
-const GAME_CONSOLE_STORAGE_KEY = "game_console_persist_v2";
-const GAME_CONSOLE_STORAGE_KEY_V1 = "game_console_persist_v1";
-const MAX_CONSOLE_LINES = 2000;
-const MAX_ARCHIVED_SESSIONS = 25;
-const HIDDEN_CONSOLE_BUFFER_MAX = 500;
-const GAME_CONSOLE_BATCH_FLUSH_MS = 150;
-const GAME_CONSOLE_PERSIST_DEBOUNCE_MS = 2500;
-
-function normalizeConsoleLine(l: unknown, i: number): GameConsoleLine | null {
-  if (!l || typeof l !== "object") return null;
-  const o = l as Record<string, unknown>;
-  const line = typeof o.line === "string" ? o.line : "";
-  const source = o.source === "stderr" ? "stderr" : "stdout";
-  const id =
-    typeof o.id === "number" && Number.isFinite(o.id)
-      ? o.id
-      : Date.now() + i + Math.random();
-  return { id, line, source };
-}
-
-function normalizeConsoleSessions(sessionsRaw: unknown): GameConsoleSession[] {
-  if (!Array.isArray(sessionsRaw)) return [];
-  return sessionsRaw
-    .flatMap((s, si): GameConsoleSession[] => {
-      if (!s || typeof s !== "object") return [];
-      const o = s as Record<string, unknown>;
-      const id = typeof o.id === "string" ? o.id : `${Date.now()}-${si}`;
-      const startedAt =
-        typeof o.startedAt === "number" && Number.isFinite(o.startedAt)
-          ? o.startedAt
-          : Date.now();
-      const endedAt =
-        typeof o.endedAt === "number" && Number.isFinite(o.endedAt) ? o.endedAt : undefined;
-      const lr = Array.isArray(o.lines) ? o.lines : [];
-      const slines = lr
-        .map((l, i) => normalizeConsoleLine(l, i + si * 1000))
-        .filter((x): x is GameConsoleLine => x !== null)
-        .slice(-MAX_CONSOLE_LINES);
-      const session: GameConsoleSession = { id, startedAt, lines: slines };
-      if (endedAt !== undefined) session.endedAt = endedAt;
-      return [session];
-    })
-    .slice(0, MAX_ARCHIVED_SESSIONS);
-}
-
-function normalizeProfileConsoleData(raw: unknown): ProfileConsoleData {
-  if (!raw || typeof raw !== "object") {
-    return { lines: [], sessions: [] };
-  }
-  const o = raw as Record<string, unknown>;
-  const linesRaw = Array.isArray(o.lines) ? o.lines : [];
-  const lines = linesRaw
-    .map((l, i) => normalizeConsoleLine(l, i))
-    .filter((x): x is GameConsoleLine => x !== null)
-    .slice(-MAX_CONSOLE_LINES);
-  return { lines, sessions: normalizeConsoleSessions(o.sessions) };
-}
-
-function loadPersistedGameConsoleByProfile(): Record<string, ProfileConsoleData> {
-  if (typeof window === "undefined") return {};
-  try {
-    const rawV2 = window.localStorage.getItem(GAME_CONSOLE_STORAGE_KEY);
-    if (rawV2) {
-      const data = JSON.parse(rawV2) as { byProfile?: unknown };
-      const byProfileRaw =
-        data.byProfile && typeof data.byProfile === "object"
-          ? (data.byProfile as Record<string, unknown>)
-          : {};
-      const out: Record<string, ProfileConsoleData> = {};
-      for (const [profileId, value] of Object.entries(byProfileRaw)) {
-        if (typeof profileId !== "string" || !profileId.trim()) continue;
-        out[profileId] = normalizeProfileConsoleData(value);
-      }
-      return out;
-    }
-
-    const rawV1 = window.localStorage.getItem(GAME_CONSOLE_STORAGE_KEY_V1);
-    if (!rawV1) return {};
-    const data = JSON.parse(rawV1) as { lines?: unknown; sessions?: unknown };
-    const migrated = normalizeProfileConsoleData(data);
-    if (migrated.lines.length === 0 && migrated.sessions.length === 0) return {};
-
-    let migrateProfileId: string | null = null;
-    try {
-      migrateProfileId = window.localStorage.getItem("modpacks_selected_profile_id");
-    } catch {
-    }
-    if (!migrateProfileId?.trim()) return {};
-    return { [migrateProfileId]: migrated };
-  } catch {
-    return {};
-  }
-}
-
-type GameStatus = "idle" | "running" | "stopped" | "crashed";
-
-type NotificationKind = "info" | "success" | "error" | "warning";
-
-const MAX_VISIBLE_NOTIFICATIONS = 2;
-const MAX_SESSION_NOTIFICATIONS = 80;
-const NOTIFICATION_EXIT_MS = 200;
-
-type Notification = {
-  id: number;
-  kind?: NotificationKind;
-  message: string;
-  leaving?: boolean;
-  entered?: boolean;
-  count?: number;
-  colorMsg?: string;
-  iconMsg?: string;
-};
-
-type ShowNotificationOptions = {
-  sound?: boolean;
-};
-
-type NotificationIdentity = Pick<Notification, "kind" | "message" | "colorMsg" | "iconMsg">;
-
-function notificationsMatch(a: NotificationIdentity, b: NotificationIdentity): boolean {
-  return (
-    a.kind === b.kind &&
-    a.message === b.message &&
-    (a.colorMsg ?? "") === (b.colorMsg ?? "") &&
-    (a.iconMsg ?? "") === (b.iconMsg ?? "")
-  );
-}
-
-function appendAlphaToHex(hex: string, alpha01: number): string {
-  const a = Math.round(Math.max(0, Math.min(1, alpha01)) * 255)
-    .toString(16)
-    .padStart(2, "0");
-  return `${hex}${a}`.toUpperCase();
-}
-
-function isHexColor(value: string): value is `#${string}` {
-  return /^#([0-9a-fA-F]{6})$/.test(value.trim());
-}
-
-function getTextColorForHexBg(hex: string): "black" | "white" {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
-  if (!m) return "white";
-  const raw = m[1];
-  const r = parseInt(raw.slice(0, 2), 16);
-  const g = parseInt(raw.slice(2, 4), 16);
-  const b = parseInt(raw.slice(4, 6), 16);
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance > 160 ? "black" : "white";
-}
-
-function resolveRemoteNotificationIconSrc(iconMsg?: string): string | null {
-  if (!iconMsg) return null;
-  const v = iconMsg.trim();
-  if (!v) return null;
-  if (/^https?:\/\//i.test(v) || v.startsWith("/")) return v;
-
-  if (/^[a-zA-Z0-9_-]+\.(png|webp|gif)$/i.test(v)) {
-    return `/launcher-assets/${v}`;
-  }
-
-  const lower = v.toLowerCase();
-  if (lower === "info") return "/launcher-assets/info.png";
-  if (lower === "success") return "/launcher-assets/success.png";
-  if (lower === "error") return "/launcher-assets/errorIcon.png";
-  if (lower === "warning" || lower === "warn") return "/launcher-assets/warn.png";
-
-  return null;
-}
-
-function normalizeOptionalString(value?: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const v = value.trim();
-  return v.length > 0 ? v : undefined;
-}
-
-function resolveRemoteNotificationKindFromColorMsg(colorMsg?: string): NotificationKind | null {
-  const c = normalizeOptionalString(colorMsg)?.toLowerCase();
-  if (!c) return null;
-
-  if (c === "red") return "error";
-  if (c === "green") return "success";
-  if (c === "yellow") return "warning";
-  if (c === "gray" || c === "grey") return "info";
-
-  if (c === "info") return "info";
-  if (c === "success") return "success";
-  if (c === "error") return "error";
-  if (c === "warning") return "warning";
-
-  return null;
-}
-
-function resolveRemoteNotificationBgStyle(
-  colorMsg?: string,
-): { background: string; border: string; textColor: "black" | "white" } | null {
-  if (!colorMsg) return null;
-  const v = colorMsg.trim();
-  if (!v) return null;
-
-  if (isHexColor(v)) {
-    const background = appendAlphaToHex(v.toUpperCase(), 0.95);
-    const border = appendAlphaToHex(v.toUpperCase(), 0.45);
-    const textColor = getTextColorForHexBg(v);
-    return { background, border, textColor };
-  }
-
-  return {
-    background: v,
-    border: "rgba(255, 255, 255, 0.35)",
-    textColor: "white",
-  };
-}
-
-type RemoteNotificationsJsonItem = {
-  "color-msg"?: string;
-  "icon-msg"?: string;
-  "text-msg"?: string;
-
-  colorMsg?: string;
-  iconMsg?: string;
-  textMsg?: string;
-
-  type?: string;
-};
-
-type RemoteNotificationHyphenKey = "color-msg" | "icon-msg" | "text-msg";
-type RemoteNotificationCamelKey = "colorMsg" | "iconMsg" | "textMsg";
-
-type BottomSocialKind = "discord" | "telegram";
-
-type BottomSocialNotification = {
-  id: number;
-  kind: BottomSocialKind;
-  colorMsg?: string;
-  iconMsg?: string;
-  textMsg?: string;
-  messageKey?: "app.social.discord" | "app.social.telegram";
-  leaving?: boolean;
-};
-
-function SocialIcon({ kind, className }: { kind: BottomSocialKind; className?: string }) {
-  const src = kind === "discord" ? "/launcher-assets/discord.png" : "/launcher-assets/telegram.png";
-  const [broken, setBroken] = useState(false);
-
-  if (broken) {
-    return (
-      <span className="text-sm font-extrabold text-white">
-        {kind === "discord" ? "D" : "T"}
-      </span>
-    );
-  }
-
-  return (
-    <img
-      src={src}
-      alt=""
-      className={className ?? "h-10 w-10 object-contain"}
-      draggable={false}
-      onError={() => setBroken(true)}
-    />
-  );
-}
-
-function getRemoteItemField(
-  item: RemoteNotificationsJsonItem,
-  hyphenKey: RemoteNotificationHyphenKey,
-  camelKey: RemoteNotificationCamelKey,
-) {
-  return item[hyphenKey] ?? item[camelKey];
-}
-
-function splitTitleAndSubtitle(textMsg: string): { title: string; subtitle?: string } {
-  const normalized = (textMsg ?? "").trim();
-  if (!normalized) return { title: "" };
-  const parts = normalized.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  if (parts.length === 1) return { title: parts[0] };
-  return { title: parts[0], subtitle: parts.slice(1).join("\n") };
-}
-
-const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
-const TELEGRAM_LINK = "https://t.me/of16launcher";
-
-const DEFAULT_SIDEBAR_ORDER: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
-
-const sidebarItems: { id: SidebarItemId; labelKey: string }[] = [
-  { id: "play", labelKey: "app.sidebar.play" },
-  { id: "settings", labelKey: "app.sidebar.settings" },
-  { id: "mods", labelKey: "app.sidebar.mods" },
-  { id: "modpacks", labelKey: "app.sidebar.modpacks" },
-];
-
-const BOTTOM_SIDEBAR_ITEMS: { id: SidebarItemId; labelKey: string }[] = [
-  { id: "rooms", labelKey: "app.sidebar.rooms" },
-  { id: "friends", labelKey: "app.sidebar.friends" },
-];
-
-const TOUR_SIDEBAR_TARGET_IDS: Partial<Record<SidebarItemId, string>> = {
-  settings: "tour-sidebar-settings",
-  mods: "tour-sidebar-mods",
-  modpacks: "tour-sidebar-modpacks",
-};
-
-function PlayIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-7 w-7 fill-current"
-      aria-hidden="true"
-    >
-      <path d="M8 6.5v11l9-5.5-9-5.5z" />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-7 w-7 fill-current"
-      aria-hidden="true"
-    >
-      <path d="M12 8.5a3.5 3.5 0 1 0 .001 7.001A3.5 3.5 0 0 0 12 8.5Zm9 3.25-1.8-1.04.16-2.08-2.12-.84-.84-2.12-2.08.16L12 2.75l-1.32 1.88-2.08-.16-.84 2.12-2.12.84.16 2.08L3 11.75v2.5l1.8 1.04-.16 2.08 2.12.84.84 2.12 2.08-.16L12 21.25l1.32-1.88 2.08.16.84-2.12 2.12-.84-.16-2.08L21 14.25v-2.5Z" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M11 5v6H5v2h6v6h2v-6h6v-2h-6V5h-2Z"
-      />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-3.5 w-3.5 shrink-0 fill-current transition-transform ${className ?? ""}`}
-      aria-hidden="true"
-    >
-      <path d="M7 10l5 5 5-5H7z" />
-    </svg>
-  );
-}
-
-function MinimizeIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-4 w-4 fill-current"
-      aria-hidden="true"
-    >
-      <rect x="5" y="11" width="14" height="2" rx="1" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-4 w-4 fill-current"
-      aria-hidden="true"
-    >
-      <path d="M6.7 6.7a1 1 0 0 1 1.4 0L12 10.6l3.9-3.9a1 1 0 0 1 1.4 1.4L13.4 12l3.9 3.9a1 1 0 0 1-1.4 1.4L12 13.4l-3.9 3.9a1 1 0 0 1-1.4-1.4L10.6 12 6.7 8.1a1 1 0 0 1 0-1.4Z" />
-    </svg>
-  );
-}
-
-function MaximizeIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <rect
-        x="5"
-        y="5"
-        width="14"
-        height="14"
-        rx="1.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function TabPaneLoading() {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/70" />
-    </div>
-  );
-}
-
-const LAUNCHER_UPDATE_BADGE_STORAGE_KEY = "mc16launcher:lastLauncherUpdateBadge";
 
 function App() {
   usePlatformWebSocket();
   useLauncherSession();
+  useGlobalUiListeners();
   const [activeItem, setActiveItem] = useState<SidebarItemId>("play");
-  const [tabSplitLayout, setTabSplitLayout] = useState<TabSplitLayout | null>(() =>
-    loadTabSplitLayout(),
-  );
-  const [tabDrag, setTabDrag] = useState<{
-    tab: SplittableTabId;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [tabDropZone, setTabDropZone] = useState<TabDropZone | null>(null);
-  const tabDropZoneRef = useRef<TabDropZone | null>(null);
-  const [isTabSplitDividerDragging, setIsTabSplitDividerDragging] = useState(false);
-  const mainSplitRef = useRef<HTMLElement | null>(null);
-  const sidebarTabDragRef = useRef<{
-    tab: SplittableTabId;
-    startX: number;
-    startY: number;
-    active: boolean;
-  } | null>(null);
-  const sidebarTabDragListenersRef = useRef<(() => void) | null>(null);
-  const sidebarDragConsumedRef = useRef(false);
-  const tabSplitDividerDragRef = useRef<{
-    startCoord: number;
-    startRatio: number;
-    direction: TabSplitLayout["direction"];
-  } | null>(null);
-  const [sidebarOrder, setSidebarOrder] = useState<SidebarItemId[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_SIDEBAR_ORDER;
-    try {
-      const raw = window.localStorage.getItem("sidebar_order");
-      if (!raw) return DEFAULT_SIDEBAR_ORDER;
-      const parsed = JSON.parse(raw);
-      const allowed: SidebarItemId[] = ["play", "settings", "mods", "modpacks"];
-      if (
-        Array.isArray(parsed) &&
-        parsed.every((id) => allowed.includes(id))
-      ) {
-        return parsed as SidebarItemId[];
-      }
-    } catch {
-    }
-    return DEFAULT_SIDEBAR_ORDER;
-  });
   const [settings, setSettings] = useState<Settings | null>(null);
   const sidebarPosition = parseSidebarPosition(settings?.sidebar_position);
   const sidebarHorizontal = isSidebarHorizontal(sidebarPosition);
-  const sidebarRef = useRef<HTMLElement | null>(null);
-  const sidebarButtonRefs = useRef<
-    Partial<Record<SidebarItemId, HTMLButtonElement | null>>
-  >({});
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return window.localStorage.getItem("sidebar_collapsed") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const toggleSidebarCollapsed = useCallback(() => {
-    setSidebarCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem("sidebar_collapsed", next ? "1" : "0");
-      } catch {
-      }
-      return next;
-    });
-  }, []);
-  const [sidebarIndicator, setSidebarIndicator] = useState<{
-    offset: number;
-    span: number;
-    ready: boolean;
-  }>({ offset: 0, span: 32, ready: false });
+  const {
+    sidebarOrder,
+    setSidebarOrder,
+    sidebarRef,
+    sidebarButtonRefs,
+    sidebarCollapsed,
+    toggleSidebarCollapsed,
+    sidebarIndicator,
+    orderedSidebarItems,
+  } = useSidebarLayout(activeItem, sidebarPosition);
 
-  const updateSidebarIndicator = useCallback(() => {
-    const container = sidebarRef.current;
-    const btn = sidebarButtonRefs.current[activeItem];
-    if (!container || !btn) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    const horizontal = isSidebarHorizontal(parseSidebarPosition(settings?.sidebar_position));
-
-    if (horizontal) {
-      const span = Math.max(16, btnRect.width - 20);
-      const offset = btnRect.left - containerRect.left + (btnRect.width - span) / 2;
-      setSidebarIndicator({ offset, span, ready: true });
-      return;
-    }
-
-    const span = Math.max(20, btnRect.height - 14);
-    const offset = btnRect.top - containerRect.top + (btnRect.height - span) / 2;
-    setSidebarIndicator({ offset, span, ready: true });
-  }, [activeItem, settings?.sidebar_position]);
-
-  useLayoutEffect(() => {
-    updateSidebarIndicator();
-    // Width/height animate for ~0.3s after collapsing; re-measure once it settles.
-    const timer = window.setTimeout(updateSidebarIndicator, 320);
-    return () => window.clearTimeout(timer);
-  }, [updateSidebarIndicator, sidebarPosition, sidebarCollapsed]);
-
-  useEffect(() => {
-    let raf = 0;
-    const scheduleUpdate = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(updateSidebarIndicator);
-    };
-    window.addEventListener("resize", scheduleUpdate);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [updateSidebarIndicator]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-
-    document.addEventListener("contextmenu", onContextMenu, true);
-    return () => document.removeEventListener("contextmenu", onContextMenu, true);
-  }, []);
-
-  const [loader, setLoader] = useState<LoaderId>(() => {
-    if (typeof window === "undefined") return "vanilla";
-    try {
-      const saved = window.localStorage.getItem("selected_loader");
-      if (
-        saved === "vanilla" ||
-        saved === "fabric" ||
-        saved === "forge" ||
-        saved === "quilt" ||
-        saved === "neoforge"
-      ) {
-        return saved;
-      }
-    } catch {
-    }
-    return "vanilla";
-  });
-  const pendingRoomGameRef = useRef<RoomGameSettings | null>(null);
-  const [versions, setVersions] = useState<VersionItem[]>([]);
-  const [selectedVersion, setSelectedVersion] = useState<VersionItem | null>(null);
-  const [versionsLoading, setVersionsLoading] = useState(true);
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
   const [isLoaderDropdownOpen, setIsLoaderDropdownOpen] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [progress, setProgress] = useState<DownloadProgressPayload | null>(null);
-  const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
-  const [installedGameVersions, setInstalledGameVersions] = useState<Set<string>>(new Set());
-  const [fabricProfileId, setFabricProfileId] = useState<string | null>(null);
-  const [quiltProfileId, setQuiltProfileId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile>({
-    nickname: "",
-    ely_username: null,
-    ely_uuid: null,
-    ms_id_token: null,
-    mc_uuid: null,
-    mc_username: null,
-  });
-  const [elyLoading, setElyLoading] = useState(false);
-  const [elyAuthUrl, setElyAuthUrl] = useState<string | null>(null);
-  const [msLoading, setMsLoading] = useState(false);
-  const [msAuthUrl, setMsAuthUrl] = useState<string | null>(null);
-  const [launcherAccounts, setLauncherAccounts] = useState<LauncherAccountSummary[]>([]);
-  const [addingAccount, setAddingAccount] = useState(false);
-  const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
-  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
-  const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
-  const [sessionNotificationsOpen, setSessionNotificationsOpen] = useState(false);
-  const sessionNotificationsRef = useRef<HTMLDivElement | null>(null);
-  const sessionNotificationsOpenRef = useRef(false);
-  const [sessionNotifications, setSessionNotifications] = useState<SessionNotification[]>([]);
-  const [nicknameDraft, setNicknameDraft] = useState("");
-  const nicknameInputFocusedRef = useRef(false);
-  const prevActiveAccountIdRef = useRef<string | null>(null);
-  const [installPaused, setInstallPaused] = useState(false);
-  const installStopReasonRef = useRef<"pause" | "cancel" | null>(null);
-  const versionInstallJobIdRef = useRef<string | null>(null);
   const {
     jobs: activeDownloadJobs,
     startJob: startDownloadJob,
@@ -958,21 +116,6 @@ function App() {
     finishJob: finishDownloadJob,
     makeJobId: makeDownloadJobId,
   } = useDownloadJobs();
-  const prevActiveItemRef = useRef<SidebarItemId>(activeItem);
-  const lastPersistedNickNormRef = useRef<string | null>(null);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const notificationTimersRef = useRef(
-    new Map<
-      number,
-      {
-        fade?: ReturnType<typeof setTimeout>;
-        remove?: ReturnType<typeof setTimeout>;
-      }
-    >(),
-  );
-  const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
-  const didLoadedRemoteNotificationsRef = useRef(false);
-  const didLoadedBottomSocialRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("game");
   const [modpackView, setModpackView] = useState<ModpackViewId>("list");
   const [requestedModpackView, setRequestedModpackView] = useState<ModpackViewId | null>(
@@ -981,263 +124,72 @@ function App() {
   const [requestedProfileSettingsId, setRequestedProfileSettingsId] = useState<string | null>(
     null,
   );
-  const [updateStatus, setUpdateStatus] = useState<
-    "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
-  >("idle");
-  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
-  const [updateDownloadPercent, setUpdateDownloadPercent] = useState<number | null>(null);
-  const [updatePopupBanner, setUpdatePopupBanner] = useState<LauncherBannerData | null>(null);
-  const [systemMemoryGb, setSystemMemoryGb] = useState<number>(16);
   const [language, setLanguage] = useState<Language>(
     () => readStoredLanguage() ?? "ru",
   );
-  const [onboardingVisible, setOnboardingVisible] = useState<boolean | null>(null);
-  const [productTourActive, setProductTourActive] = useState(false);
-  const [tourAccountsSection, setTourAccountsSection] = useState<TourAccountsSection>("accounts");
   const [showHelpModal, setShowHelpModal] = useState(false);
-  const [launcherVersion, setLauncherVersion] = useState<string | null>(null);
-  const [launcherUpdateBadge, setLauncherUpdateBadge] = useState<"latest" | "outdated" | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const v = sessionStorage.getItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY);
-      if (v === "latest" || v === "outdated") return v;
-    } catch {
-    }
-    return null;
-  });
-  const persistLauncherUpdateBadge = useCallback((v: "latest" | "outdated") => {
-    setLauncherUpdateBadge(v);
-    try {
-      sessionStorage.setItem(LAUNCHER_UPDATE_BADGE_STORAGE_KEY, v);
-    } catch {
-    }
-  }, []);
   const tt = useT(language);
 
-  const clearNotificationDismissTimers = useCallback((id: number) => {
-    const t = notificationTimersRef.current.get(id);
-    if (!t) return;
-    if (t.fade !== undefined) clearTimeout(t.fade);
-    if (t.remove !== undefined) clearTimeout(t.remove);
-    notificationTimersRef.current.delete(id);
-  }, []);
-
-  const scheduleNotificationRemoval = useCallback(
-    (id: number, delayMs = NOTIFICATION_EXIT_MS) => {
-      clearNotificationDismissTimers(id);
-      const remove = window.setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-        notificationTimersRef.current.delete(id);
-      }, delayMs);
-      notificationTimersRef.current.set(id, { remove });
-    },
-    [clearNotificationDismissTimers],
-  );
-
-  const beginDismissNotification = useCallback(
-    (id: number) => {
-      clearNotificationDismissTimers(id);
-      let shouldAnimateOut = false;
-      setNotifications((prev) => {
-        const target = prev.find((n) => n.id === id);
-        if (!target || target.leaving) return prev;
-        shouldAnimateOut = true;
-        return prev.map((n) => (n.id === id ? { ...n, leaving: true } : n));
-      });
-      if (!shouldAnimateOut) return;
-
-      scheduleNotificationRemoval(id);
-    },
-    [clearNotificationDismissTimers, scheduleNotificationRemoval],
-  );
-
-  const scheduleNotificationDismiss = useCallback(
-    (id: number) => {
-      if (!id) return;
-      clearNotificationDismissTimers(id);
-      const fade = window.setTimeout(() => beginDismissNotification(id), 4300);
-      notificationTimersRef.current.set(id, { fade });
-    },
-    [clearNotificationDismissTimers, beginDismissNotification],
-  );
-
-  useEffect(() => {
-    return () => {
-      for (const t of notificationTimersRef.current.values()) {
-        if (t.fade !== undefined) clearTimeout(t.fade);
-        if (t.remove !== undefined) clearTimeout(t.remove);
-      }
-      notificationTimersRef.current.clear();
-    };
-  }, []);
-
-  const pushNotification = useCallback(
-    (entry: NotificationIdentity): { merged: boolean } => {
-      let targetId = 0;
-      let merged = false;
-      const autoDismissIds: number[] = [];
-      const sessionId = Date.now() + Math.random();
-
-      setSessionNotifications((prev) => {
-        const next: SessionNotification[] = [
-          {
-            id: sessionId,
-            kind: entry.kind,
-            message: entry.message,
-            colorMsg: entry.colorMsg,
-            iconMsg: entry.iconMsg,
-            at: Date.now(),
-            seen: sessionNotificationsOpenRef.current,
-          },
-          ...prev,
-        ];
-        return next.length > MAX_SESSION_NOTIFICATIONS
-          ? next.slice(0, MAX_SESSION_NOTIFICATIONS)
-          : next;
-      });
-
-      flushSync(() => {
-        setNotifications((prev) => {
-          const existing = prev.find((n) => !n.leaving && notificationsMatch(n, entry));
-          if (existing) {
-            targetId = existing.id;
-            merged = true;
-            return prev.map((n) =>
-              n.id === existing.id
-                ? { ...n, ...entry, count: (n.count ?? 1) + 1, leaving: false }
-                : n,
-            );
-          }
-          let next = [...prev];
-          const active = next.filter((n) => !n.leaving);
-          if (active.length >= MAX_VISIBLE_NOTIFICATIONS) {
-            const oldest = active[0];
-            next = next.map((n) =>
-              n.id === oldest.id ? { ...n, leaving: true } : n,
-            );
-            autoDismissIds.push(oldest.id);
-          }
-          targetId = Date.now() + Math.random();
-          merged = false;
-          return [...next, { id: targetId, ...entry, count: 1, entered: false }];
-        });
-      });
-
-      for (const id of autoDismissIds) {
-        clearNotificationDismissTimers(id);
-        scheduleNotificationRemoval(id);
-      }
-
-      scheduleNotificationDismiss(targetId);
-      return { merged };
-    },
-    [scheduleNotificationDismiss, clearNotificationDismissTimers, scheduleNotificationRemoval],
-  );
-
-  const showNotification = useCallback(
-    (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => {
-      const shouldShow =
-        !(settings && !settings.notify_new_message && kind === "info");
-      if (!shouldShow) return;
-
-      const { merged } = pushNotification({ kind, message });
-
-      const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
-      const shouldSound =
-        !merged &&
-        uiSoundsEnabled &&
-        (kind === "info" || kind === "error" || options?.sound === true);
-
-      if (shouldSound) playNotificationSound();
-    },
-    [settings, pushNotification],
-  );
+  const {
+    notifications,
+    setNotifications,
+    beginDismissNotification,
+    pushNotification,
+    showNotification,
+    sessionNotifications,
+    setSessionNotifications,
+    sessionNotificationsOpen,
+    setSessionNotificationsOpen,
+    sessionNotificationsRef,
+  } = useNotifications(settings);
 
   usePlatformNotificationToasts(showNotification, language);
 
-  const refreshLauncherAccounts = useCallback(async () => {
-    try {
-      const list = await invoke<LauncherAccountSummary[]>("list_launcher_accounts");
-      setLauncherAccounts(list);
-    } catch {
-      setLauncherAccounts([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshLauncherAccounts();
-  }, [refreshLauncherAccounts]);
-
-  useEffect(() => {
-    if (!accountSwitcherOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const el = accountSwitcherRef.current;
-      if (el && !el.contains(e.target as Node)) setAccountSwitcherOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [accountSwitcherOpen]);
-
-  useEffect(() => {
-    if (!sessionNotificationsOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const el = sessionNotificationsRef.current;
-      if (el && !el.contains(e.target as Node)) setSessionNotificationsOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [sessionNotificationsOpen]);
-
-  useEffect(() => {
-    sessionNotificationsOpenRef.current = sessionNotificationsOpen;
-  }, [sessionNotificationsOpen]);
-
-  useEffect(() => {
-    if (!sessionNotificationsOpen) return;
-    setSessionNotifications((prev) => {
-      if (prev.every((n) => n.seen)) return prev;
-      return prev.map((n) => (n.seen ? n : { ...n, seen: true }));
-    });
-  }, [sessionNotificationsOpen]);
-
-  const accountKindShortLabel = useCallback(
-    (kind: string) => {
-      if (kind === "microsoft") return tt("app.accounts.kindMicrosoft");
-      if (kind === "ely") return tt("app.accounts.kindEly");
-      return tt("app.accounts.kindOffline");
-    },
-    [tt],
-  );
-
-  useEffect(() => {
-    const onFirstGesture = () => primeUiSounds();
-    window.addEventListener("pointerdown", onFirstGesture, { once: true });
-    window.addEventListener("keydown", onFirstGesture, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", onFirstGesture);
-      window.removeEventListener("keydown", onFirstGesture);
-    };
-  }, []);
+  const {
+    profile,
+    setProfile,
+    launcherAccounts,
+    refreshLauncherAccounts,
+    addingAccount,
+    pendingRemoveAccountId,
+    setPendingRemoveAccountId,
+    accountSwitcherOpen,
+    setAccountSwitcherOpen,
+    accountSwitcherRef,
+    nicknameDraft,
+    setNicknameDraft,
+    elyLoading,
+    msLoading,
+    elyAuthUrl,
+    msAuthUrl,
+    accountKindShortLabel,
+    isAuthorized,
+    displayedNickname,
+    activeAccountId,
+    activeAccountLabel,
+    activeAccountKind,
+    profileAvatarInput,
+    platformNickname,
+    loadProfile,
+    handleSaveNickname,
+    handleElyLogin,
+    handleElyLogout,
+    handleMicrosoftLogin,
+    handleMicrosoftLogout,
+    handleSwitchLauncherAccount,
+    requestRemoveLauncherAccount,
+    confirmRemoveLauncherAccount,
+    removeLauncherAccount,
+    handleAddLauncherAccount,
+  } = useLauncherAccounts({ activeItem, language, showNotification, tt });
 
   const splitViewEnabled = settings?.split_view_enabled ?? false;
   const animationsDisabled = settings?.animations_disabled ?? false;
 
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth : TAB_SPLIT_MIN_WIDTH_PX,
-  );
-  useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  const splitTooNarrow = viewportWidth < TAB_SPLIT_MIN_WIDTH_PX;
-  const canUseSplitView = splitViewEnabled && !splitTooNarrow;
-
-  const effectiveTabSplit =
-    canUseSplitView && tabSplitLayout ? tabSplitLayout : null;
-
   const playConsoleHotkeysRef = useRef<PlayConsoleHotkeyActions | null>(null);
   const modpackHotkeysRef = useRef<ModpackHotkeyActions | null>(null);
+  const appHotkeysRef = useRef<AppHotkeyActions | null>(null);
+  const [showHotkeysModal, setShowHotkeysModal] = useState(false);
   const modpackNavRef = useRef<ModpackNavigationActions | null>(null);
 
   const registerPlayConsoleHotkeys = useCallback(
@@ -1269,32 +221,6 @@ function App() {
     setRequestedProfileSettingsId(null);
   }, []);
 
-  const splitDropZoneLabels = useMemo(
-    () => ({
-      left: tt("app.splitView.zones.left"),
-      right: tt("app.splitView.zones.right"),
-      top: tt("app.splitView.zones.top"),
-      bottom: tt("app.splitView.zones.bottom"),
-      center: tt("app.splitView.zones.center"),
-    }),
-    [tt],
-  );
-
-  useEffect(() => {
-    if (splitViewEnabled) {
-      saveTabSplitLayout(tabSplitLayout);
-    } else {
-      saveTabSplitLayout(null);
-    }
-  }, [splitViewEnabled, tabSplitLayout]);
-
-  useEffect(() => {
-    if (!canUseSplitView) return;
-    if (tabSplitLayout) return;
-    const saved = loadTabSplitLayout();
-    if (saved) setTabSplitLayout(saved);
-  }, [canUseSplitView, tabSplitLayout]);
-
   const setActiveItemWithSound = useCallback(
     (next: SidebarItemId) => {
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
@@ -1306,1705 +232,239 @@ function App() {
     [activeItem, settings?.ui_sounds_enabled],
   );
 
-  const completeProductTour = useCallback(() => {
-    try {
-      window.localStorage.setItem(PRODUCT_TOUR_COMPLETED_STORAGE_KEY, "1");
-    } catch {
-    }
-    setProductTourActive(false);
-    setTourAccountsSection("accounts");
-  }, []);
+  const {
+    onboardingVisible,
+    setOnboardingVisible,
+    productTourActive,
+    tourAccountsSection,
+    setTourAccountsSection,
+    pendingProductTourRef,
+    completeProductTour,
+    startProductTour,
+  } = useOnboardingTour({
+    settings,
+    setActiveItemWithSound,
+    closeHelp: () => setShowHelpModal(false),
+  });
 
-  const startProductTour = useCallback(() => {
-    setShowHelpModal(false);
-    setActiveItemWithSound("play");
-    setTourAccountsSection("accounts");
-    setProductTourActive(true);
-  }, [setActiveItemWithSound]);
+  const {
+    effectiveTabSplit,
+    tabDrag,
+    tabDropZone,
+    isTabSplitDividerDragging,
+    mainSplitRef,
+    sidebarDragConsumedRef,
+    splitTooNarrow,
+    canUseSplitView,
+    splitDropZoneLabels,
+    setTabSplitLayout,
+    activateSidebarTab,
+    dismissTabSplitPane,
+    handleSidebarTabPointerDown,
+    onTabSplitDividerPointerDown,
+  } = useTabSplitView({
+    activeItem,
+    splitViewEnabled,
+    setActiveItemWithSound,
+    showNotification,
+    tt,
+  });
 
-  const activateSidebarTab = useCallback(
-    (next: SplittableTabId) => {
-      if (!effectiveTabSplit) {
-        setActiveItemWithSound(next);
-        return;
-      }
-      const role = tabPaneRole(next, effectiveTabSplit);
-      if (role) {
-        if (effectiveTabSplit.focused !== role) {
-          setTabSplitLayout({ ...effectiveTabSplit, focused: role });
-        }
-        setActiveItemWithSound(next);
-        return;
-      }
-      const updated: TabSplitLayout =
-        effectiveTabSplit.focused === "primary"
-          ? { ...effectiveTabSplit, primary: next }
-          : { ...effectiveTabSplit, secondary: next };
-      setTabSplitLayout(updated);
-      setActiveItemWithSound(next);
+  const {
+    activeInstanceProfile,
+    setActiveInstanceProfile,
+    knownProfiles,
+    setKnownProfiles,
+    profilesHydrated,
+    setProfilesHydrated,
+    pinnedProfileIds,
+    pinnedProfiles,
+    activeProfileCard,
+    handleToggleSidebarPin,
+    handleOpenProfileInModpacks,
+    handleDeleteProfileFromSidebar,
+    handleModpackProfileSelectionChange,
+    handleCreateProfileDesktopShortcut,
+  } = useInstanceProfiles({ showNotification, tt, setActiveItemWithSound });
+  const run = useGameRunState({
+    activeItem,
+    activeInstanceName: activeInstanceProfile?.name ?? null,
+  });
+  const { gameStatus, isLaunching, isStopping, setRoomPresenceContext, setLaunchPresenceContext } = run;
+  const {
+    runningConsoleProfileId,
+    runningConsoleProfileIdRef,
+    setRunningConsoleProfile,
+    isConsoleVisible,
+    setIsConsoleVisible,
+    consoleLines,
+    installConsoleLines,
+    playConsoleLines,
+    consoleHistorySessions,
+    lastConsoleLineTextRef,
+    manageConsoleExpandedRef,
+    isConsoleDetachedRef,
+    consoleUiActiveRef,
+    archiveCurrentConsoleAndClear,
+    flushPendingConsoleLines,
+    restoreHiddenConsoleBuffer,
+    handleManageConsoleExpandedChange,
+    prepareInstallConsole,
+    resolveLaunchConsoleProfileId,
+    handleToggleConsole,
+    handleClearConsole,
+  } = useGameConsole({
+    activeInstanceProfileId: activeInstanceProfile?.id ?? null,
+    gameStatus,
+    isLaunching,
+  });
+
+  const {
+    loader,
+    setLoader,
+    versions,
+    selectedVersion,
+    setSelectedVersion,
+    versionsLoading,
+    isInstalling,
+    installPaused,
+    progress,
+    fabricProfileId,
+    quiltProfileId,
+    isInstalled,
+    installedVersionIdsForDropdown,
+    handlePauseInstall,
+    handleCancelInstall,
+    handleResumeInstall,
+    runVersionInstall,
+    roomCurrentGame,
+    applyRoomGameSettings,
+  } = useVersionManager({
+    settings,
+    activeInstanceProfile,
+    language,
+    tt,
+    showNotification,
+    startDownloadJob,
+    updateDownloadJobProgress,
+    setDownloadJobPaused,
+    finishDownloadJob,
+    prepareInstallConsole,
+    setIsConsoleVisible,
+  });
+
+  const hotkeyTabOrder = useMemo<SidebarItemId[]>(
+    () => [...orderedSidebarItems.map((i) => i.id), ...BOTTOM_SIDEBAR_ITEMS.map((i) => i.id)],
+    [orderedSidebarItems],
+  );
+  const hotkeyForTab = useCallback(
+    (id: SidebarItemId): string | null => {
+      const idx = hotkeyTabOrder.indexOf(id);
+      return idx >= 0 && idx < 9 ? String(idx + 1) : null;
     },
-    [effectiveTabSplit, setActiveItemWithSound],
+    [hotkeyTabOrder],
   );
-
-  const dismissTabSplitPane = useCallback(
-    (role: "primary" | "secondary") => {
-      if (!effectiveTabSplit) return;
-      const keepTab = tabAfterClosingSplitPane(effectiveTabSplit, role);
-      setTabSplitLayout(null);
-      setActiveItemWithSound(keepTab);
+  const activateHotkeyTab = useCallback(
+    (id: SidebarItemId) => {
+      if (isSplittableTab(id)) activateSidebarTab(id);
+      else setActiveItemWithSound(id);
     },
-    [effectiveTabSplit, setActiveItemWithSound],
+    [activateSidebarTab, setActiveItemWithSound],
   );
-
-  const finishTabDrag = useCallback(
-    (clientX: number, clientY: number, draggedTab: SplittableTabId) => {
-      sidebarTabDragRef.current = null;
-      setTabDrag(null);
-      setTabDropZone(null);
-
-      if (!splitViewEnabled) {
-        tabDropZoneRef.current = null;
-        return;
-      }
-
-      if (splitTooNarrow) {
-        tabDropZoneRef.current = null;
-        showNotification("warning", tt("app.splitView.tooNarrow"));
-        return;
-      }
-
-      sidebarDragConsumedRef.current = true;
-      const mainEl = mainSplitRef.current;
-      if (!mainEl) {
-        tabDropZoneRef.current = null;
-        return;
-      }
-
-      const rect = mainEl.getBoundingClientRect();
-      const zone =
-        tabDropZoneRef.current ?? detectDropZone(clientX, clientY, rect);
-      tabDropZoneRef.current = null;
-
-      const currentTab = isSplittableTab(activeItem) ? activeItem : "play";
-      const { layout, focusedTab } = applyTabDrop(
-        draggedTab,
-        zone,
-        currentTab,
-        effectiveTabSplit,
-      );
-      setTabSplitLayout(layout);
-      setActiveItemWithSound(focusedTab);
-    },
-    [
-      activeItem,
-      effectiveTabSplit,
-      setActiveItemWithSound,
-      showNotification,
-      splitTooNarrow,
-      splitViewEnabled,
-      tt,
-    ],
-  );
-
-  const cleanupSidebarTabDragListeners = useCallback(() => {
-    sidebarTabDragListenersRef.current?.();
-    sidebarTabDragListenersRef.current = null;
-  }, []);
-
-  const updateTabDragPointer = useCallback((clientX: number, clientY: number, tab: SplittableTabId) => {
-    setTabDrag({ tab, x: clientX, y: clientY });
-    const mainEl = mainSplitRef.current;
-    if (mainEl) {
-      const zone = detectDropZone(clientX, clientY, mainEl.getBoundingClientRect());
-      tabDropZoneRef.current = zone;
-      setTabDropZone(zone);
-    }
-  }, []);
-
-  const handleSidebarTabPointerDown = useCallback(
-    (tab: SplittableTabId, e: ReactPointerEvent<HTMLButtonElement>) => {
-      if (!canUseSplitView || e.button !== 0) return;
-      cleanupSidebarTabDragListeners();
-
-      const pointerId = e.pointerId;
-      sidebarTabDragRef.current = {
-        tab,
-        startX: e.clientX,
-        startY: e.clientY,
-        active: false,
-      };
-
-      const onMove = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        const drag = sidebarTabDragRef.current;
-        if (!drag) return;
-        const dx = ev.clientX - drag.startX;
-        const dy = ev.clientY - drag.startY;
-        if (
-          !drag.active &&
-          (Math.abs(dx) > TAB_DRAG_THRESHOLD_PX || Math.abs(dy) > TAB_DRAG_THRESHOLD_PX)
-        ) {
-          drag.active = true;
-        }
-        if (!drag.active) return;
-        updateTabDragPointer(ev.clientX, ev.clientY, drag.tab);
-      };
-
-      const onEnd = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        cleanupSidebarTabDragListeners();
-        const drag = sidebarTabDragRef.current;
-        if (drag?.active) {
-          finishTabDrag(ev.clientX, ev.clientY, drag.tab);
-        } else {
-          sidebarTabDragRef.current = null;
-          tabDropZoneRef.current = null;
-          setTabDrag(null);
-          setTabDropZone(null);
-        }
-      };
-
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onEnd);
-      window.addEventListener("pointercancel", onEnd);
-      sidebarTabDragListenersRef.current = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onEnd);
-        window.removeEventListener("pointercancel", onEnd);
-      };
-    },
-    [cleanupSidebarTabDragListeners, finishTabDrag, canUseSplitView, updateTabDragPointer],
-  );
-
-  useEffect(() => () => cleanupSidebarTabDragListeners(), [cleanupSidebarTabDragListeners]);
-
-  const onTabSplitDividerPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (!effectiveTabSplit || e.button !== 0) return;
-      e.preventDefault();
-      const row = mainSplitRef.current;
-      if (!row) return;
-      const rect = row.getBoundingClientRect();
-      const horizontal = effectiveTabSplit.direction === "horizontal";
-      const size = horizontal ? rect.width : rect.height;
-      const origin = horizontal ? rect.left : rect.top;
-      const coord = horizontal ? e.clientX : e.clientY;
-      const startRel = size > 0 ? (coord - origin) / size : effectiveTabSplit.ratio;
-      tabSplitDividerDragRef.current = {
-        startCoord: startRel,
-        startRatio: effectiveTabSplit.ratio,
-        direction: effectiveTabSplit.direction,
-      };
-      setIsTabSplitDividerDragging(true);
-      e.currentTarget.setPointerCapture(e.pointerId);
-    },
-    [effectiveTabSplit],
-  );
-
-  useEffect(() => {
-    if (!isTabSplitDividerDragging) return;
-    const onMove = (e: PointerEvent) => {
-      const d = tabSplitDividerDragRef.current;
-      const row = mainSplitRef.current;
-      if (!d || !row) return;
-      const rect = row.getBoundingClientRect();
-      const size = d.direction === "horizontal" ? rect.width : rect.height;
-      if (size <= 0) return;
-      const coord = d.direction === "horizontal" ? e.clientX : e.clientY;
-      const origin = d.direction === "horizontal" ? rect.left : rect.top;
-      const rel = size > 0 ? (coord - origin) / size : d.startRatio;
-      const delta = rel - d.startCoord;
-      let next = d.startRatio + delta;
-      next = Math.min(TAB_SPLIT_RATIO_MAX, Math.max(TAB_SPLIT_RATIO_MIN, next));
-      setTabSplitLayout((prev) => (prev ? { ...prev, ratio: next } : prev));
-    };
-    const onUp = () => {
-      tabSplitDividerDragRef.current = null;
-      setIsTabSplitDividerDragging(false);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, [isTabSplitDividerDragging]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getVersion()
-      .then((v) => {
-        if (!cancelled) setLauncherVersion(v);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const isAuthorized = !!profile.ely_username?.trim() || !!profile.mc_username?.trim();
-  const displayedNickname =
-    profile.ely_username?.trim() ||
-    profile.mc_username?.trim() ||
-    profile.nickname.trim() ||
-    "";
-  const activeAccountFromList = launcherAccounts.find((a) => a.is_active);
-  const activeAccountId = activeAccountFromList?.id ?? null;
-  const activeAccountLabel =
-    activeAccountFromList?.label ?? (displayedNickname.trim() || "—");
-
-  useEffect(() => {
-    const accountChanged = prevActiveAccountIdRef.current !== activeAccountId;
-    prevActiveAccountIdRef.current = activeAccountId;
-    if (accountChanged || !nicknameInputFocusedRef.current) {
-      setNicknameDraft(profile.nickname);
-      if (accountChanged) nicknameInputFocusedRef.current = false;
-    }
-  }, [profile.nickname, activeAccountId]);
-  const activeAccountKind = activeAccountFromList?.kind ?? "offline";
-  const initialPersistedConsoleByProfile = useMemo(
-    () => loadPersistedGameConsoleByProfile(),
-    [],
-  );
-  const [consoleByProfile, setConsoleByProfile] = useState<
-    Record<string, ProfileConsoleData>
-  >(initialPersistedConsoleByProfile);
-  const pendingConsoleLinesRef = useRef<Record<string, GameConsoleLine[]>>({});
-  const hiddenConsoleBufferRef = useRef<Record<string, GameConsoleLine[]>>({});
-  const consoleFlushTimerRef = useRef<number | null>(null);
-  const nextConsoleLineIdRef = useRef(Date.now());
-  const lastConsoleLineTextRef = useRef("");
-  const manageConsoleExpandedRef = useRef(false);
-  const isConsoleDetachedRef = useRef(false);
-  const consoleUiActiveRef = useRef(false);
-  const gameStatusRef = useRef<GameStatus>("idle");
-  const isLaunchingRef = useRef(false);
-  const runningConsoleProfileIdRef = useRef<string | null>(null);
-  const [runningConsoleProfileId, setRunningConsoleProfileId] = useState<string | null>(null);
-  const setRunningConsoleProfile = useCallback((profileId: string | null) => {
-    runningConsoleProfileIdRef.current = profileId;
-    setRunningConsoleProfileId(profileId);
-  }, []);
-  const [isConsoleVisible, setIsConsoleVisible] = useState(false);
-
   const { handleModpackSidebarClick } = useHotkeys({
     activeTab: activeItem,
     effectiveTabSplit,
     isConsoleVisible,
     playConsoleActionsRef: playConsoleHotkeysRef,
     modpackActionsRef: modpackHotkeysRef,
+    appActionsRef: appHotkeysRef,
     settingsTab,
     modpackView,
     modpackNavRef,
     setActiveItem: setActiveItemWithSound,
+    tabOrder: hotkeyTabOrder,
+    activateTab: activateHotkeyTab,
     setSettingsTab,
     setModpackView,
     setRequestedModpackView,
   });
 
-  const [gameStatus, setGameStatus] = useState<GameStatus>("idle");
-  const [isLaunching, setIsLaunching] = useState(false);
-  gameStatusRef.current = gameStatus;
-  isLaunchingRef.current = isLaunching;
-  const [isStopping, setIsStopping] = useState(false);
-  const lastRunningRef = useRef(false);
-  const gameLaunchStartedAtRef = useRef<number | null>(null);
-  const [activeInstanceProfile, setActiveInstanceProfile] =
-    useState<InstanceProfileSummary | null>(null);
-  const [roomPresenceContext, setRoomPresenceContext] = useState<RoomPresenceContext | null>(null);
-  const [launchPresenceContext, setLaunchPresenceContext] = useState<LaunchPresenceContext | null>(null);
-
-  const presenceActivity = useMemo(
-    () =>
-      derivePresenceActivity({
-        gameStatus,
-        activeItem,
-        activeInstanceName: activeInstanceProfile?.name ?? null,
-        roomContext: roomPresenceContext,
-        launchContext: launchPresenceContext,
-      }),
-    [activeItem, activeInstanceProfile?.name, gameStatus, launchPresenceContext, roomPresenceContext],
-  );
-  usePresenceHeartbeat(presenceActivity);
-
-  const consoleProfileId =
-    activeInstanceProfile?.id ?? runningConsoleProfileId ?? null;
-
-  const consoleLines = useMemo(() => {
-    if (!consoleProfileId) return [];
-    return consoleByProfile[consoleProfileId]?.lines ?? [];
-  }, [consoleProfileId, consoleByProfile]);
-
-  const installConsoleLines = useMemo(
-    () => consoleByProfile[INSTALL_CONSOLE_PROFILE_ID]?.lines ?? [],
-    [consoleByProfile],
-  );
-
-  const playConsoleLines = useMemo(() => {
-    if (!consoleProfileId) return installConsoleLines;
-    return consoleLines;
-  }, [consoleProfileId, consoleLines, installConsoleLines]);
-
-  const consoleHistorySessions = useMemo(() => {
-    if (!consoleProfileId) return [];
-    return consoleByProfile[consoleProfileId]?.sessions ?? [];
-  }, [consoleProfileId, consoleByProfile]);
-
-  const [knownProfiles, setKnownProfiles] = useState<InstanceProfileCard[]>([]);
-  const [profilesHydrated, setProfilesHydrated] = useState(false);
-  const [pinnedProfileIds, setPinnedProfileIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = window.localStorage.getItem("modpacks_sidebar_pins");
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
-          .slice(0, 3);
-      }
-    } catch {
-    }
-    return [];
-  });
-  const [pinnedContextMenu, setPinnedContextMenu] = useState<{
-    profileId: string;
-    x: number;
-    y: number;
-  } | null>(null);
+  const [pinnedContextMenu, setPinnedContextMenu] = useState<PinnedProfileMenuState | null>(null);
   const [profileInfoProfile, setProfileInfoProfile] = useState<ProfileInfoData | null>(null);
   const [discordModsTitle, setDiscordModsTitle] = useState<string | null>(null);
-  const [backgroundDataUri, setBackgroundDataUri] = useState<string | null>(null);
-  const didApplyStartPageRef = useRef(false);
-  const pendingProductTourRef = useRef(false);
-  const languageHydratedRef = useRef(false);
-  const settingsRef = useRef<Settings | null>(null);
-  const settingsSaveGenRef = useRef(0);
-  const settingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const settingsSavePendingRef = useRef(false);
 
-  const [platformNickname, setPlatformNickname] = useState(() => {
-    try {
-      return window.localStorage.getItem(API_NICKNAME_KEY)?.trim() ?? "";
-    } catch {
-      return "";
-    }
+  const {
+    handlePlayPinnedProfile,
+    handleOpenGameFolder,
+    handleStopGame,
+    handleTitleBarProfilePlay,
+    handlePrimaryClick,
+    handleLaunchToServer,
+    handleBannerPlay,
+    primaryColorClasses,
+    primaryLabel,
+  } = useGameLaunch({
+    settings,
+    profile,
+    activeAccountKind,
+    activeInstanceProfile,
+    setActiveInstanceProfile,
+    knownProfiles,
+    profilesHydrated,
+    run,
+    gameConsole: {
+      setRunningConsoleProfile,
+      runningConsoleProfileIdRef,
+      archiveCurrentConsoleAndClear,
+      restoreHiddenConsoleBuffer,
+      flushPendingConsoleLines,
+      resolveLaunchConsoleProfileId,
+      lastConsoleLineTextRef,
+      setIsConsoleVisible,
+    },
+    versionState: {
+      selectedVersion,
+      loader,
+      fabricProfileId,
+      quiltProfileId,
+      isInstalled,
+      isInstalling,
+      runVersionInstall,
+    },
+    showNotification,
+    tt,
   });
-  useEffect(() => {
-    const sync = () => {
-      try {
-        setPlatformNickname(window.localStorage.getItem(API_NICKNAME_KEY)?.trim() ?? "");
-      } catch {
-        setPlatformNickname("");
-      }
-    };
-    window.addEventListener(API_AUTH_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(API_AUTH_CHANGED_EVENT, sync);
-  }, []);
 
-  const profileAvatarInput = useMemo<ProfileAvatarInput>(
-    () => ({
-      nickname: profile.nickname,
-      ely_username: profile.ely_username,
-      ely_uuid: profile.ely_uuid,
-      mc_uuid: profile.mc_uuid,
-    }),
-    [profile.nickname, profile.ely_username, profile.ely_uuid, profile.mc_uuid],
-  );
-
-  const archiveCurrentConsoleAndClear = useCallback((profileId: string) => {
-    resetGameConsoleFilter();
-    pendingConsoleLinesRef.current[profileId] = [];
-    delete hiddenConsoleBufferRef.current[profileId];
-    setConsoleByProfile((prev) => {
-      const current = prev[profileId] ?? { lines: [], sessions: [] };
-      if (current.lines.length === 0) {
-        return { ...prev, [profileId]: { lines: [], sessions: current.sessions } };
-      }
-      const session: GameConsoleSession = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        startedAt: Date.now(),
-        endedAt: Date.now(),
-        lines: current.lines.slice(-MAX_CONSOLE_LINES),
-      };
-      return {
-        ...prev,
-        [profileId]: {
-          lines: [],
-          sessions: [session, ...current.sessions].slice(0, MAX_ARCHIVED_SESSIONS),
-        },
-      };
-    });
-  }, []);
-
-  const flushPendingConsoleLines = useCallback(() => {
-    if (consoleFlushTimerRef.current !== null) {
-      window.clearTimeout(consoleFlushTimerRef.current);
-      consoleFlushTimerRef.current = null;
-    }
-
-    const pendingEntries = Object.entries(pendingConsoleLinesRef.current).filter(
-      ([, lines]) => lines.length > 0,
-    );
-    if (pendingEntries.length === 0) return;
-
-    pendingConsoleLinesRef.current = {};
-    setConsoleByProfile((prev) => {
-      const next = { ...prev };
-      for (const [profileId, queuedLines] of pendingEntries) {
-        const current = next[profileId] ?? { lines: [], sessions: [] };
-        const mergedLines =
-          current.lines.length > 0 ? [...current.lines, ...queuedLines] : queuedLines.slice();
-        next[profileId] = {
-          ...current,
-          lines:
-            mergedLines.length > MAX_CONSOLE_LINES
-              ? mergedLines.slice(mergedLines.length - MAX_CONSOLE_LINES)
-              : mergedLines,
-        };
-      }
-      return next;
-    });
-  }, []);
-
-  const scheduleConsoleFlush = useCallback(() => {
-    if (consoleFlushTimerRef.current !== null) return;
-    consoleFlushTimerRef.current = window.setTimeout(() => {
-      flushPendingConsoleLines();
-    }, GAME_CONSOLE_BATCH_FLUSH_MS);
-  }, [flushPendingConsoleLines]);
-
-  const restoreHiddenConsoleBuffer = useCallback(
-    (profileId: string) => {
-      const buffered = hiddenConsoleBufferRef.current[profileId];
-      if (!buffered || buffered.length === 0) return;
-      delete hiddenConsoleBufferRef.current[profileId];
-      pendingConsoleLinesRef.current[profileId] = [
-        ...(pendingConsoleLinesRef.current[profileId] ?? []),
-        ...buffered,
-      ];
-      flushPendingConsoleLines();
-    },
-    [flushPendingConsoleLines],
-  );
-
-  const handleManageConsoleExpandedChange = useCallback(
-    (expanded: boolean) => {
-      manageConsoleExpandedRef.current = expanded;
-      if (!expanded) return;
-      const profileId =
-        activeInstanceProfile?.id ?? runningConsoleProfileIdRef.current ?? null;
-      if (profileId) restoreHiddenConsoleBuffer(profileId);
-    },
-    [activeInstanceProfile?.id, restoreHiddenConsoleBuffer],
-  );
-
-  const appendConsoleLine = useCallback(
-    (profileId: string, text: string, source: "stdout" | "stderr") => {
-      if (!isGameConsoleLineImportant(text, source)) return;
-      lastConsoleLineTextRef.current = text;
-      const queued = pendingConsoleLinesRef.current[profileId] ?? [];
-      queued.push({
-        id: nextConsoleLineIdRef.current++,
-        line: text,
-        source,
-      });
-      pendingConsoleLinesRef.current[profileId] = queued;
-      scheduleConsoleFlush();
-    },
-    [scheduleConsoleFlush],
-  );
-
-  const prepareInstallConsole = useCallback(
-    (profileId?: string | null) => {
-      resetGameConsoleFilter();
-      const targetId = profileId ?? activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
-      pendingConsoleLinesRef.current[targetId] = [];
-      delete hiddenConsoleBufferRef.current[targetId];
-      setConsoleByProfile((prev) => ({
-        ...prev,
-        [targetId]: {
-          lines: [],
-          sessions: prev[targetId]?.sessions ?? [],
-        },
-      }));
-      return targetId;
-    },
-    [activeInstanceProfile?.id],
-  );
-
-  const resolveLaunchConsoleProfileId = useCallback(async (): Promise<string | null> => {
-    if (activeInstanceProfile?.id) return activeInstanceProfile.id;
-    try {
-      const selected = await invoke<InstanceProfileSummary | null>("get_selected_profile");
-      return selected?.id ?? null;
-    } catch {
-      return null;
-    }
-  }, [activeInstanceProfile?.id]);
-
-  const orderedSidebarItems = useMemo(() => {
-    const byId = new Map(sidebarItems.map((i) => [i.id, i]));
-    const result: { id: SidebarItemId; labelKey: string }[] = [];
-    for (const id of sidebarOrder) {
-      const item = byId.get(id);
-      if (item && item.id !== "accounts") {
-        result.push(item);
-      }
-    }
-    for (const item of sidebarItems) {
-      if (item.id !== "accounts" && !result.find((x) => x.id === item.id)) {
-        result.push(item);
-      }
-    }
-    return result;
-  }, [sidebarOrder]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem("modpacks_sidebar_pins", JSON.stringify(pinnedProfileIds.slice(0, 3)));
-    } catch {
-    }
-  }, [pinnedProfileIds]);
-
-  const pinnedProfiles = useMemo(() => {
-    const byId = new Map(knownProfiles.map((p) => [p.id, p]));
-    return pinnedProfileIds.map((id) => byId.get(id)).filter((p): p is InstanceProfileCard => !!p).slice(0, 3);
-  }, [knownProfiles, pinnedProfileIds]);
-
-  const activeProfileCard = useMemo(() => {
-    if (!activeInstanceProfile) return null;
-    return knownProfiles.find((p) => p.id === activeInstanceProfile.id) ?? null;
-  }, [activeInstanceProfile, knownProfiles]);
-
-  useEffect(() => {
-    if (!profilesHydrated) return;
-    const knownIds = new Set(knownProfiles.map((p) => p.id));
-    setPinnedProfileIds((prev) => prev.filter((id) => knownIds.has(id)).slice(0, 3));
-  }, [knownProfiles, profilesHydrated]);
-
-  const handleToggleSidebarPin = (profile: InstanceProfileCard) => {
-    let pinLimitReached = false;
-    setPinnedProfileIds((prev) => {
-      if (prev.includes(profile.id)) return prev.filter((id) => id !== profile.id);
-      if (prev.length >= 3) {
-        pinLimitReached = true;
-        return prev;
-      }
-      return [...prev, profile.id];
-    });
-    if (pinLimitReached) {
-      showNotification("warning", tt("app.pinnedProfiles.pinLimit"));
-    }
-  };
-
-  const [openedMrpackPath, setOpenedMrpackPath] = useState<string | null>(null);
-  const pendingProfileLaunchIdRef = useRef<string | null>(null);
-  const handlePlayPinnedProfileRef = useRef<(profile: InstanceProfileCard) => Promise<void>>(
-    async () => {},
-  );
-
-  const handlePlayPinnedProfile = async (profile: InstanceProfileCard) => {
-    try {
-      await invoke("set_selected_profile", { id: profile.id });
-      setActiveInstanceProfile({
-        id: profile.id,
-        name: profile.name,
-        game_version: profile.game_version,
-        loader: profile.loader,
-        loader_version: profile.loader_version ?? null,
-      });
-      let launchVersionId = profile.game_version;
-      const profileLoaderVersion = profile.loader_version?.trim() || null;
-      if (profile.loader === "fabric") {
-        const installedFabricId = await invoke<string | null>("get_installed_fabric_profile_id", {
-          gameVersion: profile.game_version,
-          loaderVersion: profileLoaderVersion,
-        });
-        if (!installedFabricId) {
-          throw new Error(tt("app.pinnedProfiles.fabricNotInstalled"));
-        }
-        launchVersionId = installedFabricId;
-      } else if (profile.loader === "quilt") {
-        const installedQuiltId = await invoke<string | null>("get_installed_quilt_profile_id", {
-          gameVersion: profile.game_version,
-          loaderVersion: profileLoaderVersion,
-        });
-        if (!installedQuiltId) {
-          throw new Error(tt("app.pinnedProfiles.quiltNotInstalled"));
-        }
-        launchVersionId = installedQuiltId;
-      } else if (profile.loader === "forge" && profileLoaderVersion) {
-        launchVersionId = `${profile.game_version}-forge-${profileLoaderVersion}`;
-      } else if (profile.loader === "neoforge" && profileLoaderVersion) {
-        launchVersionId = `${profile.game_version}-neoforge-${profileLoaderVersion}`;
-      }
-      const consoleProfileId = profile.id;
-      setRunningConsoleProfile(consoleProfileId);
-      archiveCurrentConsoleAndClear(consoleProfileId);
-      if (settings?.show_console_on_launch) {
-        setIsConsoleVisible(true);
-      }
-      setIsLaunching(true);
-      try {
-        await invoke("launch_game", {
-          versionId: launchVersionId,
-          versionUrl: null,
-        });
-        lastRunningRef.current = true;
-        gameLaunchStartedAtRef.current = Date.now();
-        setLaunchPresenceContext({
-          kind: "modpack",
-          startedAt: new Date().toISOString(),
-        });
-        setGameStatus("running");
-        void reportStats({ launched: true }).catch(() => {});
-      } finally {
-        setIsLaunching(false);
-      }
-    } catch (error) {
-      setRunningConsoleProfile(null);
-      const msg = error instanceof Error ? error.message : String(error);
-      showNotification("error", tt("app.errors.launchError", { msg }));
-    }
-  };
-
-  handlePlayPinnedProfileRef.current = handlePlayPinnedProfile;
-
-  const handleOpenProfileInModpacks = async (profileId: string) => {
-    const profile = knownProfiles.find((p) => p.id === profileId);
-    if (profile) {
-      setActiveInstanceProfile({
-        id: profile.id,
-        name: profile.name,
-        game_version: profile.game_version,
-        loader: profile.loader,
-        loader_version: profile.loader_version ?? null,
-      });
-    }
-    try {
-      await invoke("set_selected_profile", { id: profileId });
-    } catch {
-    }
-    setActiveItemWithSound("modpacks");
-  };
-
-  const handleDeleteProfileFromSidebar = async (profileId: string) => {
-    try {
-      await invoke("delete_profile", { id: profileId });
-      setKnownProfiles((prev) => prev.filter((p) => p.id !== profileId));
-      setPinnedProfileIds((prev) => prev.filter((id) => id !== profileId));
-      if (activeInstanceProfile?.id === profileId) {
-        setActiveInstanceProfile(null);
-      }
-      showNotification("success", tt("modpacks.toast.profileDeleted"));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showNotification("error", tt("modpacks.toast.deleteProfileFailedWithMsg", { msg }));
-    }
-  };
-
-  const handleModpackProfileSelectionChange = useCallback(
-    (
-      p: InstanceProfileSummary | (InstanceProfileSummary & { game_version: string; loader: string }) | null,
-    ) => {
-      setActiveInstanceProfile(
-        p
-          ? {
-              id: p.id,
-              name: p.name,
-              game_version: p.game_version,
-              loader: p.loader,
-              loader_version: p.loader_version ?? null,
-            }
-          : null,
-      );
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!settings || languageHydratedRef.current) return;
-    languageHydratedRef.current = true;
-
-    let lang: Language | null = readStoredLanguage();
-
-    if (!lang && settings.interface_language && isLanguage(settings.interface_language)) {
-      lang = settings.interface_language;
-    }
-
-    if (!lang) {
-      const browserLang =
-        typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "ru";
-      if (browserLang.startsWith("de")) lang = "de";
-      else if (browserLang.startsWith("es")) lang = "es";
-      else if (browserLang.startsWith("en")) lang = "en";
-      else lang = "ru";
-    }
-
-    setLanguage(lang);
-
-    let onboardingAlreadyDone = !!settings.onboarding_completed;
-    try {
-      if (window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY) === "1") {
-        onboardingAlreadyDone = true;
-      }
-    } catch {
-    }
-
-    if (onboardingAlreadyDone) {
-      try {
-        window.localStorage.setItem("launcher_language", lang);
-      } catch {
-      }
-    }
-
-    if (settings.interface_language !== lang) {
-      const synced = { ...settings, interface_language: lang };
-      setSettings(synced);
-      void invoke("set_settings", { settings: synced }).catch(() => {});
-    }
-  }, [settings]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    void listen<{ exit_code?: number | null }>("game-process-exited", (event) => {
-      if (!lastRunningRef.current) return;
-      const profileId =
-        runningConsoleProfileIdRef.current ?? activeInstanceProfile?.id ?? null;
-      if (profileId) restoreHiddenConsoleBuffer(profileId);
-      lastRunningRef.current = false;
-      flushPendingConsoleLines();
-      setRunningConsoleProfile(null);
-      const exitCode = event.payload.exit_code;
-      const elapsedMs =
-        gameLaunchStartedAtRef.current != null
-          ? Date.now() - gameLaunchStartedAtRef.current
-          : null;
-      gameLaunchStartedAtRef.current = null;
-      setLaunchPresenceContext(null);
-      if (exitCode != null && exitCode !== 0) {
-        showNotification(
-          "error",
-          tt("app.toast.gameExitedEarly", { code: exitCode }),
-        );
-      } else if (elapsedMs != null && elapsedMs < 5000) {
-        showNotification(
-          "warning",
-          tt("app.toast.gameExitedEarly", { code: exitCode ?? 0 }),
-        );
-      }
-      setGameStatus((prev) => {
-        if (prev !== "running") return prev;
-        const lastLine = lastConsoleLineTextRef.current;
-        const lower = lastLine.toLowerCase();
-        const looksCrash =
-          lower.includes("exception") ||
-          lower.includes("fatal") ||
-          lower.includes("crash") ||
-          lower.includes("ошибка");
-        return looksCrash ? "crashed" : "stopped";
-      });
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    return () => {
-      unlisten?.();
-    };
-  }, [activeInstanceProfile?.id, flushPendingConsoleLines, restoreHiddenConsoleBuffer, showNotification, tt]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem("selected_loader", loader);
-    } catch {
-    }
-  }, [loader]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    (async () => {
-      try {
-        unlisten = await listen<GameConsoleLinePayload>("game-console-line", (event) => {
-          const payload = event.payload;
-          const text =
-            typeof payload === "string"
-              ? payload
-              : typeof payload.line === "string"
-                ? payload.line
-                : "";
-          if (!text) return;
-          lastConsoleLineTextRef.current = text;
-          const source: "stdout" | "stderr" =
-            typeof payload === "string"
-              ? "stdout"
-              : payload.source === "stderr"
-                ? "stderr"
-                : "stdout";
-          if (!isGameConsoleLineImportant(text, source)) return;
-          const runningId = runningConsoleProfileIdRef.current;
-          let profileId: string | null = runningId;
-          if (!profileId) {
-            if (isVersionInstallConsoleLine(text)) {
-              profileId = activeInstanceProfile?.id ?? INSTALL_CONSOLE_PROFILE_ID;
-            } else {
-              profileId = activeInstanceProfile?.id ?? null;
-            }
-          }
-          if (!profileId) return;
-
-          const capturePaused =
-            gameStatusRef.current === "running" &&
-            !isLaunchingRef.current &&
-            !consoleUiActiveRef.current;
-          if (capturePaused) {
-            const buffered = hiddenConsoleBufferRef.current[profileId] ?? [];
-            buffered.push({
-              id: nextConsoleLineIdRef.current++,
-              line: text,
-              source,
-            });
-            if (buffered.length > HIDDEN_CONSOLE_BUFFER_MAX) {
-              buffered.splice(0, buffered.length - HIDDEN_CONSOLE_BUFFER_MAX);
-            }
-            hiddenConsoleBufferRef.current[profileId] = buffered;
-            return;
-          }
-
-          appendConsoleLine(profileId, text, source);
-        });
-      } catch (e) {
-        console.error("Не удалось подписаться на консоль игры:", e);
-      }
-    })();
-
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, [activeInstanceProfile?.id, appendConsoleLine]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (isLaunching || gameStatus === "running") return;
-    const t = window.setTimeout(() => {
-      flushPendingConsoleLines();
-      const writeConsole = (byProfile: Record<string, ProfileConsoleData>) => {
-        window.localStorage.setItem(
-          GAME_CONSOLE_STORAGE_KEY,
-          JSON.stringify({ byProfile }),
-        );
-      };
-      try {
-        writeConsole(consoleByProfile);
-      } catch {
-        try {
-          const pruned: Record<string, ProfileConsoleData> = {};
-          for (const [profileId, data] of Object.entries(consoleByProfile)) {
-            pruned[profileId] = {
-              lines: data.lines.slice(-200),
-              sessions: data.sessions.slice(0, 3).map((s) => ({
-                ...s,
-                lines: s.lines.slice(-100),
-              })),
-            };
-          }
-          writeConsole(pruned);
-        } catch {
-          try {
-            window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY);
-            window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY_V1);
-          } catch {
-            //ignore
-          }
-        }
-      }
-    }, GAME_CONSOLE_PERSIST_DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [consoleByProfile, flushPendingConsoleLines, gameStatus, isLaunching]);
-
-  useEffect(() => {
-    return () => {
-      flushPendingConsoleLines();
-    };
-  }, [flushPendingConsoleLines]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen<{
-      profile_id: string;
-      delta_seconds: number;
-      total_seconds?: number;
-    }>("playtime-updated", (event) => {
-      const profileId = event.payload?.profile_id;
-      const delta = Number(event.payload?.delta_seconds ?? 0);
-      const totalRaw = event.payload?.total_seconds;
-      const total =
-        totalRaw != null && Number.isFinite(Number(totalRaw))
-          ? Math.max(0, Math.floor(Number(totalRaw)))
-          : null;
-      if (!profileId) return;
-
-      setKnownProfiles((prev) => {
-        const next = prev.map((p) => {
-          if (p.id !== profileId) return p;
-          const nextSeconds =
-            total != null
-              ? total
-              : Number.isFinite(delta) && delta > 0
-                ? (p.play_time_seconds ?? 0) + Math.floor(delta)
-                : p.play_time_seconds;
-          return { ...p, play_time_seconds: nextSeconds };
-        });
-        writeDataCache("profiles", next);
-        return next;
-      });
-
-      if (!Number.isFinite(delta) || delta <= 0) return;
-      if (!getStoredAccessToken()) return;
-      void reportStats({ playtime_seconds_delta: Math.floor(delta) }).catch(() => {});
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  const showSettingsSavedNotification = useCallback(() => {
-    showNotification("success", tt("app.toast.settingsSaved"));
-  }, [tt, showNotification]);
-
-  const defaultSettings: Settings = {
-    game_directory: null,
-    ram_mb: 4096,
-    graphics_adapter: null,
-    show_console_on_launch: false,
-    close_launcher_on_game_start: false,
-    check_game_processes: true,
-    resolution_width: null,
-    resolution_height: null,
-    show_snapshots: false,
-    show_alpha_versions: false,
-    forge_ipv6_download: false,
-    forge_proxy_fallback: true,
-    notify_new_update: true,
-    notify_new_message: true,
-    notify_system_message: true,
-    check_updates_on_start: true,
-    auto_install_updates: false,
-    open_launcher_on_profiles_tab: false,
-    ui_sounds_enabled: true,
-    discord_rpc_enabled: true,
-    minimize_to_tray_on_close: false,
-    autostart_enabled: false,
-    animations_disabled: false,
-    background_animation_disabled: false,
-    thematic_decorations_disabled: false,
-    show_launcher_banners: true,
-    background_accent_color: "#4a22a8",
-    background_image_url: null,
-    background_blur_enabled: true,
-    split_view_enabled: false,
-    sidebar_position: "left",
-    onboarding_completed: false,
-    interface_language: "ru",
-    custom_theme_id: null,
-    custom_theme_hot_reload: false,
-  };
-
-  const refreshSettings = useCallback(async (profileId?: string | null) => {
-    if (settingsSavePendingRef.current) return;
-    try {
-      const loaded =
-        profileId != null && profileId !== ""
-          ? await invoke<Settings>("get_effective_settings", { profileId })
-          : await invoke<Settings>("get_settings");
-      if (settingsSavePendingRef.current) return;
-      const s =
-        loaded.background_accent_color?.trim().toLowerCase() === "#0b1530"
-          ? { ...loaded, background_accent_color: "#4a22a8" }
-          : loaded;
-      const storedLang = readStoredLanguage();
-      if (storedLang && storedLang !== s.interface_language) {
-        const synced = { ...s, interface_language: storedLang };
-        settingsRef.current = synced;
-        setSettings(synced);
-        void invoke("set_settings", { settings: synced }).catch(() => {});
-        return;
-      }
-      settingsRef.current = s;
-      setSettings(s);
-    } catch (e) {
-      console.error("Не удалось загрузить настройки:", e);
-      settingsRef.current = defaultSettings;
-      setSettings(defaultSettings);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!settings) return;
-    if (didApplyStartPageRef.current) return;
-    setActiveItem(settings.open_launcher_on_profiles_tab ? "modpacks" : "play");
-    didApplyStartPageRef.current = true;
-  }, [settings]);
-
-  useEffect(() => {
-    if (!settings) return;
-
-    try {
-      if (window.localStorage.getItem(ONBOARDING_FORCE_STORAGE_KEY) === "1") {
-        setOnboardingVisible(true);
-        return;
-      }
-    } catch {
-    }
-
-    if (settings.onboarding_completed) {
-      setOnboardingVisible(false);
-      return;
-    }
-
-    try {
-      if (window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY) === "1") {
-        setOnboardingVisible(false);
-        void invoke("set_settings", {
-          settings: { ...settings, onboarding_completed: true },
-        }).catch(() => {});
-        return;
-      }
-    } catch {
-    }
-
-    setOnboardingVisible(true);
-  }, [settings]);
-
-  useEffect(() => {
-    if (onboardingVisible !== false) return;
-
-    if (pendingProductTourRef.current) {
-      pendingProductTourRef.current = false;
-      try {
-        if (window.localStorage.getItem(PRODUCT_TOUR_COMPLETED_STORAGE_KEY) !== "1") {
-          setProductTourActive(true);
-        }
-      } catch {
-      }
-      return;
-    }
-
-    try {
-      if (window.localStorage.getItem(PRODUCT_TOUR_FORCE_STORAGE_KEY) === "1") {
-        window.localStorage.removeItem(PRODUCT_TOUR_FORCE_STORAGE_KEY);
-        setProductTourActive(true);
-      }
-    } catch {
-    }
-  }, [onboardingVisible]);
-
-  const updateSettings = useCallback(
-    async (patch: Partial<Settings>, profileId?: string | null) => {
-      const gameFields = [
-        "ram_mb",
-        "show_console_on_launch",
-        "close_launcher_on_game_start",
-        "check_game_processes",
-      ] as const;
-      const hasGameField = gameFields.some((k) => k in patch && patch[k] !== undefined);
-      const useProfile = profileId != null && profileId !== "" && hasGameField;
-
-      let snapshotCurrent = defaultSettings;
-      let snapshotNext = defaultSettings;
-
-      setSettings((prev) => {
-        snapshotCurrent = prev ?? defaultSettings;
-        snapshotNext = { ...snapshotCurrent, ...patch };
-        settingsRef.current = snapshotNext;
-        return snapshotNext;
-      });
-
-      if (patch.open_launcher_on_profiles_tab !== undefined) {
-        setActiveItemWithSound(patch.open_launcher_on_profiles_tab ? "modpacks" : "play");
-      }
-
-      const languageOnly =
-        Object.keys(patch).length === 1 && patch.interface_language !== undefined;
-
-      try {
-        if (useProfile) {
-          const profilePatch: Record<string, unknown> = {};
-          if (patch.ram_mb !== undefined) profilePatch.ram_mb = patch.ram_mb;
-          if (patch.show_console_on_launch !== undefined)
-            profilePatch.show_console_on_launch = patch.show_console_on_launch;
-          if (patch.close_launcher_on_game_start !== undefined)
-            profilePatch.close_launcher_on_game_start = patch.close_launcher_on_game_start;
-          if (patch.check_game_processes !== undefined)
-            profilePatch.check_game_processes = patch.check_game_processes;
-
-          await invoke("update_profile_settings", { id: profileId, patch: profilePatch });
-
-          const nonGamePatch = { ...patch };
-          gameFields.forEach((k) => delete nonGamePatch[k]);
-          if (Object.keys(nonGamePatch).length > 0) {
-            settingsSavePendingRef.current = true;
-            const gen = ++settingsSaveGenRef.current;
-            const base = settingsRef.current ?? snapshotCurrent;
-            await invoke("set_settings", {
-              settings: { ...base, ...nonGamePatch },
-            });
-            if (gen === settingsSaveGenRef.current) {
-              settingsSavePendingRef.current = false;
-            }
-          }
-        } else {
-          settingsSavePendingRef.current = true;
-          const gen = ++settingsSaveGenRef.current;
-          if (settingsSaveTimerRef.current != null) {
-            clearTimeout(settingsSaveTimerRef.current);
-          }
-          await new Promise<void>((resolve) => {
-            settingsSaveTimerRef.current = setTimeout(() => resolve(), 200);
-          });
-          if (gen !== settingsSaveGenRef.current) return;
-          const toSave = settingsRef.current ?? snapshotNext;
-          await invoke("set_settings", { settings: toSave });
-          if (gen === settingsSaveGenRef.current) {
-            settingsSavePendingRef.current = false;
-          }
-        }
-        if (!languageOnly) {
-          showSettingsSavedNotification();
-        }
-      } catch (e) {
-        settingsSavePendingRef.current = false;
-        console.error("Не удалось сохранить настройки:", e);
-      }
-    },
-    [showSettingsSavedNotification, setActiveItemWithSound],
-  );
-
-  const persistInterfaceLanguage = useCallback(
-    (lang: Language) => {
-      setLanguage(lang);
-      try {
-        window.localStorage.setItem("launcher_language", lang);
-      } catch {
-      }
-      setSettings((prev) => (prev ? { ...prev, interface_language: lang } : prev));
-      void updateSettings({ interface_language: lang });
-    },
-    [updateSettings],
-  );
-
-  useEffect(() => {
-    (async () => {
-      await refreshSettings();
-      try {
-        const totalGb = await invoke<number>("get_system_memory_gb");
-        if (typeof totalGb === "number" && Number.isFinite(totalGb) && totalGb >= 1) {
-          setSystemMemoryGb(Math.max(1, Math.min(64, Math.round(totalGb))));
-        } else {
-          setSystemMemoryGb(16);
-        }
-      } catch {
-        setSystemMemoryGb(16);
-      }
-    })();
-  }, [refreshSettings]);
-
-  useEffect(() => {
-    if (!settings) return;
-    if (didLoadedRemoteNotificationsRef.current) return;
-
-    const controller = new AbortController();
-    (async () => {
-      try {
-        let raw: unknown = null;
-        try {
-          const response = await fetchFirstAvailableMirror(
-            buildLauncherNewsUrls("notifications.json"),
-            { signal: controller.signal },
-          );
-          const text = await response.text();
-          const sanitized = text.replace(/,\s*([}\]])/g, "$1");
-          raw = JSON.parse(sanitized) as unknown;
-        } catch (e) {
-          if (!controller.signal.aborted) {
-            console.warn("Remote notifications failed to load:", e);
-          }
-          return;
-        }
-
-        let items: RemoteNotificationsJsonItem[] = [];
-        if (Array.isArray(raw)) {
-          items = raw as RemoteNotificationsJsonItem[];
-        } else if (raw && typeof raw === "object") {
-          const obj = raw as any;
-          if (Array.isArray(obj.notifications)) {
-            items = obj.notifications as RemoteNotificationsJsonItem[];
-          } else if (Array.isArray(obj.items)) {
-            items = obj.items as RemoteNotificationsJsonItem[];
-          }
-        }
-
-        const normalized = items
-          .map((item) => {
-            const colorMsg = getRemoteItemField(item, "color-msg", "colorMsg");
-            const iconMsg = getRemoteItemField(item, "icon-msg", "iconMsg");
-            const textMsg = getRemoteItemField(item, "text-msg", "textMsg");
-
-            const color = normalizeOptionalString(colorMsg);
-            const icon = normalizeOptionalString(iconMsg);
-            const text = normalizeOptionalString(textMsg) ?? "";
-            return {
-              item,
-              colorMsg: color,
-              iconMsg: icon,
-              textMsg: text,
-            };
-          })
-          .filter((x) => x.textMsg.length > 0);
-
-        const system: Array<
-          Pick<Notification, "colorMsg" | "iconMsg" | "message" | "kind">
-        > = [];
-
-        for (const n of normalized) {
-          const kindFromColor = resolveRemoteNotificationKindFromColorMsg(n.colorMsg);
-          system.push({
-            message: n.textMsg,
-            colorMsg: n.colorMsg,
-            iconMsg: n.iconMsg,
-            kind: kindFromColor ?? undefined,
-          });
-        }
-
-        didLoadedRemoteNotificationsRef.current = true;
-
-        if (system.length === 0) return;
-        if (!settings.notify_system_message) return;
-
-        if (settings.ui_sounds_enabled) {
-          const hasNoisyKind = system.some((s) => s.kind === "info" || s.kind === "error");
-          if (hasNoisyKind) playNotificationSound();
-        }
-
-        for (const s of system) {
-          pushNotification(s);
-        }
-
-      } catch (e) {
-        if (controller.signal.aborted) return;
-        console.error("Failed to load remote notifications:", e);
-      }
-    })();
-
-    return () => controller.abort();
-  }, [settings, pushNotification]);
-
-  useEffect(() => {
-    if (didLoadedBottomSocialRef.current) return;
-    didLoadedBottomSocialRef.current = true;
-
-    const STORAGE_LAUNCHES_KEY = "mc16launcher:socialPromptLaunches";
-    const STORAGE_LAST_SHOWN_AT_KEY = "mc16launcher:socialPromptLastShownAt";
-
-    const MIN_LAUNCHES_BETWEEN = 6;
-    const MIN_DAYS_BETWEEN = 5;
-    const CHANCE_PER_ELIGIBLE_LAUNCH = 0.22;
-
-    let launches = 0;
-    let lastShownAt = 0;
-    try {
-      launches = Number.parseInt(localStorage.getItem(STORAGE_LAUNCHES_KEY) ?? "0", 10) || 0;
-      lastShownAt = Number.parseInt(localStorage.getItem(STORAGE_LAST_SHOWN_AT_KEY) ?? "0", 10) || 0;
-    } catch {
-    }
-
-    launches += 1;
-    try {
-      localStorage.setItem(STORAGE_LAUNCHES_KEY, String(launches));
-    } catch {
-    }
-
-    const now = Date.now();
-    const minMs = MIN_DAYS_BETWEEN * 24 * 60 * 60 * 1000;
-    const eligible =
-      launches >= MIN_LAUNCHES_BETWEEN &&
-      (lastShownAt <= 0 || now - lastShownAt >= minMs) &&
-      Math.random() < CHANCE_PER_ELIGIBLE_LAUNCH;
-
-    if (!eligible) return;
-
-    const kind: BottomSocialKind = Math.random() < 0.5 ? "discord" : "telegram";
-    const card: BottomSocialNotification = {
-      id: Date.now() + Math.random(),
-      kind,
-      colorMsg: kind === "discord" ? "#5865F2" : "#229ED9",
-      iconMsg: undefined,
-      messageKey: kind === "discord" ? "app.social.discord" : "app.social.telegram",
-    };
-
-    setBottomSocialNotifications([card]);
-    try {
-      localStorage.setItem(STORAGE_LAST_SHOWN_AT_KEY, String(now));
-      localStorage.setItem(STORAGE_LAUNCHES_KEY, "0");
-    } catch {
-    }
-  }, []);
-
-  const installUpdate = useCallback(
-    async (
-      upd?: import("@tauri-apps/plugin-updater").Update | null,
-    ) => {
-      let update = upd;
-      if (!update && updateVersion) {
-        setUpdateStatus("checking");
-        const u = await check();
-        if (!u) {
-          setUpdateStatus("available");
-          return;
-        }
-        update = u;
-      }
-      if (!update) return;
-      try {
-        setUpdateStatus("downloading");
-        setUpdateDownloadPercent(0);
-        let downloaded = 0;
-        let total = 0;
-        await update.download((event) => {
-          if (event.event === "Started" && event.data?.contentLength) {
-            total = event.data.contentLength;
-            downloaded = 0;
-          } else if (event.event === "Progress" && event.data?.chunkLength) {
-            downloaded += event.data.chunkLength;
-            if (total > 0) {
-              setUpdateDownloadPercent(Math.min(99, Math.round((downloaded / total) * 100)));
-            }
-          }
-        });
-        setUpdateStatus("installing");
-        setUpdateDownloadPercent(100);
-        await update.install();
-        showNotification("success", tt("settings.updates.installedRestart"));
-        await relaunch();
-      } catch (e) {
-        console.error("Update install failed:", e);
-        setUpdateStatus("available");
-        setUpdateDownloadPercent(null);
-        showNotification("error", tt("settings.updates.checkFailed"));
-      }
-    },
-    [updateVersion, showNotification, tt],
-  );
-
-  const markUpdatePopupShown = useCallback((version: string) => {
-    try {
-      localStorage.setItem("mc16launcher:lastShownUpdateVersion", version);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const previewUpdatePopup = useCallback(async () => {
-    try {
-      const cached = readCachedLauncherBanners();
-      let banners = cached ?? [];
-      if (!pickUpdatePopupBanner(banners)) {
-        try {
-          banners = await fetchLauncherBanners();
-        } catch (e) {
-          console.error("Failed to fetch banners for popup preview:", e);
-        }
-      }
-      const popup =
-        pickUpdatePopupBanner(banners) ?? createFallbackUpdatePopupBanner();
-      setUpdatePopupBanner(popup);
-      if (!updateVersion) {
-        setUpdateVersion("preview");
-      }
-      return true;
-    } catch (e) {
-      console.error("Failed to preview update popup:", e);
-      showNotification("error", tt("settings.updates.checkFailed"));
-      return false;
-    }
-  }, [showNotification, tt, updateVersion]);
-
-  const maybeShowUpdatePopup = useCallback(
-    async (version: string) => {
-      try {
-        const cached = readCachedLauncherBanners();
-        let banners = cached ?? [];
-        if (!pickUpdatePopupBanner(banners)) {
-          banners = await fetchLauncherBanners();
-        }
-        const popup = pickUpdatePopupBanner(banners);
-        if (!popup) return false;
-        setUpdatePopupBanner(popup);
-        markUpdatePopupShown(version);
-        return true;
-      } catch (e) {
-        console.error("Failed to load update popup banner:", e);
-        return false;
-      }
-    },
-    [markUpdatePopupShown],
-  );
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("mc16launcher:forceUpdatePopup") !== "1") return;
-      localStorage.removeItem("mc16launcher:forceUpdatePopup");
-    } catch {
-      return;
-    }
-    const t = window.setTimeout(() => {
-      void previewUpdatePopup();
-    }, 800);
-    return () => window.clearTimeout(t);
-  }, [previewUpdatePopup]);
-
-  const checkForUpdate = useCallback(
-    async (options?: { silent?: boolean; source?: "startup" | "manual" }) => {
-      const silent = options?.silent ?? false;
-      const source = options?.source ?? "manual";
-      try {
-        setUpdateStatus("checking");
-        setUpdateVersion(null);
-        const update = await check();
-        if (update) {
-          setUpdateVersion(update.version);
-          setUpdateStatus("available");
-          persistLauncherUpdateBadge("outdated");
-
-          const notifyEnabled = settings?.notify_new_update !== false;
-          const shouldNotifyManual = !silent && notifyEnabled;
-          const shouldNotifyStartup = source === "startup" && notifyEnabled;
-          const autoInstall = settings?.auto_install_updates === true;
-
-          if (autoInstall) {
-            void installUpdate(update);
-            return;
-          }
-
-          if (shouldNotifyStartup) {
-            const key = "mc16launcher:lastShownUpdateVersion";
-            let lastShown: string | null = null;
-            try {
-              lastShown = localStorage.getItem(key);
-            } catch {
-              lastShown = null;
-            }
-            if (lastShown !== update.version) {
-              const shownPopup = await maybeShowUpdatePopup(update.version);
-              if (!shownPopup) {
-                showNotification(
-                  "info",
-                  tt("settings.updates.released", { version: update.version }),
-                );
-                markUpdatePopupShown(update.version);
-              }
-            }
-          } else if (shouldNotifyManual) {
-            const shownPopup = await maybeShowUpdatePopup(update.version);
-            if (!shownPopup) {
-              showNotification(
-                "info",
-                tt("settings.updates.available", { version: update.version }),
-              );
-            }
-          }
-        } else {
-          setUpdatePopupBanner(null);
-          setUpdateStatus("up-to-date");
-          persistLauncherUpdateBadge("latest");
-          if (!silent) {
-            showNotification("info", tt("settings.updates.noneFound"));
-          }
-        }
-      } catch (e) {
-        console.error("Update check failed:", e);
-        setUpdateStatus("error");
-        if (!silent) {
-          showNotification("info", tt("settings.updates.checkFailed"));
-        }
-      }
-    },
-    [
-      settings?.notify_new_update,
-      settings?.auto_install_updates,
+  const { systemMemoryGb, refreshSettings, updateSettings, persistInterfaceLanguage } =
+    useLauncherSettings({
+      settings,
+      setSettings,
+      setLanguage,
+      setActiveItem,
+      setActiveItemWithSound,
       showNotification,
       tt,
-      installUpdate,
-      persistLauncherUpdateBadge,
-      maybeShowUpdatePopup,
-      markUpdatePopupShown,
-    ],
+    });
+
+  const { bottomSocialNotifications, setBottomSocialNotifications } = useRemoteNotices(
+    settings,
+    pushNotification,
   );
 
-  const checkForUpdateRef = useRef(checkForUpdate);
-  checkForUpdateRef.current = checkForUpdate;
-  const didStartupUpdateCheckRef = useRef(false);
+  const {
+    updateStatus,
+    updateVersion,
+    updateDownloadPercent,
+    updatePopupBanner,
+    setUpdatePopupBanner,
+    launcherVersion,
+    launcherVersionBadgeKind,
+    checkForUpdate,
+    installUpdate,
+    previewUpdatePopup,
+  } = useLauncherUpdater({ settings, showNotification, tt });
 
-  useEffect(() => {
-    if (settings == null) return;
-    if (settings.check_updates_on_start === false) return;
-    if (didStartupUpdateCheckRef.current) return;
-    const t = setTimeout(() => {
-      didStartupUpdateCheckRef.current = true;
-      void checkForUpdateRef.current({ silent: true, source: "startup" });
-    }, 2000);
-    return () => clearTimeout(t);
-  }, [settings?.check_updates_on_start]);
-
-  const launcherVersionBadgeKind = useMemo(() => {
-    if (updateStatus === "available") return "outdated" as const;
-    if (updateStatus === "up-to-date") return "latest" as const;
-    if (launcherUpdateBadge === "outdated") return "outdated" as const;
-    if (launcherUpdateBadge === "latest") return "latest" as const;
-    return "unknown" as const;
-  }, [updateStatus, launcherUpdateBadge]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const current = await invoke<InstanceProfileSummary | null>("get_selected_profile");
-        if (current) {
-          setActiveInstanceProfile({
-            id: current.id,
-            name: current.name,
-            game_version: current.game_version,
-            loader: current.loader,
-            loader_version: current.loader_version ?? null,
-          });
-        }
-      } catch {
-        //ignore
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    const cached = readDataCache<InstanceProfileCard[]>("profiles", 8_000);
-    if (cached?.length) {
-      setKnownProfiles(cached);
-      setProfilesHydrated(true);
-    }
-
-    (async () => {
-      try {
-        const list = await invoke<InstanceProfileCard[]>("get_profiles");
-        const mapped = list.map((p) => ({
-          id: p.id,
-          name: p.name,
-          game_version: p.game_version,
-          loader: p.loader,
-          loader_version: p.loader_version ?? null,
-          icon_path: p.icon_path,
-          created_at: p.created_at,
-          play_time_seconds: p.play_time_seconds,
-          last_played_at: p.last_played_at ?? null,
-          mods_count: p.mods_count,
-          resourcepacks_count: p.resourcepacks_count,
-          shaderpacks_count: p.shaderpacks_count,
-          total_size_bytes: p.total_size_bytes,
-          directory: p.directory,
-        }));
-        writeDataCache("profiles", mapped);
-        setKnownProfiles(mapped);
-      } catch {
-      } finally {
-        setProfilesHydrated(true);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      try {
-        const pending = await invoke<string | null>("take_pending_profile_launch");
-        if (pending?.trim()) {
-          pendingProfileLaunchIdRef.current = pending.trim();
-        }
-      } catch {
-        //ignore
-      }
-      try {
-        unlisten = await listen<{ profile_id: string }>("profile-launch-request", (event) => {
-          const id = event.payload.profile_id?.trim();
-          if (id) pendingProfileLaunchIdRef.current = id;
-        });
-      } catch {
-        //ignore
-      }
-    })();
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      try {
-        const pending = await invoke<string | null>("take_pending_mrpack_open");
-        const p = pending?.trim();
-        if (p) {
-          activateSidebarTab("modpacks");
-          setOpenedMrpackPath(p);
-        }
-      } catch {
-        //ignore
-      }
-
-      try {
-        unlisten = await listen<{ path: string }>("mrpack-open-request", (event) => {
-          const p = event.payload.path?.trim();
-          if (!p) return;
-          activateSidebarTab("modpacks");
-          setOpenedMrpackPath(p);
-        });
-      } catch {
-        //ignore
-      }
-    })();
-
-    return () => {
-      unlisten?.();
-    };
-  }, [activateSidebarTab]);
-
-  useEffect(() => {
-    const profileId = pendingProfileLaunchIdRef.current;
-    if (!profileId || !profilesHydrated) return;
-    const profile = knownProfiles.find((p) => p.id === profileId);
-    if (!profile) return;
-    pendingProfileLaunchIdRef.current = null;
-    void handlePlayPinnedProfileRef.current(profile);
-  }, [profilesHydrated, knownProfiles]);
-
-  const handleCreateProfileDesktopShortcut = async (profile: InstanceProfileCard) => {
-    try {
-      const path = await invoke<string>("create_profile_desktop_shortcut", {
-        profileId: profile.id,
-      });
-      showNotification(
-        "success",
-        path
-          ? `${tt("modpacks.shortcut.created")} (${path})`
-          : tt("modpacks.shortcut.created"),
-      );
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      showNotification("error", tt("modpacks.shortcut.failed", { msg }));
-    }
-  };
+  const { openedMrpackPath, setOpenedMrpackPath } = useOpenedMrpack(activateSidebarTab);
 
   useEffect(() => {
     if (activeItem === "settings") {
@@ -3012,618 +472,16 @@ function App() {
     }
   }, [activeItem, activeInstanceProfile?.id, refreshSettings]);
 
-  useEffect(() => {
-    if (!(settings?.discord_rpc_enabled ?? true)) {
-      invoke("discord_presence_clear").catch(() => {});
-      return;
-    }
-
-    let details: string;
-    let state: string | null = null;
-    let tab = activeItem;
-
-    if (gameStatus === "running") {
-      const profileName = activeInstanceProfile?.name?.trim() || null;
-      const gameVersion =
-        activeInstanceProfile?.game_version?.trim() ||
-        selectedVersion?.id?.trim() ||
-        null;
-      const loaderId = (activeInstanceProfile?.loader || loader || "").toLowerCase();
-      const loaderLabel =
-        loaderId === "fabric"
-          ? "Fabric"
-          : loaderId === "forge"
-            ? "Forge"
-            : loaderId === "quilt"
-              ? "Quilt"
-              : loaderId === "neoforge"
-                ? "NeoForge"
-                : loaderId === "vanilla"
-                  ? "Vanilla"
-                  : null;
-
-      const metaParts = [loaderLabel, gameVersion].filter(Boolean) as string[];
-      const meta = metaParts.join(" · ");
-      const playingLabel = profileName
-        ? meta
-          ? `${profileName} · ${meta}`
-          : profileName
-        : meta || "Minecraft";
-
-      details = t(language, "app.discord.playing");
-      state = playingLabel;
-      tab = "play";
-    } else {
-      switch (activeItem) {
-        case "play":
-          details = t(language, "app.discord.play");
-          break;
-        case "settings":
-          details = t(language, "app.discord.settings");
-          break;
-        case "mods":
-          details = t(language, "app.discord.mods");
-          if (discordModsTitle) state = discordModsTitle;
-          break;
-        case "modpacks":
-          details = t(language, "app.discord.modpacks");
-          if (activeInstanceProfile?.name) state = activeInstanceProfile.name;
-          break;
-        case "friends":
-          details = t(language, "app.discord.friends");
-          break;
-        case "rooms":
-          details = t(language, "app.discord.rooms");
-          break;
-        case "accounts":
-          details = t(language, "app.discord.accounts");
-          break;
-        default:
-          details = t(language, "app.discord.play");
-      }
-    }
-    invoke("discord_presence_update", { details, state, tab }).catch(() => {});
-  }, [
+  useDiscordPresence({
     activeItem,
     language,
     discordModsTitle,
-    activeInstanceProfile?.name,
-    activeInstanceProfile?.game_version,
-    activeInstanceProfile?.loader,
+    activeInstanceProfile,
     gameStatus,
     loader,
-    selectedVersion?.id,
-    settings?.discord_rpc_enabled,
-  ]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    (async () => {
-      setVersionsLoading(true);
-      try {
-        const installed = await invoke<string[]>("list_installed_versions");
-        setInstalledIds(new Set(installed));
-
-        if (loader === "forge") {
-          const result = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
-          setVersions(result);
-          const pending = pendingRoomGameRef.current;
-          const preferId =
-            pending && pending.loader === "forge" ? pending.gameVersion : null;
-          const savedId =
-            preferId ??
-            (typeof window !== "undefined"
-              ? window.localStorage.getItem("selected_version_id_forge")
-              : null);
-          const match = savedId ? result.find((v) => v.id === savedId) : undefined;
-          setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
-          if (preferId && match) pendingRoomGameRef.current = null;
-          setInstalledGameVersions(new Set());
-        } else if (loader === "neoforge") {
-          const result = await invoke<NeoForgeVersionSummary[]>("fetch_neoforge_versions");
-          setVersions(result);
-          const pending = pendingRoomGameRef.current;
-          const preferId =
-            pending && pending.loader === "neoforge" ? pending.gameVersion : null;
-          const savedId =
-            preferId ??
-            (typeof window !== "undefined"
-              ? window.localStorage.getItem("selected_version_id_neoforge")
-              : null);
-          const match = savedId ? result.find((v) => v.id === savedId) : undefined;
-          setSelectedVersion(match ?? (result.length > 0 ? result[0] : null));
-          if (preferId && match) pendingRoomGameRef.current = null;
-          setInstalledGameVersions(new Set());
-        } else {
-          const filtered = await invoke<VersionSummary[]>("fetch_versions_for_loader", {
-            loader,
-            showSnapshots: settings?.show_snapshots ?? false,
-            showAlpha: settings?.show_alpha_versions ?? false,
-          });
-          setVersions(filtered);
-          const pending = pendingRoomGameRef.current;
-          const preferId =
-            pending && pending.loader === loader ? pending.gameVersion : null;
-          const savedKey =
-            loader === "fabric"
-              ? "selected_version_id_fabric"
-              : loader === "quilt"
-                ? "selected_version_id_quilt"
-                : "selected_version_id_vanilla";
-          const savedId =
-            preferId ??
-            (typeof window !== "undefined" ? window.localStorage.getItem(savedKey) : null);
-          const match = savedId ? filtered.find((v) => v.id === savedId) : undefined;
-          setSelectedVersion(match ?? (filtered.length > 0 ? filtered[0] : null));
-          if (preferId && match) pendingRoomGameRef.current = null;
-
-          if (loader === "fabric") {
-            try {
-              const installedGv = await invoke<string[]>("list_installed_fabric_game_versions");
-              setInstalledGameVersions(new Set(installedGv ?? []));
-            } catch {
-              setInstalledGameVersions(new Set());
-            }
-          } else if (loader === "quilt") {
-            try {
-              const installedGv = await invoke<string[]>("list_installed_quilt_game_versions");
-              setInstalledGameVersions(new Set(installedGv ?? []));
-            } catch {
-              setInstalledGameVersions(new Set());
-            }
-          } else {
-            setInstalledGameVersions(new Set());
-          }
-        }
-      } catch (error) {
-        console.error("Не удалось загрузить список версий:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        if (loader === "forge") {
-          showNotification(
-            "error",
-            tt("app.errors.forgeVersionsLoadFailed", { msg }),
-          );
-        } else if (loader === "neoforge") {
-          showNotification(
-            "error",
-            tt("app.errors.neoforgeVersionsLoadFailed", { msg }),
-          );
-        } else {
-          showNotification(
-            "error",
-            tt("app.errors.versionsLoadFailed", { msg }),
-          );
-        }
-        setVersions([]);
-        setSelectedVersion(null);
-        setInstalledGameVersions(new Set());
-      } finally {
-        setVersionsLoading(false);
-      }
-
-      try {
-        unlisten = await listen<DownloadProgressPayload>(
-          "download-progress",
-          (event) => {
-            setProgress(event.payload);
-            updateDownloadJobProgress(
-              versionInstallJobId(event.payload.version_id),
-              event.payload.percent,
-            );
-          },
-        );
-      } catch (error) {
-        console.error("Не удалось подписаться на прогресс загрузки:", error);
-      }
-    })();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [
-    loader,
-    settings?.show_snapshots,
-    settings?.show_alpha_versions,
-    showNotification,
-    language,
-    updateDownloadJobProgress,
-  ]);
-
-  useEffect(() => {
-    if (activeInstanceProfile) return;
-    if (!selectedVersion) return;
-    if (typeof window === "undefined") return;
-    try {
-      const key =
-        loader === "forge"
-          ? "selected_version_id_forge"
-          : loader === "neoforge"
-            ? "selected_version_id_neoforge"
-            : loader === "fabric"
-              ? "selected_version_id_fabric"
-              : loader === "quilt"
-                ? "selected_version_id_quilt"
-                : "selected_version_id_vanilla";
-      window.localStorage.setItem(key, selectedVersion.id);
-    } catch {
-    }
-  }, [activeInstanceProfile, loader, selectedVersion]);
-
-  useEffect(() => {
-    if (
-      (loader !== "fabric" && loader !== "quilt") ||
-      !selectedVersion ||
-      isForgeVersion(selectedVersion)
-    ) {
-      setFabricProfileId(null);
-      setQuiltProfileId(null);
-      return;
-    }
-    (async () => {
-      try {
-        if (loader === "fabric") {
-          const id = await invoke<string | null>("get_installed_fabric_profile_id", {
-            gameVersion: selectedVersion.id,
-            loaderVersion: null,
-          });
-          setFabricProfileId(id);
-          setQuiltProfileId(null);
-          if (id) {
-            setInstalledGameVersions((prev) => new Set(prev).add(selectedVersion.id));
-          }
-        } else if (loader === "quilt") {
-          const id = await invoke<string | null>("get_installed_quilt_profile_id", {
-            gameVersion: selectedVersion.id,
-            loaderVersion: null,
-          });
-          setQuiltProfileId(id);
-          setFabricProfileId(null);
-          if (id) {
-            setInstalledGameVersions((prev) => new Set(prev).add(selectedVersion.id));
-          }
-        }
-      } catch {
-        setFabricProfileId(null);
-        setQuiltProfileId(null);
-      }
-    })();
-  }, [loader, selectedVersion]);
-
-  const maybePlayNecoArcSecret = useCallback((trimmedNickname: string) => {
-    const norm = normalizeNicknameForSecretCheck(trimmedNickname);
-    const prev = lastPersistedNickNormRef.current;
-    lastPersistedNickNormRef.current = norm;
-    if (norm !== "neco arc" || prev === "neco arc") return;
-    try {
-      const audio = new Audio(NECO_ARC_SECRET_SOUND_SRC);
-      audio.volume = Math.min(1, Math.max(0, NECO_ARC_SECRET_SOUND_VOLUME));
-      void audio.play().catch(() => {});
-    } catch {
-      //ignore
-    }
-  }, []);
-
-  const loadProfile = useCallback(async () => {
-    try {
-      const p = await invoke<Profile & { mc_username?: string | null }>("get_profile");
-      const nick = p.nickname ?? "";
-      setProfile({
-        nickname: nick,
-        ely_username: p.ely_username ?? null,
-        ely_uuid: p.ely_uuid ?? null,
-        ms_id_token: p.ms_id_token ?? null,
-        mc_uuid: p.mc_uuid ?? null,
-        mc_username: p.mc_username ?? null,
-      });
-      lastPersistedNickNormRef.current = normalizeNicknameForSecretCheck(nick);
-    } catch {
-      setProfile({
-        nickname: "",
-        ely_username: null,
-        ely_uuid: null,
-        ms_id_token: null,
-        mc_uuid: null,
-        mc_username: null,
-      });
-      lastPersistedNickNormRef.current = "";
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
-
-  useEffect(() => {
-    if (activeItem === "accounts") {
-      loadProfile();
-      void refreshLauncherAccounts();
-    }
-  }, [activeItem, loadProfile, refreshLauncherAccounts]);
-
-  useEffect(() => {
-    const prev = prevActiveItemRef.current;
-    prevActiveItemRef.current = activeItem;
-    const trimmed = profile.nickname.trim();
-    if (prev === "accounts" && activeItem !== "accounts" && trimmed) {
-      invoke("set_profile", { nickname: trimmed })
-        .then(() => maybePlayNecoArcSecret(trimmed))
-        .catch(console.error);
-    }
-  }, [activeItem, profile.nickname, maybePlayNecoArcSecret]);
-
-  useEffect(() => {
-    if (isAuthorized) return;
-    const t = setTimeout(() => {
-      const nick = nicknameDraft.trim();
-      if (!nick) return;
-      void invoke("set_profile", { nickname: nick })
-        .then(() => maybePlayNecoArcSecret(nick))
-        .catch(console.error);
-    }, 700);
-    return () => clearTimeout(t);
-  }, [nicknameDraft, isAuthorized, maybePlayNecoArcSecret]);
-
-  const handleSaveNickname = async (nickname: string) => {
-    try {
-      await invoke("set_profile", { nickname });
-      setProfile((prev) => ({ ...prev, nickname }));
-      maybePlayNecoArcSecret(nickname);
-      showNotification(
-        "success",
-        tt("app.accounts.toast.nicknameSaved"),
-      );
-    } catch (e) {
-      console.error(e);
-      showNotification(
-        "error",
-        tt("app.accounts.toast.nicknameSaveFailed"),
-      );
-    }
-  };
-
-  const handleElyLogin = async () => {
-    setElyLoading(true);
-    setElyAuthUrl(null);
-    let unlistenOk: (() => void) | undefined;
-    let unlistenFail: (() => void) | undefined;
-    const cleanupElyListeners = () => {
-      unlistenOk?.();
-      unlistenFail?.();
-    };
-    try {
-      unlistenOk = await listen<Profile & { mc_username?: string | null }>("ely-login-complete", (e) => {
-        const p = e.payload;
-        setProfile({
-          nickname: p.nickname ?? "",
-          ely_username: p.ely_username ?? null,
-          ely_uuid: p.ely_uuid ?? null,
-          ms_id_token: p.ms_id_token ?? null,
-          mc_uuid: p.mc_uuid ?? null,
-          mc_username: p.mc_username ?? null,
-        });
-        void refreshLauncherAccounts();
-        setElyLoading(false);
-        setElyAuthUrl(null);
-        cleanupElyListeners();
-      });
-
-      unlistenFail = await listen<string>("ely-login-failed", (e) => {
-        showNotification("error", e.payload);
-        setElyLoading(false);
-        setElyAuthUrl(null);
-        cleanupElyListeners();
-      });
-
-      const url = await invoke<string>("start_ely_oauth");
-      setElyAuthUrl(url);
-      try {
-        await openUrl(url);
-      } catch (e) {
-        console.error("Не удалось открыть браузер для Ely.by OAuth:", e);
-        cleanupElyListeners();
-        setElyLoading(false);
-        setElyAuthUrl(null);
-        showNotification(
-          "error",
-          tt("app.accounts.toast.elyOpenBrowserFailed"),
-        );
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showNotification("error", msg);
-      cleanupElyListeners();
-      setElyLoading(false);
-      setElyAuthUrl(null);
-    }
-  };
-
-  const handleElyLogout = async () => {
-    try {
-      await invoke("ely_logout");
-      await loadProfile();
-      void refreshLauncherAccounts();
-      showNotification(
-        "info",
-        tt("app.accounts.toast.elyLoggedOut"),
-      );
-    } catch (e) {
-      console.error(e);
-      showNotification(
-        "error",
-        tt("app.accounts.toast.elyLogoutFailed"),
-      );
-    }
-  };
-
-  const handleMicrosoftLogin = async () => {
-    if (msLoading) return;
-    setMsLoading(true);
-    setMsAuthUrl(null);
-
-    let unlistenComplete: (() => void) | null = null;
-    try {
-      unlistenComplete = await listen("ms-login-complete", async () => {
-        unlistenComplete?.();
-        unlistenComplete = null;
-        setMsLoading(false);
-        setMsAuthUrl(null);
-        await loadProfile();
-        void refreshLauncherAccounts();
-        showNotification("success", tt("app.accounts.toast.msLoggedIn"));
-      });
-
-      const url = await invoke<string>("start_ms_oauth", { language });
-      setMsAuthUrl(url);
-      try {
-        await openUrl(url);
-      } catch (e) {
-        console.error("Не удалось открыть браузер для Microsoft OAuth:", e);
-        unlistenComplete?.();
-        unlistenComplete = null;
-        setMsLoading(false);
-        setMsAuthUrl(null);
-        showNotification("error", tt("app.accounts.toast.msOpenBrowserFailed"));
-      }
-    } catch (e) {
-      console.error(e);
-      unlistenComplete?.();
-      unlistenComplete = null;
-      setMsLoading(false);
-      setMsAuthUrl(null);
-      showNotification("error", tt("app.accounts.toast.msLoginFailed"));
-    }
-  };
-
-  const handleMicrosoftLogout = async () => {
-    try {
-      await invoke("ms_logout");
-      await loadProfile();
-      void refreshLauncherAccounts();
-      showNotification(
-        "info",
-        tt("app.accounts.toast.msLoggedOut"),
-      );
-    } catch (e) {
-      console.error(e);
-      showNotification(
-        "error",
-        tt("app.accounts.toast.msLogoutFailed"),
-      );
-    }
-  };
-
-  const handleSwitchLauncherAccount = async (accountId: string) => {
-    try {
-      await invoke("switch_launcher_account", { accountId });
-      await loadProfile();
-      await refreshLauncherAccounts();
-      setAccountSwitcherOpen(false);
-      showNotification("success", tt("app.accounts.toast.switched"));
-    } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  const requestRemoveLauncherAccount = (accountId: string) => {
-    setAccountSwitcherOpen(false);
-    setPendingRemoveAccountId(accountId);
-  };
-
-  const confirmRemoveLauncherAccount = async () => {
-    const accountId = pendingRemoveAccountId;
-    if (!accountId) return;
-    setPendingRemoveAccountId(null);
-    try {
-      await invoke("remove_launcher_account", { accountId });
-      await loadProfile();
-      await refreshLauncherAccounts();
-      setAccountSwitcherOpen(false);
-      showNotification("info", tt("app.accounts.toast.removed"));
-    } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  const handleAddLauncherAccount = async () => {
-    if (addingAccount) return;
-    setAddingAccount(true);
-    try {
-      const nick = `${tt("app.accounts.newAccountNameBase")} ${launcherAccounts.length + 1}`;
-      await invoke("add_launcher_account", { nickname: nick });
-      await loadProfile();
-      await refreshLauncherAccounts();
-      setAccountSwitcherOpen(false);
-      showNotification("success", tt("app.accounts.toast.added"));
-    } catch (e) {
-      showNotification("error", e instanceof Error ? e.message : String(e));
-    } finally {
-      setAddingAccount(false);
-    }
-  };
-
-  const isInstalled = useMemo(() => {
-    if (!selectedVersion) return false;
-    if (loader === "fabric" && !isForgeVersion(selectedVersion)) {
-      return (
-        !!fabricProfileId || installedGameVersions.has(selectedVersion.id)
-      );
-    }
-    if (loader === "quilt" && !isForgeVersion(selectedVersion)) {
-      return (
-        !!quiltProfileId || installedGameVersions.has(selectedVersion.id)
-      );
-    }
-    return installedIds.has(selectedVersion.id);
-  }, [installedIds, selectedVersion, loader, fabricProfileId, quiltProfileId, installedGameVersions]);
-
-  const installedVersionIdsForDropdown = useMemo(() => {
-    if (loader === "fabric" || loader === "quilt") {
-      return installedGameVersions;
-    }
-    return installedIds;
-  }, [installedGameVersions, installedIds, loader]);
-
-  const primaryColorClasses =
-    isLaunching
-      ? "accent-bg opacity-60 cursor-not-allowed"
-      : gameStatus === "running" || isStopping
-        ? "bg-red-600 hover:bg-red-500"
-        : "accent-bg hover:opacity-90";
-
-  const primaryLabel = useMemo(() => {
-    if (isLaunching) {
-      return tt("app.playAction.launching");
-    }
-    if (gameStatus === "running" || isStopping) {
-      return tt("app.playAction.stop");
-    }
-    if (isInstalled) {
-      return tt("app.playAction.play");
-    }
-    return tt("app.playAction.install");
-  }, [gameStatus, isLaunching, isStopping, isInstalled, tt]);
-
-  const handleToggleConsole = () => {
-    setIsConsoleVisible((prev) => !prev);
-  };
-
-  const handleClearConsole = () => {
-    resetGameConsoleFilter();
-    const profileId =
-      activeInstanceProfile?.id ?? runningConsoleProfileId ?? INSTALL_CONSOLE_PROFILE_ID;
-    pendingConsoleLinesRef.current[profileId] = [];
-    delete hiddenConsoleBufferRef.current[profileId];
-    setConsoleByProfile((prev) => ({
-      ...prev,
-      [profileId]: {
-        lines: [],
-        sessions: prev[profileId]?.sessions ?? [],
-      },
-    }));
-  };
+    selectedVersion,
+    settings,
+  });
 
   const { isConsoleDetached, toggleConsoleDetached } = useGameConsoleWindow({
     enabled:
@@ -3658,540 +516,22 @@ function App() {
     restoreHiddenConsoleBuffer,
   ]);
 
-  const handleOpenGameFolder = async () => {
-    try {
-      await invoke("open_game_folder", {
-        profileId: activeInstanceProfile?.id ?? null,
-      });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Не удалось открыть папку игры:", error);
-      showNotification(
-        "error",
-        tt("app.errors.openFolderFailed", { msg }),
-      );
-    }
+  appHotkeysRef.current = {
+    launchGame: () => {
+      if (gameStatus === "running") return;
+      handleTitleBarProfilePlay();
+    },
+    stopGame: () => void handleStopGame(),
+    toggleSidebar: toggleSidebarCollapsed,
+    openHotkeysHelp: () => setShowHotkeysModal(true),
   };
-
-  useEffect(() => {
-    if (!activeInstanceProfile || versions.length === 0) return;
-
-    const desiredLoader = activeInstanceProfile.loader as LoaderId;
-    const allowedLoaders: LoaderId[] = [
-      "vanilla",
-      "fabric",
-      "forge",
-      "quilt",
-      "neoforge",
-    ];
-    if (allowedLoaders.includes(desiredLoader)) {
-      setLoader(desiredLoader);
-    }
-
-    const versionId = activeInstanceProfile.game_version;
-    const loaderVer = activeInstanceProfile.loader_version?.trim() || null;
-    const match = versions.find((v) => {
-      if (isForgeVersion(v)) {
-        if (loaderVer) {
-          return (
-            v.id === `${versionId}-forge-${loaderVer}` ||
-            (v.mc_version === versionId && v.forge_build === loaderVer)
-          );
-        }
-        return v.mc_version === versionId || v.id === versionId;
-      }
-      if (isNeoForgeVersion(v)) {
-        if (loaderVer) {
-          return (
-            v.id === `${versionId}-neoforge-${loaderVer}` ||
-            (v.mc_version === versionId && v.neoforge_build === loaderVer)
-          );
-        }
-        return v.mc_version === versionId || v.id === versionId;
-      }
-      return (v as VersionSummary).id === versionId;
-    });
-    if (match) {
-      setSelectedVersion(match);
-    }
-  }, [activeInstanceProfile, versions]);
-
-  const handleMinimize = () => {
-    getCurrentWindow().minimize();
-  };
-
-  const handleToggleMaximize = () => {
-    getCurrentWindow().toggleMaximize();
-  };
-
-  const handleTitleBarMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
-    if (target.closest("[data-no-drag]")) return;
-    getCurrentWindow().startDragging().catch(() => {});
-  };
-
-  const handleClose = () => {
-    getCurrentWindow().close();
-  };
-
-  const handlePauseInstall = async () => {
-    if (!isInstalling) return;
-    installStopReasonRef.current = "pause";
-    try {
-      await invoke("cancel_download");
-    } catch (error) {
-      console.error("Не удалось поставить загрузку на паузу:", error);
-      installStopReasonRef.current = null;
-    }
-  };
-
-  const handleCancelInstall = async () => {
-    installStopReasonRef.current = "cancel";
-    setInstallPaused(false);
-    setIsInstalling(false);
-    const jobId =
-      versionInstallJobIdRef.current ??
-      (selectedVersion ? versionInstallJobId(selectedVersion.id) : null);
-    if (jobId) {
-      finishDownloadJob(jobId);
-      versionInstallJobIdRef.current = null;
-    }
-    setProgress(null);
-    try {
-      await invoke("cancel_download");
-    } catch (error) {
-      console.error("Не удалось отменить загрузку:", error);
-    }
-  };
-
-  const handleResumeInstall = () => {
-    if (isInstalled || !selectedVersion || isInstalling) return;
-    void runVersionInstall({ resume: true });
-  };
-
-  const runVersionInstall = async (options?: { resume?: boolean }) => {
-    if (!selectedVersion) return;
-
-    let installVersionId = isNeoForgeVersion(selectedVersion)
-      ? neoForgeInstallVersionId(selectedVersion)
-      : selectedVersion.id;
-    const jobId = versionInstallJobId(installVersionId);
-    versionInstallJobIdRef.current = jobId;
-
-    setInstallPaused(false);
-    setIsInstalling(true);
-    prepareInstallConsole();
-    setIsConsoleVisible(true);
-    if (!options?.resume) {
-      setProgress(null);
-      showNotification("info", tt("app.toast.downloadStarted"));
-    }
-    startDownloadJob({
-      id: jobId,
-      label: getVersionLabel(selectedVersion),
-      kind: "version",
-      percent: options?.resume ? (progress?.percent ?? null) : null,
-    });
-    if (options?.resume) {
-      setDownloadJobPaused(jobId, false);
-    }
-
-    try {
-      try {
-        await invoke("reset_download_cancel");
-      } catch (e) {
-        console.error("Не удалось сбросить состояние загрузки:", e);
-      }
-      if (loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
-        const v = selectedVersion as VersionSummary;
-        if (v.version_type === "custom" || !v.url) {
-          await invoke("install_local_version", { versionId: v.id });
-        } else {
-          await invoke("install_version", {
-            versionId: v.id,
-            versionUrl: v.url,
-          });
-        }
-      } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
-        const v = selectedVersion as VersionSummary;
-        const loaders = await invoke<{ version: string }[]>("fetch_fabric_loaders", {
-          gameVersion: v.id,
-        });
-        const loaderVersion = loaders[0]?.version;
-        if (!loaderVersion) throw new Error(tt("app.install.noFabricLoader"));
-        const profileId = await invoke<string>("install_fabric", {
-          gameVersion: v.id,
-          loaderVersion,
-        });
-        setInstalledIds((prev) => new Set(prev).add(profileId));
-        setFabricProfileId(profileId);
-        setInstalledGameVersions((prev) => new Set(prev).add(v.id));
-        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
-        return;
-      } else if (loader === "quilt" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
-        const v = selectedVersion as VersionSummary;
-        const profileId = await invoke<string>("install_quilt", {
-          gameVersion: v.id,
-          loaderVersion: null,
-        });
-        setInstalledIds((prev) => new Set(prev).add(profileId));
-        setQuiltProfileId(profileId);
-        setInstalledGameVersions((prev) => new Set(prev).add(v.id));
-        showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
-        return;
-      } else if (loader === "forge" && isForgeVersion(selectedVersion)) {
-        await invoke("install_forge", {
-          versionId: selectedVersion.id,
-          installerUrl: selectedVersion.installer_url,
-        });
-      } else if (loader === "neoforge" && isNeoForgeVersion(selectedVersion)) {
-        await invoke("install_neoforge", {
-          versionId: installVersionId,
-        });
-      } else if (
-        loader === "neoforge" &&
-        !isForgeVersion(selectedVersion) &&
-        !isNeoForgeVersion(selectedVersion)
-      ) {
-        const v = selectedVersion as VersionSummary;
-        const builds = await invoke<{ version: string }[]>("fetch_neoforge_builds_for_game", {
-          gameVersion: v.id,
-        });
-        const loaderVersion = builds[0]?.version;
-        if (!loaderVersion) throw new Error(tt("app.install.noNeoForgeLoader"));
-        installVersionId = `${v.id}-neoforge-${loaderVersion}`;
-        await invoke("install_neoforge", { versionId: installVersionId });
-      } else {
-        throw new Error(tt("app.install.unknownVersionType"));
-      }
-
-      showNotification("success", tt("app.toast.downloadFinished"), { sound: true });
-      setInstalledIds((prev) => {
-        const next = new Set(prev);
-        next.add(installVersionId);
-        return next;
-      });
-    } catch (error) {
-      if (
-        installStopReasonRef.current === "pause" ||
-        installStopReasonRef.current === "cancel"
-      ) {
-        return;
-      }
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Ошибка установки версии:", error);
-      showNotification("error", tt("app.errors.installError", { msg }));
-    } finally {
-      const stopReason = installStopReasonRef.current;
-      if (stopReason === "pause") {
-        setInstallPaused(true);
-        setIsInstalling(false);
-        setDownloadJobPaused(jobId, true);
-        installStopReasonRef.current = null;
-      } else {
-        setIsInstalling(false);
-        setInstallPaused(false);
-        finishDownloadJob(jobId);
-        versionInstallJobIdRef.current = null;
-        if (stopReason === "cancel") {
-          setProgress(null);
-          try {
-            await invoke("reset_download_cancel");
-          } catch (e) {
-            console.error("Не удалось сбросить состояние загрузки:", e);
-          }
-        }
-        installStopReasonRef.current = null;
-      }
-    }
-  };
-
-  const handleStopGame = async () => {
-    if (isStopping || gameStatus !== "running") return;
-    setIsStopping(true);
-    try {
-      await invoke("stop_game");
-      lastRunningRef.current = false;
-      setLaunchPresenceContext(null);
-      setGameStatus("stopped");
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Ошибка остановки игры:", error);
-      showNotification("error", tt("app.errors.stopError", { msg }));
-    } finally {
-      setIsStopping(false);
-    }
-  };
-
-  const handleTitleBarProfilePlay = () => {
-    if (!activeInstanceProfile) {
-      showNotification("warning", tt("app.warnings.selectProfileFirst"));
-      return;
-    }
-    void handlePrimaryClick();
-  };
-
   const handleTitleBarProfileSettings = () => {
     if (!activeInstanceProfile) return;
     setActiveItemWithSound("modpacks");
     setRequestedProfileSettingsId(activeInstanceProfile.id);
   };
 
-  const handlePrimaryClick = async () => {
-    if (!selectedVersion || isInstalling || isLaunching || isStopping) return;
-
-    if (isInstalled) {
-      if (gameStatus === "running") {
-        await handleStopGame();
-        return;
-      }
-
-      try {
-        await invoke("set_profile", {
-          nickname: profile.nickname,
-        });
-        const vanillaSummary =
-          loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
-            ? (selectedVersion as VersionSummary)
-            : null;
-        const versionUrl =
-          vanillaSummary && vanillaSummary.version_type !== "custom" && vanillaSummary.url
-            ? vanillaSummary.url
-            : undefined;
-        const versionId =
-          loader === "fabric" && fabricProfileId
-            ? fabricProfileId
-            : loader === "quilt" && quiltProfileId
-              ? quiltProfileId
-              : selectedVersion.id;
-        const consoleProfileId = await resolveLaunchConsoleProfileId();
-        if (consoleProfileId) {
-          setRunningConsoleProfile(consoleProfileId);
-          archiveCurrentConsoleAndClear(consoleProfileId);
-        }
-        if (settings?.show_console_on_launch) {
-          setIsConsoleVisible(true);
-        }
-        setIsLaunching(true);
-        try {
-          await invoke("launch_game", {
-            versionId,
-            versionUrl: versionUrl ?? null,
-          });
-          lastRunningRef.current = true;
-          gameLaunchStartedAtRef.current = Date.now();
-          setLaunchPresenceContext({
-            kind: "modpack",
-            startedAt: new Date().toISOString(),
-          });
-          setGameStatus("running");
-          void reportStats({ launched: true }).catch(() => {});
-        } finally {
-          setIsLaunching(false);
-        }
-      } catch (error) {
-        setRunningConsoleProfile(null);
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error("Ошибка запуска игры:", error);
-        showNotification(
-          "error",
-          tt("app.errors.launchError", { msg }),
-        );
-      }
-      return;
-    }
-
-    await runVersionInstall();
-  };
-
-  const roomCurrentGame = useMemo<RoomCurrentGame | null>(() => {
-    const known = ["vanilla", "fabric", "quilt", "forge", "neoforge"];
-    if (activeInstanceProfile?.game_version?.trim()) {
-      const l = (activeInstanceProfile.loader || "vanilla").toLowerCase();
-      return {
-        loader: (known.includes(l) ? l : "vanilla") as RoomCurrentGame["loader"],
-        gameVersion: activeInstanceProfile.game_version.trim(),
-        loaderVersion: activeInstanceProfile.loader_version ?? null,
-        source: "profile",
-        label: activeInstanceProfile.name,
-      };
-    }
-    if (selectedVersion) {
-      return {
-        loader: loader as RoomCurrentGame["loader"],
-        gameVersion: selectedVersion.id,
-        loaderVersion: null,
-        source: "menu",
-        label: "",
-      };
-    }
-    return null;
-  }, [activeInstanceProfile, loader, selectedVersion]);
-
-  const applyRoomGameSettings = useCallback(
-    (settings: RoomGameSettings) => {
-      pendingRoomGameRef.current = settings;
-      if (loader === settings.loader) {
-        const match = versions.find((v) => v.id === settings.gameVersion);
-        if (match) {
-          setSelectedVersion(match);
-          pendingRoomGameRef.current = null;
-          return;
-        }
-      }
-      setLoader(settings.loader);
-    },
-    [loader, versions],
-  );
-
-  const handleLaunchToServer = useCallback(
-    async (
-      serverAddress: string,
-      options?: {
-        requireOnlineAccount?: boolean;
-        presenceContext?: LaunchPresenceContext | null;
-      },
-    ) => {
-      if (!selectedVersion) {
-        throw new Error(tt("app.warnings.needMinecraftVersion"));
-      }
-      if (!isInstalled) {
-        throw new Error(tt("app.warnings.needInstalledVersion"));
-      }
-      if (gameStatus === "running" || isLaunching) {
-        throw new Error(tt("app.warnings.closeGameFirst"));
-      }
-      if (options?.requireOnlineAccount && activeAccountKind === "offline") {
-        throw new Error(
-          "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.",
-        );
-      }
-
-      await invoke("set_profile", {
-        nickname: profile.nickname,
-      });
-      const vanillaSummary =
-        loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
-          ? (selectedVersion as VersionSummary)
-          : null;
-      const versionUrl =
-        vanillaSummary && vanillaSummary.version_type !== "custom" && vanillaSummary.url
-          ? vanillaSummary.url
-          : null;
-      const versionId =
-        loader === "fabric" && fabricProfileId
-          ? fabricProfileId
-          : loader === "quilt" && quiltProfileId
-            ? quiltProfileId
-            : selectedVersion.id;
-
-      const consoleProfileId = await resolveLaunchConsoleProfileId();
-      if (consoleProfileId) {
-        setRunningConsoleProfile(consoleProfileId);
-        archiveCurrentConsoleAndClear(consoleProfileId);
-      }
-      if (settings?.show_console_on_launch) {
-        setIsConsoleVisible(true);
-      }
-
-      setIsLaunching(true);
-      try {
-        console.info("[LaunchToServer]", {
-          versionId,
-          versionUrl,
-          serverAddress,
-          activeAccountKind,
-        });
-        await invoke("launch_game", {
-          versionId,
-          versionUrl,
-          serverAddress,
-        });
-        lastRunningRef.current = true;
-        gameLaunchStartedAtRef.current = Date.now();
-        setLaunchPresenceContext(
-          options?.presenceContext ?? {
-            kind: "server",
-            serverAddress,
-            startedAt: new Date().toISOString(),
-          },
-        );
-        setGameStatus("running");
-        void reportStats({ launched: true }).catch(() => {});
-      } catch (error) {
-        setRunningConsoleProfile(null);
-        throw error;
-      } finally {
-        setIsLaunching(false);
-      }
-    },
-    [
-      selectedVersion,
-      isInstalled,
-      gameStatus,
-      isLaunching,
-      activeAccountKind,
-      profile.nickname,
-      loader,
-      fabricProfileId,
-      quiltProfileId,
-      resolveLaunchConsoleProfileId,
-      archiveCurrentConsoleAndClear,
-      settings?.show_console_on_launch,
-      tt,
-    ],
-  );
-
-  const handleBannerPlay = useCallback(
-    async (serverAddress: string) => {
-      try {
-        await handleLaunchToServer(serverAddress);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        showNotification("error", tt("app.errors.launchError", { msg }));
-      }
-    },
-    [handleLaunchToServer, showNotification, tt],
-  );
-
-  const accentColor = settings?.background_accent_color ?? "#4a22a8";
-
-  useEffect(() => {
-    (async () => {
-      if (!shouldLoadBackgroundDataUri(settings?.background_image_url)) {
-        setBackgroundDataUri(null);
-        return;
-      }
-      try {
-        const uri = await invoke<string | null>("get_background_data_uri");
-        setBackgroundDataUri(uri ?? null);
-      } catch {
-        setBackgroundDataUri(null);
-      }
-    })();
-  }, [settings?.background_image_url]);
-
-  useLayoutEffect(() => {
-    applyAccentColor(accentColor);
-  }, [accentColor]);
-
-  useCustomTheme(
-    settings?.custom_theme_id ?? null,
-    settings?.custom_theme_hot_reload ?? false,
-  );
-
-  useEffect(() => {
-    document.documentElement.dataset.launcherTab = activeItem;
-  }, [activeItem]);
-
-  const backgroundImageUrl = resolveLauncherBackgroundUrl(
-    settings?.background_image_url,
-    backgroundDataUri,
-  );
-  const backgroundIsAnimated = isAnimatedBackgroundPath(
-    settings?.background_image_url ?? "",
-  );
+  const { accentColor, backgroundImageUrl, backgroundIsAnimated } = useLauncherAppearance(settings, activeItem);
 
   const renderMainTabContent = useCallback(
     (tab: SplittableTabId, inSplitPane = false) => {
@@ -4231,85 +571,53 @@ function App() {
               }
             >
               <Suspense fallback={<TabPaneLoading />}>
-              <ModpackTab
-                fillPane={inSplitPane}
-                language={language}
-                initialProfiles={profilesHydrated ? knownProfiles : undefined}
-                onRegisterModpackHotkeys={registerModpackHotkeys}
-                onRegisterModpackNavigation={registerModpackNavigation}
-                onActiveViewChange={setModpackView}
-                requestedModpackView={requestedModpackView}
-                onRequestedModpackViewApplied={clearRequestedModpackView}
-                requestedProfileSettingsId={requestedProfileSettingsId}
-                onRequestedProfileSettingsApplied={clearRequestedProfileSettings}
-                showNotification={showNotification}
-                registerDownloadJob={startDownloadJob}
-                updateDownloadJob={updateDownloadJobProgress}
-                finishDownloadJob={finishDownloadJob}
-                makeDownloadJobId={makeDownloadJobId}
-                onProfileSelectionChange={handleModpackProfileSelectionChange}
-                initialSelectedProfileId={activeInstanceProfile?.id ?? null}
-                openedMrpackPath={openedMrpackPath}
-                onOpenedMrpackPathConsumed={() => setOpenedMrpackPath(null)}
-                onProfilesChange={(profiles) => {
-                  setKnownProfiles(
-                    profiles.map((p) => ({
-                      id: p.id,
-                      name: p.name,
-                      game_version: p.game_version,
-                      loader: p.loader,
-                      loader_version: p.loader_version ?? null,
-                      icon_path: p.icon_path,
-                      created_at: p.created_at,
-                      play_time_seconds: p.play_time_seconds ?? 0,
-                      last_played_at: p.last_played_at ?? null,
-                      mods_count: p.mods_count,
-                      resourcepacks_count: p.resourcepacks_count,
-                      shaderpacks_count: p.shaderpacks_count,
-                      total_size_bytes: p.total_size_bytes,
-                      directory: p.directory,
-                    })),
-                  );
-                  setProfilesHydrated(true);
-                }}
-                onTogglePinInSidebar={(profile) =>
-                  handleToggleSidebarPin({
-                    id: profile.id,
-                    name: profile.name,
-                    game_version: profile.game_version,
-                    loader: profile.loader,
-                    loader_version: profile.loader_version ?? null,
-                    icon_path: profile.icon_path,
-                    created_at: profile.created_at,
-                    play_time_seconds: profile.play_time_seconds ?? 0,
-                    last_played_at: profile.last_played_at ?? null,
-                    mods_count: profile.mods_count,
-                    resourcepacks_count: profile.resourcepacks_count,
-                    shaderpacks_count: profile.shaderpacks_count,
-                    total_size_bytes: profile.total_size_bytes,
-                    directory: profile.directory,
-                  })
-                }
-                isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
-                onOpenModsTab={() => activateSidebarTab("mods")}
-                onPlaySelectedProfile={() => {
-                  if (!activeInstanceProfile) {
-                    showNotification("warning", tt("app.warnings.selectProfileFirst"));
-                    return;
+                <ModpackTab
+                  fillPane={inSplitPane}
+                  language={language}
+                  initialProfiles={profilesHydrated ? knownProfiles : undefined}
+                  onRegisterModpackHotkeys={registerModpackHotkeys}
+                  onRegisterModpackNavigation={registerModpackNavigation}
+                  onActiveViewChange={setModpackView}
+                  requestedModpackView={requestedModpackView}
+                  onRequestedModpackViewApplied={clearRequestedModpackView}
+                  requestedProfileSettingsId={requestedProfileSettingsId}
+                  onRequestedProfileSettingsApplied={clearRequestedProfileSettings}
+                  showNotification={showNotification}
+                  registerDownloadJob={startDownloadJob}
+                  updateDownloadJob={updateDownloadJobProgress}
+                  finishDownloadJob={finishDownloadJob}
+                  makeDownloadJobId={makeDownloadJobId}
+                  onProfileSelectionChange={handleModpackProfileSelectionChange}
+                  initialSelectedProfileId={activeInstanceProfile?.id ?? null}
+                  openedMrpackPath={openedMrpackPath}
+                  onOpenedMrpackPathConsumed={() => setOpenedMrpackPath(null)}
+                  onProfilesChange={(profiles) => {
+                    setKnownProfiles(profiles.map(toInstanceProfileCard));
+                    setProfilesHydrated(true);
+                  }}
+                  onTogglePinInSidebar={(profile) =>
+                    handleToggleSidebarPin(toInstanceProfileCard(profile))
                   }
-                  void handlePrimaryClick();
-                }}
-                primaryLabel={primaryLabel}
-                primaryColorClasses={primaryColorClasses}
-                isLaunching={isLaunching}
-                isStopping={isStopping}
-                gameStatus={gameStatus}
-                consoleLines={consoleLines}
-                consoleHistorySessions={consoleHistorySessions}
-                onClearConsole={handleClearConsole}
-                prepareInstallConsole={prepareInstallConsole}
-                onManageConsoleExpandedChange={handleManageConsoleExpandedChange}
-              />
+                  isPinnedInSidebar={(profileId) => pinnedProfileIds.includes(profileId)}
+                  onOpenModsTab={() => activateSidebarTab("mods")}
+                  onPlaySelectedProfile={() => {
+                    if (!activeInstanceProfile) {
+                      showNotification("warning", tt("app.warnings.selectProfileFirst"));
+                      return;
+                    }
+                    void handlePrimaryClick();
+                  }}
+                  primaryLabel={primaryLabel}
+                  primaryColorClasses={primaryColorClasses}
+                  isLaunching={isLaunching}
+                  isStopping={isStopping}
+                  gameStatus={gameStatus}
+                  consoleLines={consoleLines}
+                  consoleHistorySessions={consoleHistorySessions}
+                  onClearConsole={handleClearConsole}
+                  prepareInstallConsole={prepareInstallConsole}
+                  onManageConsoleExpandedChange={handleManageConsoleExpandedChange}
+                />
               </Suspense>
             </div>
           );
@@ -4322,50 +630,29 @@ function App() {
                   : "flex h-full min-h-0 w-full flex-1 flex-col"
               }
             >
-            <Suspense fallback={<TabPaneLoading />}>
-            <SettingsTab
-              fillPane={inSplitPane}
-              settings={settings}
-              settingsTab={settingsTab}
-              setSettingsTab={setSettingsTab}
-              systemMemoryGb={systemMemoryGb}
-              updateSettings={(patch) =>
-                updateSettings(patch, activeInstanceProfile?.id ?? undefined)
-              }
-              showNotification={showNotification}
-              SettingsCard={SettingsCard}
-              SettingsSlider={SettingsSlider}
-              SettingsToggle={SettingsToggle}
-              language={language}
-              setLanguage={persistInterfaceLanguage}
-              sidebarOrder={
-                sidebarOrder.filter(
-                  (id) =>
-                    id === "play" ||
-                    id === "settings" ||
-                    id === "mods" ||
-                    id === "modpacks",
-                ) as ("play" | "settings" | "mods" | "modpacks")[]
-              }
-              setSidebarOrder={(order) =>
-                setSidebarOrder(
-                  order.filter(
-                    (id) =>
-                      id === "play" ||
-                      id === "settings" ||
-                      id === "mods" ||
-                      id === "modpacks",
-                  ) as SidebarItemId[],
-                )
-              }
-              updateStatus={updateStatus}
-              updateVersion={updateVersion}
-              updateDownloadPercent={updateDownloadPercent}
-              onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
-              onPreviewUpdatePopup={() => void previewUpdatePopup()}
-              onInstallUpdate={() => void installUpdate()}
-            />
-            </Suspense>
+              <Suspense fallback={<TabPaneLoading />}>
+              <SettingsTab
+                fillPane={inSplitPane}
+                settings={settings}
+                settingsTab={settingsTab}
+                setSettingsTab={setSettingsTab}
+                systemMemoryGb={systemMemoryGb}
+                updateSettings={(patch) =>
+                  updateSettings(patch, activeInstanceProfile?.id ?? undefined)
+                }
+                showNotification={showNotification}
+                language={language}
+                setLanguage={persistInterfaceLanguage}
+                sidebarOrder={sidebarOrder.filter(isReorderableSidebarId)}
+                setSidebarOrder={setSidebarOrder}
+                updateStatus={updateStatus}
+                updateVersion={updateVersion}
+                updateDownloadPercent={updateDownloadPercent}
+                onCheckUpdate={() => void checkForUpdate({ silent: false, source: "manual" })}
+                onPreviewUpdatePopup={() => void previewUpdatePopup()}
+                onInstallUpdate={() => void installUpdate()}
+              />
+              </Suspense>
             </div>
           );
         case "play":
@@ -4378,62 +665,62 @@ function App() {
                   : "flex min-h-0 w-full flex-1 flex-col items-center"
               }
             >
-            <PlayTab
-              fillPane={inSplitPane}
-              gameStatus={gameStatus}
-              playConsoleLines={playConsoleLines}
-              isConsoleVisible={isConsoleVisible}
-              onRegisterConsoleHotkeys={registerPlayConsoleHotkeys}
-              onToggleConsole={handleToggleConsole}
-              onClearConsole={handleClearConsole}
-              showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
-              versions={versions}
-              selectedVersion={selectedVersion}
-              setSelectedVersion={setSelectedVersion}
-              versionsLoading={versionsLoading}
-              isVersionDropdownOpen={isVersionDropdownOpen}
-              setIsVersionDropdownOpen={setIsVersionDropdownOpen}
-              installPaused={installPaused}
-              isInstalling={isInstalling}
-              handleResumeInstall={handleResumeInstall}
-              handlePauseInstall={handlePauseInstall}
-              handleCancelInstall={handleCancelInstall}
-              handlePrimaryClick={handlePrimaryClick}
-              isLaunching={isLaunching}
-              primaryColorClasses={primaryColorClasses}
-              primaryLabel={primaryLabel}
-              progress={progress}
-              loader={loader}
-              setLoader={setLoader}
-              isLoaderDropdownOpen={isLoaderDropdownOpen}
-              setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
-              handleOpenGameFolder={handleOpenGameFolder}
-              language={language}
-              installedVersionIds={installedVersionIdsForDropdown}
-              showSnapshots={settings?.show_snapshots ?? false}
-              showLauncherBanners={settings?.show_launcher_banners !== false}
-              isConsoleDetached={isConsoleDetached}
-              onToggleConsoleDetached={toggleConsoleDetached}
-              onPlayServer={handleBannerPlay}
-              profiles={profilesHydrated ? knownProfiles : []}
-              selectedProfileId={activeInstanceProfile?.id ?? null}
-              onSelectProfile={(profileId) => {
-                const profile = knownProfiles.find((p) => p.id === profileId);
-                if (!profile) return;
-                handleModpackProfileSelectionChange(profile);
-                void invoke("set_selected_profile", { id: profileId }).catch(() => {});
-              }}
-              onPlayProfile={(profileId) => {
-                const profile = knownProfiles.find((p) => p.id === profileId);
-                if (!profile) return;
-                void handlePlayPinnedProfile(profile);
-              }}
-              onOpenModpacks={() => activateSidebarTab("modpacks")}
-              onOpenProfile={(profileId) => {
-                void handleOpenProfileInModpacks(profileId);
-              }}
-              onOpenProfileSettings={handleTitleBarProfileSettings}
-            />
+              <PlayTab
+                fillPane={inSplitPane}
+                gameStatus={gameStatus}
+                playConsoleLines={playConsoleLines}
+                isConsoleVisible={isConsoleVisible}
+                onRegisterConsoleHotkeys={registerPlayConsoleHotkeys}
+                onToggleConsole={handleToggleConsole}
+                onClearConsole={handleClearConsole}
+                showConsoleOnLaunch={settings?.show_console_on_launch ?? false}
+                versions={versions}
+                selectedVersion={selectedVersion}
+                setSelectedVersion={setSelectedVersion}
+                versionsLoading={versionsLoading}
+                isVersionDropdownOpen={isVersionDropdownOpen}
+                setIsVersionDropdownOpen={setIsVersionDropdownOpen}
+                installPaused={installPaused}
+                isInstalling={isInstalling}
+                handleResumeInstall={handleResumeInstall}
+                handlePauseInstall={handlePauseInstall}
+                handleCancelInstall={handleCancelInstall}
+                handlePrimaryClick={handlePrimaryClick}
+                isLaunching={isLaunching}
+                primaryColorClasses={primaryColorClasses}
+                primaryLabel={primaryLabel}
+                progress={progress}
+                loader={loader}
+                setLoader={setLoader}
+                isLoaderDropdownOpen={isLoaderDropdownOpen}
+                setIsLoaderDropdownOpen={setIsLoaderDropdownOpen}
+                handleOpenGameFolder={handleOpenGameFolder}
+                language={language}
+                installedVersionIds={installedVersionIdsForDropdown}
+                showSnapshots={settings?.show_snapshots ?? false}
+                showLauncherBanners={settings?.show_launcher_banners !== false}
+                isConsoleDetached={isConsoleDetached}
+                onToggleConsoleDetached={toggleConsoleDetached}
+                onPlayServer={handleBannerPlay}
+                profiles={profilesHydrated ? knownProfiles : []}
+                selectedProfileId={activeInstanceProfile?.id ?? null}
+                onSelectProfile={(profileId) => {
+                  const profile = knownProfiles.find((p) => p.id === profileId);
+                  if (!profile) return;
+                  handleModpackProfileSelectionChange(profile);
+                  void invoke("set_selected_profile", { id: profileId }).catch(() => {});
+                }}
+                onPlayProfile={(profileId) => {
+                  const profile = knownProfiles.find((p) => p.id === profileId);
+                  if (!profile) return;
+                  void handlePlayPinnedProfile(profile);
+                }}
+                onOpenModpacks={() => activateSidebarTab("modpacks")}
+                onOpenProfile={(profileId) => {
+                  void handleOpenProfileInModpacks(profileId);
+                }}
+                onOpenProfileSettings={handleTitleBarProfileSettings}
+              />
             </div>
           );
       }
@@ -4518,520 +805,124 @@ function App() {
   if (onboardingVisible) {
     return (
       <LauncherAnimationScope animationsDisabled={animationsDisabled}>
-      <OnboardingFlow
-        language={language}
-        accentColor={settings?.background_accent_color ?? "#4a22a8"}
-        backgroundImageUrl={backgroundImageUrl}
-        backgroundAnimated={backgroundIsAnimated}
-        onLanguagePersist={persistInterfaceLanguage}
-        onProfileUpdated={loadProfile}
-        onComplete={async () => {
-          pendingProductTourRef.current = true;
-          try {
-            window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-            window.localStorage.removeItem(ONBOARDING_FORCE_STORAGE_KEY);
-          } catch {
-          }
-          await updateSettings({ onboarding_completed: true });
-          setOnboardingVisible(false);
-        }}
-      />
+        <OnboardingFlow
+          language={language}
+          accentColor={settings?.background_accent_color ?? "#4a22a8"}
+          backgroundImageUrl={backgroundImageUrl}
+          backgroundAnimated={backgroundIsAnimated}
+          onLanguagePersist={persistInterfaceLanguage}
+          onProfileUpdated={loadProfile}
+          onComplete={async () => {
+            pendingProductTourRef.current = true;
+            try {
+              window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+              window.localStorage.removeItem(ONBOARDING_FORCE_STORAGE_KEY);
+            } catch {
+            }
+            await updateSettings({ onboarding_completed: true });
+            setOnboardingVisible(false);
+          }}
+        />
       </LauncherAnimationScope>
     );
   }
 
   return (
     <LauncherAnimationScope animationsDisabled={animationsDisabled}>
-    <div className="relative min-h-screen w-full overflow-hidden text-white">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        {settings?.background_image_url?.trim() ? (
-          <LauncherBackgroundImage
-            imageUrl={backgroundImageUrl}
-            blurEnabled={settings?.background_blur_enabled ?? true}
-            animated={backgroundIsAnimated}
-          />
-        ) : (
-          <LauncherGradientBackground animated={!(settings?.background_animation_disabled ?? false)} />
-        )}
-      </div>
-      <div
-        className={`pointer-events-none absolute inset-0 ${
-          settings?.background_image_url?.trim()
-            ? "bg-gradient-to-b from-black/50 via-black/60 to-black/75"
-            : "bg-transparent"
-        }`}
-      />
-      {shouldShowThematicDecorations(settings?.thematic_decorations_disabled) && (
-        <HalloweenDecorations />
-      )}
-
-      <div className="pointer-events-none fixed top-11 left-0 right-0 z-30 flex flex-col items-center px-4">
-        {notifications.map((n) => {
-          const baseClasses =
-            "pointer-events-auto group inline-flex w-max max-w-[min(36rem,calc(100vw-2rem))] cursor-pointer items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium leading-snug shadow-soft transition-colors hover:bg-ink-800 outline-none focus-visible:ring-2 focus-visible:ring-accent-to/60";
-          let bgClasses = "";
-          let iconSrc = "";
-          let style: React.CSSProperties | undefined;
-
-          if (n.kind === "info") {
-            bgClasses = "bg-ink-850 border border-white/15 border-l-[3px] border-l-accent-to text-white";
-            iconSrc = "/launcher-assets/info.png";
-          } else if (n.kind === "success") {
-            bgClasses = "bg-ink-850 border border-white/15 border-l-[3px] border-l-emerald-400 text-white";
-            iconSrc = "/launcher-assets/success.png";
-          } else if (n.kind === "error") {
-            bgClasses = "bg-ink-850 border border-red-400/30 border-l-[3px] border-l-red-400 text-white";
-            iconSrc = "/launcher-assets/errorIcon.png";
-          } else if (n.kind === "warning") {
-            bgClasses = "bg-ink-850 border border-amber-400/30 border-l-[3px] border-l-amber-400 text-white";
-            iconSrc = "/launcher-assets/warn.png";
-          } else {
-            const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);
-            iconSrc = resolvedIcon ?? "/launcher-assets/icon.png";
-            const resolvedBg = resolveRemoteNotificationBgStyle(n.colorMsg);
-            if (resolvedBg) {
-              style = {
-                backgroundColor: resolvedBg.background,
-                border: `1px solid ${resolvedBg.border}`,
-                color: resolvedBg.textColor === "black" ? "#000" : "#fff",
-              };
-            } else {
-              bgClasses = "bg-ink-850 border border-white/15 text-white";
-            }
-          }
-
-          if (n.iconMsg) {
-            const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);
-            if (resolvedIcon) iconSrc = resolvedIcon;
-          }
-
-          const wrapperAnimationClass = n.leaving
-            ? "animate-notification-slide-out overflow-hidden"
-            : !n.entered
-              ? "animate-notification-slide-in"
-              : "";
-
-          return (
-            <div
-              key={n.id}
-              className={`mb-2 flex w-full justify-center last:mb-0 ${wrapperAnimationClass}`}
-              onAnimationEnd={(e) => {
-                if (e.currentTarget !== e.target || n.leaving || n.entered) return;
-                if (!e.animationName.includes("notification-slide-down")) return;
-                setNotifications((prev) =>
-                  prev.map((item) =>
-                    item.id === n.id ? { ...item, entered: true } : item,
-                  ),
-                );
-              }}
-            >
-              <div
-                role="button"
-                tabIndex={0}
-                className={`${baseClasses} ${bgClasses}`}
-                style={style}
-                onClick={() => beginDismissNotification(n.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    beginDismissNotification(n.id);
-                  }
-                }}
-              >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/15">
-                  <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
-                </div>
-                <span className="whitespace-pre-line break-words">{n.message}</span>
-                {(n.count ?? 1) > 1 ? (
-                  <span className="shrink-0 pl-0.5 tabular-nums text-xs font-semibold leading-none opacity-85">
-                    ×{n.count}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="pointer-events-auto fixed bottom-6 right-6 z-50 flex w-[360px] flex-col gap-3">
-        {bottomSocialNotifications.map((n) => {
-          const text = n.messageKey ? tt(n.messageKey) : (n.textMsg ?? "");
-          const { title, subtitle } = splitTitleAndSubtitle(text);
-          const hexForShadow =
-            typeof n.colorMsg === "string" && n.colorMsg.trim().startsWith("#")
-              ? n.colorMsg.trim()
-              : null;
-
-          const primaryLabel =
-            n.kind === "discord" ? tt("app.social.joinButton") : tt("app.social.subscribeButton");
-          const laterLabel = tt("app.social.laterButton");
-          const link = n.kind === "discord" ? DISCORD_LINK : TELEGRAM_LINK;
-
-          return (
-            <div
-              key={n.id}
-              className={`relative rounded-2xl border border-white/10 bg-ink-900/90 p-4 ${
-                n.leaving ? "animate-notification-slide-out" : "animate-notification-slide-in"
-              }`}
-              style={{
-                borderColor: hexForShadow ? `${hexForShadow}33` : undefined,
-                boxShadow: hexForShadow ? `0 0 14px ${hexForShadow}33` : undefined,
-              }}
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center">
-                  <SocialIcon kind={n.kind} />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold leading-tight">{title}</div>
-                  {subtitle && (
-                    <div className="mt-1 whitespace-pre-line text-xs leading-snug text-white/70">
-                      {subtitle}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  className="interactive-press flex-1 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20"
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setBottomSocialNotifications((prev) =>
-                      prev.map((x) => (x.id === n.id ? { ...x, leaving: true } : x)),
-                    );
-                    window.setTimeout(() => {
-                      setBottomSocialNotifications((prev) => prev.filter((x) => x.id !== n.id));
-                    }, 180);
-                    try {
-                      await openUrl(link);
-                    } catch (err) {
-                      console.error("Failed to open link:", err);
-                    }
-                  }}
-                >
-                  {primaryLabel}
-                </button>
-
-                <button
-                  type="button"
-                  className="interactive-press flex-1 rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setBottomSocialNotifications((prev) =>
-                      prev.map((x) => (x.id === n.id ? { ...x, leaving: true } : x)),
-                    );
-                    window.setTimeout(() => {
-                      setBottomSocialNotifications((prev) => prev.filter((x) => x.id !== n.id));
-                    }, 180);
-                  }}
-                >
-                  {laterLabel}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {updatePopupBanner && (
-        <UpdatePopupModal
-          language={language}
-          banner={updatePopupBanner}
-          version={updateVersion}
-          busy={
-            updateStatus === "checking" ||
-            updateStatus === "downloading" ||
-            updateStatus === "installing"
-          }
-          onClose={() => setUpdatePopupBanner(null)}
-          onUpdate={() => {
-            void installUpdate();
-          }}
+      <div className="relative min-h-screen w-full overflow-hidden text-white">
+        <LauncherBackdrop
+          settings={settings}
+          backgroundImageUrl={backgroundImageUrl}
+          backgroundIsAnimated={backgroundIsAnimated}
         />
-      )}
 
-      {showHelpModal && (
-        <div
-          className="glass-overlay pointer-events-auto fixed inset-0 z-[300] flex items-center justify-center"
-          onClick={() => setShowHelpModal(false)}
+        <NotificationToasts
+          notifications={notifications}
+          setNotifications={setNotifications}
+          onDismiss={beginDismissNotification}
+        />
+
+        <SocialPromptCards
+          items={bottomSocialNotifications}
+          setItems={setBottomSocialNotifications}
+          tt={tt}
+        />
+
+        {updatePopupBanner && (
+          <UpdatePopupModal
+            language={language}
+            banner={updatePopupBanner}
+            version={updateVersion}
+            busy={
+              updateStatus === "checking" ||
+              updateStatus === "downloading" ||
+              updateStatus === "installing"
+            }
+            onClose={() => setUpdatePopupBanner(null)}
+            onUpdate={() => {
+              void installUpdate();
+            }}
+          />
+        )}
+
+        <HotkeysModal
+          language={language}
+          open={showHotkeysModal}
+          onClose={() => setShowHotkeysModal(false)}
+        />
+        {showHelpModal && (
+          <HelpModal
+            tt={tt}
+            onClose={() => setShowHelpModal(false)}
+            onReplayTour={startProductTour}
+          />
+        )}
+
+        {pendingRemoveAccountId !== null && (
+          <RemoveAccountDialog
+            tt={tt}
+            onCancel={() => setPendingRemoveAccountId(null)}
+            onConfirm={confirmRemoveLauncherAccount}
+          />
+        )}
+
+        <ProfileInfoModal
+          language={language}
+          profile={profileInfoProfile}
+          onClose={() => setProfileInfoProfile(null)}
+        />
+
+        {pinnedContextMenu && (
+          <PinnedProfileMenu
+            menu={pinnedContextMenu}
+            profiles={knownProfiles}
+            tt={tt}
+            onClose={() => setPinnedContextMenu(null)}
+            onShowInfo={setProfileInfoProfile}
+            onOpenProfile={(profileId) => void handleOpenProfileInModpacks(profileId)}
+            onCreateShortcut={(profile) => void handleCreateProfileDesktopShortcut(profile)}
+            onTogglePin={handleToggleSidebarPin}
+            onDeleteProfile={(profileId) => void handleDeleteProfileFromSidebar(profileId)}
+          />
+        )}
+
+        <TitleBar
+          tt={tt}
+          language={language}
+          launcherVersion={launcherVersion}
+          launcherVersionBadgeKind={launcherVersionBadgeKind}
+          updateVersion={updateVersion}
+          onOpenHelp={() => setShowHelpModal(true)}
+          activeInstanceProfile={activeInstanceProfile}
+          activeProfileIconPath={activeProfileCard?.icon_path ?? null}
+          gameStatus={gameStatus}
+          isLaunching={isLaunching}
+          isStopping={isStopping}
+          onProfilePlay={handleTitleBarProfilePlay}
+          onProfileStop={() => void handleStopGame()}
+          onProfileSettings={handleTitleBarProfileSettings}
+          onProfileOpen={(profileId) => void handleOpenProfileInModpacks(profileId)}
         >
-          <div
-            className="glass-modal w-[min(90vw,28rem)] max-h-[85vh] overflow-y-auto p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <img src="/launcher-assets/help.png" alt="" className="h-8 w-8 object-contain opacity-90" />
-              <h2 className="text-base font-semibold text-white">{tt("app.help.title")}</h2>
-            </div>
-            <div className="space-y-4 text-sm text-white/90 leading-relaxed">
-              <p>{tt("app.help.mainInfo")}</p>
-              <p>
-                {tt("app.help.icons")}{" "}
-                <button
-                  type="button"
-                  className="text-amber-400 hover:text-amber-300 underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await openUrl("https://icons8.ru/icons");
-                    } catch (err) {
-                      console.error("Failed to open link:", err);
-                    }
-                  }}
-                >
-                  icons8.ru
-                </button>
-              </p>
-              <p className="text-xs text-white/70 whitespace-pre-line">
-                {tt("app.help.mojangDisclaimer")}
-              </p>
-              <p className="text-white/80">
-                {tt("app.help.apis")}
-              </p>
-              <p>
-                <button
-                  type="button"
-                  className="text-amber-400 hover:text-amber-300 underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await openUrl(DISCORD_LINK);
-                    } catch (err) {
-                      console.error("Failed to open link:", err);
-                    }
-                  }}
-                >
-                  {tt("app.help.reportBug")}
-                </button>
-              </p>
-            </div>
-            <div className="mt-5 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowHelpModal(false);
-                  startProductTour();
-                }}
-                className="interactive-press rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/12"
-              >
-                {tt("productTour.replay")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowHelpModal(false)}
-                className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-              >
-                {tt("app.help.close")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingRemoveAccountId !== null && (
-        <div
-          className="glass-overlay pointer-events-auto fixed inset-0 z-[340] flex items-center justify-center"
-          onClick={() => setPendingRemoveAccountId(null)}
-        >
-          <div
-            className="glass-modal pointer-events-auto w-[min(90vw,24rem)] p-5"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-remove-confirm-title"
-          >
-            <p
-              id="account-remove-confirm-title"
-              className="mb-5 text-sm leading-relaxed text-white/90"
-            >
-              {tt("app.accounts.removeConfirm")}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPendingRemoveAccountId(null)}
-                className="interactive-press rounded-xl border border-white/10 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/18"
-              >
-                {tt("common.cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={() => void confirmRemoveLauncherAccount()}
-                className="interactive-press rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-semibold text-white shadow-lg hover:bg-amber-400"
-              >
-                {tt("common.delete")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ProfileInfoModal
-        language={language}
-        profile={profileInfoProfile}
-        onClose={() => setProfileInfoProfile(null)}
-      />
-
-      {pinnedContextMenu && (
-        <ContextMenuPanel
-          x={pinnedContextMenu.x}
-          y={pinnedContextMenu.y}
-          onClose={() => setPinnedContextMenu(null)}
-          zIndex={320}
-        >
-            <button
-              type="button"
-              onClick={() => {
-                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
-                setPinnedContextMenu(null);
-                if (!profile) return;
-                setProfileInfoProfile(profile);
-              }}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
-            >
-              <ProfileInfoIcon className="h-3.5 w-3.5" />
-              <span>{tt("modpacks.profileInfo.menuItem")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
-                setPinnedContextMenu(null);
-                if (!profile) return;
-                void handleOpenProfileInModpacks(profile.id);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
-            >
-              <img src="/launcher-assets/settings.svg" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{tt("modpacks.contextMenu.settings")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
-                setPinnedContextMenu(null);
-                if (!profile) return;
-                void handleCreateProfileDesktopShortcut(profile);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
-            >
-              <img src="/launcher-assets/export.png" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{tt("modpacks.actions.createShortcut")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
-                setPinnedContextMenu(null);
-                if (!profile) return;
-                handleToggleSidebarPin(profile);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
-            >
-              <img src="/launcher-assets/favorite.png" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{tt("modpacks.contextMenu.unpinFromSidebar")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const profile = knownProfiles.find((p) => p.id === pinnedContextMenu.profileId);
-                setPinnedContextMenu(null);
-                if (!profile) return;
-                void handleDeleteProfileFromSidebar(profile.id);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
-            >
-              <DeleteIcon className="h-3.5 w-3.5" />
-              <span>{tt("modpacks.contextMenu.deleteProfile")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPinnedContextMenu(null);
-                void handleOpenProfileInModpacks(pinnedContextMenu.profileId);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
-            >
-              <img src="/launcher-assets/edit.png" alt="" className="h-3.5 w-3.5 object-contain" />
-              <span>{tt("modpacks.contextMenu.editProfile")}</span>
-            </button>
-        </ContextMenuPanel>
-      )}
-
-      <div
-        className="relative z-20 flex h-11 items-center justify-between gap-3 px-3 select-none"
-        onMouseDown={handleTitleBarMouseDown}
-      >
-        <div className="flex min-w-0 items-center gap-2 pl-1 select-none">
-          <span className="text-[0.8125rem] font-semibold tracking-[-0.01em] text-white/60">
-            16Launcher
-          </span>
-          {launcherVersion ? (
-            <span
-              className="flex items-center gap-1.5 text-[0.75rem] font-medium tabular-nums text-white/35"
-              title={
-                launcherVersionBadgeKind === "latest"
-                  ? tt("app.versionBadge.latest")
-                  : launcherVersionBadgeKind === "outdated"
-                    ? updateVersion
-                      ? tt("app.versionBadge.outdatedWithVersion", { version: updateVersion })
-                      : tt("app.versionBadge.outdated")
-                    : tt("app.versionBadge.unknown")
-              }
-            >
-              {launcherVersion}
-              {launcherVersionBadgeKind === "latest" ? (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" aria-hidden="true" />
-              ) : null}
-            </span>
-          ) : null}
-          {launcherVersion && launcherVersionBadgeKind === "outdated" ? (
-            <span
-              className="rounded-md border border-amber-400/25 bg-amber-500/10 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-amber-100"
-              title={
-                updateVersion
-                  ? tt("app.versionBadge.outdatedWithVersion", { version: updateVersion })
-                  : tt("app.versionBadge.outdated")
-              }
-            >
-              {tt("app.versionBadge.updateChip")}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setShowHelpModal(true)}
-            className="icon-btn ml-0.5 h-7 w-7"
-            title={tt("app.help.title")}
-            data-no-drag
-          >
-            <img src="/launcher-assets/help.png" alt="" className="h-3.5 w-3.5 object-contain opacity-70" />
-          </button>
-        </div>
-        {activeInstanceProfile ? (
-          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-20">
-            <SelectedProfileTitleBar
-              profile={{
-                id: activeInstanceProfile.id,
-                name: activeInstanceProfile.name,
-                icon_path: activeProfileCard?.icon_path ?? null,
-              }}
-              language={language}
-              gameStatus={gameStatus}
-              isLaunching={isLaunching}
-              isStopping={isStopping}
-              onPlay={handleTitleBarProfilePlay}
-              onStop={() => void handleStopGame()}
-              onSettings={handleTitleBarProfileSettings}
-              onOpenProfile={() => void handleOpenProfileInModpacks(activeInstanceProfile.id)}
-            />
-          </div>
-        ) : null}
-        <div className="flex items-center gap-1.5">
           <SessionNotificationsBell
             language={language}
             open={sessionNotificationsOpen}
@@ -5043,573 +934,193 @@ function App() {
             }}
             onClear={() => setSessionNotifications([])}
           />
-          <div className="relative" ref={accountSwitcherRef} data-no-drag>
-            <button
-              type="button"
-              onClick={() => {
-                void refreshLauncherAccounts();
-                setSessionNotificationsOpen(false);
-                setAccountSwitcherOpen((o) => !o);
-              }}
-              data-tour-id="tour-account-switcher"
-              className={`interactive-press flex h-8 max-w-[200px] items-center gap-2 rounded-lg border pl-1 pr-2 text-left text-[0.8125rem] font-semibold text-white/90 transition-colors ${
-                accountSwitcherOpen
-                  ? "border-white/15 bg-ink-800"
-                  : "border-white/10 bg-ink-850 hover:bg-ink-800"
-              }`}
-              title={tt("app.accounts.switcherTitle")}
-            >
-              <AccountAvatar
-                username={activeAccountLabel}
-                profile={profileAvatarInput}
-                kind={activeAccountKind}
-                size={56}
-                className={`h-6 w-6 shrink-0 rounded-md ${accountKindAvatarClass(activeAccountKind)}`}
-              />
-              <span className="min-w-0 flex-1 truncate">{activeAccountLabel}</span>
-              <ChevronDownIcon
-                className={`transition-transform ${accountSwitcherOpen ? "rotate-180 opacity-100" : "opacity-60"}`}
-              />
-            </button>
-            {accountSwitcherOpen ? (
-              <div className="glass-popover absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden py-1">
-                <p className="px-3 py-2 text-[0.75rem] font-bold text-white/40">
-                  {tt("app.accounts.switcherHeading")}
-                </p>
-                <div className="max-h-[min(280px,45vh)] overflow-y-auto">
-                  {launcherAccounts.map((acc) => (
-                    <div
-                      key={acc.id}
-                      className={`flex items-center gap-2 border-t border-white/5 px-2 py-1.5 first:border-t-0 ${
-                        acc.is_active ? "bg-accent-from/20" : "hover:bg-white/5"
-                      }`}
-                    >
-                      <AccountAvatar
-                        username={acc.label}
-                        profile={acc.is_active ? profileAvatarInput : undefined}
-                        kind={acc.kind}
-                        size={64}
-                        className={`h-8 w-8 shrink-0 rounded-full ${accountKindAvatarClass(acc.kind)}`}
-                      />
-                      <button
-                        type="button"
-                        disabled={acc.is_active}
-                        onClick={() => {
-                          if (!acc.is_active) void handleSwitchLauncherAccount(acc.id);
-                        }}
-                        className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition enabled:cursor-pointer enabled:hover:bg-white/10 enabled:active:scale-[0.99] disabled:cursor-default"
-                      >
-                        <span className="block truncate text-sm font-medium text-white/95">
-                          {acc.label}
-                        </span>
-                        <span className="mt-0.5 block text-[0.75rem] text-white/45">
-                          {accountKindShortLabel(acc.kind)}
-                          {acc.is_active
-                            ? ` · ${tt("app.accounts.activeBadge")}`
-                            : ""}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => requestRemoveLauncherAccount(acc.id)}
-                        className="interactive-press shrink-0 rounded-lg p-2 text-white/35 hover:bg-red-500/15 hover:text-red-300"
-                        title={tt("app.accounts.removeTitle")}
-                      >
-                        <DeleteIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-white/10" />
-                <button
-                  type="button"
-                  disabled={addingAccount}
-                  onClick={() => void handleAddLauncherAccount()}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-accent-hi hover:bg-white/10 disabled:opacity-50"
-                >
-                  <PlusIcon className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                  {tt("app.accounts.addAccount")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountSwitcherOpen(false);
-                    setActiveItemWithSound("accounts");
-                  }}
-                  className="w-full border-t border-white/10 px-3 py-2.5 text-left text-xs font-medium text-white/70 hover:bg-white/10 hover:text-white"
-                >
-                  {tt("app.accounts.manageAll")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <div className="ml-1.5 flex items-center gap-0.5 border-l border-white/10 pl-2">
-            <button
-              type="button"
-              onClick={handleMinimize}
-              className="icon-btn h-8 w-8"
-              aria-label={tt("app.window.minimize")}
-              data-no-drag
-            >
-              <MinimizeIcon />
-            </button>
-            <button
-              type="button"
-              onClick={handleToggleMaximize}
-              className="icon-btn h-8 w-8"
-              aria-label={tt("app.window.maximize")}
-              data-no-drag
-            >
-              <MaximizeIcon />
-            </button>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="icon-btn h-8 w-8 hover:!bg-red-600/90 hover:!text-white"
-              aria-label={tt("app.window.close")}
-              data-no-drag
-            >
-              <CloseIcon />
-            </button>
-          </div>
-        </div>
-      </div>
+          <AccountSwitcher
+            containerRef={accountSwitcherRef}
+            open={accountSwitcherOpen}
+            onToggle={() => {
+              void refreshLauncherAccounts();
+              setSessionNotificationsOpen(false);
+              setAccountSwitcherOpen((o) => !o);
+            }}
+            tt={tt}
+            label={activeAccountLabel}
+            kind={activeAccountKind}
+            avatarProfile={profileAvatarInput}
+            accounts={launcherAccounts}
+            kindShortLabel={accountKindShortLabel}
+            adding={addingAccount}
+            onSwitch={(accountId) => void handleSwitchLauncherAccount(accountId)}
+            onRemove={requestRemoveLauncherAccount}
+            onAdd={() => void handleAddLauncherAccount()}
+            onManageAll={() => {
+              setAccountSwitcherOpen(false);
+              setActiveItemWithSound("accounts");
+            }}
+          />
+        </TitleBar>
 
-      <div
-        className={`relative z-10 flex h-[calc(100vh-2.75rem)] ${
-          sidebarPosition === "top"
-            ? "flex-col"
-            : sidebarPosition === "bottom"
-              ? "flex-col-reverse"
-              : sidebarPosition === "right"
-                ? "flex-row-reverse"
-                : "flex-row"
-        }`}
-      >
-          <aside
-            ref={sidebarRef}
-            data-tour-id="tour-sidebar"
-            className={[
-              "shell-sidebar",
-              sidebarPosition === "right" ? "shell-sidebar-right" : "",
-              sidebarHorizontal ? "shell-sidebar-horizontal" : "",
-              sidebarPosition === "bottom" ? "shell-sidebar-bottom" : "",
-              sidebarCollapsed ? "shell-sidebar-collapsed" : "",
-            ].join(" ")}
-          >
-            <span
-              className="shell-nav-bar"
-              style={
-                sidebarHorizontal
-                  ? {
-                      width: `${sidebarIndicator.span}px`,
-                      transform: `translateX(${sidebarIndicator.offset}px)`,
-                      opacity: sidebarIndicator.ready ? 1 : 0,
-                      willChange: "transform",
-                    }
-                  : {
-                      height: `${sidebarIndicator.span}px`,
-                      transform: `translateY(${sidebarIndicator.offset}px)`,
-                      opacity: sidebarIndicator.ready ? 1 : 0,
-                      willChange: "transform",
-                    }
-              }
-            />
-            <SidebarAccount
-              avatar={
-                <AccountAvatar
-                  username={activeAccountLabel}
-                  profile={profileAvatarInput}
-                  kind={activeAccountKind}
-                  size={72}
-                  className="h-8 w-8 shrink-0 rounded-lg"
-                />
-              }
-              label={activeAccountLabel}
-              kind={activeAccountKind}
-              platformNickname={platformNickname}
-              offlineText={tt("app.accounts.offlineBadge")}
-              title={tt("app.accounts.sidebarTooltip")}
-              active={activeItem === "accounts"}
-              collapsed={sidebarCollapsed}
-              buttonRef={(el) => {
-                sidebarButtonRefs.current.accounts = el;
-              }}
-              onClick={() => setActiveItemWithSound("accounts")}
-            />
-            <nav className="shell-nav">
-              {orderedSidebarItems.map((item) => {
-                const tabId = item.id as SplittableTabId;
-                const splitRole = effectiveTabSplit && tabPaneRole(tabId, effectiveTabSplit);
-                const isActive = activeItem === tabId;
-                const label = tt(item.labelKey);
-                return (
-                  <div
-                    key={item.id}
-                    className="group relative"
-                    data-tour-id={TOUR_SIDEBAR_TARGET_IDS[item.id]}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (sidebarDragConsumedRef.current) {
-                          sidebarDragConsumedRef.current = false;
-                          return;
-                        }
-                        if (tabId === "modpacks") {
-                          const modpacksPaneVisible =
-                            effectiveTabSplit != null
-                              ? effectiveTabSplit.primary === "modpacks" ||
-                                effectiveTabSplit.secondary === "modpacks"
-                              : activeItem === "modpacks";
-                          if (modpacksPaneVisible && handleModpackSidebarClick()) {
-                            activateSidebarTab(tabId);
-                            return;
-                          }
-                        }
-                        activateSidebarTab(tabId);
-                      }}
-                      aria-label={label}
-                      title={
-                        canUseSplitView
-                          ? tt("app.splitView.dragHint", { tab: label })
-                          : sidebarCollapsed
-                            ? label
-                            : undefined
-                      }
-                      ref={(el) => {
-                        sidebarButtonRefs.current[item.id] = el;
-                      }}
-                      className={[
-                        "nav-item",
-                        isActive ? "nav-item-active" : "",
-                        !isActive && splitRole ? "nav-item-split" : "",
-                        canUseSplitView ? "nav-item-splittable" : "",
-                      ].join(" ")}
-                      onPointerDown={(e) => handleSidebarTabPointerDown(tabId, e)}
-                    >
-                      {SIDEBAR_ICON_PATHS[item.id] ? (
-                        <img src={SIDEBAR_ICON_PATHS[item.id]} alt="" draggable={false} />
-                      ) : null}
-                      <span className="truncate">{label}</span>
-                    </button>
-                    {splitRole ? (
-                      <button
-                        type="button"
-                        className="tab-split-sidebar-close tab-split-sidebar-close-vertical interactive-press no-shift"
-                        title={tt("app.splitView.closePane")}
-                        aria-label={tt("app.splitView.closePane")}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          dismissTabSplitPane(splitRole);
-                        }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <CloseIcon />
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </nav>
-
-            <div className="shell-foot">
-              {pinnedProfiles.length > 0 ? (
-                <div className="pin-row">
-                  {pinnedProfiles.map((profile) => (
-                    <button
-                      key={profile.id}
-                      type="button"
-                      onClick={() => {
-                        void handlePlayPinnedProfile(profile);
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPinnedContextMenu({
-                          profileId: profile.id,
-                          x: e.clientX,
-                          y: e.clientY,
-                        });
-                      }}
-                      title={profile.name}
-                      className="pin-btn group"
-                    >
-                      <ProfileInstanceIcon
-                        profile={{ id: profile.id, name: profile.name }}
-                        className="absolute inset-0 size-full rounded-xl"
-                        initialClassName="text-xs"
-                      />
-                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
-                        <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white" aria-hidden="true">
-                          <path d="M8 6.5v11l9-5.5-9-5.5z" />
-                        </svg>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {BOTTOM_SIDEBAR_ITEMS.map((item) => {
-                const label = tt(item.labelKey);
-                const isActive = activeItem === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setActiveItemWithSound(item.id)}
-                    aria-label={label}
-                    title={sidebarCollapsed ? label : undefined}
-                    ref={(el) => {
-                      sidebarButtonRefs.current[item.id] = el;
-                    }}
-                    className={`nav-item ${isActive ? "nav-item-active" : ""}`}
-                  >
-                    {SIDEBAR_ICON_PATHS[item.id] ? (
-                      <img src={SIDEBAR_ICON_PATHS[item.id]} alt="" draggable={false} />
-                    ) : null}
-                    <span className="truncate">{label}</span>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={toggleSidebarCollapsed}
-                className="nav-item shell-collapse-btn"
-                aria-label={tt(sidebarCollapsed ? "app.sidebar.expand" : "app.sidebar.collapse")}
-                title={tt(sidebarCollapsed ? "app.sidebar.expand" : "app.sidebar.collapse")}
-                aria-expanded={!sidebarCollapsed}
-              >
-                <svg viewBox="0 0 24 24" className="shell-collapse-icon" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 6l-6 6 6 6" />
-                </svg>
-                <span className="truncate">{tt("app.sidebar.collapse")}</span>
-              </button>
-            </div>
-          </aside>
-
-        <main
-          ref={mainSplitRef}
-          className={`relative z-0 flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
-            tabDrag ? "select-none" : ""
+        <div
+          className={`relative z-10 flex h-[calc(100vh-2.75rem)] ${
+            sidebarPosition === "top"
+              ? "flex-col"
+              : sidebarPosition === "bottom"
+                ? "flex-col-reverse"
+                : sidebarPosition === "right"
+                  ? "flex-row-reverse"
+                  : "flex-row"
           }`}
         >
-          {splitViewEnabled && splitTooNarrow ? (
-            <div
-              className="mb-2 shrink-0 rounded-xl border border-amber-400/30 bg-amber-500/15 px-3 py-1.5 text-center text-caption text-amber-100/90"
-              role="status"
-            >
-              {tt("app.splitView.tooNarrowBanner")}
-            </div>
-          ) : null}
-          {splitViewEnabled && !splitTooNarrow && !effectiveTabSplit && !tabDrag ? (
-            <div
-              className="pointer-events-none mb-2 shrink-0 text-center text-caption text-white/40"
-              aria-hidden="true"
-            >
-              {tt("app.splitView.dragSidebarHint")}
-            </div>
-          ) : null}
-          {tabDrag ? (
-            <div
-              className="tab-drag-ghost"
-              style={{ left: tabDrag.x, top: tabDrag.y }}
-              aria-hidden
-            >
-              {SIDEBAR_ICON_PATHS[tabDrag.tab] ? (
-                <img
-                  src={SIDEBAR_ICON_PATHS[tabDrag.tab]}
-                  alt=""
-                  className="h-7 w-7 object-contain"
-                />
-              ) : (
-                <>
-                  {tabDrag.tab === "play" && <PlayIcon />}
-                  {tabDrag.tab === "settings" && <SettingsIcon />}
-                </>
-              )}
-            </div>
-          ) : null}
-          {}
-          <div
-            className={
-              activeItem === "rooms"
-                ? "flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4"
-                : "hidden"
-            }
-            aria-hidden={activeItem !== "rooms"}
+          <AppSidebar
+            tt={tt}
+            activeItem={activeItem}
+            sidebarRef={sidebarRef}
+            sidebarButtonRefs={sidebarButtonRefs}
+            sidebarPosition={sidebarPosition}
+            sidebarHorizontal={sidebarHorizontal}
+            sidebarCollapsed={sidebarCollapsed}
+            sidebarIndicator={sidebarIndicator}
+            orderedSidebarItems={orderedSidebarItems}
+            activeAccountLabel={activeAccountLabel}
+            activeAccountKind={activeAccountKind}
+            profileAvatarInput={profileAvatarInput}
+            platformNickname={platformNickname}
+            effectiveTabSplit={effectiveTabSplit}
+            canUseSplitView={canUseSplitView}
+            sidebarDragConsumedRef={sidebarDragConsumedRef}
+            hotkeyForTab={hotkeyForTab}
+            pinnedProfiles={pinnedProfiles}
+            onSelectTab={setActiveItemWithSound}
+            onActivateTab={activateSidebarTab}
+            onModpacksTabClick={handleModpackSidebarClick}
+            onTabPointerDown={handleSidebarTabPointerDown}
+            onDismissSplitPane={dismissTabSplitPane}
+            onPlayPinned={handlePlayPinnedProfile}
+            onPinnedContextMenu={setPinnedContextMenu}
+            onToggleCollapsed={toggleSidebarCollapsed}
+          />
+
+          <main
+            ref={mainSplitRef}
+            className={`relative z-0 flex min-h-0 flex-1 flex-col self-stretch overflow-hidden px-6 py-3 ${
+              tabDrag ? "select-none" : ""
+            }`}
           >
-            <RoomsTab
-              showNotification={showNotification}
-              language={language}
-              minecraftAccountKind={activeAccountKind}
-              gameStatus={gameStatus}
-              tabActive={activeItem === "rooms"}
-              onLaunchToServer={handleLaunchToServer}
-              onPresenceContextChange={setRoomPresenceContext}
-              onRoomLaunchContextChange={setLaunchPresenceContext}
-              onOpenAccounts={() => setActiveItemWithSound("accounts")}
-              onApplyRoomGameSettings={applyRoomGameSettings}
-              currentGame={roomCurrentGame}
-            />
-          </div>
-          {activeItem === "friends" ? (
-            <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
-              <FriendsTab
+            {splitViewEnabled && splitTooNarrow ? (
+              <div
+                className="mb-2 shrink-0 rounded-xl border border-amber-400/30 bg-amber-500/15 px-3 py-1.5 text-center text-caption text-amber-100/90"
+                role="status"
+              >
+                {tt("app.splitView.tooNarrowBanner")}
+              </div>
+            ) : null}
+            {splitViewEnabled && !splitTooNarrow && !effectiveTabSplit && !tabDrag ? (
+              <div
+                className="pointer-events-none mb-2 shrink-0 text-center text-caption text-white/40"
+                aria-hidden="true"
+              >
+                {tt("app.splitView.dragSidebarHint")}
+              </div>
+            ) : null}
+            {tabDrag ? <TabDragGhost drag={tabDrag} /> : null}
+            <div
+              className={
+                activeItem === "rooms"
+                  ? "flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4"
+                  : "hidden"
+              }
+              aria-hidden={activeItem !== "rooms"}
+            >
+              <RoomsTab
                 showNotification={showNotification}
                 language={language}
-                onOpenRooms={() => setActiveItemWithSound("rooms")}
+                minecraftAccountKind={activeAccountKind}
+                gameStatus={gameStatus}
+                tabActive={activeItem === "rooms"}
+                onLaunchToServer={handleLaunchToServer}
+                onPresenceContextChange={setRoomPresenceContext}
+                onRoomLaunchContextChange={setLaunchPresenceContext}
                 onOpenAccounts={() => setActiveItemWithSound("accounts")}
+                onApplyRoomGameSettings={applyRoomGameSettings}
+                currentGame={roomCurrentGame}
               />
             </div>
-          ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
-            <AccountsTab
-              showNotification={showNotification}
-              language={language}
-              profile={profile}
-              setProfile={setProfile}
-              launcherAccounts={launcherAccounts}
-              nicknameDraft={nicknameDraft}
-              setNicknameDraft={setNicknameDraft}
-              isAuthorized={isAuthorized}
-              displayedNickname={displayedNickname}
-              profileAvatarInput={profileAvatarInput}
-              activeAccountKind={activeAccountKind}
-              activeAccountId={activeAccountId}
-              elyLoading={elyLoading}
-              msLoading={msLoading}
-              elyAuthUrl={elyAuthUrl}
-              msAuthUrl={msAuthUrl}
-              addingAccount={addingAccount}
-              accountKindShortLabel={accountKindShortLabel}
-              onSaveNickname={handleSaveNickname}
-              onMicrosoftLogin={handleMicrosoftLogin}
-              onMicrosoftLogout={handleMicrosoftLogout}
-              onElyLogin={handleElyLogin}
-              onElyLogout={handleElyLogout}
-              onSwitchAccount={handleSwitchLauncherAccount}
-              tourAccountsSection={productTourActive ? tourAccountsSection : null}
-              tourForceSettingsOpen={productTourActive && tourAccountsSection === "platform"}
-              onRemoveAccount={async (accountId) => {
-                try {
-                  await invoke("remove_launcher_account", { accountId });
-                  await loadProfile();
-                  await refreshLauncherAccounts();
-                  setAccountSwitcherOpen(false);
-                  showNotification("info", tt("app.accounts.toast.removed"));
-                } catch (e) {
-                  showNotification("error", e instanceof Error ? e.message : String(e));
-                }
-              }}
-              onAddAccount={handleAddLauncherAccount}
-            />
-          ) : effectiveTabSplit ? (
-            <div
-              className={`tab-split-main tab-animate min-h-0 w-full flex-1 ${
-                effectiveTabSplit.direction === "horizontal"
-                  ? "tab-split-main-horizontal"
-                  : "tab-split-main-vertical"
-              }`}
-            >
-              <div
-                className={`tab-split-pane ${
-                  effectiveTabSplit.focused !== "primary" ? "tab-split-pane-inactive" : ""
-                }`}
-                style={{ flexGrow: effectiveTabSplit.ratio, flexBasis: 0 }}
-                onPointerDown={() => {
-                  if (effectiveTabSplit.focused !== "primary") {
-                    setTabSplitLayout({ ...effectiveTabSplit, focused: "primary" });
-                    setActiveItemWithSound(effectiveTabSplit.primary);
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className="tab-split-pane-close interactive-press no-shift"
-                  title={tt("app.splitView.closePane")}
-                  aria-label={tt("app.splitView.closePane")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dismissTabSplitPane("primary");
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <CloseIcon />
-                </button>
-                <div className="tab-split-pane-inner">
-                  {renderMainTabContent(effectiveTabSplit.primary, true)}
-                </div>
+            {activeItem === "friends" ? (
+              <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
+                <FriendsTab
+                  showNotification={showNotification}
+                  language={language}
+                  onOpenRooms={() => setActiveItemWithSound("rooms")}
+                  onOpenAccounts={() => setActiveItemWithSound("accounts")}
+                />
               </div>
-              <div
-                role="separator"
-                aria-orientation={
-                  effectiveTabSplit.direction === "horizontal" ? "vertical" : "horizontal"
-                }
-                aria-valuenow={Math.round(effectiveTabSplit.ratio * 100)}
-                className={[
-                  "tab-split-divider",
-                  effectiveTabSplit.direction === "horizontal"
-                    ? "tab-split-divider-horizontal"
-                    : "tab-split-divider-vertical",
-                  isTabSplitDividerDragging ? "tab-split-divider-dragging" : "",
-                ].join(" ")}
-                onPointerDown={onTabSplitDividerPointerDown}
+            ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
+              <AccountsTab
+                showNotification={showNotification}
+                language={language}
+                profile={profile}
+                setProfile={setProfile}
+                launcherAccounts={launcherAccounts}
+                nicknameDraft={nicknameDraft}
+                setNicknameDraft={setNicknameDraft}
+                isAuthorized={isAuthorized}
+                displayedNickname={displayedNickname}
+                profileAvatarInput={profileAvatarInput}
+                activeAccountKind={activeAccountKind}
+                activeAccountId={activeAccountId}
+                elyLoading={elyLoading}
+                msLoading={msLoading}
+                elyAuthUrl={elyAuthUrl}
+                msAuthUrl={msAuthUrl}
+                addingAccount={addingAccount}
+                accountKindShortLabel={accountKindShortLabel}
+                onSaveNickname={handleSaveNickname}
+                onMicrosoftLogin={handleMicrosoftLogin}
+                onMicrosoftLogout={handleMicrosoftLogout}
+                onElyLogin={handleElyLogin}
+                onElyLogout={handleElyLogout}
+                onSwitchAccount={handleSwitchLauncherAccount}
+                tourAccountsSection={productTourActive ? tourAccountsSection : null}
+                tourForceSettingsOpen={productTourActive && tourAccountsSection === "platform"}
+                onRemoveAccount={removeLauncherAccount}
+                onAddAccount={handleAddLauncherAccount}
               />
+            ) : effectiveTabSplit ? (
+              <TabSplitPanes
+                layout={effectiveTabSplit}
+                tt={tt}
+                dividerDragging={isTabSplitDividerDragging}
+                onDividerPointerDown={onTabSplitDividerPointerDown}
+                onLayoutChange={setTabSplitLayout}
+                onFocusTab={setActiveItemWithSound}
+                onDismissPane={dismissTabSplitPane}
+                renderPane={(tab) => renderMainTabContent(tab, true)}
+              />
+            ) : (
               <div
-                className={`tab-split-pane ${
-                  effectiveTabSplit.focused !== "secondary" ? "tab-split-pane-inactive" : ""
-                }`}
-                style={{ flexGrow: 1 - effectiveTabSplit.ratio, flexBasis: 0 }}
-                onPointerDown={() => {
-                  if (effectiveTabSplit.focused !== "secondary") {
-                    setTabSplitLayout({ ...effectiveTabSplit, focused: "secondary" });
-                    setActiveItemWithSound(effectiveTabSplit.secondary);
-                  }
-                }}
+                key={singleMainTab}
+                className="tab-animate flex min-h-0 w-full flex-1 flex-col items-stretch justify-start"
               >
-                <button
-                  type="button"
-                  className="tab-split-pane-close interactive-press no-shift"
-                  title={tt("app.splitView.closePane")}
-                  aria-label={tt("app.splitView.closePane")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dismissTabSplitPane("secondary");
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <CloseIcon />
-                </button>
-                <div className="tab-split-pane-inner">
-                  {renderMainTabContent(effectiveTabSplit.secondary, true)}
-                </div>
+                {renderMainTabContent(singleMainTab)}
               </div>
-            </div>
-          ) : (
-            <div
-              key={singleMainTab}
-              className="tab-animate flex min-h-0 w-full flex-1 flex-col items-stretch justify-start"
-            >
-              {renderMainTabContent(singleMainTab)}
-            </div>
-          )}
-          {tabDrag && canUseSplitView ? (
-            <TabSplitDropOverlay zone={tabDropZone} labels={splitDropZoneLabels} />
-          ) : null}
-        </main>
+            )}
+            {tabDrag && canUseSplitView ? (
+              <TabSplitDropOverlay zone={tabDropZone} labels={splitDropZoneLabels} />
+            ) : null}
+          </main>
 
-        <ActiveDownloadsPanel jobs={activeDownloadJobs} language={language} />
+          <ActiveDownloadsPanel jobs={activeDownloadJobs} language={language} />
+        </div>
+
+        <ProductTour
+          language={language}
+          accentColor={accentColor}
+          active={productTourActive}
+          onNavigateTab={(tab: TourTabId) => setActiveItemWithSound(tab)}
+          onNavigateAccountsSection={setTourAccountsSection}
+          onComplete={completeProductTour}
+          onSkip={completeProductTour}
+        />
       </div>
-
-      <ProductTour
-        language={language}
-        accentColor={accentColor}
-        active={productTourActive}
-        onNavigateTab={(tab: TourTabId) => setActiveItemWithSound(tab)}
-        onNavigateAccountsSection={setTourAccountsSection}
-        onComplete={completeProductTour}
-        onSkip={completeProductTour}
-      />
-    </div>
     </LauncherAnimationScope>
   );
 }

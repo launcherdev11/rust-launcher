@@ -92,7 +92,7 @@
     "quickInstall": "Installieren",
     "installing": "Installieren…",
     "batch": {
-      "hint": "Mehrere Projekte anhaken und als Stapel herunterladen.",
+      "hint": "Projekte anhaken, per Strg+Klick oder mit gedrückter Strg-Taste per Rahmen auswählen und als Stapel herunterladen.",
       "selectOne": "{{title}} auswählen",
       "selected": "Ausgewählt: {{count}}",
       "clear": "Auswahl aufheben",
@@ -800,7 +800,7 @@
           },
           "missingDependency": {
             "title": "Fehlende Mod-Abhängigkeit",
-            "fix": "Installiere benötigte Bibliotheken in der passenden Version."
+            "fix": "Installiere benötigte Bibliotheken (z. B. Fabric API, Architectury) in der passenden Version."
           },
           "versionMismatch": {
             "title": "Minecraft-Versionskonflikt",
@@ -940,6 +940,7 @@
       "editGroupMenu": "Gruppe bearbeiten",
       "deleteGroupMenu": "Gruppe löschen",
       "dropHint": "Hierher ziehen",
+      "deleteSelected": "Ausgewählte löschen",
       "selectedCount": "Ausgewählt: {{count}}",
       "title": "Meine Profile",
       "newGroup": "Neue Gruppe",
@@ -1044,7 +1045,10 @@
       "deleteConfirm": "Screenshot „{{name}}“ löschen?",
       "deleteFailed": "Screenshot konnte nicht gelöscht werden: {{msg}}",
       "openFolderFailed": "Ordner konnte nicht geöffnet werden: {{msg}}",
-      "openFailed": "Screenshot konnte nicht geöffnet werden: {{msg}}"
+      "openFailed": "Screenshot konnte nicht geöffnet werden: {{msg}}",
+      "copy": "Kopieren",
+      "copied": "Screenshot in die Zwischenablage kopiert.",
+      "copyFailed": "Screenshot konnte nicht kopiert werden: {{msg}}"
     },
     "import": {
       "title": "Modrinth-Paket importieren",
@@ -1099,6 +1103,8 @@
       "profileSelected": "Profil „{{name}}“ ausgewählt.",
       "selectProfileFailed": "Profil konnte nicht ausgewählt werden.",
       "profileDeleted": "Profil gelöscht.",
+      "profilesDeleted": "Gelöschte Profile: {{count}}.",
+      "deleteProfilesPartial": "{{failed}} Profile konnten nicht gelöscht werden.",
       "deleteProfileFailed": "Profil konnte nicht gelöscht werden.",
       "deleteProfileFailedWithMsg": "Profil konnte nicht gelöscht werden: {{msg}}",
       "loadLoaderVersionsFailed": "Loader-Versionen konnten nicht geladen werden: {{msg}}",
@@ -1164,6 +1170,7 @@
       "pinToSidebar": "An Seitenleiste anpinnen",
       "unpinFromSidebar": "Von der Seitenleiste lösen",
       "deleteProfile": "Profil löschen",
+      "deleteSelectedProfiles": "Ausgewählte löschen ({{count}})",
       "renameProfile": "Profil umbenennen",
       "editProfile": "Profil bearbeiten",
       "createBackup": "Backup erstellen",
@@ -1192,6 +1199,7 @@
       "openFolderFailed": "Backup-Ordner konnte nicht geöffnet werden."
     },
     "deleteConfirm": {
+      "bulkPrompt": "Ausgewählte Profile ({{count}}) löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
       "title": "Bestätigung löschen",
       "prompt": "Profil „{{name}}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden."
     },
@@ -1727,6 +1735,34 @@
       "modpacks": "Modpacks",
       "friends": "Freunde",
       "rooms": "Räume"
+    },
+    "hotkeys": {
+      "title": "Tastenkürzel",
+      "subtitle": "Aktiv, wenn kein Dialog offen und kein Eingabefeld fokussiert ist.",
+      "groups": {
+        "navigation": "Navigation",
+        "play": "Spiel",
+        "content": "Builds und Inhalte",
+        "general": "Allgemein"
+      },
+      "items": {
+        "tabs": "Seitenleisten-Tabs der Reihe nach",
+        "cycleTabs": "Nächster / vorheriger Tab",
+        "history": "Zurück / vor im Verlauf",
+        "settings": "Einstellungen öffnen",
+        "sidebar": "Seitenleiste ein- oder ausklappen",
+        "back": "Zurück zur Build-Liste",
+        "launch": "Ausgewählten Build starten",
+        "stop": "Spiel beenden",
+        "copyConsole": "Konsole kopieren",
+        "detachConsole": "Konsole abtrennen",
+        "create": "Build erstellen",
+        "import": "Build importieren",
+        "screenshots": "Screenshots des Builds öffnen",
+        "search": "Zur Suche springen",
+        "refresh": "Liste aktualisieren",
+        "help": "Tastenkürzel anzeigen"
+      }
     },
     "splitView": {
       "zones": {

@@ -11,7 +11,7 @@
     "search": "Buscar…",
     "yes": "Sí",
     "no": "No",
-    "close": "Cerca",
+    "close": "Cerrar",
     "clear": "Borrar",
     "add": "Agregar",
     "rename": "Rebautizar",
@@ -92,7 +92,7 @@
     "quickInstall": "Instalar",
     "installing": "Instalando…",
     "batch": {
-      "hint": "Marca varios proyectos y descárgalos en lote.",
+      "hint": "Marca proyectos, haz Ctrl+clic o arrastra un recuadro con Ctrl pulsado y descárgalos en lote.",
       "selectOne": "Seleccionar {{title}}",
       "selected": "Seleccionados: {{count}}",
       "clear": "Quitar selección",
@@ -800,7 +800,7 @@
           },
           "missingDependency": {
             "title": "Falta una dependencia",
-            "fix": "Instala las librerías requeridas en la versión correcta."
+            "fix": "Instala las librerías requeridas (Fabric API, Architectury, etc.) en la versión correcta."
           },
           "versionMismatch": {
             "title": "Versión de Minecraft incompatible",
@@ -919,7 +919,7 @@
       "content": "Contenido",
       "folder": "Carpeta",
       "profileId": "ID de perfil",
-      "close": "Cerca",
+      "close": "Cerrar",
       "contentMods": "{{count}} mod(es)",
       "contentResourcepacks": "{{count}} paquete(s)",
       "contentShaders": "{{count}} sombreador(es)"
@@ -940,6 +940,7 @@
       "editGroupMenu": "Editar grupo",
       "deleteGroupMenu": "Eliminar grupo",
       "dropHint": "Arrastra aquí",
+      "deleteSelected": "Eliminar seleccionados",
       "selectedCount": "Seleccionado: {{count}}",
       "title": "Mis perfiles",
       "newGroup": "Nuevo grupo",
@@ -1035,7 +1036,7 @@
       "empty": "Aún no hay capturas de pantalla. Toma uno en el juego (F2) y aparecerá aquí.",
       "refresh": "Refrescar",
       "openFolder": "Abrir carpeta",
-      "close": "Cerca",
+      "close": "Cerrar",
       "open": "Abierto",
       "delete": "Borrar",
       "selectHint": "Seleccione una captura de pantalla de la galería.",
@@ -1044,7 +1045,10 @@
       "deleteConfirm": "¿Eliminar captura de pantalla “{{name}}”?",
       "deleteFailed": "No se pudo eliminar la captura de pantalla: {{msg}}",
       "openFolderFailed": "No se pudo abrir la carpeta: {{msg}}",
-      "openFailed": "No se pudo abrir la captura de pantalla: {{msg}}"
+      "openFailed": "No se pudo abrir la captura de pantalla: {{msg}}",
+      "copy": "Copiar",
+      "copied": "Captura copiada al portapapeles.",
+      "copyFailed": "No se pudo copiar la captura: {{msg}}"
     },
     "import": {
       "title": "Importar paquete Modrinth",
@@ -1099,6 +1103,8 @@
       "profileSelected": "Perfil “{{name}}” seleccionado.",
       "selectProfileFailed": "No se pudo seleccionar el perfil.",
       "profileDeleted": "Perfil eliminado.",
+      "profilesDeleted": "Perfiles eliminados: {{count}}.",
+      "deleteProfilesPartial": "No se pudieron eliminar {{failed}} perfiles.",
       "deleteProfileFailed": "No se pudo eliminar el perfil.",
       "deleteProfileFailedWithMsg": "No se pudo eliminar el perfil: {{msg}}",
       "loadLoaderVersionsFailed": "No se pudieron cargar las versiones del cargador: {{msg}}",
@@ -1164,6 +1170,7 @@
       "pinToSidebar": "Fijar a la barra lateral",
       "unpinFromSidebar": "Desanclar de la barra lateral",
       "deleteProfile": "Eliminar perfil",
+      "deleteSelectedProfiles": "Eliminar seleccionados ({{count}})",
       "renameProfile": "Cambiar nombre de perfil",
       "editProfile": "Editar perfil",
       "createBackup": "Crear copia de seguridad",
@@ -1192,6 +1199,7 @@
       "openFolderFailed": "No se pudo abrir la carpeta de copias."
     },
     "deleteConfirm": {
+      "bulkPrompt": "¿Eliminar los perfiles seleccionados ({{count}})? Esta acción no se puede deshacer.",
       "title": "Eliminar confirmación",
       "prompt": "¿Eliminar perfil “{{name}}”? Esta acción no se puede deshacer."
     },
@@ -1728,6 +1736,34 @@
       "friends": "Amigos",
       "rooms": "Salas"
     },
+    "hotkeys": {
+      "title": "Atajos de teclado",
+      "subtitle": "Activos cuando no hay ningún diálogo abierto ni un campo de texto enfocado.",
+      "groups": {
+        "navigation": "Navegación",
+        "play": "Juego",
+        "content": "Instancias y contenido",
+        "general": "General"
+      },
+      "items": {
+        "tabs": "Pestañas de la barra lateral en orden",
+        "cycleTabs": "Pestaña siguiente / anterior",
+        "history": "Atrás / adelante en el historial",
+        "settings": "Abrir ajustes",
+        "sidebar": "Contraer o expandir la barra lateral",
+        "back": "Volver a la lista de instancias",
+        "launch": "Iniciar la instancia seleccionada",
+        "stop": "Detener el juego",
+        "copyConsole": "Copiar la consola",
+        "detachConsole": "Separar la consola",
+        "create": "Crear una instancia",
+        "import": "Importar una instancia",
+        "screenshots": "Abrir capturas de la instancia",
+        "search": "Ir a la búsqueda",
+        "refresh": "Actualizar la lista",
+        "help": "Mostrar atajos de teclado"
+      }
+    },
     "splitView": {
       "zones": {
         "left": "Izquierda",
@@ -1933,7 +1969,7 @@
       "mojangDisclaimer": "NO ES UN PRODUCTO OFICIAL DE MINECRAFT. NO APROBADO NI ASOCIADO CON MOJANG O MICROSOFT.\n\n16Launcher no está afiliado de ninguna manera con Mojang Studios, ni debe considerarse un proyecto respaldado por Mojang Studios.",
       "apis": "Usamos las API Modrinth, CurseForge y Ely.by",
       "reportBug": "¿Encontraste un error?",
-      "close": "Cerca"
+      "close": "Cerrar"
     },
     "playAction": {
       "play": "JUGAR",

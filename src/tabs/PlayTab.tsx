@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CursorHint, useCursorHint } from "../components/CursorHint";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
 import { BannerSkeleton, InputClearButton, Spinner } from "../components/ui";
@@ -197,6 +198,7 @@ export function PlayTab({
     [profiles, selectedProfileId],
   );
   const dockIconSrc = useProfileIconSrc(selectedProfile?.id ?? "");
+  const lockedHint = useCursorHint();
 
   const consoleText = useMemo(
     () => playConsoleLines.map((e) => e.line).join("\n"),
@@ -367,7 +369,7 @@ export function PlayTab({
       className={
         fillPane
           ? "mt-2 flex min-h-0 w-full flex-1 flex-col gap-2"
-          : "mt-3 flex w-full flex-col gap-2"
+          : "mt-3 flex min-h-0 w-full flex-col gap-2"
       }
     >
       <div className="flex items-center justify-between px-1">
@@ -389,7 +391,7 @@ export function PlayTab({
         className={
           fillPane
             ? "grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-2"
-            : "grid grid-cols-2 gap-2 sm:gap-3"
+            : "custom-scrollbar grid min-h-0 grid-cols-2 gap-2 overflow-y-auto sm:gap-3"
         }
       >
         {Array.from({ length: 4 }, (_, index) => {
@@ -608,7 +610,10 @@ export function PlayTab({
                   <button
                     type="button"
                     title={tt("play.loader.label")}
-                    onClick={() => setIsLoaderDropdownOpen(!isLoaderDropdownOpen)}
+                    onClick={(e) => {
+                      if (selectedProfile) lockedHint.show(e);
+                      else setIsLoaderDropdownOpen(!isLoaderDropdownOpen);
+                    }}
                     className="dock-chip"
                   >
                     {LOADER_ICONS[loader] ? (
@@ -652,7 +657,10 @@ export function PlayTab({
                     type="button"
                     title={tt("play.version.label")}
                     disabled={versions.length === 0 || versionsLoading}
-                    onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
+                    onClick={(e) => {
+                      if (selectedProfile) lockedHint.show(e);
+                      else setIsVersionDropdownOpen(!isVersionDropdownOpen);
+                    }}
                     className="dock-chip"
                   >
                     <span className="min-w-0 truncate">
@@ -837,10 +845,10 @@ export function PlayTab({
       </div>
 
       {(showConsoleOnLaunch || isInstalling || installPaused) && !isConsoleDetached && (
-        <div className="mt-4 flex w-full max-w-[95vw] justify-center px-2">
+        <div className="mt-3 w-full shrink-0">
           <GameConsolePanel
             embedded
-            className="glass-panel pointer-events-auto w-full max-w-3xl"
+            className="pointer-events-auto"
             consoleLines={playConsoleLines}
             isConsoleVisible={isConsoleVisible || isInstalling || installPaused}
             gameStatus={gameStatus}
@@ -853,6 +861,21 @@ export function PlayTab({
           />
         </div>
       )}
+      <CursorHint
+        hint={selectedProfile ? lockedHint.hint : null}
+        onClose={lockedHint.hide}
+        title={tt("play.version.lockedHintTitle")}
+        action={
+          onOpenProfileSettings
+            ? { label: tt("play.version.lockedHintAction"), onClick: onOpenProfileSettings }
+            : undefined
+        }
+      >
+        {tt("play.version.lockedHintBody", {
+          version: selectedProfile?.game_version || "—",
+          loader: selectedProfile?.loader || "—",
+        })}
+      </CursorHint>
     </>
   );
 
