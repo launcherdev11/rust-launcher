@@ -3,22 +3,16 @@ export type LogAnalyzerSeverity = "error" | "warning" | "info";
 export type LogAnalyzerFinding = {
   id: string;
   severity: LogAnalyzerSeverity;
-  /** i18n key under play.console.analyzer.rules.<id>.title */
   titleKey: string;
-  /** i18n key under play.console.analyzer.rules.<id>.fix */
   fixKey: string;
   matchCount: number;
   sample?: string;
-  /** Extra detail extracted from crash reports (mod names, description, etc.) */
   detail?: string;
-  /** Which input sources contributed (console / latest.log / crash-report) */
   sources?: string[];
 };
 
 export type LogAnalyzerInputSource = {
-  /** Stable id for UI: console | latest | crash:<name> */
   id: string;
-  /** Human-readable label for sample/source badge */
   label: string;
   text: string;
 };
@@ -153,7 +147,6 @@ function splitLines(text: string): string[] {
   return text.split(/\r?\n/);
 }
 
-/** Pull structured fields from a Minecraft crash report body. */
 function extractCrashReportHints(text: string): {
   description?: string;
   suspectedMods?: string;
@@ -277,9 +270,6 @@ function analyzeCrashBody(
   }
 }
 
-/**
- * Analyze console output plus optional on-disk sources (latest.log, crash reports).
- */
 export function analyzeGameLogs(
   lines: string[],
   diskSources: LogAnalyzerInputSource[] = [],

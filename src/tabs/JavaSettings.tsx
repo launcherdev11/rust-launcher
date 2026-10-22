@@ -27,7 +27,6 @@ type JavaSettingsProps = {
   systemMemoryGb: number;
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   profileId?: string | null;
-  /** Rendered inside a page that already scrolls, so no inner scroll area. */
   embedded?: boolean;
 };
 

@@ -6,9 +6,7 @@ export type ConsoleFilters = Record<ConsoleFilterKey, boolean>;
 
 export const EMPTY_CONSOLE_FILTERS: ConsoleFilters = { warn: false, error: false, crash: false };
 
-// "[main/INFO]:", "[Render thread/WARN]", "[main/ERROR] [mixin/]:" (Forge puts the logger after the level).
 const THREAD_LEVEL = /\[[^\][]*\/(FATAL|SEVERE|ERROR|WARN|WARNING|INFO|DEBUG|TRACE)\]/i;
-// "[12:00:00 WARN]:", "[12:00:00] [WARN]"
 const PLAIN_LEVEL = /^\[[\d:.\s]*\b(FATAL|SEVERE|ERROR|WARN|WARNING|INFO|DEBUG|TRACE)\]/i;
 
 const LOG_HEADER = /^\[(\d{1,2}:\d{2}:\d{2}|\d{2}[A-Za-z]{3}\d{4})/;
@@ -20,7 +18,6 @@ const CRASH_LINE = /#@!@#|Game crashed!|Crash report saved to|Saving crash repor
 
 const STACK_TRACE = /^\s+at\s|^\s*Caused by:|^\s*Suppressed:|^\s*\.\.\.\s*\d+\s+more|^\s*(Exception in thread|[\w$.]+(Exception|Error|Throwable)(:|$))/;
 
-// \b only knows ASCII letters, so the Russian words get their own boundary check.
 const ERROR_TEXT =
   /\b(error|exception|fatal|failed|failure|cannot|can't|unable to)\b|(^|[^а-яё])(ошибк|не удалось)|java\.lang\.\w+(Error|Exception)|OutOfMemoryError/i;
 const WARN_TEXT = /\b(warn|warning)\b|(^|[^а-яё])предупрежд/i;
@@ -44,10 +41,6 @@ function levelFromHeader(line: string): ConsoleLineLevel | null {
   }
 }
 
-/**
- * Levels for a whole console buffer. Stack traces and crash-report bodies have no log header of
- * their own, so they take the level of the line that started them.
- */
 export function classifyConsoleLines(
   entries: ReadonlyArray<{ line: string; source?: "stdout" | "stderr" }>,
 ): ConsoleLineLevel[] {

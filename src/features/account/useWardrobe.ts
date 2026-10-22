@@ -14,7 +14,6 @@ import {
 export type WardrobeBusy = "apply" | "upload" | "username" | null;
 
 export type PendingSkin = { id: string; alias: string; url: string };
-/** `id: null` means "take the cape off". */
 export type PendingCape = { id: string | null; alias: string | null; url: string | null };
 
 export type WardrobeState = {
@@ -23,7 +22,6 @@ export type WardrobeState = {
   capes: McCape[];
   skinsLoading: boolean;
   capesLoading: boolean;
-  /** Raw error text ("" when the backend gave none) or null. */
   skinsError: string | null;
   capesError: string | null;
   activeSkin: McSkin | null;
@@ -32,10 +30,8 @@ export type WardrobeState = {
   pendingCape: PendingCape | null;
   hasPending: boolean;
   busy: WardrobeBusy;
-  /** Texture for the 3D viewer: pending preview, then the last applied skin, else null (profile skin). */
   viewerSkinUrl: string | null;
   viewerCapeUrl: string | null;
-  /** Skin as it is on the account right now (null → load from profile). */
   appliedSkinUrl: string | null;
   appliedCapeUrl: string | null;
   reload: () => Promise<void>;
@@ -57,10 +53,6 @@ export function wardrobeErrorText(error: unknown): string {
   return "";
 }
 
-/**
- * Skins and capes of the active Microsoft account. Picking an item only previews it;
- * `applyPending` sends the skin and cape to Mojang together.
- */
 export function useWardrobe(enabled: boolean, accountKey: string): WardrobeState {
   const [skins, setSkins] = useState<McSkin[]>([]);
   const [capes, setCapes] = useState<McCape[]>([]);

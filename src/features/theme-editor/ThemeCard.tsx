@@ -7,7 +7,6 @@ type Props = {
   title?: string;
   selected: boolean;
   disabled?: boolean;
-  /** Absolute path to preview.png; without one the card draws a mock-up from the theme's colours. */
   preview?: string | null;
   variables?: ThemeVariables;
   accentColor: string;

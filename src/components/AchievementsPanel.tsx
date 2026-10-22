@@ -39,13 +39,9 @@ type Filter = "all" | "unlocked" | "locked";
 
 type AchievementsPanelProps = {
   language: Language;
-  /** Another user's achievements; omit for the signed-in user. */
   userId?: string | null;
-  /** Already loaded state (shared with other widgets); when omitted the panel loads on its own. */
   state?: AchievementsState;
-  /** Own stats, used to show progress on launch / playtime achievements. */
   stats?: UserStats | null;
-  /** Narrower cards, for the profile modal. */
   compact?: boolean;
   onSignIn?: () => void;
   className?: string;

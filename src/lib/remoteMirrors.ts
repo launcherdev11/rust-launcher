@@ -12,7 +12,6 @@ const LAUNCHER_NEWS_MIRROR_BASES = [LAUNCHER_NEWS_RAW_BASE, LAUNCHER_NEWS_CDN_BA
 
 export const REMOTE_FETCH_TIMEOUT_MS = 5_000;
 
-/** @deprecated Use resolveLauncherNewsAssetUrl */
 export const BANNER_BASE_URL = LAUNCHER_NEWS_RAW_BASE;
 
 export function buildLauncherNewsUrls(

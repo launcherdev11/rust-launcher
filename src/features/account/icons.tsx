@@ -1,4 +1,3 @@
-/** White glyph from public/launcher-assets (e.g. "refresh", "achivements"). */
 export function AssetIcon({ name, className = "h-4 w-4" }: { name: string; className?: string }) {
   return (
     <img
@@ -26,7 +25,6 @@ export function ElyByIcon({ className = "h-4 w-4 text-[0.6875rem]" }: { classNam
   );
 }
 
-/** Badge colours for the Minecraft account kind (Microsoft / Ely.by / offline). */
 export function accountKindTagClass(kind: string): string {
   if (kind === "microsoft") return "bg-sky-500/25 text-sky-100";
   if (kind === "ely") return "bg-[#2d7d46]/35 text-emerald-100";

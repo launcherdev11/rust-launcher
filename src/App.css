@@ -2,8 +2,6 @@
   --accent-color: #4a22a8;
 }
 
-/* Derived accent tokens. Custom properties resolve where they are declared, so they are re-declared on
-   every element that sets --accent-color inline (the app root, onboarding) to follow the user's pick. */
 :root,
 [style*="--accent-color"] {
   --accent-from: color-mix(in srgb, var(--accent-color) 72%, #7c4dff);

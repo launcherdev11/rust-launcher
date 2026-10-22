@@ -35,10 +35,6 @@ function isMemberOnline(room: Room, userId: string): boolean {
   return true;
 }
 
-/**
- * `openPeerIds` — пиры с живым DataChannel. Их не отключаем, даже если presence на миг пометил
- * участника офлайн: рабочий канал надёжнее heartbeat'а, а обрыв убил бы игровое соединение.
- */
 function remotePeerIdsFor(
   room: Room | null,
   localUserId: string,

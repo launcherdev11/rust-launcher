@@ -18,17 +18,10 @@ export type PeerSessionCallbacks = {
   onChannelOpen?: () => void;
 };
 
-/**
- * Объявляется по DataChannel сразу после открытия: пир понимает мультиплексированный
- * протокол LAN-моста (кадры OPEN/DATA/CLOSE). Бинарные данные от пира без этой метки
- * (старая версия лаунчера) игнорируются — их нельзя разобрать как кадры.
- */
 export const LAN_TUNNEL_CAPABILITY = "mux:1";
 
-/** Сколько ждать самовосстановления ICE после `disconnected`, прежде чем хост сделает ICE restart. */
 const ICE_RESTART_DELAY_MS = 3_000;
 const ICE_RESTART_MAX_ATTEMPTS = 3;
-/** Если связь так и не восстановилась — пересоздаём соединение целиком (сервер Minecraft ждёт ~30 с). */
 const ICE_RECOVERY_TIMEOUT_MS = 18_000;
 
 function urlList(urls: string | string[]): string[] {
@@ -214,7 +207,6 @@ export class RoomPeerSession {
     return this.channel?.readyState === "open";
   }
 
-  /** Пир объявил поддержку мультиплексированного LAN-моста (см. LAN_TUNNEL_CAPABILITY). */
   get supportsLanTunnel(): boolean {
     return this.remoteTunnelCapable;
   }
@@ -341,11 +333,6 @@ export class RoomPeerSession {
     }
   }
 
-  /**
-   * ICE потерял связь. Пока DataChannel жив, пытаемся восстановить путь (ICE restart со стороны
-   * хоста), не обрывая игровые TCP-соединения в туннеле. Не вышло за ICE_RECOVERY_TIMEOUT_MS —
-   * пересоздаём соединение целиком.
-   */
   private onLinkDegraded(state: "disconnected" | "failed"): void {
     if (!this.channelOpen) {
       this.callbacks.onStatus(state === "failed" ? "failed" : "connecting");
@@ -401,7 +388,6 @@ export class RoomPeerSession {
     }
   }
 
-  /** Закрывает транспорт и сообщает об ошибке — хук пересоздаст сессию. */
   private abort(): void {
     this.clearRecoveryTimers();
     try {

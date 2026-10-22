@@ -46,16 +46,12 @@ function applyIdleAnimation(viewer: SkinViewer, look: { x: number; y: number }) 
 export type AccountSkinPreviewProps = {
   profile: ProfileAvatarInput;
   username: string;
-  /** Texture to show instead of the profile's skin (wardrobe preview, freshly applied skin). */
   skinUrl?: string | null;
-  /** Cape texture (data URL); null hides the cape. */
   capeUrl?: string | null;
-  /** Overlays drawn above the canvas (badges, action bars). */
   children?: ReactNode;
   className?: string;
 };
 
-/** Interactive 3D player model. The head follows the cursor; drag to rotate. */
 export function AccountSkinPreview({
   profile,
   username,

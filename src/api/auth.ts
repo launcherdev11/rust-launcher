@@ -66,7 +66,6 @@ export async function requestPasswordReset(email: string): Promise<{
   );
 }
 
-/** Sets a new password with the emailed code; the server signs out all devices and logs this one in. */
 export async function resetPasswordAndPersist(input: {
   email: string;
   code: string;
@@ -83,7 +82,6 @@ export async function resetPasswordAndPersist(input: {
   return me;
 }
 
-/** Changes the password; other devices are signed out and this one gets fresh tokens. */
 export async function changePassword(
   input: { current_password: string; new_password: string },
   accessToken?: string,

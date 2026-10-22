@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 
-/** Items inside the container opt in with `data-marquee-key="<key>"`. */
 const MARQUEE_KEY_ATTR = "data-marquee-key";
 
 const DRAG_THRESHOLD = 5;
@@ -16,7 +15,6 @@ export type UseMarqueeSelectionOptions = {
   enabled?: boolean;
 };
 
-// The click that follows a drag must not toggle the item the pointer was released on.
 function suppressNextClick() {
   const stop = (ev: MouseEvent) => {
     ev.stopPropagation();
@@ -30,10 +28,6 @@ function preventDefault(ev: Event) {
   ev.preventDefault();
 }
 
-/**
- * Ctrl/Cmd + drag inside the container draws a selection box, like on the desktop.
- * Items touched by the box are added to the selection; Escape restores the previous one.
- */
 export function useMarqueeSelection({
   containerRef,
   selected,
@@ -55,7 +49,6 @@ export function useMarqueeSelection({
       if (!container) return;
       if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
       const bounds = container.getBoundingClientRect();
-      // Grabbing the scrollbar is not a selection.
       if (e.clientX >= bounds.left + container.clientLeft + container.clientWidth) return;
       cleanupRef.current?.();
 

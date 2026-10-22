@@ -92,7 +92,7 @@
     "quickInstall": "Install",
     "installing": "Installing…",
     "batch": {
-      "hint": "Check projects, Ctrl+click them or Ctrl+drag a box around them, then download them as a batch.",
+      "hint": "Check several projects and download them as a batch.",
       "selectOne": "Select {{title}}",
       "selected": "Selected: {{count}}",
       "clear": "Clear selection",
@@ -772,7 +772,7 @@
           },
           "missingDependency": {
             "title": "Missing mod dependency",
-            "fix": "Install required libraries (e.g. Fabric API, Architectury, Kotlin for Forge) matching the mod version."
+            "fix": "Install required libraries matching the mod version."
           },
           "versionMismatch": {
             "title": "Minecraft version mismatch",
@@ -912,7 +912,6 @@
       "editGroupMenu": "Edit group",
       "deleteGroupMenu": "Delete group",
       "dropHint": "Drop here",
-      "deleteSelected": "Delete selected",
       "selectedCount": "Selected: {{count}}",
       "title": "My profiles",
       "newGroup": "New group",
@@ -1017,10 +1016,7 @@
       "deleteConfirm": "Delete screenshot “{{name}}”?",
       "deleteFailed": "Failed to delete screenshot: {{msg}}",
       "openFolderFailed": "Failed to open folder: {{msg}}",
-      "openFailed": "Failed to open screenshot: {{msg}}",
-      "copy": "Copy",
-      "copied": "Screenshot copied to clipboard.",
-      "copyFailed": "Failed to copy screenshot: {{msg}}"
+      "openFailed": "Failed to open screenshot: {{msg}}"
     },
     "import": {
       "title": "Import Modrinth pack",
@@ -1075,8 +1071,6 @@
       "profileSelected": "Profile “{{name}}” selected.",
       "selectProfileFailed": "Failed to select profile.",
       "profileDeleted": "Profile deleted.",
-      "profilesDeleted": "Profiles deleted: {{count}}.",
-      "deleteProfilesPartial": "Failed to delete {{failed}} profiles.",
       "deleteProfileFailed": "Failed to delete profile.",
       "deleteProfileFailedWithMsg": "Failed to delete profile: {{msg}}",
       "loadLoaderVersionsFailed": "Failed to load loader versions: {{msg}}",
@@ -1142,7 +1136,6 @@
       "pinToSidebar": "Pin to sidebar",
       "unpinFromSidebar": "Unpin from sidebar",
       "deleteProfile": "Delete profile",
-      "deleteSelectedProfiles": "Delete selected ({{count}})",
       "renameProfile": "Rename profile",
       "editProfile": "Edit profile",
       "createBackup": "Create backup",
@@ -1171,7 +1164,6 @@
       "openFolderFailed": "Failed to open backups folder."
     },
     "deleteConfirm": {
-      "bulkPrompt": "Delete the selected profiles ({{count}})? This action cannot be undone.",
       "title": "Delete confirmation",
       "prompt": "Delete profile “{{name}}”? This action cannot be undone."
     },
@@ -1827,34 +1819,6 @@
       "modpacks": "Modpacks",
       "friends": "Friends",
       "rooms": "Rooms"
-    },
-    "hotkeys": {
-      "title": "Keyboard shortcuts",
-      "subtitle": "Active when no dialog is open and no input is focused.",
-      "groups": {
-        "navigation": "Navigation",
-        "play": "Game",
-        "content": "Builds and content",
-        "general": "General"
-      },
-      "items": {
-        "tabs": "Sidebar tabs in order",
-        "cycleTabs": "Next / previous tab",
-        "history": "Back / forward in history",
-        "settings": "Open settings",
-        "sidebar": "Collapse or expand the sidebar",
-        "back": "Return to the builds list",
-        "launch": "Launch the selected build",
-        "stop": "Stop the game",
-        "copyConsole": "Copy console",
-        "detachConsole": "Detach console",
-        "create": "Create a build",
-        "import": "Import a build",
-        "screenshots": "Open build screenshots",
-        "search": "Jump to search",
-        "refresh": "Refresh the list",
-        "help": "Show keyboard shortcuts"
-      }
     },
     "splitView": {
       "zones": {

@@ -2,13 +2,6 @@ import { useCallback, useMemo, useState } from "react";
 import { useT, type Language } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 import type { GameConsoleLine, GameStatus } from "../lib/gameConsoleWindow";
-import { AssetIcon } from "./asset_icon";
-import {
-  ConsoleFilterBar,
-  ConsoleLines,
-  useConsoleFilters,
-  useVisibleConsoleLines,
-} from "./ConsoleLogView";
 import { LogAnalyzerPanel } from "./LogAnalyzerPanel";
 
 type GameConsolePanelProps = {
@@ -20,7 +13,6 @@ type GameConsolePanelProps = {
   onClearConsole: () => void;
   onToggleConsole: () => void;
   onToggleDetached: () => void;
-  /** Profile/instance whose latest.log + crash-reports to analyze. */
   profileId?: string | null;
   showHint?: boolean;
   embedded?: boolean;
@@ -44,21 +36,22 @@ export function GameConsolePanel({
   const tt = useT(language);
   const [isCopyingConsole, setIsCopyingConsole] = useState(false);
   const [isConsoleCopied, setIsConsoleCopied] = useState(false);
-  const { filters, toggleFilter } = useConsoleFilters();
-  const { visible, counts } = useVisibleConsoleLines(consoleLines, filters);
 
-  const analyzerLines = useMemo(() => consoleLines.map((e) => e.line), [consoleLines]);
+  const consoleText = useMemo(
+    () => consoleLines.map((e) => e.line).join("\n"),
+    [consoleLines],
+  );
 
   const handleCopyConsole = useCallback(async () => {
     if (isCopyingConsole) return;
     setIsCopyingConsole(true);
-    const ok = await copyTextToClipboard(visible.map((v) => v.entry.line).join("\n"));
+    const ok = await copyTextToClipboard(consoleText);
     setIsCopyingConsole(false);
     if (ok) {
       setIsConsoleCopied(true);
       window.setTimeout(() => setIsConsoleCopied(false), 1200);
     }
-  }, [visible, isCopyingConsole]);
+  }, [consoleText, isCopyingConsole]);
 
   const statusDotClass =
     gameStatus === "running"
@@ -69,65 +62,73 @@ export function GameConsolePanel({
           ? "bg-sky-400"
           : "bg-gray-500";
 
-  const logBoxClass = embedded ? "h-52 shrink-0" : "min-h-0 flex-1";
-
   return (
-    <div className={`glass-panel flex min-h-0 w-full flex-col px-4 py-3 ${className}`}>
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onToggleConsole}
-          className="flex min-w-0 items-center gap-2 text-left"
-          aria-expanded={isConsoleVisible}
-        >
-          <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass}`} />
-          <span className="truncate text-[0.8125rem] font-semibold text-white/80">
+    <div
+      className={`glass-panel flex min-h-0 w-full flex-col px-4 py-3 ${className}`}
+    >
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full ${statusDotClass}`}
+          />
+          <span className="text-[0.8125rem] font-semibold text-white/70">
             {tt("play.console.title")}
           </span>
-          {!isConsoleVisible && consoleLines.length > 0 && (
-            <span className="tabular-nums text-[0.75rem] text-white/40">{consoleLines.length}</span>
-          )}
-        </button>
-        <div className="flex items-center gap-1">
+        </div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClearConsole}
-            className="icon-btn h-7 w-7"
-            title={tt("play.console.clear")}
-            aria-label={tt("play.console.clear")}
+            className="interactive-press rounded-xl bg-white/10 px-3 py-1 text-[0.8125rem] font-medium text-white/80 hover:bg-white/20"
           >
-            <AssetIcon name="delete" className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleCopyConsole}
-            disabled={isCopyingConsole}
-            className="icon-btn h-7 w-7 disabled:opacity-50"
-            title={isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")}
-            aria-label={tt("app.toast.copy")}
-          >
-            <AssetIcon name="copy" className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onToggleDetached}
-            className="icon-btn h-7 w-7"
-            title={isDetached ? tt("play.console.attach") : tt("play.console.detach")}
-            aria-label={isDetached ? tt("play.console.attach") : tt("play.console.detach")}
-          >
-            <img src="/launcher-assets/move.png" alt="" className="h-3.5 w-3.5 object-contain opacity-80" />
+            {tt("play.console.clear")}
           </button>
           <button
             type="button"
             onClick={onToggleConsole}
-            className="icon-btn h-7 w-7"
-            title={isConsoleVisible ? tt("play.console.hide") : tt("play.console.show")}
-            aria-label={isConsoleVisible ? tt("play.console.hide") : tt("play.console.show")}
-            aria-expanded={isConsoleVisible}
+            className="interactive-press rounded-xl bg-white/10 px-3 py-1 text-[0.8125rem] font-medium text-white/80 hover:bg-white/20"
           >
-            <AssetIcon
-              name="arrow_down"
-              className={`h-3.5 w-3.5 transition-transform ${isConsoleVisible ? "" : "rotate-180"}`}
+            {isConsoleVisible
+              ? tt("play.console.hide")
+              : tt("play.console.show")}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCopyConsole}
+            disabled={isCopyingConsole}
+            className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:bg-white/20 disabled:opacity-50"
+            title={
+              isConsoleCopied ? tt("app.toast.copied") : tt("app.toast.copy")
+            }
+            aria-label={tt("app.toast.copy")}
+          >
+            <img
+              src="/launcher-assets/copy.png"
+              alt=""
+              className="h-4 w-4 object-contain"
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleDetached}
+            className="interactive-press inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:bg-white/20"
+            title={
+              isDetached
+                ? tt("play.console.attach")
+                : tt("play.console.detach")
+            }
+            aria-label={
+              isDetached
+                ? tt("play.console.attach")
+                : tt("play.console.detach")
+            }
+          >
+            <img
+              src="/launcher-assets/move.png"
+              alt=""
+              className="h-4 w-4 object-contain"
             />
           </button>
         </div>
@@ -135,31 +136,38 @@ export function GameConsolePanel({
 
       {isConsoleVisible && (
         <>
-          <ConsoleFilterBar
-            tt={tt}
-            filters={filters}
-            counts={counts}
-            onToggle={toggleFilter}
-            className="mt-2 shrink-0"
-          />
           <LogAnalyzerPanel
-            lines={analyzerLines}
+            lines={consoleLines.map((e) => e.line)}
             language={language}
             profileId={profileId}
             gameStatus={gameStatus}
             compact={embedded}
-            className="mt-2"
+            className={embedded ? "mt-1.5" : "mb-1.5"}
           />
           {consoleLines.length > 0 ? (
-            <ConsoleLines
-              tt={tt}
-              visible={visible}
-              filters={filters}
-              className={`mt-2 rounded-xl border border-white/[0.06] bg-[var(--ink-0)] px-3 py-2 text-[0.75rem] leading-[1.55] ${logBoxClass}`}
-            />
+            <div
+              className={`overflow-y-auto rounded-xl bg-black/80 px-3 py-2 text-[0.8125rem] font-mono text-white/80 ${
+                embedded ? "mt-1.5 h-44 w-full" : "min-h-0 flex-1"
+              }`}
+            >
+              {consoleLines.map((entry) => (
+                <div
+                  key={entry.id}
+                  className={`whitespace-pre break-all ${
+                    entry.source === "stderr"
+                      ? "text-red-300"
+                      : "text-emerald-200"
+                  }`}
+                >
+                  {entry.line}
+                </div>
+              ))}
+            </div>
           ) : (
             <div
-              className={`mt-2 flex w-full items-center justify-center rounded-xl border border-dashed border-white/10 px-3 py-2 text-[0.8125rem] text-white/45 ${logBoxClass}`}
+              className={`flex h-24 w-full items-center justify-center rounded-xl bg-black/70 px-3 py-2 text-[0.8125rem] text-white/60 ${
+                embedded ? "mt-2" : ""
+              }`}
             >
               {tt("play.console.empty")}
             </div>

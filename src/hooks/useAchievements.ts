@@ -13,7 +13,6 @@ export type AchievementsState = {
   reload: () => Promise<void>;
 };
 
-/** Own achievements, or another user's when `userId` is given. `enabled: false` skips all requests. */
 export function useAchievements(
   userId: string | null = null,
   { enabled = true }: { enabled?: boolean } = {},

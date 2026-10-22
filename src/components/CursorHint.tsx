@@ -12,7 +12,6 @@ export function useCursorHint() {
 
   const show = useCallback((e: MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    // Keyboard activation reports 0/0, so fall back to the control itself.
     const fromKeyboard = e.clientX === 0 && e.clientY === 0;
     setHint({
       x: fromKeyboard ? rect.left + rect.width / 2 : e.clientX,
@@ -69,7 +68,7 @@ export function CursorHint({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    // Registered on the next tick so the click that opened the hint doesn't close it.
+    
     const frame = window.setTimeout(() => {
       document.addEventListener("pointerdown", onPointerDown, true);
     }, 0);

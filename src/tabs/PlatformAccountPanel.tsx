@@ -59,7 +59,6 @@ type PlatformAccountPanelProps = {
   onMicrosoftLogin?: () => void | Promise<void>;
   onElyLogin?: () => void | Promise<void>;
   providerLoginBusy?: boolean;
-  /** Called after the platform nickname changes, so other widgets can refresh. */
   onProfileChanged?: () => void;
 };
 
@@ -202,7 +201,6 @@ export function PlatformAccountPanel({
         window.localStorage.setItem(API_NICKNAME_KEY, me.nickname);
         const fresh = getStoredAccessToken() ?? token;
         if (fresh !== token) setAccessToken(fresh);
-        // The public profile of yourself carries the linked Ely.by / Minecraft identities.
         void fetchUserProfile(me.id)
           .then((pub) =>
             setLinkedIdentity({
@@ -475,7 +473,6 @@ export function PlatformAccountPanel({
     }
   };
 
-  /** 404 here means the API on the server predates the password endpoints. */
   const passwordErrorMessage = (e: unknown): string => {
     if (e instanceof ApiError && e.status === 404) return tt("platform.errors.serverOutdated");
     const rawMessage = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
@@ -601,7 +598,6 @@ export function PlatformAccountPanel({
       setDeletePassword("");
       showNotification("success", tt("platform.toast.accountDeleted"));
     } catch (e) {
-      // Wrong password comes back as 400 "invalid password"; 401 means the session itself is gone.
       if (e instanceof ApiError && e.status === 401) {
         await handleLogout();
         showNotification("warning", tt("platform.toast.sessionExpired"));

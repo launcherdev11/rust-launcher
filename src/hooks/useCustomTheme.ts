@@ -9,10 +9,6 @@ import {
 } from "../lib/customTheme";
 import { subscribeTauriEvent } from "../lib/tauriEvents";
 
-/**
- * Applies the selected custom theme and re-applies it when the editor saves, when something asks
- * for a reload, or (with hot reload on) when a file in the theme folder changes on disk.
- */
 export function useCustomTheme(themeId: string | null, hotReload: boolean) {
   useEffect(() => {
     let cancelled = false;

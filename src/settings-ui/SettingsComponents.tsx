@@ -168,7 +168,6 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
   );
 };
 
-// Locale labels end with a colon; rows show them without it.
 const trimLabel = (label: React.ReactNode) =>
   typeof label === "string" ? label.replace(/\s*:\s*$/, "") : label;
 
@@ -205,7 +204,6 @@ export type SettingsRowProps = {
   label: React.ReactNode;
   hint?: React.ReactNode;
   htmlFor?: string;
-  /** Puts the control under the label at full width (lists, grids, sliders). */
   stacked?: boolean;
   children?: React.ReactNode;
 };

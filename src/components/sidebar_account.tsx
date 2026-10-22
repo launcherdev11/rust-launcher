@@ -26,8 +26,6 @@ function BrandBadge({ icon, fallback, tip, children }: BadgeProps) {
   );
 }
 
-/** The "16" logo, drawn at the app icon's proportions (the source SVG is squashed into a square).
- *  Face takes the badge colour, the lower band and the counter of the 6 take a darker shade of it. */
 function LauncherMark() {
   return (
     <svg viewBox="0 0 10 10" preserveAspectRatio="none" className="brand-mark" aria-hidden="true">
@@ -59,7 +57,6 @@ type SidebarAccountProps = {
   onClick: () => void;
 };
 
-/** Account block at the top of the sidebar: avatar, nickname and one badge per signed-in service. */
 export function SidebarAccount({
   avatar,
   label,

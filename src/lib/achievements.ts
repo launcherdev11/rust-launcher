@@ -42,7 +42,6 @@ export type AchievementProgress = {
   ratio: number;
 };
 
-/** Progress towards a locked launch/playtime achievement, when stats are known. */
 export function achievementProgress(
   achievement: AchievementRow,
   stats: UserStats | null | undefined,

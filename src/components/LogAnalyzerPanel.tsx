@@ -25,12 +25,9 @@ type InstanceAnalysisLogsDto = {
 type LogAnalyzerPanelProps = {
   lines: string[];
   language: Language;
-  /** Instance/profile id whose logs/ and crash-reports/ to read. */
   profileId?: string | null;
-  /** When game crashes, force a disk re-read. */
   gameStatus?: string;
   className?: string;
-  /** Compact layout for narrow manage/console columns. */
   compact?: boolean;
 };
 
@@ -158,7 +155,6 @@ export function LogAnalyzerPanel({
     };
   }, [canReadDisk, profileId, gameStatus, reloadTick]);
 
-  // Re-read disk logs shortly after a crash — Minecraft may still be flushing files.
   useEffect(() => {
     if (gameStatus !== "crashed" || !canReadDisk) return;
     const t1 = window.setTimeout(() => setReloadTick((n) => n + 1), 1500);
@@ -195,7 +191,6 @@ export function LogAnalyzerPanel({
     ].filter(Boolean) as string[];
   }, [lines.length, diskSources, tt]);
 
-  // Auto-expand when we discover real issues (especially after a crash).
   useEffect(() => {
     if (findings.length > 0 && (gameStatus === "crashed" || errorCount > 0)) {
       setOpen(true);

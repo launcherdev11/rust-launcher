@@ -969,7 +969,6 @@ export function ModsTab({
     let failed = 0;
 
     try {
-      // Скользящее окно вместо пачек: один медленный мод не задерживает следующие.
       let next = 0;
       const worker = async () => {
         while (next < keys.length) {

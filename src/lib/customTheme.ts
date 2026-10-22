@@ -17,9 +17,7 @@ export type ThemeDetails = ThemeInfo & {
   dir: string;
 };
 
-/** Rust emits this while hot reload is on and a file in the active theme folder changes. */
 export const THEME_CHANGED_EVENT = "custom-theme-changed";
-/** Dispatched on `window` to make the app re-read the active theme from disk. */
 export const THEME_RELOAD_EVENT = "16l:custom-theme-reload";
 
 const THEME_STYLE_ID = "custom-theme-style";
@@ -31,7 +29,6 @@ export function isValidVariableName(name: string): boolean {
   return VARIABLE_NAME_RE.test(name.trim());
 }
 
-/** Mirrors the Rust check: a value must not be able to close the `:root { }` block. */
 export function isValidVariableValue(value: string): boolean {
   const v = value.trim();
   return v.length > 0 && v.length <= 1024 && !/[{};]/.test(v);
@@ -47,7 +44,6 @@ export function cleanVariables(variables: ThemeVariables): ThemeVariables {
   return out;
 }
 
-/** Relative `url(...)` in a theme points into its folder; the webview needs asset:// URLs. */
 function rewriteThemeUrls(css: string, themeDir: string): string {
   const separator = themeDir.includes("\\") ? "\\" : "/";
   return css.replace(
@@ -60,7 +56,6 @@ function rewriteThemeUrls(css: string, themeDir: string): string {
   );
 }
 
-/** theme.json variables go first as `:root { ... }` so style.css can still override them. */
 export function buildThemeStylesheet(theme: {
   css: string;
   dir: string;
@@ -87,10 +82,6 @@ function upsertStyle(id: string, text: string, before?: HTMLElement | null) {
   if (el.textContent !== text) el.textContent = text;
 }
 
-/**
- * The user's accent goes into its own `<style>` placed before the theme, so a theme that sets
- * `:root { --accent-color }` wins by source order instead of losing to an inline style.
- */
 export function applyAccentColor(color: string) {
   upsertStyle(
     ACCENT_STYLE_ID,
@@ -112,7 +103,6 @@ function writeThemeStyle(text: string | null, themeId: string | null) {
   if (themeId) root.dataset.customTheme = themeId;
 }
 
-/** Applies the saved theme unless the editor is currently previewing a draft. */
 export function applySavedTheme(text: string | null, themeId: string | null) {
   if (previewActive) return;
   writeThemeStyle(text, themeId);
@@ -123,7 +113,6 @@ export function applyThemePreview(text: string, themeId: string) {
   writeThemeStyle(text, themeId);
 }
 
-/** Ends the editor preview and puts the saved active theme back. */
 export function clearThemePreview() {
   if (!previewActive) return;
   previewActive = false;
@@ -136,7 +125,6 @@ export function requestThemeReload() {
 
 export type CssProblem = { line: number; kind: "unclosedBrace" | "extraBrace" | "unclosedComment" | "unclosedString" };
 
-/** Cheap structural check; the webview silently drops broken rules, so this is the only feedback. */
 export function findCssProblem(css: string): CssProblem | null {
   const open: number[] = [];
   let line = 1;
@@ -189,9 +177,7 @@ export type ThemeVariableKind = "color" | "length" | "font" | "image" | "text";
 export type ThemeVariableDef = {
   name: string;
   kind: ThemeVariableKind;
-  /** Value from index.css / App.css; empty when the launcher derives it from another token. */
   fallback: string;
-  /** Range for the slider of `length` variables, in px. */
   max?: number;
 };
 
@@ -200,7 +186,6 @@ export type ThemeVariableGroup = {
   vars: ThemeVariableDef[];
 };
 
-/** Tokens the visual editor exposes. Keep in sync with `:root` in index.css and App.css. */
 export const THEME_VARIABLE_GROUPS: ThemeVariableGroup[] = [
   {
     id: "accent",
@@ -263,7 +248,6 @@ export const KNOWN_THEME_VARIABLES = new Set(
   THEME_VARIABLE_GROUPS.flatMap((g) => g.vars.map((v) => v.name)),
 );
 
-/** `#rgb` / `#rrggbb` → `#rrggbb` for `<input type="color">`; anything else (rgba, var()) → null. */
 export function toHexColor(value: string): string | null {
   const v = value.trim();
   if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
@@ -273,7 +257,6 @@ export function toHexColor(value: string): string | null {
   return null;
 }
 
-/** Parses `12px` / `0.75rem` into px for the radius slider. */
 export function lengthToPx(value: string): number | null {
   const m = value.trim().match(/^(-?\d*\.?\d+)(px|rem)?$/);
   if (!m) return null;

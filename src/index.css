@@ -2,16 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Surfaces are near-opaque layers of one plum-tinted black; the accent gradient
-   (App.css) is reserved for actions and "on" states, never for decoration. */
 :root {
   color-scheme: dark;
 
-  --ink-0: #0b0910; /* window */
-  --ink-1: #14111b; /* panels, cards */
-  --ink-2: #1b1724; /* controls, raised rows */
-  --ink-3: #241e2f; /* hover, selected segment */
-  --ink-4: #2e2739; /* pressed, strong selection */
+  --ink-0: #0b0910;
+  --ink-1: #14111b;
+  --ink-2: #1b1724;
+  --ink-3: #241e2f;
+  --ink-4: #2e2739;
   --seam: rgba(214, 200, 240, 0.09);
   --seam-strong: rgba(214, 200, 240, 0.16);
   --fg: #eee9f6;
@@ -36,14 +34,11 @@
   --glass-radius: var(--r-panel);
   --glass-radius-sm: var(--r-control);
 
-  /* Interface font. Custom themes override it (with their own @font-face) instead of patching body. */
   --font-sans: "Onest Variable", "Onest", "Segoe UI", system-ui, sans-serif;
-  /* Optional image layered over the default background; themes set it as url(...). */
   --launcher-bg-image: none;
 }
 
 html {
-  /* Root size drives every rem-based Tailwind value, so this scales text, buttons and spacing together. */
   font-size: 16px;
 }
 
@@ -87,7 +82,6 @@ body {
   color: var(--fg-muted);
 }
 
-/* Group heading inside a panel. Sentence case, carried by weight rather than caps and tracking. */
 .ui-section {
   font-size: 0.8125rem;
   font-weight: 600;
@@ -129,11 +123,6 @@ body {
 .no-number-spin[type="number"] {
   -moz-appearance: textfield;
 }
-
-/* ---------- surfaces ----------
-   The glass-* names are kept because every tab uses them, but they are now solid layers:
-   heavy blur everywhere made each tab look like a different frosted theme.
-   In the components layer so utilities (error borders, one-off radii) can still override them. */
 
 @layer components {
   .glass-panel {
@@ -193,7 +182,6 @@ body {
     box-shadow: 0 0 0 3px var(--accent-soft, rgba(88, 46, 192, 0.16)) !important;
   }
 
-  /* Native selects keep keyboard accessibility while matching the launcher's controls. */
   .launcher-select {
     appearance: none;
     -webkit-appearance: none;
@@ -253,9 +241,6 @@ body {
   }
 }
 
-/* ---------- controls ----------
-   One button family for every tab. Height and radius are fixed per size so rows of buttons line up.
-   In the components layer so a utility on the same element can still adjust it. */
 
 @layer components {
   .btn {
@@ -372,15 +357,12 @@ body {
     color: var(--fg);
   }
 
-  /* Selected item in segmented controls, sub-tabs and filter groups: a raised neutral surface,
-     so "selected" never competes with the accent-coloured primary action next to it. */
   .seg-on {
     background: var(--ink-4);
     color: #fff;
     box-shadow: inset 0 0 0 1px var(--seam-strong), 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
-  /* The recessed track a segmented control sits in. Items inside use rounded-lg. */
   .seg-track {
     border-radius: var(--r-control);
     border: 1px solid var(--seam);
@@ -415,7 +397,6 @@ body {
   }
 }
 
-/* Range sliders: white thumb ringed in the accent; the filled track is drawn inline where needed. */
 input[type="range"] {
   accent-color: var(--accent-to, #975ade);
 }
@@ -447,7 +428,6 @@ input[type="range"]::-webkit-slider-thumb {
   transform: scale(0.98);
 }
 
-/* Disabled controls must look disabled, and say why via title/tooltip where available. */
 button:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
@@ -539,13 +519,10 @@ html.launcher-linux .shadow-soft {
   }
 }
 
-/* `backwards`, not `both`: with `both` the final `transform: translateY(0)` stays applied and keeps
-   the whole tab on its own compositing layer, which causes repaint artifacts and lag in WebKitGTK. */
 .tab-animate {
   animation: tab-fade-in 160ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
 }
 
-/* Opacity-only on Linux: no transform means no layer promotion of the whole tab. */
 @keyframes tab-fade-in-linux {
   from {
     opacity: 0;

@@ -13,9 +13,7 @@ type NotificationKind = "info" | "success" | "error" | "warning";
 type Props = {
   showNotification: (kind: NotificationKind, message: string) => void;
   language: Language;
-  /** Already loaded state (shared with the tab badge); when omitted the panel loads on its own. */
   state?: PlatformNotificationsState;
-  /** "preview" shows only the latest few items without the toolbar. */
   variant?: "full" | "preview";
   previewLimit?: number;
   onSignIn?: () => void;

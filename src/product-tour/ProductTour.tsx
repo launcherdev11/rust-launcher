@@ -33,7 +33,6 @@ type TooltipPos = {
 
 export type ProductTourProps = {
   language: Language;
-  /** Unused: the tour reads the accent from CSS variables. Kept so callers need no change. */
   accentColor?: string;
   active: boolean;
   onNavigateTab: (tab: TourTabId) => void;

@@ -83,7 +83,6 @@ export type RoomCurrentGame = {
   label: string;
 };
 
-/** Finds the room version option that matches the profile / main-menu selection. */
 function pickRoomVersionId(list: RoomVersionOption[], cur: RoomCurrentGame | null | undefined): string | null {
   if (!cur) return null;
   const gv = cur.gameVersion.trim();
@@ -117,7 +116,6 @@ type RoomsTabProps = {
   onRoomLaunchContextChange?: (context: LaunchPresenceContext | null) => void;
   onOpenAccounts?: () => void;
   onApplyRoomGameSettings?: (settings: RoomGameSettings) => void;
-  /** Game the user currently has selected (profile, or main menu when no profile). Rooms follow it automatically. */
   currentGame?: RoomCurrentGame | null;
 };
 
@@ -475,8 +473,6 @@ export function RoomsTab({
     };
   }, [accessToken, selectedRoomId]);
 
-  // Адрес нужен только гостю: это локальный вход в туннель на его же компьютере.
-  // LAN-IP хоста гостю бесполезен — он в другой сети, поэтому хосту адрес не показываем.
   const roomConnectAddress = useMemo(() => {
     if (!isOwner && guestBridgePort != null) {
       return `127.0.0.1:${guestBridgePort}`;
@@ -523,9 +519,6 @@ export function RoomsTab({
     };
   }, [hostReady, isOwner, onRoomLaunchContextChange, selectedRoom, selectedRoomSessionStartedAt]);
 
-  // Каждому пиру с открытым DataChannel — свой туннель в Rust-мосте. Туннель живёт, пока жив
-  // DataChannel: кратковременный обрыв ICE его не трогает, а новая WebRTC-сессия переподключает
-  // туннель к себе, сохраняя локальный порт гостя (адрес в игре не меняется).
   type LanTunnelEntry = {
     session: RoomPeerSession;
     cancelled: boolean;
@@ -562,7 +555,6 @@ export function RoomsTab({
         ready: Promise.resolve(),
       };
       tunnelsByPeerRef.current.set(peerUserId, entry);
-      // Подключения к одному пиру строго по очереди, чтобы старый attach не перекрыл новый.
       const previous = tunnelChainByPeerRef.current.get(peerUserId) ?? Promise.resolve();
       entry.ready = previous
         .then(async () => {

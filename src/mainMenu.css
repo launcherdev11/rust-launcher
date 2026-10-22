@@ -1,5 +1,3 @@
-/* Main menu + sidebar. Solid ink surfaces; the accent gradient marks only the current item and the launch action. */
-
 :root {
   --shell-edge: var(--accent-to, #975ade);
   --shell-surface: rgba(20, 17, 27, 0.92);
@@ -7,7 +5,6 @@
   --shell-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
 }
 
-/* ---------- sidebar ---------- */
 
 .shell-sidebar {
   position: relative;
@@ -97,7 +94,6 @@
     color 0.15s ease;
 }
 
-/* The SVG is used as a mask so it takes the badge colour (accent-tinted). */
 .brand-badge-icon {
   display: block;
   height: 1rem;
@@ -107,7 +103,6 @@
   -webkit-mask: center / contain no-repeat;
 }
 
-/* App icon proportions: the glyph is ~1.15x wider than tall. */
 .brand-mark {
   display: block;
   height: 0.8125rem;
@@ -169,8 +164,6 @@
   gap: 0.125rem;
 }
 
-/* The sliding marker next to the current tab: the one place the gradient runs vertically.
-   It sits in the panel's padding gutter so the active item's fill never covers it. */
 .shell-nav-bar {
   pointer-events: none;
   position: absolute;
@@ -283,7 +276,6 @@
   border-color: var(--accent-line, rgba(151, 90, 222, 0.45));
 }
 
-/* ---------- main menu ---------- */
 
 .menu-banner {
   position: relative;
@@ -370,7 +362,6 @@
     0 16px 40px rgba(0, 0, 0, 0.45);
 }
 
-/* The build icon, stretched and blurred into a banner: the dock takes on the selected build's colours. */
 .dock-backdrop {
   pointer-events: none;
   position: absolute;
@@ -391,7 +382,6 @@
   animation: banner-fade-in 0.5s ease both;
 }
 
-/* Blurred version number shown when no build is selected. */
 .dock-version-ghost {
   position: absolute;
   right: 16rem;
@@ -409,7 +399,6 @@
   animation: banner-fade-in 0.5s ease both;
 }
 
-/* A 28px blur over an oversized image is expensive to rasterize in WebKitGTK; use a plain dim instead. */
 html.launcher-linux .dock-backdrop img {
   filter: none;
   opacity: 0.22;
@@ -559,9 +548,6 @@ html.launcher-linux .dock-backdrop img {
   }
 }
 
-/* ---------- default background ----------
-   A still, dark field with one low amethyst haze from the top-left corner and film grain.
-   No drifting blobs: the content is what should move. */
 
 .launcher-gradient {
   position: absolute;
@@ -574,7 +560,6 @@ html.launcher-linux .dock-backdrop img {
     var(--ink-0, #0b0910);
 }
 
-/* Soft vignette keeps the edges dark so content stays readable on top of the haze. */
 .launcher-gradient-sheen {
   position: absolute;
   inset: 0;
@@ -588,8 +573,6 @@ html.launcher-linux .dock-backdrop img {
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-
-/* ---------- collapsed sidebar ---------- */
 
 .shell-sidebar-collapsed {
   width: 4.5rem;
@@ -649,10 +632,6 @@ html.launcher-linux .dock-backdrop img {
 .shell-sidebar-right.shell-sidebar-collapsed .shell-collapse-icon {
   transform: none;
 }
-
-/* ---------- horizontal sidebar (top / bottom) ----------
-   Same parts as the vertical panel laid out in one row: account, tabs, then pins and the
-   secondary tabs pushed to the far end. The marker runs under (or over) the current tab. */
 
 .shell-sidebar-horizontal {
   width: auto;

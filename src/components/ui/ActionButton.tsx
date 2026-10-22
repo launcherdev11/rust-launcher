@@ -12,15 +12,10 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   loadingLabel?: ReactNode;
   children: ReactNode;
   fullWidth?: boolean;
-  /** @deprecated Buttons share one radius now; kept so existing call sites compile. */
   pill?: boolean;
-  /** Why the button is unavailable. Shown as a tooltip and as a bubble when the user clicks it anyway. */
   disabledReason?: string;
 };
 
-// Every variant shares the .btn base (index.css), so height, radius and type match across tabs.
-// "emerald" and "sky" are kept as names for existing call sites: emerald is the tinted accent
-// (secondary confirm), sky the neutral secondary.
 const variantClasses: Record<Variant, string> = {
   primary: "btn-accent",
   secondary: "btn-soft",

@@ -13,7 +13,6 @@ use tauri::{command, Emitter};
 use crate::app::paths::launcher_data_dir;
 use crate::infra::fs_copy::copy_dir_recursive;
 
-/// Event emitted while hot reload is on and a file inside the watched theme folder changes.
 pub const THEME_CHANGED_EVENT: &str = "custom-theme-changed";
 
 const WATCH_INTERVAL: Duration = Duration::from_millis(700);
@@ -32,9 +31,7 @@ pub struct ThemeInfo {
     pub author: String,
     pub description: String,
     pub version: String,
-    /// CSS custom properties from theme.json, applied as `:root { ... }` before style.css.
     pub variables: BTreeMap<String, String>,
-    /// Absolute path of the preview image, if the theme has one.
     pub preview: Option<String>,
 }
 
@@ -46,7 +43,6 @@ pub struct ThemeDetails {
     pub dir: String,
 }
 
-/// Editable part of theme.json. Unknown fields already in the file are preserved on save.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ThemeMetaInput {
     #[serde(default)]
@@ -88,7 +84,6 @@ fn ensure_themes_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Theme ids come from the webview; they must name a direct child of the themes folder.
 fn validate_theme_id(theme_id: &str) -> Result<(), String> {
     let valid = !theme_id.trim().is_empty()
         && !theme_id.contains("..")
@@ -126,7 +121,6 @@ fn slugify(name: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
-/// `base`, or `base-2`, `base-3`, … if a folder with that name already exists.
 fn unique_theme_id(base: &str) -> Result<String, String> {
     let dir = ensure_themes_dir()?;
     let base = if base.is_empty() {
@@ -154,7 +148,6 @@ pub fn is_valid_variable_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// A value must not be able to close the `:root { }` block it is written into.
 pub fn is_valid_variable_value(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 1024 && !value.contains(['{', '}', ';'])
 }
@@ -167,7 +160,6 @@ fn sanitize_variables(variables: BTreeMap<String, String>) -> BTreeMap<String, S
         .collect()
 }
 
-/// Writes through a temp file so an editor watching the file never sees it half written.
 fn write_theme_file(path: &Path, data: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
@@ -314,7 +306,6 @@ pub fn list_themes() -> Result<Vec<ThemeInfo>, String> {
     Ok(themes)
 }
 
-/// Directory inside the archive that holds theme.json: the shallowest one, ignoring macOS metadata.
 fn zip_theme_prefix<R: std::io::Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
 ) -> Result<Option<String>, String> {
@@ -439,7 +430,6 @@ pub fn get_theme_css(theme_id: String) -> Result<String, String> {
         .map_err(|e| format!("Не удалось прочитать style.css: {e}"))
 }
 
-/// Everything needed to apply or edit a theme in one call: metadata, variables, CSS and folder.
 #[command]
 pub fn get_theme(theme_id: String) -> Result<ThemeDetails, String> {
     let dir = existing_theme_path(&theme_id)?;
@@ -515,8 +505,6 @@ pub fn create_empty_theme(name: String) -> Result<ThemeInfo, String> {
     read_theme_info(&theme_dir).ok_or_else(|| "Не удалось создать тему.".to_string())
 }
 
-/// Saves metadata and variables into theme.json (keeping fields the editor doesn't know about)
-/// and, when given, the new style.css.
 #[command]
 pub fn save_theme(
     theme_id: String,
@@ -576,7 +564,6 @@ pub fn duplicate_theme(theme_id: String, name: String) -> Result<ThemeInfo, Stri
     read_theme_info(&dest).ok_or_else(|| "Не удалось прочитать копию темы.".to_string())
 }
 
-/// Files that belong to the theme rather than to an editor or the OS.
 fn is_theme_content_file(name: &str) -> bool {
     !(name.starts_with('.')
         || name.ends_with('~')
@@ -644,7 +631,6 @@ pub fn export_theme_zip(theme_id: String, dest_path: String) -> Result<(), Strin
     Ok(())
 }
 
-/// Copies an image or font into `<theme>/assets/` and returns the path to use in `url(...)`.
 #[command]
 pub fn add_theme_asset(theme_id: String, source_path: String) -> Result<String, String> {
     let dir = existing_theme_path(&theme_id)?;
@@ -720,7 +706,6 @@ pub fn get_theme_dir(theme_id: String) -> Result<String, String> {
     Ok(theme_dir.to_string_lossy().to_string())
 }
 
-/// Bumped on every `watch_theme` call; a watcher thread exits once it no longer owns the latest value.
 static WATCH_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 fn theme_fingerprint(dir: &Path) -> u64 {
@@ -742,11 +727,6 @@ fn theme_fingerprint(dir: &Path) -> u64 {
     }
     hasher.finish()
 }
-
-/// Hot reload: polls the theme folder and emits `custom-theme-changed` when any file in it changes.
-/// Polling (not OS notifications) because editors save via rename/replace in ways that native
-/// watchers report inconsistently, and a theme folder is only a handful of files.
-/// `theme_id: None` stops the current watcher.
 #[command]
 pub fn watch_theme(app: tauri::AppHandle, theme_id: Option<String>) -> Result<(), String> {
     let generation = WATCH_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;

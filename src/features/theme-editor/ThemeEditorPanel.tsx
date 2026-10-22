@@ -8,12 +8,12 @@ import {
   PanelRight,
   Plus,
   RotateCcw,
+  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AssetIcon } from "../../components/asset_icon";
 import { TextField } from "../../components/ui";
 import {
   KNOWN_THEME_VARIABLES,
@@ -101,7 +101,6 @@ export function ThemeEditorPanel({ themeId, tt, onClose, onSaved, showNotificati
     };
   }, [themeId, te]);
 
-  // The preview replaces the saved theme's <style> until the panel closes or preview is turned off.
   useEffect(() => {
     if (!theme) return;
     if (!livePreview) {
@@ -307,7 +306,7 @@ export function ThemeEditorPanel({ themeId, tt, onClose, onSaved, showNotificati
                     title={te("removeVar")}
                     aria-label={te("removeVar")}
                   >
-                    <AssetIcon name="delete" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               ))}

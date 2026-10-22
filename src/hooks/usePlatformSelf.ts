@@ -6,7 +6,6 @@ import { usePlatformAccessToken } from "./usePlatformAccessToken";
 export type PlatformSelfState = {
   signedIn: boolean;
   user: PlatformUser | null;
-  /** Cached nickname shown until /me answers. */
   nickname: string;
   stats: UserStats | null;
   reload: () => Promise<void>;
@@ -20,7 +19,6 @@ function cachedNickname(): string {
   }
 }
 
-/** The signed-in 16Launcher user and their playtime / launch stats. */
 export function usePlatformSelf(): PlatformSelfState {
   const signedIn = usePlatformAccessToken() !== "";
   const [user, setUser] = useState<PlatformUser | null>(null);

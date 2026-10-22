@@ -17,7 +17,6 @@ export type UserProfileSeed = {
   ely_username?: string | null;
   mc_uuid?: string | null;
   online?: boolean | null;
-  /** Live presence, when the caller has it (friends list). */
   presence?: PresenceInfo | null;
 };
 

@@ -24,7 +24,6 @@ export async function setHostLanPort(port: number | null): Promise<void> {
   await invoke("lan_bridge_set_host_port", { port });
 }
 
-/** Проверяет, что на этом компьютере кто-то слушает LAN-порт (мир открыт для сети). */
 export async function probeLanPort(port: number): Promise<boolean> {
   return invoke<boolean>("lan_bridge_probe_port", { port });
 }
@@ -61,11 +60,6 @@ function concatChunks(parts: Uint8Array[], size: number): Uint8Array {
   return out;
 }
 
-/**
- * Связывает DataChannel пира с Rust-мостом. Кадры ходят без base64: Rust → JS через `Channel`,
- * JS → Rust через сырое тело `invoke`. Если DataChannel не успевает отправлять, мост
- * приостанавливает чтение TCP (обратное давление), а не копит данные без ограничений.
- */
 export async function attachLanTunnel(opts: {
   sessionId: string;
   sendBinary: (data: ArrayBuffer) => boolean;
