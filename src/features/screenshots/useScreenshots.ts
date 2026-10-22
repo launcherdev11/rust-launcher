@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteScreenshot,
+  getScreenshotDataUri,
   getScreenshotThumbnail,
   listScreenshots,
   openScreenshot,
@@ -12,6 +13,28 @@ const THUMB_MAX_PX = 256;
 const PREVIEW_MAX_PX = 1280;
 const THUMB_CACHE_LIMIT = 48;
 const LOAD_CONCURRENCY = 3;
+
+async function dataUriToPngBlob(uri: string): Promise<Blob> {
+  const blob = await (await fetch(uri)).blob();
+  if (blob.type === "image/png") return blob;
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas is unavailable");
+    ctx.drawImage(bitmap, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (out) => (out ? resolve(out) : reject(new Error("Failed to encode image"))),
+        "image/png",
+      );
+    });
+  } finally {
+    bitmap.close();
+  }
+}
 
 function trimCache(
   prev: Record<string, string>,
@@ -187,6 +210,19 @@ export function useScreenshots(enabled: boolean, profileId: string | null) {
     [profileId],
   );
 
+  const copyToClipboard = useCallback(
+    async (name: string) => {
+      if (!profileId) throw new Error("No profile selected");
+      const png = (async () => {
+        const uri = await getScreenshotDataUri(profileId, name);
+        if (!uri) throw new Error("Screenshot not found");
+        return dataUriToPngBlob(uri);
+      })();
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    },
+    [profileId],
+  );
+
   return {
     items,
     loading,
@@ -200,5 +236,6 @@ export function useScreenshots(enabled: boolean, profileId: string | null) {
     remove,
     openFolder,
     openInSystem,
+    copyToClipboard,
   };
 }

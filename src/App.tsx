@@ -24,11 +24,6 @@ import "./App.css";
 import { reportStats } from "./api/stats";
 import { getStoredAccessToken } from "./api/client";
 import { playNotificationSound, playTabSwitchSound, primeUiSounds } from "./uiSounds";
-import {
-  SettingsToggle,
-  SettingsSlider,
-  SettingsCard,
-} from "./settings-ui/SettingsComponents";
 import { ModsTab } from "./tabs/ModsTab";
 import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
@@ -65,6 +60,7 @@ import {
 } from "./components/profile_info_modal";
 import { ProfileInstanceIcon } from "./components/profile_instance_icon";
 import { ContextMenuPanel } from "./components/ContextMenuPanel";
+import { HotkeysModal } from "./components/HotkeysModal";
 import { SelectedProfileTitleBar } from "./components/selected_profile_title_bar";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import {
@@ -82,6 +78,7 @@ const SettingsTab = lazy(() =>
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import {
   useHotkeys,
+  type AppHotkeyActions,
   type ModpackHotkeyActions,
   type ModpackNavigationActions,
   type ModpackViewId,
@@ -1239,6 +1236,8 @@ function App() {
 
   const playConsoleHotkeysRef = useRef<PlayConsoleHotkeyActions | null>(null);
   const modpackHotkeysRef = useRef<ModpackHotkeyActions | null>(null);
+  const appHotkeysRef = useRef<AppHotkeyActions | null>(null);
+  const [showHotkeysModal, setShowHotkeysModal] = useState(false);
   const modpackNavRef = useRef<ModpackNavigationActions | null>(null);
 
   const registerPlayConsoleHotkeys = useCallback(
@@ -1589,16 +1588,56 @@ function App() {
   }, []);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
 
+  const orderedSidebarItems = useMemo(() => {
+    const byId = new Map(sidebarItems.map((i) => [i.id, i]));
+    const result: { id: SidebarItemId; labelKey: string }[] = [];
+    for (const id of sidebarOrder) {
+      const item = byId.get(id);
+      if (item && item.id !== "accounts") {
+        result.push(item);
+      }
+    }
+    for (const item of sidebarItems) {
+      if (item.id !== "accounts" && !result.find((x) => x.id === item.id)) {
+        result.push(item);
+      }
+    }
+    return result;
+  }, [sidebarOrder]);
+
+  const hotkeyTabOrder = useMemo<SidebarItemId[]>(
+    () => [...orderedSidebarItems.map((i) => i.id), ...BOTTOM_SIDEBAR_ITEMS.map((i) => i.id)],
+    [orderedSidebarItems],
+  );
+  const hotkeyForTab = useCallback(
+    (id: SidebarItemId): string | null => {
+      const idx = hotkeyTabOrder.indexOf(id);
+      return idx >= 0 && idx < 9 ? String(idx + 1) : null;
+    },
+    [hotkeyTabOrder],
+  );
+
+  const activateHotkeyTab = useCallback(
+    (id: SidebarItemId) => {
+      if (isSplittableTab(id)) activateSidebarTab(id);
+      else setActiveItemWithSound(id);
+    },
+    [activateSidebarTab, setActiveItemWithSound],
+  );
+
   const { handleModpackSidebarClick } = useHotkeys({
     activeTab: activeItem,
     effectiveTabSplit,
     isConsoleVisible,
     playConsoleActionsRef: playConsoleHotkeysRef,
     modpackActionsRef: modpackHotkeysRef,
+    appActionsRef: appHotkeysRef,
     settingsTab,
     modpackView,
     modpackNavRef,
     setActiveItem: setActiveItemWithSound,
+    tabOrder: hotkeyTabOrder,
+    activateTab: activateHotkeyTab,
     setSettingsTab,
     setModpackView,
     setRequestedModpackView,
@@ -1843,23 +1882,6 @@ function App() {
       return null;
     }
   }, [activeInstanceProfile?.id]);
-
-  const orderedSidebarItems = useMemo(() => {
-    const byId = new Map(sidebarItems.map((i) => [i.id, i]));
-    const result: { id: SidebarItemId; labelKey: string }[] = [];
-    for (const id of sidebarOrder) {
-      const item = byId.get(id);
-      if (item && item.id !== "accounts") {
-        result.push(item);
-      }
-    }
-    for (const item of sidebarItems) {
-      if (item.id !== "accounts" && !result.find((x) => x.id === item.id)) {
-        result.push(item);
-      }
-    }
-    return result;
-  }, [sidebarOrder]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3934,6 +3956,16 @@ function App() {
     void handlePrimaryClick();
   };
 
+  appHotkeysRef.current = {
+    launchGame: () => {
+      if (gameStatus === "running") return;
+      handleTitleBarProfilePlay();
+    },
+    stopGame: () => void handleStopGame(),
+    toggleSidebar: toggleSidebarCollapsed,
+    openHotkeysHelp: () => setShowHotkeysModal(true),
+  };
+
   const handleTitleBarProfileSettings = () => {
     if (!activeInstanceProfile) return;
     setActiveItemWithSound("modpacks");
@@ -4335,9 +4367,6 @@ function App() {
                 updateSettings(patch, activeInstanceProfile?.id ?? undefined)
               }
               showNotification={showNotification}
-              SettingsCard={SettingsCard}
-              SettingsSlider={SettingsSlider}
-              SettingsToggle={SettingsToggle}
               language={language}
               setLanguage={persistInterfaceLanguage}
               sidebarOrder={
@@ -4757,6 +4786,11 @@ function App() {
         />
       )}
 
+      <HotkeysModal
+        language={language}
+        open={showHotkeysModal}
+        onClose={() => setShowHotkeysModal(false)}
+      />
       {showHelpModal && (
         <div
           className="glass-overlay pointer-events-auto fixed inset-0 z-[300] flex items-center justify-center"
@@ -5272,11 +5306,14 @@ function App() {
                         activateSidebarTab(tabId);
                       }}
                       aria-label={label}
+                      aria-keyshortcuts={hotkeyForTab(item.id) ?? undefined}
                       title={
                         canUseSplitView
                           ? tt("app.splitView.dragHint", { tab: label })
                           : sidebarCollapsed
-                            ? label
+                            ? hotkeyForTab(item.id)
+                              ? `${label} (${hotkeyForTab(item.id)})`
+                              : label
                             : undefined
                       }
                       ref={(el) => {
@@ -5360,7 +5397,14 @@ function App() {
                     type="button"
                     onClick={() => setActiveItemWithSound(item.id)}
                     aria-label={label}
-                    title={sidebarCollapsed ? label : undefined}
+                    aria-keyshortcuts={hotkeyForTab(item.id) ?? undefined}
+                    title={
+                      sidebarCollapsed
+                        ? hotkeyForTab(item.id)
+                          ? `${label} (${hotkeyForTab(item.id)})`
+                          : label
+                        : undefined
+                    }
                     ref={(el) => {
                       sidebarButtonRefs.current[item.id] = el;
                     }}

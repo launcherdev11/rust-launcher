@@ -37,12 +37,12 @@
     },
     "unlockTitle": "Version ist durch das Profil festgelegt",
     "unlockConfirm": "Version und Loader ändern? Installierte Inhalte sind eventuell nicht mit dem Profil kompatibel.",
-    "lockedBanner": "Vom Profil festgelegt: Minecraft {{version}} · {{loader}}. Mods werden darauf abgestimmt.",
+    "lockedHintTitle": "Vom Profil festgelegt",
+    "lockedHintBody": "Minecraft {{version}} · {{loader}}. Mods werden darauf abgestimmt.",
     "unlockedBanner": "Sie sehen Inhalte, die nicht zum gewählten Profil passen. Installierte Mods starten möglicherweise nicht.",
     "relock": "Wieder wie Profil",
     "searchPlaceholder": "Suchen...",
     "version": "Version",
-    "syncedHint": "Mit Profil synchronisiert. Klicken Sie zum Entsperren auf „Ändern“.",
     "loaderAny": "Beliebig",
     "loaderAll": "Alle",
     "tab": {
@@ -92,7 +92,7 @@
     "quickInstall": "Installieren",
     "installing": "Installieren…",
     "batch": {
-      "hint": "Mehrere Projekte anhaken und als Stapel herunterladen.",
+      "hint": "Projekte anhaken, per Strg+Klick oder mit gedrückter Strg-Taste per Rahmen auswählen und als Stapel herunterladen.",
       "selectOne": "{{title}} auswählen",
       "selected": "Ausgewählt: {{count}}",
       "clear": "Auswahl aufheben",
@@ -181,6 +181,16 @@
       "updates": "Launcher-Updates",
       "interfaceLanguage": "Schnittstellensprache",
       "customization": "Anpassung"
+    },
+    "section": {
+      "display": "Fenster und Grafik",
+      "java": "Java und Speicher",
+      "versionList": "Listenoptionen",
+      "behavior": "Verhalten",
+      "interface": "Oberfläche",
+      "appearance": "Darstellung",
+      "themes": "Designs",
+      "data": "Daten"
     },
     "directories": {
       "comingSoon": "Verzeichniseinstellungen werden später hinzugefügt."
@@ -537,7 +547,9 @@
       "resetSettings": {
         "button": "Setzen Sie die Launcher-Einstellungen auf die Standardeinstellungen zurück",
         "success": "Die Launcher-Einstellungen wurden auf die Standardwerte zurückgesetzt.",
-        "failed": "Die Launcher-Einstellungen konnten nicht zurückgesetzt werden."
+        "failed": "Die Launcher-Einstellungen konnten nicht zurückgesetzt werden.",
+        "confirm": "Alle Launcher-Einstellungen zurücksetzen? Das lässt sich nicht rückgängig machen.",
+        "hint": "Stellt Standardwerte, den Standardhintergrund und die Tab-Reihenfolge wieder her."
       },
       "backup": {
         "title": "Importieren/Exportieren",
@@ -555,6 +567,7 @@
       }
     },
     "updates": {
+      "idle": "Prüfen, ob eine neue Version verfügbar ist.",
       "checkOnStart": {
         "label": "Beim Start nach Updates suchen:"
       },
@@ -702,7 +715,10 @@
       "select": "Version auswählen",
       "searchPlaceholder": "Typausführung...",
       "snapshotHint": "Sieht aus wie eine Momentaufnahme. Aktivieren Sie „Snapshot-Versionen anzeigen“ unter Einstellungen → Versionen.",
-      "nothingFound": "Nichts gefunden."
+      "nothingFound": "Nichts gefunden.",
+      "lockedHintTitle": "Vom Profil festgelegt",
+      "lockedHintBody": "Minecraft {{version}} · {{loader}}. Version und Loader lassen sich in den Profileinstellungen ändern.",
+      "lockedHintAction": "Profileinstellungen"
     },
     "install": {
       "resume": "Wieder aufnehmen",
@@ -745,6 +761,13 @@
       "attach": "Befestigen",
       "empty": "Protokolle werden nach Spielstart angezeigt.",
       "hint": "Wird durch die Einstellung „Konsole beim Spielstart anzeigen“ im Spielbereich gesteuert.",
+      "filters": {
+        "label": "Filter",
+        "warnings": "Warnungen",
+        "errors": "Fehler",
+        "crash": "Crash-Report",
+        "nothing": "Keine Zeilen für die gewählten Filter."
+      },
       "analyzer": {
         "readingDisk": "Logs werden gelesen…",
         "okBadge": "Keine Fehler",
@@ -917,6 +940,7 @@
       "editGroupMenu": "Gruppe bearbeiten",
       "deleteGroupMenu": "Gruppe löschen",
       "dropHint": "Hierher ziehen",
+      "deleteSelected": "Ausgewählte löschen",
       "selectedCount": "Ausgewählt: {{count}}",
       "title": "Meine Profile",
       "newGroup": "Neue Gruppe",
@@ -1021,7 +1045,10 @@
       "deleteConfirm": "Screenshot „{{name}}“ löschen?",
       "deleteFailed": "Screenshot konnte nicht gelöscht werden: {{msg}}",
       "openFolderFailed": "Ordner konnte nicht geöffnet werden: {{msg}}",
-      "openFailed": "Screenshot konnte nicht geöffnet werden: {{msg}}"
+      "openFailed": "Screenshot konnte nicht geöffnet werden: {{msg}}",
+      "copy": "Kopieren",
+      "copied": "Screenshot in die Zwischenablage kopiert.",
+      "copyFailed": "Screenshot konnte nicht kopiert werden: {{msg}}"
     },
     "import": {
       "title": "Modrinth-Paket importieren",
@@ -1076,6 +1103,8 @@
       "profileSelected": "Profil „{{name}}“ ausgewählt.",
       "selectProfileFailed": "Profil konnte nicht ausgewählt werden.",
       "profileDeleted": "Profil gelöscht.",
+      "profilesDeleted": "Gelöschte Profile: {{count}}.",
+      "deleteProfilesPartial": "{{failed}} Profile konnten nicht gelöscht werden.",
       "deleteProfileFailed": "Profil konnte nicht gelöscht werden.",
       "deleteProfileFailedWithMsg": "Profil konnte nicht gelöscht werden: {{msg}}",
       "loadLoaderVersionsFailed": "Loader-Versionen konnten nicht geladen werden: {{msg}}",
@@ -1141,6 +1170,7 @@
       "pinToSidebar": "An Seitenleiste anpinnen",
       "unpinFromSidebar": "Von der Seitenleiste lösen",
       "deleteProfile": "Profil löschen",
+      "deleteSelectedProfiles": "Ausgewählte löschen ({{count}})",
       "renameProfile": "Profil umbenennen",
       "editProfile": "Profil bearbeiten",
       "createBackup": "Backup erstellen",
@@ -1169,6 +1199,7 @@
       "openFolderFailed": "Backup-Ordner konnte nicht geöffnet werden."
     },
     "deleteConfirm": {
+      "bulkPrompt": "Ausgewählte Profile ({{count}}) löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
       "title": "Bestätigung löschen",
       "prompt": "Profil „{{name}}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden."
     },
@@ -1704,6 +1735,34 @@
       "modpacks": "Modpacks",
       "friends": "Freunde",
       "rooms": "Räume"
+    },
+    "hotkeys": {
+      "title": "Tastenkürzel",
+      "subtitle": "Aktiv, wenn kein Dialog offen und kein Eingabefeld fokussiert ist.",
+      "groups": {
+        "navigation": "Navigation",
+        "play": "Spiel",
+        "content": "Builds und Inhalte",
+        "general": "Allgemein"
+      },
+      "items": {
+        "tabs": "Seitenleisten-Tabs der Reihe nach",
+        "cycleTabs": "Nächster / vorheriger Tab",
+        "history": "Zurück / vor im Verlauf",
+        "settings": "Einstellungen öffnen",
+        "sidebar": "Seitenleiste ein- oder ausklappen",
+        "back": "Zurück zur Build-Liste",
+        "launch": "Ausgewählten Build starten",
+        "stop": "Spiel beenden",
+        "copyConsole": "Konsole kopieren",
+        "detachConsole": "Konsole abtrennen",
+        "create": "Build erstellen",
+        "import": "Build importieren",
+        "screenshots": "Screenshots des Builds öffnen",
+        "search": "Zur Suche springen",
+        "refresh": "Liste aktualisieren",
+        "help": "Tastenkürzel anzeigen"
+      }
     },
     "splitView": {
       "zones": {

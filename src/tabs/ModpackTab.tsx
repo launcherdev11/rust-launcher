@@ -63,7 +63,12 @@ import {
   scheduleIdleWork,
   writeDataCache,
 } from "../lib/launcherDataCache";
-import type { ModpackHotkeyActions, ModpackNavigationActions } from "../hooks/useHotkeys";
+import {
+  HOTKEY_REFRESH_EVENT,
+  type ModpackHotkeyActions,
+  type ModpackNavigationActions,
+} from "../hooks/useHotkeys";
+import { useMarqueeSelection } from "../hooks/useMarqueeSelection";
 import { ScreenshotsModal } from "../features/screenshots";
 import {
   ProfileInfoIcon,
@@ -88,6 +93,12 @@ import {
   type ProfileConflict,
 } from "../lib/profileConflicts";
 import { LogAnalyzerPanel } from "../components/LogAnalyzerPanel";
+import {
+  ConsoleFilterBar,
+  ConsoleLines,
+  useConsoleFilters,
+  useVisibleConsoleLines,
+} from "../components/ConsoleLogView";
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 type LoaderVersionChannel = "stable" | "beta" | "alpha";
@@ -888,6 +899,9 @@ export function ModpackTab({
   const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
     null,
   );
+  const [pendingBulkDeleteProfileIds, setPendingBulkDeleteProfileIds] = useState<string[] | null>(
+    null,
+  );
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [profileSettingsTab, setProfileSettingsTab] = useState<"general" | "java">("general");
   const [profileEffectiveSettings, setProfileEffectiveSettings] = useState<Settings | null>(null);
@@ -956,6 +970,16 @@ export function ModpackTab({
   }>({ left: 0, width: 0 });
   const manageDropZoneRef = useRef<HTMLDivElement | null>(null);
   const [isManageDropTarget, setIsManageDropTarget] = useState(false);
+  const handleProfilesMarqueePointerDown = useMarqueeSelection({
+    containerRef: profilesScrollRef,
+    selected: multiSelectedProfileIds,
+    onChange: setMultiSelectedProfileIds,
+  });
+  const handleContentMarqueePointerDown = useMarqueeSelection({
+    containerRef: manageDropZoneRef,
+    selected: selectedContentNames,
+    onChange: setSelectedContentNames,
+  });
 
   const [uiScale, setUiScale] = useState(() =>
     typeof window === "undefined" ? 1 : computeTabUiScale(window.innerWidth),
@@ -965,6 +989,27 @@ export function ModpackTab({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // Percentages on a zoomed element resolve against the unzoomed parent in current Chromium,
+  // so the scaled editor is sized from the host's real pixels instead.
+  const manageZoomed = activeView === "manage" && uiScale > 1;
+  const scaledRootRef = useRef<HTMLDivElement | null>(null);
+  const [scaledHostSize, setScaledHostSize] = useState<{ w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!manageZoomed) return;
+    const host = scaledRootRef.current?.parentElement;
+    if (!host) return;
+    const measure = () => {
+      const cs = getComputedStyle(host);
+      const w = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = host.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      setScaledHostSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [manageZoomed]);
 
   const [manageConsoleExpanded, setManageConsoleExpanded] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1151,9 +1196,15 @@ export function ModpackTab({
     return consoleHistorySessions.find((s) => s.id === selectedLogSessionId)?.lines ?? [];
   }, [selectedLogSessionId, consoleLines, consoleHistorySessions]);
 
+  const { filters: consoleFilters, toggleFilter: toggleConsoleFilter } = useConsoleFilters();
+  const { visible: visibleConsoleLines, counts: consoleFilterCounts } = useVisibleConsoleLines(
+    displayedConsoleLines,
+    consoleFilters,
+  );
+
   const consoleTextForCopy = useMemo(
-    () => displayedConsoleLines.map((e) => e.line).join("\n"),
-    [displayedConsoleLines],
+    () => visibleConsoleLines.map((v) => v.entry.line).join("\n"),
+    [visibleConsoleLines],
   );
 
   const manageConsoleStatusDotClass = useMemo(() => {
@@ -2713,9 +2764,22 @@ export function ModpackTab({
     onRegisterModpackHotkeys({
       openCreate: handleOpenCreateView,
       openImport: handleOpenImportView,
+      openScreenshots: () => {
+        if (selectedProfileId) setIsScreenshotsOpen(true);
+      },
     });
     return () => onRegisterModpackHotkeys(null);
-  }, [handleOpenCreateView, handleOpenImportView, onRegisterModpackHotkeys]);
+  }, [handleOpenCreateView, handleOpenImportView, onRegisterModpackHotkeys, selectedProfileId]);
+
+  const hotkeyRefreshRef = useRef<() => void>(() => {});
+  hotkeyRefreshRef.current = () => {
+    if (activeView === "list") void refreshProfiles();
+  };
+  useEffect(() => {
+    const onRefresh = () => hotkeyRefreshRef.current();
+    window.addEventListener(HOTKEY_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(HOTKEY_REFRESH_EVENT, onRefresh);
+  }, []);
 
   useEffect(() => {
     onActiveViewChange?.(activeView);
@@ -3166,6 +3230,42 @@ export function ModpackTab({
     }
   }
 
+  async function handleBulkDeleteProfiles(ids: string[]) {
+    const deleted = new Set<string>();
+    for (const id of ids) {
+      try {
+        await invoke("delete_profile", { id });
+        deleted.add(id);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (deleted.size > 0) {
+      setProfiles((prev) => prev.filter((p) => !deleted.has(p.id)));
+      setMultiSelectedProfileIds((prev) => new Set([...prev].filter((id) => !deleted.has(id))));
+      if (selectedProfileId && deleted.has(selectedProfileId)) {
+        setSelectedProfileId(null);
+        try {
+          await invoke("set_selected_profile", { id: null });
+        } catch (e) {
+          console.error(e);
+        }
+        if (activeView === "manage") {
+          setActiveView("list");
+        }
+      }
+    }
+    if (deleted.size < ids.length) {
+      showNotification("error", t(language, "modpacks.toast.deleteProfilesPartial", {
+        failed: ids.length - deleted.size,
+      }));
+    } else {
+      showNotification("success", t(language, "modpacks.toast.profilesDeleted", {
+        count: deleted.size,
+      }));
+    }
+  }
+
   async function handleImportMrpack(path?: string) {
     let chosen = path;
     if (!chosen) {
@@ -3548,6 +3648,22 @@ export function ModpackTab({
       console.error(e);
       showNotification("error", tt("modpacks.manage.toggleFailed"));
     }
+  }
+
+  function toggleContentSelected(name: string) {
+    setSelectedContentNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function handleContentRowClick(name: string, e: React.MouseEvent<HTMLDivElement>) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if ((e.target as HTMLElement).closest("button, a, input")) return;
+    e.preventDefault();
+    toggleContentSelected(name);
   }
 
   async function handleBulkSetEnabled(enabled: boolean) {
@@ -4232,7 +4348,7 @@ export function ModpackTab({
   }
 
   function handleProfilePointerDown(profileId: string, e: ReactPointerEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
     if ((e.target as HTMLElement).closest("button, a, input")) return;
     profileDragListenersRef.current?.();
     profilePointerDragRef.current = {
@@ -4331,6 +4447,7 @@ export function ModpackTab({
       <div
         key={p.id}
         data-profile-card
+        data-marquee-key={p.id}
         onPointerDown={(e) => handleProfilePointerDown(p.id, e)}
         onDragStart={(e) => e.preventDefault()}
         className={`relative flex cursor-pointer select-none items-center gap-3 overflow-hidden rounded-2xl border px-3 py-2.5 transition ${
@@ -4583,6 +4700,7 @@ export function ModpackTab({
             <SearchIcon className="h-4 w-4" />
             <input
               type="text"
+              data-hotkey-search
               placeholder={tt("modpacks.list.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -4704,6 +4822,15 @@ export function ModpackTab({
                   {tt("modpacks.list.selectedCount", { count: multiSelectedProfileIds.size })}
                   <button
                     type="button"
+                    onClick={() => setPendingBulkDeleteProfileIds([...multiSelectedProfileIds])}
+                    className="rounded p-0.5 text-red-300 hover:bg-red-600/25"
+                    title={tt("modpacks.list.deleteSelected")}
+                    aria-label={tt("modpacks.list.deleteSelected")}
+                  >
+                    <DeleteIcon className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setMultiSelectedProfileIds(new Set())}
                     className="rounded p-0.5 hover:bg-white/10"
                     title={tt("modpacks.list.clearSelection")}
@@ -4728,6 +4855,7 @@ export function ModpackTab({
           </div>
           <div
             ref={profilesScrollRef}
+            onPointerDown={handleProfilesMarqueePointerDown}
             className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5"
           >
             <div className="flex flex-col gap-2">
@@ -6195,6 +6323,7 @@ export function ModpackTab({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div
               ref={manageDropZoneRef}
+              onPointerDown={handleContentMarqueePointerDown}
               className={`custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl bg-black/35 p-2.5 shadow-inner transition-colors ${
                 isManageDropTarget
                   ? "bg-accent-from/15 ring-2 ring-accent-to/70 ring-inset"
@@ -6246,7 +6375,13 @@ export function ModpackTab({
                           resourcePackRowRefs.current.delete(item.name);
                         }
                       }}
-                      className={`flex items-center justify-between gap-2.5 rounded-2xl bg-black/45 px-3 py-3 text-xs transition-opacity ${
+                      data-marquee-key={item.name}
+                      onClick={(e) => handleContentRowClick(item.name, e)}
+                      className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-opacity ${
+                        selectedContentNames.has(item.name)
+                          ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
+                          : "bg-black/45"
+                      } ${
                         item.enabled ? "text-white/85" : "text-white/45 opacity-75"
                       } ${isDragging ? "opacity-50" : ""} ${
                         isDropTarget ? "ring-2 ring-accent-to/70 ring-inset" : ""
@@ -6256,14 +6391,7 @@ export function ModpackTab({
                         <input
                           type="checkbox"
                           checked={selectedContentNames.has(item.name)}
-                          onChange={() => {
-                            setSelectedContentNames((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(item.name)) next.delete(item.name);
-                              else next.add(item.name);
-                              return next;
-                            });
-                          }}
+                          onChange={() => toggleContentSelected(item.name)}
                           className="accent-checkbox accent-checkbox-lg"
                         />
                         {reorderable && canReorder ? (
@@ -6366,22 +6494,21 @@ export function ModpackTab({
                   return (
                   <div
                     key={item.name}
-                    className={`flex items-center justify-between gap-2.5 rounded-2xl bg-black/45 px-3 py-3 text-xs transition-opacity ${
-                      item.enabled ? "text-white/85" : "text-white/45 opacity-75"
-                    } ${hasConflict ? "bg-amber-500/10" : ""}`}
+                    data-marquee-key={item.name}
+                    onClick={(e) => handleContentRowClick(item.name, e)}
+                    className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-opacity ${
+                      selectedContentNames.has(item.name)
+                        ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
+                        : hasConflict
+                          ? "bg-amber-500/10"
+                          : "bg-black/45"
+                    } ${item.enabled ? "text-white/85" : "text-white/45 opacity-75"}`}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <input
                         type="checkbox"
                         checked={selectedContentNames.has(item.name)}
-                        onChange={() => {
-                          setSelectedContentNames((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(item.name)) next.delete(item.name);
-                            else next.add(item.name);
-                            return next;
-                          });
-                        }}
+                        onChange={() => toggleContentSelected(item.name)}
                         className="accent-checkbox accent-checkbox-lg"
                       />
                       <ProfileItemIcon
@@ -6599,6 +6726,13 @@ export function ModpackTab({
 
           {manageConsoleExpanded && (
             <div className="flex min-h-0 flex-1 flex-col">
+              <ConsoleFilterBar
+                tt={tt}
+                filters={consoleFilters}
+                counts={consoleFilterCounts}
+                onToggle={toggleConsoleFilter}
+                className="mb-2 shrink-0 px-0.5"
+              />
               <LogAnalyzerPanel
                 lines={displayedConsoleLines.map((e) => e.line)}
                 language={language}
@@ -6608,18 +6742,13 @@ export function ModpackTab({
                 className="mb-2"
               />
               {displayedConsoleLines.length > 0 ? (
-                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-white/[0.06] bg-[var(--ink-0)] px-3 py-2 font-mono text-[0.75rem] leading-[1.55] text-white/75 sm:min-h-[10rem]">
-                  {displayedConsoleLines.map((entry, idx) => (
-                    <div
-                      key={`${selectedLogSessionId}-${idx}`}
-                      className={`whitespace-pre break-all ${
-                        entry.source === "stderr" ? "text-red-300/90" : ""
-                      }`}
-                    >
-                      {entry.line}
-                    </div>
-                  ))}
-                </div>
+                <ConsoleLines
+                  tt={tt}
+                  visible={visibleConsoleLines}
+                  filters={consoleFilters}
+                  keyPrefix={`${selectedLogSessionId}-`}
+                  className="min-h-0 flex-1 rounded-xl border border-white/[0.06] bg-[var(--ink-0)] px-3 py-2 text-[0.75rem] leading-[1.55] sm:min-h-[10rem]"
+                />
               ) : (
                 <div className="flex h-24 w-full shrink-0 items-center justify-center rounded-xl border border-dashed border-white/10 px-3 py-2 text-[0.8125rem] text-white/45 lg:flex-1">
                   {tt("play.console.empty")}
@@ -6641,17 +6770,19 @@ export function ModpackTab({
 
   return (
     <div
+      ref={scaledRootRef}
       className={`flex w-full min-h-0 flex-1 flex-col gap-4 ${
         fillPane || activeView === "manage"
           ? "h-full max-w-none self-stretch px-0 sm:px-1"
           : "max-w-none self-stretch"
       }`}
       style={
-        activeView === "manage" && uiScale > 1
+        manageZoomed && scaledHostSize
           ? ({
               zoom: uiScale,
-              width: `${100 / uiScale}%`,
-              height: `${100 / uiScale}%`,
+              flex: "none",
+              width: `${scaledHostSize.w / uiScale}px`,
+              height: `${scaledHostSize.h / uiScale}px`,
             } as CSSProperties)
           : undefined
       }
@@ -6876,13 +7007,20 @@ export function ModpackTab({
                 );
                 setContextMenu(null);
                 if (!profile) return;
-                setPendingDeleteProfileId(profile.id);
+                const ids = profileIdsForAction(profile.id);
+                if (ids.length > 1) setPendingBulkDeleteProfileIds(ids);
+                else setPendingDeleteProfileId(profile.id);
               }}
               className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
             >
               <DeleteIcon className="h-3.5 w-3.5" />
               <span>
-                {tt("modpacks.contextMenu.deleteProfile")}
+                {(() => {
+                  const count = profileIdsForAction(contextMenu.profileId).length;
+                  return count > 1
+                    ? tt("modpacks.contextMenu.deleteSelectedProfiles", { count })
+                    : tt("modpacks.contextMenu.deleteProfile");
+                })()}
               </span>
             </button>
             <button
@@ -7278,6 +7416,62 @@ export function ModpackTab({
                   }
                   setPendingDeleteProfileId(null);
                   void handleDeleteProfile(profile);
+                }}
+                className="interactive-press rounded-xl bg-red-600 px-4 py-1.5 font-semibold text-white hover:bg-red-500"
+              >
+                {tt("common.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBulkDeleteProfileIds && (
+        <div
+          className="glass-overlay fixed inset-0 z-40 flex items-center justify-center"
+          onClick={() => setPendingBulkDeleteProfileIds(null)}
+        >
+          <div
+            className="glass-modal relative w-full max-w-sm border-yellow-400/60 p-5 text-sm text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-yellow-500/20 text-yellow-300">
+                !
+              </div>
+              <h2 className="text-sm font-semibold text-yellow-200">
+                {tt("modpacks.deleteConfirm.title")}
+              </h2>
+            </div>
+            <p className="mb-2 text-xs text-yellow-50">
+              {tt("modpacks.deleteConfirm.bulkPrompt", {
+                count: pendingBulkDeleteProfileIds.length,
+              })}
+            </p>
+            <ul className="custom-scrollbar mb-4 max-h-32 overflow-y-auto text-xs text-white/60">
+              {pendingBulkDeleteProfileIds.map((id) => {
+                const profile = profiles.find((p) => p.id === id);
+                return profile ? (
+                  <li key={id} className="truncate">
+                    {profile.name}
+                  </li>
+                ) : null;
+              })}
+            </ul>
+            <div className="flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setPendingBulkDeleteProfileIds(null)}
+                className="interactive-press rounded-xl bg-white/10 px-4 py-1.5 font-semibold text-white hover:bg-white/20"
+              >
+                {tt("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = pendingBulkDeleteProfileIds;
+                  setPendingBulkDeleteProfileIds(null);
+                  void handleBulkDeleteProfiles(ids);
                 }}
                 className="interactive-press rounded-xl bg-red-600 px-4 py-1.5 font-semibold text-white hover:bg-red-500"
               >

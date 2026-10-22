@@ -6,6 +6,15 @@ import { Search } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { InputClearButton } from "../components/ui";
+import { AssetIcon } from "../components/asset_icon";
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSegmented,
+  SettingsSelect,
+  SettingsSlider,
+  SettingsSwitchRow,
+} from "../settings-ui/SettingsComponents";
 import { JavaSettingsTab } from "./JavaSettings";
 import { clearLauncherAvatarCache } from "../lib/avatar";
 import { localeTag, useT, SUPPORTED_LANGUAGES, type Language } from "../i18n";
@@ -16,7 +25,6 @@ import { errorMessage, type ThemeInfo } from "../lib/customTheme";
 import { ThemeCard } from "../features/theme-editor/ThemeCard";
 import { ThemeEditorPanel } from "../features/theme-editor/ThemeEditorPanel";
 
-const SETTINGS_DARK_BOX = "glass-inset p-3";
 
 type SettingsTabId = "game" | "versions" | "launcher";
 
@@ -60,7 +68,6 @@ type SettingSearchId =
 type SettingSearchDef = {
   id: SettingSearchId;
   tab: SettingsTabId;
-  gameSubTab?: "general" | "java";
   keys: string[];
 };
 
@@ -68,31 +75,30 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "game.showConsole",
     tab: "game",
-    gameSubTab: "general",
     keys: ["settings.game.showConsoleOnLaunch.label"],
   },
   {
     id: "game.graphicsAdapter",
     tab: "game",
-    gameSubTab: "general",
-    keys: ["settings.game.graphicsAdapter.label", "settings.game.graphicsAdapter.hint"],
+    keys: [
+      "settings.section.display",
+      "settings.game.graphicsAdapter.label",
+      "settings.game.graphicsAdapter.hint",
+    ],
   },
   {
     id: "game.closeLauncher",
     tab: "game",
-    gameSubTab: "general",
     keys: ["settings.game.closeLauncherOnStart.label"],
   },
   {
     id: "game.checkProcesses",
     tab: "game",
-    gameSubTab: "general",
     keys: ["settings.game.checkGameProcesses.label"],
   },
   {
     id: "game.gameDirectory",
     tab: "game",
-    gameSubTab: "general",
     keys: [
       "settings.game.gameDirectory.label",
       "settings.game.gameDirectory.hint",
@@ -102,20 +108,18 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "game.windowSize",
     tab: "game",
-    gameSubTab: "general",
-    keys: ["settings.game.windowSize.label"],
+    keys: ["settings.section.display", "settings.game.windowSize.label"],
   },
   {
     id: "game.ram",
     tab: "game",
-    gameSubTab: "java",
-    keys: ["settings.game.ram.label", "settings.game.subtab.java"],
+    keys: ["settings.section.java", "settings.game.ram.label", "settings.game.subtab.java"],
   },
   {
     id: "game.java",
     tab: "game",
-    gameSubTab: "java",
     keys: [
+      "settings.section.java",
       "settings.game.subtab.java",
       "javaSettings.description",
       "javaSettings.useCustomArgs.label",
@@ -130,17 +134,21 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "versions.showSnapshots",
     tab: "versions",
-    keys: ["settings.versions.showSnapshots.label", "settings.tab.versions"],
+    keys: [
+      "settings.section.versionList",
+      "settings.versions.showSnapshots.label",
+      "settings.tab.versions",
+    ],
   },
   {
     id: "versions.showAlpha",
     tab: "versions",
-    keys: ["settings.versions.showAlpha.label"],
+    keys: ["settings.section.versionList", "settings.versions.showAlpha.label"],
   },
   {
     id: "versions.forgeProxy",
     tab: "versions",
-    keys: ["settings.versions.forgeProxyFallback.label"],
+    keys: ["settings.section.versionList", "settings.versions.forgeProxyFallback.label"],
   },
   {
     id: "versions.loaderFilter",
@@ -170,17 +178,22 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "launcher.openOnProfiles",
     tab: "launcher",
-    keys: ["settings.launcher.openOnProfilesTab.label", "settings.card.customization"],
+    keys: [
+      "settings.section.behavior",
+      "settings.launcher.openOnProfilesTab.label",
+      "settings.card.customization",
+    ],
   },
   {
     id: "launcher.uiSounds",
     tab: "launcher",
-    keys: ["settings.launcher.uiSounds.label"],
+    keys: ["settings.section.behavior", "settings.launcher.uiSounds.label"],
   },
   {
     id: "launcher.discordRpc",
     tab: "launcher",
     keys: [
+      "settings.section.behavior",
       "settings.launcher.discordRpc.label",
       "settings.launcher.discordRpc.hint",
     ],
@@ -188,32 +201,41 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "launcher.minimizeToTray",
     tab: "launcher",
-    keys: ["settings.launcher.minimizeToTray.label"],
+    keys: ["settings.section.behavior", "settings.launcher.minimizeToTray.label"],
   },
   {
     id: "launcher.autostart",
     tab: "launcher",
-    keys: ["settings.launcher.autostart.label"],
+    keys: ["settings.section.behavior", "settings.launcher.autostart.label"],
   },
   {
     id: "launcher.splitView",
     tab: "launcher",
-    keys: ["settings.launcher.splitView.label", "settings.launcher.splitView.hint"],
+    keys: [
+      "settings.section.behavior",
+      "settings.launcher.splitView.label",
+      "settings.launcher.splitView.hint",
+    ],
   },
   {
     id: "launcher.disableAnimations",
     tab: "launcher",
-    keys: ["settings.launcher.disableAnimations.label"],
+    keys: ["settings.section.appearance", "settings.launcher.disableAnimations.label"],
   },
   {
     id: "launcher.backgroundAnimation",
     tab: "launcher",
-    keys: ["settings.launcher.backgroundAnimation.label", "settings.launcher.backgroundAnimation.hint"],
+    keys: [
+      "settings.section.appearance",
+      "settings.launcher.backgroundAnimation.label",
+      "settings.launcher.backgroundAnimation.hint",
+    ],
   },
   {
     id: "launcher.hideBanners",
     tab: "launcher",
     keys: [
+      "settings.section.appearance",
       "settings.launcher.hideBanners.label",
       "settings.launcher.hideBanners.hint",
     ],
@@ -222,6 +244,7 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     id: "launcher.disableThematicDecorations",
     tab: "launcher",
     keys: [
+      "settings.section.appearance",
       "settings.launcher.disableThematicDecorations.label",
       "settings.launcher.disableThematicDecorations.hint",
     ],
@@ -229,27 +252,36 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "launcher.language",
     tab: "launcher",
-    keys: ["settings.launcher.interfaceLanguage.label", "settings.card.interfaceLanguage"],
+    keys: [
+      "settings.section.interface",
+      "settings.launcher.interfaceLanguage.label",
+      "settings.card.interfaceLanguage",
+    ],
   },
   {
     id: "launcher.accentColor",
     tab: "launcher",
-    keys: ["settings.launcher.accentColor.label"],
+    keys: ["settings.section.appearance", "settings.launcher.accentColor.label"],
   },
   {
     id: "launcher.backgroundImage",
     tab: "launcher",
-    keys: ["settings.launcher.backgroundImage.label", "settings.launcher.backgroundImage.hint"],
+    keys: [
+      "settings.section.appearance",
+      "settings.launcher.backgroundImage.label",
+      "settings.launcher.backgroundImage.hint",
+    ],
   },
   {
     id: "launcher.backgroundBlur",
     tab: "launcher",
-    keys: ["settings.launcher.backgroundBlur.label"],
+    keys: ["settings.section.appearance", "settings.launcher.backgroundBlur.label"],
   },
   {
     id: "launcher.customThemes",
     tab: "launcher",
     keys: [
+      "settings.section.themes",
       "settings.launcher.customThemes.label",
       "settings.launcher.customThemes.default",
       "settings.launcher.customThemes.importZip",
@@ -266,27 +298,32 @@ const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
   {
     id: "launcher.sidebarPosition",
     tab: "launcher",
-    keys: ["settings.launcher.sidebarPosition.label"],
+    keys: ["settings.section.interface", "settings.launcher.sidebarPosition.label"],
   },
   {
     id: "launcher.sidebarOrder",
     tab: "launcher",
-    keys: ["settings.launcher.sidebarOrder.label"],
+    keys: ["settings.section.interface", "settings.launcher.sidebarOrder.label"],
   },
   {
     id: "launcher.resetSettings",
     tab: "launcher",
-    keys: ["settings.launcher.resetSettings.button"],
+    keys: ["settings.section.data", "settings.launcher.resetSettings.button"],
   },
   {
     id: "launcher.cache",
     tab: "launcher",
-    keys: ["settings.launcher.cache.label", "settings.launcher.cache.description"],
+    keys: [
+      "settings.section.data",
+      "settings.launcher.cache.label",
+      "settings.launcher.cache.description",
+    ],
   },
   {
     id: "launcher.backup",
     tab: "launcher",
     keys: [
+      "settings.section.data",
       "settings.launcher.backup.title",
       "settings.launcher.backup.exportButton",
       "settings.launcher.backup.importButton",
@@ -362,9 +399,6 @@ type SettingsTabProps = {
   systemMemoryGb: number;
   updateSettings: (patch: Partial<Settings>) => void;
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
-  SettingsCard: typeof import("../settings-ui/SettingsComponents").SettingsCard;
-  SettingsSlider: typeof import("../settings-ui/SettingsComponents").SettingsSlider;
-  SettingsToggle: typeof import("../settings-ui/SettingsComponents").SettingsToggle;
   language: Language;
   setLanguage: (lang: Language) => void;
   sidebarOrder: SidebarItemId[];
@@ -554,6 +588,18 @@ function hueDegFromWheelClientPos(el: HTMLElement, clientX: number, clientY: num
   return (angleDeg + 90 + 360) % 360;
 }
 
+const ACCENT_PRESETS = [
+  "#4a22a8",
+  "#7c3aed",
+  "#c026d3",
+  "#e11d48",
+  "#ea580c",
+  "#ca8a04",
+  "#16a34a",
+  "#0891b2",
+  "#2563eb",
+];
+
 const ACCENT_HUE_RING_STYLE: CSSProperties = {
   backgroundImage: `conic-gradient(from 0deg, ${Array.from({ length: 72 }, (_, i) => {
     const h = (i * 360) / 72;
@@ -568,9 +614,6 @@ export function SettingsTab({
   systemMemoryGb,
   updateSettings,
   showNotification,
-  SettingsCard,
-  SettingsSlider,
-  SettingsToggle,
   language,
   setLanguage,
   sidebarOrder,
@@ -588,7 +631,6 @@ export function SettingsTab({
   const [installedThemes, setInstalledThemes] = useState<ThemeInfo[]>([]);
   const [themesLoading, setThemesLoading] = useState(false);
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
-  const [gameSubTab, setGameSubTab] = useState<"general" | "java">("general");
   const [isRamEditing, setIsRamEditing] = useState(false);
   const [ramInputMb, setRamInputMb] = useState("");
   const ramInputRef = useRef<HTMLInputElement | null>(null);
@@ -601,7 +643,6 @@ export function SettingsTab({
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null);
   const [checkingVersionId, setCheckingVersionId] = useState<string | null>(null);
   const [versionsLoader, setVersionsLoader] = useState<LoaderId>("vanilla");
-  const [isVersionsLoaderDropdownOpen, setIsVersionsLoaderDropdownOpen] = useState(false);
   const [isVersionFilterDropdownOpen, setIsVersionFilterDropdownOpen] = useState(false);
   const [versionFilterQuery, setVersionFilterQuery] = useState("");
   const [selectedVersionFilterId, setSelectedVersionFilterId] = useState<string | null>(null);
@@ -625,7 +666,6 @@ export function SettingsTab({
   } | null>(null);
   const [reinstallLoaderOptions, setReinstallLoaderOptions] = useState<LoaderVersionOption[]>([]);
   const [reinstallLoaderLoading, setReinstallLoaderLoading] = useState(false);
-  const [isReinstallLoaderDropdownOpen, setIsReinstallLoaderDropdownOpen] = useState(false);
   const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
   const [skipRepairPrompt, setSkipRepairPrompt] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -649,21 +689,6 @@ export function SettingsTab({
     left: number;
     width: number;
   }>({ left: 0, width: 0 });
-  const gameSubTabRefs = useRef<
-    Partial<Record<"general" | "java", HTMLButtonElement | null>>
-  >({});
-  const [gameSubIndicator, setGameSubIndicator] = useState<{
-    left: number;
-    width: number;
-  }>({ left: 0, width: 0 });
-  const languageTabRefs = useRef<
-    Partial<Record<Language, HTMLButtonElement | null>>
-  >({});
-  const languageToggleContainerRef = useRef<HTMLDivElement | null>(null);
-  const [languageIndicator, setLanguageIndicator] = useState<{
-    left: number;
-    width: number;
-  }>({ left: 0, width: 0 });
   const [accentInput, setAccentInput] = useState<string>("");
   const [isAccentPickerOpen, setIsAccentPickerOpen] = useState(false);
   const accentHueWheelRef = useRef<HTMLDivElement | null>(null);
@@ -673,12 +698,8 @@ export function SettingsTab({
   const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
   const [isCacheLoading, setIsCacheLoading] = useState(false);
   const [isResettingSettings, setIsResettingSettings] = useState(false);
-  const [isSidebarPositionDropdownOpen, setIsSidebarPositionDropdownOpen] = useState(false);
-  const [isGraphicsAdapterDropdownOpen, setIsGraphicsAdapterDropdownOpen] = useState(false);
-  const graphicsAdapterDropdownRef = useRef<HTMLDivElement | null>(null);
-  const versionsLoaderDropdownRef = useRef<HTMLDivElement | null>(null);
+  const accentPickerRef = useRef<HTMLDivElement | null>(null);
   const versionsFilterDropdownRef = useRef<HTMLDivElement | null>(null);
-  const sidebarPositionDropdownRef = useRef<HTMLDivElement | null>(null);
   const versionFilterInputRef = useRef<HTMLInputElement | null>(null);
   const versionFilterListRef = useRef<HTMLDivElement | null>(null);
   const selectedVersionFilterButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -728,79 +749,8 @@ export function SettingsTab({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", scheduleUpdate);
     };
-  }, [settingsTab]);
+  }, [settingsTab, settingsSearch, language]);
 
-  useLayoutEffect(() => {
-    let raf = 0;
-    let cancelled = false;
-
-    const updateIndicator = () => {
-      if (cancelled) return;
-      const el = gameSubTabRefs.current[gameSubTab];
-      if (el) {
-        setGameSubIndicator({
-          left: el.offsetLeft,
-          width: el.offsetWidth,
-        });
-      }
-    };
-
-    const scheduleUpdate = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(updateIndicator);
-    };
-
-    updateIndicator();
-    window.addEventListener("resize", scheduleUpdate);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [gameSubTab, settingsTab]);
-
-  useLayoutEffect(() => {
-    let raf = 0;
-    let cancelled = false;
-
-    const updateIndicator = () => {
-      if (cancelled) return;
-      const btnEl = languageTabRefs.current[language];
-      const containerEl = languageToggleContainerRef.current;
-      if (!btnEl || !containerEl) return;
-
-      const btnRect = btnEl.getBoundingClientRect();
-      const containerRect = containerEl.getBoundingClientRect();
-      setLanguageIndicator({
-        left: btnRect.left - containerRect.left,
-        width: btnRect.width,
-      });
-    };
-
-    const scheduleUpdate = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(updateIndicator);
-    };
-
-    scheduleUpdate();
-    window.addEventListener("resize", scheduleUpdate);
-
-    if (typeof document !== "undefined" && (document as any).fonts?.ready) {
-      void (document as any).fonts.ready
-        .then(() => {
-          if (!cancelled) scheduleUpdate();
-        })
-        .catch(() => {
-          if (!cancelled) scheduleUpdate();
-        });
-    }
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [language, settingsTab]);
 
   useEffect(() => {
     const current = settings?.background_accent_color ?? "#4a22a8";
@@ -1043,7 +993,6 @@ export function SettingsTab({
   useEffect(() => {
     setSelectedVersionFilterId(null);
     setVersionFilterQuery("");
-    setIsVersionsLoaderDropdownOpen(false);
     setIsVersionFilterDropdownOpen(false);
   }, [versionsLoader]);
 
@@ -1069,28 +1018,13 @@ export function SettingsTab({
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
       if (
-        versionsLoaderDropdownRef.current &&
-        !versionsLoaderDropdownRef.current.contains(target)
-      ) {
-        setIsVersionsLoaderDropdownOpen(false);
-      }
-      if (
         versionsFilterDropdownRef.current &&
         !versionsFilterDropdownRef.current.contains(target)
       ) {
         setIsVersionFilterDropdownOpen(false);
       }
-      if (
-        graphicsAdapterDropdownRef.current &&
-        !graphicsAdapterDropdownRef.current.contains(target)
-      ) {
-        setIsGraphicsAdapterDropdownOpen(false);
-      }
-      if (
-        sidebarPositionDropdownRef.current &&
-        !sidebarPositionDropdownRef.current.contains(target)
-      ) {
-        setIsSidebarPositionDropdownOpen(false);
+      if (accentPickerRef.current && !accentPickerRef.current.contains(target)) {
+        setIsAccentPickerOpen(false);
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -1350,7 +1284,6 @@ export function SettingsTab({
       //ignore
     }
     setReinstallDialog({ version, gameVersion, selectedLoaderVersion });
-    setIsReinstallLoaderDropdownOpen(false);
     void loadReinstallLoaderOptions(version, gameVersion);
   };
 
@@ -1579,6 +1512,7 @@ export function SettingsTab({
   };
 
   const handleResetSettings = async () => {
+    if (!window.confirm(tt("settings.launcher.resetSettings.confirm"))) return;
     setIsResettingSettings(true);
     try {
       try {
@@ -1737,6 +1671,17 @@ export function SettingsTab({
     );
   }, [matchedSettingIds, settingsTab]);
 
+  const tabMatchCounts = useMemo(() => {
+    if (!matchedSettingIds) return null;
+    const counts: Record<SettingsTabId, number> = { game: 0, versions: 0, launcher: 0 };
+    for (const item of SETTING_SEARCH_CATALOG) {
+      if (matchedSettingIds.has(item.id)) counts[item.tab] += 1;
+    }
+    return counts;
+  }, [matchedSettingIds]);
+
+  const anyVisible = (...ids: SettingSearchId[]) => ids.some((id) => showSetting(id));
+
   useEffect(() => {
     if (!matchedSettingIds || matchedSettingIds.size === 0) return;
     const firstMatch = SETTING_SEARCH_CATALOG.find((item) => matchedSettingIds.has(item.id));
@@ -1749,73 +1694,312 @@ export function SettingsTab({
     }
   }, [settingsSearchQuery]);
 
+  const label = (key: string) => tt(key).replace(/\s*:\s*$/, "");
+  const accentColor = settings?.background_accent_color ?? "#4a22a8";
+  const seasonalThemeActive = isSeasonalThemePeriod();
+
+  const applyAccentColor = (hex: string) => {
+    setAccentInput(hex);
+    updateSettings({ background_accent_color: hex });
+  };
+
+  const resetResolutionInputs = () => {
+    setResolutionWidthInput(
+      settings?.resolution_width != null ? String(settings.resolution_width) : "",
+    );
+    setResolutionHeightInput(
+      settings?.resolution_height != null ? String(settings.resolution_height) : "",
+    );
+  };
+
+  const refreshVersionsList = async () => {
+    try {
+      setIsLoadingVersions(true);
+      const [available] = await Promise.all([
+        loadAvailableByLoader(versionsLoader),
+        loadInstalledVersions(),
+      ]);
+      setAvailableVersions(available);
+    } catch (e) {
+      console.error("Failed to refresh versions list:", e);
+      showNotification("error", tt("settings.versions.refreshFailed"));
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  };
+
+  const chooseGameDirectory = async () => {
+    try {
+      const path = await openFile({ multiple: false, directory: true });
+      if (typeof path === "string" && path.trim()) {
+        updateSettings({ game_directory: path });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const chooseBackgroundImage = async () => {
+    try {
+      const path = await openFile({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: tt("settings.common.imagesFilterName"),
+            extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+          },
+        ],
+      });
+      if (!path) return;
+      const stored = await invoke<string | null>("set_background_image", { sourcePath: path });
+      updateSettings({ background_image_url: stored });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const resetBackgroundImage = async () => {
+    try {
+      await invoke("set_background_image", { sourcePath: null });
+      updateSettings({ background_image_url: null });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const importThemeZip = async () => {
+    try {
+      const path = await openFile({
+        multiple: false,
+        directory: false,
+        filters: [{ name: tt("settings.launcher.customThemes.zipFilterName"), extensions: ["zip"] }],
+      });
+      if (!path) return;
+      const imported = await invoke<ThemeInfo>("import_theme_zip", { sourcePath: path });
+      await refreshThemes();
+      updateSettings({ custom_theme_id: imported.id });
+      showNotification(
+        "success",
+        tt("settings.launcher.customThemes.imported", { name: imported.name }),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        errorMessage(e, tt("settings.launcher.customThemes.importFailed")),
+      );
+    }
+  };
+
+  const createTheme = async () => {
+    const name = window.prompt(tt("settings.launcher.customThemes.createPrompt"));
+    if (!name?.trim()) return;
+    try {
+      const created = await invoke<ThemeInfo>("create_empty_theme", { name: name.trim() });
+      await refreshThemes();
+      updateSettings({ custom_theme_id: created.id });
+      setEditingThemeId(created.id);
+      showNotification(
+        "success",
+        tt("settings.launcher.customThemes.created", { name: created.name }),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        errorMessage(e, tt("settings.launcher.customThemes.createFailed")),
+      );
+    }
+  };
+
+  const openThemesFolder = async () => {
+    try {
+      await invoke("open_themes_folder");
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("settings.launcher.customThemes.openFolderFailed"));
+    }
+  };
+
+  const openActiveThemeCss = async () => {
+    if (!activeThemeId) return;
+    try {
+      await invoke("open_theme_css_file", { themeId: activeThemeId });
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("settings.launcher.customThemes.editCssFailed"));
+    }
+  };
+
+  const duplicateActiveTheme = async () => {
+    if (!activeThemeId) return;
+    const name = window.prompt(
+      tt("settings.launcher.customThemes.duplicatePrompt"),
+      tt("settings.launcher.customThemes.duplicateDefault", {
+        name: activeTheme?.name ?? activeThemeId,
+      }),
+    );
+    if (!name?.trim()) return;
+    try {
+      const copy = await invoke<ThemeInfo>("duplicate_theme", {
+        themeId: activeThemeId,
+        name: name.trim(),
+      });
+      await refreshThemes();
+      updateSettings({ custom_theme_id: copy.id });
+      showNotification(
+        "success",
+        tt("settings.launcher.customThemes.duplicated", { name: copy.name }),
+      );
+    } catch (e) {
+      showNotification(
+        "error",
+        errorMessage(e, tt("settings.launcher.customThemes.duplicateFailed")),
+      );
+    }
+  };
+
+  const exportActiveTheme = async () => {
+    if (!activeThemeId) return;
+    try {
+      const dest = await saveFile({
+        defaultPath: `${activeThemeId}.zip`,
+        filters: [{ name: tt("settings.launcher.customThemes.zipFilterName"), extensions: ["zip"] }],
+      });
+      if (!dest) return;
+      await invoke("export_theme_zip", { themeId: activeThemeId, destPath: dest });
+      showNotification("success", tt("settings.launcher.customThemes.exported"));
+    } catch (e) {
+      showNotification(
+        "error",
+        errorMessage(e, tt("settings.launcher.customThemes.exportFailed")),
+      );
+    }
+  };
+
+  const deleteActiveTheme = async () => {
+    if (!activeThemeId) return;
+    const themeName = activeTheme?.name ?? activeThemeId;
+    if (!window.confirm(tt("settings.launcher.customThemes.deleteConfirm", { name: themeName }))) {
+      return;
+    }
+    try {
+      setEditingThemeId(null);
+      await invoke("delete_theme", { themeId: activeThemeId });
+      await refreshThemes();
+      updateSettings({ custom_theme_id: null });
+      showNotification(
+        "success",
+        tt("settings.launcher.customThemes.deleted", { name: themeName }),
+      );
+    } catch (e) {
+      console.error(e);
+      showNotification(
+        "error",
+        errorMessage(e, tt("settings.launcher.customThemes.deleteFailed")),
+      );
+    }
+  };
+
+  const updateStatusText = (() => {
+    switch (updateStatus) {
+      case "checking":
+        return tt("settings.updates.checking");
+      case "downloading":
+        return tt("settings.updates.downloading", { percent: updateDownloadPercent ?? 0 });
+      case "installing":
+        return tt("settings.updates.installing");
+      case "available":
+        return updateVersion
+          ? tt("settings.updates.available", { version: updateVersion })
+          : tt("settings.updates.idle");
+      case "up-to-date":
+        return tt("settings.updates.upToDate");
+      case "error":
+        return tt("settings.updates.checkFailed");
+      default:
+        return tt("settings.updates.idle");
+    }
+  })();
+
+  const graphicsAdapterOptions = [
+    { value: "", label: tt("settings.game.graphicsAdapter.auto") },
+    ...graphicsAdapters.map((adapter) => ({ value: adapter, label: adapter })),
+    ...(settings?.graphics_adapter && !graphicsAdapters.includes(settings.graphics_adapter)
+      ? [{ value: settings.graphics_adapter, label: settings.graphics_adapter }]
+      : []),
+  ];
+
+  const sidebarItemLabel = (id: SidebarItemId) =>
+    tt(
+      id === "play"
+        ? "app.sidebar.play"
+        : id === "settings"
+          ? "app.sidebar.settings"
+          : id === "mods"
+            ? "app.sidebar.mods"
+            : "app.sidebar.modpacks",
+    );
+
+  const settingsTabs: { id: SettingsTabId; label: string; icon: string }[] = [
+    { id: "game", label: tt("settings.tab.game"), icon: "play" },
+    { id: "versions", label: tt("settings.tab.versions"), icon: "versions" },
+    { id: "launcher", label: tt("settings.tab.launcher"), icon: "settings" },
+  ];
+
+  const numberInputClass =
+    "glass-control no-number-spin h-9 w-24 px-3 text-sm text-white/90 outline-none placeholder:text-white/35";
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       {reinstallDialog && (
         <div
-          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center p-4"
           onClick={() => setReinstallDialog(null)}
         >
           <div
-            className="glass-modal max-w-md p-5"
+            className="glass-modal w-[min(92vw,28rem)] p-5"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
           >
-            <h3 className="mb-1 text-sm font-semibold text-white">
+            <h3 className="text-[0.9375rem] font-semibold text-white">
               {tt("settings.versions.manage.reinstallTitle", {
                 version: reinstallDialog.version.id,
               })}
             </h3>
-            <p className="mb-4 text-xs text-white/70">
+            <p className="ui-meta mt-1">
               {tt("settings.versions.manage.reinstallHint", {
                 gameVersion: reinstallDialog.gameVersion,
               })}
             </p>
-            <label className="mb-1 block text-xs text-white/70">
-              {tt("settings.versions.manage.loaderVersionLabel")}
+            <label className="ui-meta mb-1.5 mt-4 block" htmlFor="reinstall-loader-select">
+              {label("settings.versions.manage.loaderVersionLabel")}
             </label>
-            <div className="relative mb-4">
-              <button
-                type="button"
-                disabled={reinstallLoaderLoading}
-                onClick={() => setIsReinstallLoaderDropdownOpen((v) => !v)}
-                className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white/90"
-              >
-                <span className="truncate">
-                  {reinstallLoaderLoading
-                    ? tt("common.loading")
-                    : reinstallDialog.selectedLoaderVersion || tt("modpacks.common.select")}
-                </span>
-                <span className="text-[0.75rem] text-white/50">▾</span>
-              </button>
-              {isReinstallLoaderDropdownOpen && (
-                <div className="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto glass-popover p-1 text-xs">
-                  {reinstallLoaderOptions.map((opt) => (
-                    <button
-                      key={opt.version}
-                      type="button"
-                      onClick={() => {
-                        setReinstallDialog((prev) =>
-                          prev ? { ...prev, selectedLoaderVersion: opt.version } : null,
-                        );
-                        setIsReinstallLoaderDropdownOpen(false);
-                      }}
-                      className={`flex w-full rounded-lg px-3 py-1.5 text-left ${
-                        reinstallDialog.selectedLoaderVersion === opt.version
-                          ? "seg-on"
-                          : "text-white/80 hover:bg-white/10"
-                      }`}
-                    >
-                      {opt.version}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2">
+            <SettingsSelect
+              id="reinstall-loader-select"
+              className="w-full"
+              disabled={reinstallLoaderLoading}
+              value={reinstallDialog.selectedLoaderVersion}
+              placeholder={
+                reinstallLoaderLoading ? tt("common.loading") : tt("modpacks.common.select")
+              }
+              options={reinstallLoaderOptions.map((opt) => ({
+                value: opt.version,
+                label: opt.version,
+              }))}
+              onChange={(version) =>
+                setReinstallDialog((prev) =>
+                  prev ? { ...prev, selectedLoaderVersion: version } : null,
+                )
+              }
+            />
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setReinstallDialog(null)}
-                className="interactive-press rounded-xl bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("common.cancel")}
               </button>
@@ -1823,7 +2007,7 @@ export function SettingsTab({
                 type="button"
                 disabled={installingVersionId === reinstallDialog.version.id}
                 onClick={() => void confirmReinstall()}
-                className="interactive-press rounded-xl accent-bg px-3.5 py-1.5 text-xs font-semibold text-white hover:brightness-110"
+                className="btn btn-sm btn-accent"
               >
                 {tt("settings.versions.manage.reinstallConfirm")}
               </button>
@@ -1833,11 +2017,11 @@ export function SettingsTab({
       )}
       {simpleDeleteDialog && (
         <div
-          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center p-4"
           onClick={() => setSimpleDeleteDialog(null)}
         >
           <div
-            className="glass-modal w-[min(90vw,24rem)] p-5"
+            className="glass-modal w-[min(92vw,26rem)] p-5"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -1845,17 +2029,17 @@ export function SettingsTab({
           >
             <p
               id="version-delete-simple-title"
-              className="mb-5 text-sm leading-relaxed text-white/90"
+              className="text-sm leading-relaxed text-white/90"
             >
               {tt("settings.versions.delete.simplePrompt", {
                 version: simpleDeleteDialog.version.id,
               })}
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setSimpleDeleteDialog(null)}
-                className="interactive-press rounded-xl border border-white/10 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/18"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("common.cancel")}
               </button>
@@ -1867,7 +2051,7 @@ export function SettingsTab({
                   setSimpleDeleteDialog(null);
                   void performDelete(version, scope, targetLabel);
                 }}
-                className="interactive-press rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-semibold text-white shadow-lg hover:bg-amber-400 disabled:opacity-50"
+                className="btn btn-sm btn-danger"
               >
                 {tt("common.delete")}
               </button>
@@ -1877,22 +2061,24 @@ export function SettingsTab({
       )}
       {deleteDialog && (
         <div
-          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center p-4"
           onClick={() => setDeleteDialog(null)}
         >
           <div
-            className="glass-modal max-w-md p-5"
+            className="glass-modal w-[min(92vw,28rem)] p-5"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
           >
-            <h3 className="mb-2 text-sm font-semibold text-white">
+            <h3 className="text-[0.9375rem] font-semibold text-white">
               {tt("settings.versions.delete.title", { version: deleteDialog.version.id })}
             </h3>
-            <p className="mb-4 text-xs text-white/70">
+            <p className="ui-meta mt-1">
               {tt("settings.versions.delete.choicePrompt", {
                 version: deleteDialog.version.id,
               })}
             </p>
-            <div className="flex flex-col gap-2">
+            <div className="mt-4 flex flex-col gap-2">
               <button
                 type="button"
                 disabled={deletingVersionId === deleteDialog.version.id}
@@ -1907,7 +2093,7 @@ export function SettingsTab({
                     }),
                   );
                 }}
-                className="interactive-press rounded-xl border border-white/15 px-3.5 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+                className="btn btn-soft w-full justify-start"
               >
                 {tt("settings.versions.delete.gameOnly", {
                   gameVersion: deleteDialog.details.gameVersion,
@@ -1929,14 +2115,16 @@ export function SettingsTab({
                     tt("settings.versions.delete.loaderOnly", { loaderSuffix: suffix }),
                   );
                 }}
-                className="interactive-press rounded-xl border border-white/15 px-3.5 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+                className="btn btn-soft w-full justify-start"
               >
-                {tt("settings.versions.delete.loaderOnly", {
-                  loaderSuffix:
-                    deleteDialog.details.loaderVersions.length > 0
-                      ? ` (${deleteDialog.details.loaderVersions.join(", ")})`
-                      : "",
-                })}
+                <span className="truncate">
+                  {tt("settings.versions.delete.loaderOnly", {
+                    loaderSuffix:
+                      deleteDialog.details.loaderVersions.length > 0
+                        ? ` (${deleteDialog.details.loaderVersions.join(", ")})`
+                        : "",
+                  })}
+                </span>
               </button>
               <button
                 type="button"
@@ -1946,7 +2134,7 @@ export function SettingsTab({
                   setDeleteDialog(null);
                   void performDelete(version, "all", version.id);
                 }}
-                className="interactive-press rounded-xl border border-rose-400/40 bg-rose-500/15 px-3.5 py-2 text-left text-xs font-semibold text-rose-100 hover:bg-rose-500/25"
+                className="btn btn-danger w-full justify-start"
               >
                 {tt("settings.versions.delete.all")}
               </button>
@@ -1955,7 +2143,7 @@ export function SettingsTab({
               <button
                 type="button"
                 onClick={() => setDeleteDialog(null)}
-                className="interactive-press rounded-xl bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("common.cancel")}
               </button>
@@ -1965,14 +2153,16 @@ export function SettingsTab({
       )}
       {repairPrompt && (
         <div
-          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
+          className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center p-4"
           onClick={() => setRepairPrompt(null)}
         >
           <div
-            className="glass-modal max-w-md p-5"
+            className="glass-modal w-[min(92vw,28rem)] p-5"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
           >
-            <p className="mb-2 text-sm text-white/90">
+            <p className="text-sm leading-relaxed text-white/90">
               {tt("settings.versions.verify.promptText", {
                 version: repairPrompt.version.id,
                 checked: repairPrompt.result.checked_files,
@@ -1980,20 +2170,20 @@ export function SettingsTab({
                 corrupted: repairPrompt.result.corrupted_files,
               })}
             </p>
-            <label className="mb-4 flex items-center gap-2 text-[0.8125rem] text-white/70">
+            <label className="ui-meta mt-4 flex cursor-pointer items-center gap-2">
               <input
                 type="checkbox"
-                className="h-3.5 w-3.5 accent-white"
+                className="accent-checkbox"
                 checked={skipRepairPrompt}
                 onChange={(e) => handleSkipRepairPromptToggle(e.target.checked)}
               />
               <span>{tt("settings.versions.verify.skipPrompt")}</span>
             </label>
-            <div className="flex justify-end gap-2">
+            <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setRepairPrompt(null)}
-                className="interactive-press rounded-xl bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("common.cancel")}
               </button>
@@ -2011,7 +2201,7 @@ export function SettingsTab({
                     );
                   })();
                 }}
-                className="interactive-press rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+                className="btn btn-sm btn-accent"
               >
                 {tt("settings.versions.verify.rewriteButton")}
               </button>
@@ -2020,27 +2210,73 @@ export function SettingsTab({
         </div>
       )}
       <div
-        className={`flex min-h-0 w-full flex-1 overflow-hidden ${
-          fillPane ? "px-1 py-1" : "items-center justify-center px-4 py-4"
-        }`}
+        className={`flex min-h-0 w-full flex-1 flex-col ${fillPane ? "px-1 py-1" : "px-4 py-4"}`}
       >
         <div
-          className={[
-            "flex w-full min-h-0 flex-col gap-3",
-            fillPane
-              ? "h-full max-w-none"
-              : "max-h-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl",
-          ].join(" ")}
+          className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-3 ${
+            fillPane ? "" : "max-w-5xl"
+          }`}
         >
-          <div className="flex w-full shrink-0 justify-center">
-            <label className="glass-toolbar flex w-full max-w-xl items-center gap-3 px-4 py-2.5">
+          <div className="flex shrink-0 flex-wrap items-center gap-3">
+            <div
+              role="tablist"
+              className="seg-track relative flex items-center overflow-hidden p-1"
+            >
+              <div
+                className="seg-indicator pointer-events-none absolute bottom-1 top-1 rounded-lg transition-all duration-200 ease-out"
+                style={{
+                  left: `${settingsIndicator.left}px`,
+                  width: `${settingsIndicator.width}px`,
+                }}
+              />
+              {settingsTabs.map((tab) => {
+                const active = settingsTab === tab.id;
+                const count = tabMatchCounts?.[tab.id] ?? null;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    ref={(el) => {
+                      settingsTabRefs.current[tab.id] = el;
+                    }}
+                    onClick={() => {
+                      if ((settings?.ui_sounds_enabled ?? true) && settingsTab !== tab.id) {
+                        playTabSwitchSound();
+                      }
+                      setSettingsTab(tab.id);
+                    }}
+                    className={`interactive-press relative z-10 flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-[0.8125rem] font-semibold transition-colors ${
+                      active
+                        ? "text-white"
+                        : count === 0
+                          ? "text-white/35 hover:text-white/60"
+                          : "text-white/65 hover:text-white"
+                    }`}
+                  >
+                    <AssetIcon name={tab.icon} />
+                    <span>{tab.label}</span>
+                    {count != null && count > 0 && (
+                      <span className="rounded-md bg-white/10 px-1.5 text-[0.6875rem] leading-5 text-white/80">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <label className="glass-toolbar flex min-w-[14rem] flex-1 items-center gap-3 px-3.5 py-2 sm:ml-auto sm:max-w-sm">
               <Search className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
               <input
                 type="search"
                 value={settingsSearch}
                 onChange={(e) => setSettingsSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setSettingsSearch("");
+                }}
                 placeholder={tt("settings.search.placeholder")}
-                className="min-w-0 w-full bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+                className="w-full min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
                 aria-label={tt("settings.search.placeholder")}
               />
               <InputClearButton
@@ -2050,1821 +2286,1307 @@ export function SettingsTab({
               />
             </label>
           </div>
-          <div
-            className={[
-              "glass-panel w-full overflow-hidden",
-              fillPane ? "flex min-h-0 flex-1 flex-col" : "",
-            ].join(" ")}
-          >
-          <div
-            className={[
-              "custom-scrollbar px-6 py-5",
-              fillPane
-                ? "min-h-0 flex-1 overflow-y-auto"
-                : "max-h-[min(72vh,calc(100vh-11rem))] overflow-y-auto xl:max-h-[min(78vh,calc(100vh-10rem))] 2xl:max-h-[min(84vh,calc(100vh-9rem))]",
-            ].join(" ")}
-          >
-          {settingsSearchActive && !searchHasAnyMatches ? (
-            <p className="py-8 text-center text-sm text-white/55">
-              {tt("settings.search.noResults")}
-            </p>
-          ) : (
-          <>
-          {settingsTab === "game" && (
-            <SettingsCard title={tt("settings.card.game")}>
-              {settingsSearchActive && !searchHasMatchesOnTab ? (
-                <p className="py-6 text-center text-sm text-white/55">
-                  {tt("settings.search.noResults")}
-                </p>
-              ) : (
-                <>
-              {!settingsSearchActive && (
-              <div className="mb-4 flex items-center seg-track p-1 relative overflow-hidden">
-                <div
-                  className="pointer-events-none absolute top-1 bottom-1 rounded-md seg-indicator transition-all duration-200 ease-out"
-                  style={{
-                    left: `${gameSubIndicator.left}px`,
-                    width: `${gameSubIndicator.width}px`,
-                  }}
-                />
-                <button
-                  type="button"
-                  ref={(el) => {
-                    gameSubTabRefs.current.general = el;
-                  }}
-                  onClick={() => {
-                    if ((settings?.ui_sounds_enabled ?? true) && gameSubTab !== "general") playTabSwitchSound();
-                    setGameSubTab("general");
-                  }}
-                  className={`interactive-press relative z-10 flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    gameSubTab === "general" ? "text-white" : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  {tt("settings.game.subtab.general")}
-                </button>
-                <button
-                  type="button"
-                  ref={(el) => {
-                    gameSubTabRefs.current.java = el;
-                  }}
-                  onClick={() => {
-                    if ((settings?.ui_sounds_enabled ?? true) && gameSubTab !== "java") playTabSwitchSound();
-                    setGameSubTab("java");
-                  }}
-                  className={`interactive-press relative z-10 flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    gameSubTab === "java" ? "text-white" : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  {tt("settings.game.subtab.java")}
-                </button>
+
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
+            {settingsSearchActive && (!searchHasAnyMatches || !searchHasMatchesOnTab) ? (
+              <div className="glass-panel px-6 py-10 text-center">
+                <Search className="mx-auto mb-3 h-5 w-5 text-white/30" aria-hidden />
+                <p className="ui-meta">{tt("settings.search.noResults")}</p>
               </div>
-              )}
-              {(settingsSearchActive || gameSubTab === "general") &&
-                (!settingsSearchActive ||
-                  showSetting("game.showConsole") ||
-                  showSetting("game.closeLauncher") ||
-                  showSetting("game.checkProcesses") ||
-                  showSetting("game.gameDirectory") ||
-                  showSetting("game.windowSize")) && (
-                <div
-                  className={`${SETTINGS_DARK_BOX} space-y-4 ${
-                    settingsSearchActive &&
-                    (showSetting("game.ram") || showSetting("game.java"))
-                      ? "mb-4"
-                      : ""
-                  }`}
-                >
-                    {showSetting("game.graphicsAdapter") && (
-                    <div className="flex flex-col gap-2">
-                      <label className="text-sm text-white/90" htmlFor="graphics-adapter-select">
-                        {tt("settings.game.graphicsAdapter.label")}
-                      </label>
-                    <div ref={graphicsAdapterDropdownRef} className="relative">
-                      <button
-                        id="graphics-adapter-select"
-                        type="button"
-                        aria-haspopup="listbox"
-                        aria-expanded={isGraphicsAdapterDropdownOpen}
-                        onClick={() => setIsGraphicsAdapterDropdownOpen((prev) => !prev)}
-                        className="interactive-press launcher-select glass-control flex w-full items-center justify-between px-4 py-2 text-left text-sm outline-none"
+            ) : (
+              <div className="flex flex-col gap-3 pb-1">
+                {settingsTab === "game" && (
+                  <>
+                    {anyVisible(
+                      "game.gameDirectory",
+                      "game.showConsole",
+                      "game.closeLauncher",
+                      "game.checkProcesses",
+                    ) && (
+                      <SettingsSection
+                        title={tt("settings.game.subtab.general")}
+                        icon={<AssetIcon name="versions" />}
                       >
-                        <span className="min-w-0 truncate">
-                          {settings?.graphics_adapter || tt("settings.game.graphicsAdapter.auto")}
-                        </span>
-                        <span className="ml-2 shrink-0 text-[0.75rem] text-white/55">▾</span>
-                      </button>
-                      <AnimatePresence>
-                        {isGraphicsAdapterDropdownOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                            transition={{ duration: 0.14, ease: "easeOut" }}
-                            className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-y-auto glass-popover p-1 text-sm"
-                            role="listbox"
-                            aria-labelledby="graphics-adapter-select"
+                        {showSetting("game.gameDirectory") && (
+                          <SettingsRow
+                            label={tt("settings.game.gameDirectory.label")}
+                            hint={tt("settings.game.gameDirectory.hint")}
+                            stacked
                           >
-                            {[
-                              { value: "", label: tt("settings.game.graphicsAdapter.auto") },
-                              ...graphicsAdapters.map((adapter) => ({ value: adapter, label: adapter })),
-                              ...(settings?.graphics_adapter && !graphicsAdapters.includes(settings.graphics_adapter)
-                                ? [{ value: settings.graphics_adapter, label: settings.graphics_adapter }]
-                                : []),
-                            ].map((adapter) => {
-                              const selected = (settings?.graphics_adapter ?? "") === adapter.value;
-                              return (
-                                <button
-                                  key={adapter.value || "auto"}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={selected}
-                                  onClick={() => {
-                                    updateSettings({ graphics_adapter: adapter.value || null });
-                                    setIsGraphicsAdapterDropdownOpen(false);
-                                  }}
-                                  className={`flex w-full items-center rounded-lg px-3 py-2 text-left transition-colors ${
-                                    selected ? "seg-on" : "text-white/80 hover:bg-white/10"
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <div
+                                className="glass-control flex h-9 min-w-0 flex-1 items-center px-3"
+                                title={settings?.game_directory ?? undefined}
+                              >
+                                <span
+                                  className={`truncate ${
+                                    settings?.game_directory
+                                      ? "font-mono text-[0.8125rem] text-white/85"
+                                      : "text-sm text-white/45"
                                   }`}
                                 >
-                                  <span className="min-w-0 truncate">{adapter.label}</span>
+                                  {settings?.game_directory ||
+                                    tt("settings.game.gameDirectory.defaultPathHint")}
+                                </span>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void chooseGameDirectory()}
+                                  className="btn btn-soft"
+                                >
+                                  <AssetIcon name="folder" />
+                                  {tt("settings.game.gameDirectory.choose")}
                                 </button>
-                              );
-                            })}
-                          </motion.div>
+                                <button
+                                  type="button"
+                                  disabled={!settings?.game_directory}
+                                  onClick={() => updateSettings({ game_directory: null })}
+                                  className="btn btn-ghost"
+                                >
+                                  {tt("settings.common.reset")}
+                                </button>
+                              </div>
+                            </div>
+                          </SettingsRow>
                         )}
-                      </AnimatePresence>
-                    </div>
-                      <span className="text-[0.8125rem] text-white/45">
-                        {tt("settings.game.graphicsAdapter.hint")}
-                      </span>
-                    </div>
-                    )}
-                    {showSetting("game.showConsole") && (
-                    <SettingsToggle
-                      label={tt("settings.game.showConsoleOnLaunch.label")}
-                      yesLabel={tt("settings.common.toggle.on")}
-                      noLabel={tt("settings.common.toggle.off")}
-                      value={settings?.show_console_on_launch ?? false}
-                      onChange={(value: boolean) => updateSettings({ show_console_on_launch: value })}
-                    />
-                    )}
-                    {showSetting("game.closeLauncher") && (
-                    <SettingsToggle
-                      label={tt("settings.game.closeLauncherOnStart.label")}
-                      yesLabel={tt("settings.common.yes")}
-                      noLabel={tt("settings.common.no")}
-                      value={settings?.close_launcher_on_game_start ?? false}
-                      onChange={(value: boolean) => updateSettings({ close_launcher_on_game_start: value })}
-                    />
-                    )}
-                    {showSetting("game.checkProcesses") && (
-                    <SettingsToggle
-                      label={tt("settings.game.checkGameProcesses.label")}
-                      yesLabel={tt("settings.common.yes")}
-                      noLabel={tt("settings.common.no")}
-                      value={settings?.check_game_processes ?? true}
-                      onChange={(value: boolean) => updateSettings({ check_game_processes: value })}
-                    />
-                    )}
-
-                    {showSetting("game.gameDirectory") && (
-                    <>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm text-white/90">
-                          {tt("settings.game.gameDirectory.label")}
-                        </div>
-                        <div className="mt-1 break-all text-[0.8125rem] text-white/55">
-                          {settings?.game_directory
-                            ? settings.game_directory
-                            : tt("settings.game.gameDirectory.defaultPathHint")}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void (async () => {
-                              try {
-                                const path = await openFile({
-                                  multiple: false,
-                                  directory: true,
-                                });
-                                if (typeof path === "string" && path.trim()) {
-                                  updateSettings({ game_directory: path });
-                                }
-                              } catch (e) {
-                                console.error(e);
-                              }
-                            })();
-                          }}
-                          className="interactive-press rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:bg-black/60"
-                        >
-                          {tt("settings.game.gameDirectory.choose")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!settings?.game_directory}
-                          onClick={() => updateSettings({ game_directory: null })}
-                          className="interactive-press rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/20 disabled:opacity-60"
-                        >
-                          {tt("settings.common.reset")}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-[0.8125rem] text-white/45">
-                      {tt("settings.game.gameDirectory.hint")}
-                    </div>
-                    </>
-                    )}
-
-                  {showSetting("game.windowSize") && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-white/90">
-                      {tt("settings.game.windowSize.label")}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={320}
-                        max={7680}
-                        placeholder={tt("settings.game.windowSize.widthPlaceholder")}
-                        value={resolutionWidthInput}
-                        onChange={(e) => setResolutionWidthInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") commitResolution();
-                          if (e.key === "Escape") {
-                            setResolutionWidthInput(
-                              settings?.resolution_width != null
-                                ? String(settings.resolution_width)
-                                : "",
-                            );
-                            setResolutionHeightInput(
-                              settings?.resolution_height != null
-                                ? String(settings.resolution_height)
-                                : "",
-                            );
-                          }
-                        }}
-                        onBlur={commitResolution}
-                        className="no-number-spin h-9 w-28 rounded-xl border border-white/15 bg-black/40 px-3 text-xs font-semibold text-white/90 outline-none focus:border-white/35"
-                      />
-                      <span className="text-xs text-white/50">×</span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={320}
-                        max={7680}
-                        placeholder={tt("settings.game.windowSize.heightPlaceholder")}
-                        value={resolutionHeightInput}
-                        onChange={(e) => setResolutionHeightInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") commitResolution();
-                          if (e.key === "Escape") {
-                            setResolutionWidthInput(
-                              settings?.resolution_width != null
-                                ? String(settings.resolution_width)
-                                : "",
-                            );
-                            setResolutionHeightInput(
-                              settings?.resolution_height != null
-                                ? String(settings.resolution_height)
-                                : "",
-                            );
-                          }
-                        }}
-                        onBlur={commitResolution}
-                        className="no-number-spin h-9 w-28 rounded-xl border border-white/15 bg-black/40 px-3 text-xs font-semibold text-white/90 outline-none focus:border-white/35"
-                      />
-                    </div>
-                  </div>
-                  )}
-                </div>
-              )}
-              {(settingsSearchActive || gameSubTab === "java") &&
-                (showSetting("game.ram") || showSetting("game.java")) && (
-                <div className={`${SETTINGS_DARK_BOX} space-y-4`}>
-                  {showSetting("game.ram") && (
-                  <SettingsSlider
-                    label={tt("settings.game.ram.label")}
-                    min={1}
-                    max={ramSliderMaxGb}
-                    value={displayRamGb}
-                    onChange={(value: number) => setRamSliderLocal(Math.min(ramSliderMaxGb, Math.max(1, value)))}
-                    onChangeCommitted={(value: number) => {
-                      const clamped = Math.min(ramSliderMaxGb, Math.max(1, value));
-                      updateSettings({ ram_mb: clamped * 1024 });
-                      setRamSliderLocal(null);
-                    }}
-                    right={
-                      isRamEditing ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            ref={ramInputRef}
-                            type="number"
-                            inputMode="numeric"
-                            min={ramMinMb}
-                            max={ramMaxMb}
-                            value={ramInputMb}
-                            onChange={(e) => setRamInputMb(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") commitRamMb(ramInputMb); if (e.key === "Escape") cancelRamEditing(); }}
-                            onBlur={() => commitRamMb(ramInputMb)}
-                            className="no-number-spin h-7 w-28 rounded-lg border border-white/15 bg-black/25 px-2 text-right text-sm font-semibold text-white/90 outline-none focus:border-white/30"
+                        {showSetting("game.showConsole") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.game.showConsoleOnLaunch.label")}
+                            value={settings?.show_console_on_launch ?? false}
+                            onChange={(v) => updateSettings({ show_console_on_launch: v })}
                           />
-                          <span className="text-xs font-semibold text-white/70">
-                            {tt("settings.game.ram.mbUnit")}
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setIsRamEditing(true)}
-                          className="interactive-press text-sm font-semibold text-white/90 hover:text-white"
-                          title={tt("settings.game.ram.editInMbHint")}
-                        >
-                          {tt("settings.game.ram.gbValue", { gb: currentRamGbRounded })}
-                        </button>
-                      )
-                    }
-                  />
-                  )}
-                  {showSetting("game.java") && (
-                  <JavaSettingsTab language={language} systemMemoryGb={systemMemoryGb} showNotification={showNotification} />
-                  )}
-                </div>
-              )}
-                </>
-              )}
-            </SettingsCard>
-          )}
-
-          {settingsTab === "versions" && (
-            <SettingsCard title={tt("settings.card.versions")}>
-              {settingsSearchActive && !searchHasMatchesOnTab ? (
-                <p className="py-6 text-center text-sm text-white/55">
-                  {tt("settings.search.noResults")}
-                </p>
-              ) : (
-              <div className={`${SETTINGS_DARK_BOX} max-h-[clamp(260px,62vh,700px)] overflow-y-auto pr-1 space-y-4`}>
-              {showSetting("versions.showSnapshots") && (
-              <SettingsToggle
-                label={tt("settings.versions.showSnapshots.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.show_snapshots ?? false}
-                onChange={(value: boolean) => updateSettings({ show_snapshots: value })}
-              />
-              )}
-              {showSetting("versions.showAlpha") && (
-              <SettingsToggle
-                label={tt("settings.versions.showAlpha.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.show_alpha_versions ?? false}
-                onChange={(value: boolean) => updateSettings({ show_alpha_versions: value })}
-              />
-              )}
-              {showSetting("versions.forgeProxy") && (
-              <SettingsToggle
-                label={tt("settings.versions.forgeProxyFallback.label")}
-                yesLabel={tt("settings.common.yes")}
-                noLabel={tt("settings.common.no")}
-                value={settings?.forge_proxy_fallback ?? false}
-                onChange={(value: boolean) => updateSettings({ forge_proxy_fallback: value })}
-              />
-              )}
-              {(showSetting("versions.loaderFilter") || showSetting("versions.versionFilter")) && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {showSetting("versions.loaderFilter") && (
-                <div ref={versionsLoaderDropdownRef} className="relative text-xs text-white/70">
-                  <span className="mb-1 block">{tt("settings.versions.loaderFilter.label")}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsVersionsLoaderDropdownOpen((prev) => !prev);
-                      setIsVersionFilterDropdownOpen(false);
-                    }}
-                    className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/20 hover:bg-black/40"
-                  >
-                    <span>{tt(`settings.versions.loader.${versionsLoader}`)}</span>
-                    <span className="text-[0.75rem] text-white/50">▾</span>
-                  </button>
-                  <AnimatePresence>
-                    {isVersionsLoaderDropdownOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                        transition={{ duration: 0.14, ease: "easeOut" }}
-                        className="absolute left-0 z-30 mt-1 w-full overflow-hidden glass-popover p-1"
-                      >
-                        {(["vanilla", "fabric", "quilt", "forge", "neoforge"] as LoaderId[]).map((id) => {
-                          const active = versionsLoader === id;
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              onClick={() => {
-                                setVersionsLoader(id);
-                                setIsVersionsLoaderDropdownOpen(false);
-                              }}
-                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                active ? "seg-on" : "text-white/80 hover:bg-white/10"
-                              }`}
-                            >
-                              <span>{tt(`settings.versions.loader.${id}`)}</span>
-                            </button>
-                          );
-                        })}
-                      </motion.div>
+                        )}
+                        {showSetting("game.closeLauncher") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.game.closeLauncherOnStart.label")}
+                            value={settings?.close_launcher_on_game_start ?? false}
+                            onChange={(v) => updateSettings({ close_launcher_on_game_start: v })}
+                          />
+                        )}
+                        {showSetting("game.checkProcesses") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.game.checkGameProcesses.label")}
+                            value={settings?.check_game_processes ?? true}
+                            onChange={(v) => updateSettings({ check_game_processes: v })}
+                          />
+                        )}
+                      </SettingsSection>
                     )}
-                  </AnimatePresence>
-                </div>
-                )}
 
-                {showSetting("versions.versionFilter") && (
-                <div ref={versionsFilterDropdownRef} className="relative text-xs text-white/70">
-                  <span className="mb-1 block">{tt("settings.versions.versionFilter.label")}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsVersionFilterDropdownOpen((prev) => !prev);
-                      setIsVersionsLoaderDropdownOpen(false);
-                    }}
-                    className="interactive-press flex h-10 w-full items-center justify-between rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/20 hover:bg-black/40"
-                  >
-                    <span className="truncate">{selectedVersionFilterLabel}</span>
-                    <span className="text-[0.75rem] text-white/50">▾</span>
-                  </button>
-                  <AnimatePresence>
-                    {isVersionFilterDropdownOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                        transition={{ duration: 0.14, ease: "easeOut" }}
-                        className="absolute left-0 z-30 mt-1 w-full glass-popover p-1"
+                    {anyVisible("game.windowSize", "game.graphicsAdapter") && (
+                      <SettingsSection
+                        title={tt("settings.section.display")}
+                        icon={<AssetIcon name="display" />}
                       >
-                        <div className="px-1 pb-1">
-                          <div className="relative">
+                        {showSetting("game.windowSize") && (
+                          <SettingsRow label={tt("settings.game.windowSize.label")}>
                             <input
-                              ref={versionFilterInputRef}
-                              type="text"
-                              value={versionFilterQuery}
-                              onChange={(e) => setVersionFilterQuery(e.target.value)}
+                              type="number"
+                              inputMode="numeric"
+                              min={320}
+                              max={7680}
+                              aria-label={tt("settings.game.windowSize.widthPlaceholder")}
+                              placeholder={tt("settings.game.windowSize.widthPlaceholder")}
+                              value={resolutionWidthInput}
+                              onChange={(e) => setResolutionWidthInput(e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key === "Escape") {
-                                  setIsVersionFilterDropdownOpen(false);
-                                  return;
-                                }
-                                if (e.key === "Enter") {
-                                  const q = versionFilterQuery.trim().toLowerCase();
-                                  const exact = q
-                                    ? versionFilterOptions.find((v) => v.id.toLowerCase() === q)
-                                    : null;
-                                  const chosen = exact ?? versionFilterOptions[0] ?? null;
-                                  if (chosen) {
-                                    setSelectedVersionFilterId(chosen.id);
-                                    setIsVersionFilterDropdownOpen(false);
-                                  }
-                                }
+                                if (e.key === "Enter") commitResolution();
+                                if (e.key === "Escape") resetResolutionInputs();
                               }}
-                              placeholder={tt("play.version.searchPlaceholder")}
-                              className={`glass-control h-8 w-full rounded-lg border px-3 text-xs text-white/90 placeholder:text-white/35 outline-none ${
-                                versionFilterQuery ? "pr-8" : ""
-                              }`}
+                              onBlur={commitResolution}
+                              className={numberInputClass}
                             />
-                            <InputClearButton
-                              value={versionFilterQuery}
-                              onClear={() => setVersionFilterQuery("")}
-                              className="absolute right-1 top-1/2 -translate-y-1/2"
-                              aria-label={tt("common.clear")}
+                            <span className="text-sm text-white/40">×</span>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={320}
+                              max={7680}
+                              aria-label={tt("settings.game.windowSize.heightPlaceholder")}
+                              placeholder={tt("settings.game.windowSize.heightPlaceholder")}
+                              value={resolutionHeightInput}
+                              onChange={(e) => setResolutionHeightInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitResolution();
+                                if (e.key === "Escape") resetResolutionInputs();
+                              }}
+                              onBlur={commitResolution}
+                              className={numberInputClass}
+                            />
+                          </SettingsRow>
+                        )}
+                        {showSetting("game.graphicsAdapter") && (
+                          <SettingsRow
+                            label={tt("settings.game.graphicsAdapter.label")}
+                            hint={tt("settings.game.graphicsAdapter.hint")}
+                            htmlFor="graphics-adapter-select"
+                          >
+                            <SettingsSelect
+                              id="graphics-adapter-select"
+                              value={settings?.graphics_adapter ?? ""}
+                              options={graphicsAdapterOptions}
+                              onChange={(value) =>
+                                updateSettings({ graphics_adapter: value || null })
+                              }
+                            />
+                          </SettingsRow>
+                        )}
+                      </SettingsSection>
+                    )}
+
+                    {anyVisible("game.ram", "game.java") && (
+                      <SettingsSection
+                        title={tt("settings.section.java")}
+                        icon={<AssetIcon name="java" />}
+                      >
+                        {showSetting("game.ram") && (
+                          <div className="py-3.5">
+                            <SettingsSlider
+                              label={label("settings.game.ram.label")}
+                              min={1}
+                              max={ramSliderMaxGb}
+                              value={displayRamGb}
+                              onChange={(value: number) =>
+                                setRamSliderLocal(Math.min(ramSliderMaxGb, Math.max(1, value)))
+                              }
+                              onChangeCommitted={(value: number) => {
+                                const clamped = Math.min(ramSliderMaxGb, Math.max(1, value));
+                                updateSettings({ ram_mb: clamped * 1024 });
+                                setRamSliderLocal(null);
+                              }}
+                              right={
+                                isRamEditing ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      ref={ramInputRef}
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={ramMinMb}
+                                      max={ramMaxMb}
+                                      value={ramInputMb}
+                                      onChange={(e) => setRamInputMb(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") commitRamMb(ramInputMb);
+                                        if (e.key === "Escape") cancelRamEditing();
+                                      }}
+                                      onBlur={() => commitRamMb(ramInputMb)}
+                                      className="glass-control no-number-spin h-8 w-28 px-2.5 text-right text-sm font-semibold text-white/90 outline-none"
+                                    />
+                                    <span className="ui-meta">{tt("settings.game.ram.mbUnit")}</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsRamEditing(true)}
+                                    className="interactive-press glass-control h-8 px-2.5 text-sm font-semibold text-white/90 hover:text-white"
+                                    title={tt("settings.game.ram.editInMbHint")}
+                                  >
+                                    {tt("settings.game.ram.gbValue", {
+                                      gb: ramSliderLocal ?? currentRamGbRounded,
+                                    })}
+                                  </button>
+                                )
+                              }
                             />
                           </div>
-                        </div>
-                        <div ref={versionFilterListRef} className="max-h-[240px] overflow-y-auto px-1 pb-1">
-                          <button
-                            type="button"
-                            ref={(el) => {
-                              if (selectedVersionFilterId === null) {
-                                selectedVersionFilterButtonRef.current = el;
-                              }
-                            }}
-                            onClick={() => {
-                              setSelectedVersionFilterId(null);
-                              setIsVersionFilterDropdownOpen(false);
-                            }}
-                            className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors ${
-                              selectedVersionFilterId === null
-                                ? "seg-on"
-                                : "text-white/80 hover:bg-white/10"
-                            }`}
-                          >
-                            <span>{tt("settings.versions.versionFilter.all")}</span>
-                          </button>
-                          {versionFilterOptions.length === 0 ? (
-                            <div className="px-3 py-2 text-[0.8125rem] text-white/50">
-                              {tt("settings.versions.versionFilter.noneFound")}
-                            </div>
-                          ) : (
-                            versionFilterOptions.map((v) => {
-                              const selected = selectedVersionFilterId === v.id;
-                              return (
+                        )}
+                        {showSetting("game.java") && (
+                          <div className="py-3.5">
+                            <JavaSettingsTab
+                              embedded
+                              language={language}
+                              systemMemoryGb={systemMemoryGb}
+                              showNotification={showNotification}
+                            />
+                          </div>
+                        )}
+                      </SettingsSection>
+                    )}
+                  </>
+                )}
+
+                {settingsTab === "versions" && (
+                  <>
+                    {anyVisible(
+                      "versions.showSnapshots",
+                      "versions.showAlpha",
+                      "versions.forgeProxy",
+                    ) && (
+                      <SettingsSection
+                        title={tt("settings.section.versionList")}
+                        icon={<AssetIcon name="filter" />}
+                      >
+                        {showSetting("versions.showSnapshots") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.versions.showSnapshots.label")}
+                            value={settings?.show_snapshots ?? false}
+                            onChange={(v) => updateSettings({ show_snapshots: v })}
+                          />
+                        )}
+                        {showSetting("versions.showAlpha") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.versions.showAlpha.label")}
+                            value={settings?.show_alpha_versions ?? false}
+                            onChange={(v) => updateSettings({ show_alpha_versions: v })}
+                          />
+                        )}
+                        {showSetting("versions.forgeProxy") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.versions.forgeProxyFallback.label")}
+                            value={settings?.forge_proxy_fallback ?? false}
+                            onChange={(v) => updateSettings({ forge_proxy_fallback: v })}
+                          />
+                        )}
+                      </SettingsSection>
+                    )}
+
+                    {anyVisible(
+                      "versions.loaderFilter",
+                      "versions.versionFilter",
+                      "versions.available",
+                    ) && (
+                      <SettingsSection
+                        title={tt("settings.card.versions")}
+                        icon={<AssetIcon name="versions" />}
+                        actions={
+                          showSetting("versions.available") ? (
+                            <>
+                              {versionsLoader === "vanilla" && (
                                 <button
-                                  key={v.id}
-                                  ref={(el) => {
-                                    if (selected) selectedVersionFilterButtonRef.current = el;
-                                  }}
                                   type="button"
-                                  onClick={() => {
-                                    setSelectedVersionFilterId(v.id);
+                                  onClick={() => void handleImportCustomVersion()}
+                                  className="btn btn-sm btn-soft"
+                                >
+                                  <AssetIcon name="import" className="h-3.5 w-3.5" />
+                                  {tt("settings.versions.custom.importButton")}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={isLoadingVersions}
+                                onClick={() => void refreshVersionsList()}
+                                className="btn btn-sm btn-ghost"
+                              >
+                                <AssetIcon
+                                  name="updates"
+                                  className={`h-3.5 w-3.5 ${isLoadingVersions ? "animate-spin" : ""}`}
+                                  />
+                                {tt("settings.versions.refresh")}
+                              </button>
+                            </>
+                          ) : undefined
+                        }
+                      >
+                        {anyVisible("versions.loaderFilter", "versions.versionFilter") && (
+                          <div className="grid grid-cols-1 gap-3 py-3.5 sm:grid-cols-2">
+                            {showSetting("versions.loaderFilter") && (
+                              <div>
+                                <label
+                                  htmlFor="versions-loader-select"
+                                  className="ui-meta mb-1.5 block"
+                                >
+                                  {label("settings.versions.loaderFilter.label")}
+                                </label>
+                                <SettingsSelect
+                                  id="versions-loader-select"
+                                  className="w-full"
+                                  value={versionsLoader}
+                                  options={(
+                                    ["vanilla", "fabric", "quilt", "forge", "neoforge"] as LoaderId[]
+                                  ).map((id) => ({
+                                    value: id,
+                                    label: tt(`settings.versions.loader.${id}`),
+                                  }))}
+                                  onChange={(id) => {
+                                    setVersionsLoader(id);
                                     setIsVersionFilterDropdownOpen(false);
                                   }}
-                                  className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors ${
-                                    selected
-                                      ? "seg-on"
-                                      : "text-white/80 hover:bg-white/10"
-                                  }`}
+                                />
+                              </div>
+                            )}
+                            {showSetting("versions.versionFilter") && (
+                              <div ref={versionsFilterDropdownRef} className="relative">
+                                <span className="ui-meta mb-1.5 block">
+                                  {label("settings.versions.versionFilter.label")}
+                                </span>
+                                <button
+                                  type="button"
+                                  aria-haspopup="listbox"
+                                  aria-expanded={isVersionFilterDropdownOpen}
+                                  onClick={() => setIsVersionFilterDropdownOpen((prev) => !prev)}
+                                  className="interactive-press launcher-select glass-control flex h-9 w-full items-center px-3 text-left text-sm outline-none"
                                 >
-                                  <span className="truncate">{v.id}</span>
+                                  <span className="truncate">{selectedVersionFilterLabel}</span>
                                 </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-                )}
-              </div>
-              )}
-              {showSetting("versions.available") && (
-              <>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-white/90">
-                  {tt("settings.versions.available.label")}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {versionsLoader === "vanilla" && (
-                    <button
-                      type="button"
-                      onClick={() => void handleImportCustomVersion()}
-                      className="interactive-press rounded-xl border border-amber-400/40 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:border-amber-300/60 hover:text-amber-50"
-                    >
-                      {tt("settings.versions.custom.importButton")}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void (async () => {
-                        try {
-                          setIsLoadingVersions(true);
-                          const [available] = await Promise.all([
-                            loadAvailableByLoader(versionsLoader),
-                            loadInstalledVersions(),
-                          ]);
-                          setAvailableVersions(available);
-                        } catch (e) {
-                          console.error("Failed to refresh versions list:", e);
-                          showNotification(
-                            "error",
-                            tt("settings.versions.refreshFailed"),
-                          );
-                        } finally {
-                          setIsLoadingVersions(false);
-                        }
-                      })();
-                    }}
-                    className="interactive-press rounded-xl border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/20 hover:text-white"
-                  >
-                    {tt("settings.versions.refresh")}
-                  </button>
-                </div>
-              </div>
-              <div className="h-48 min-h-[12rem] overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-2">
-                {isLoadingVersions && (
-                  <div className="flex h-full items-center justify-center text-sm text-white/70">
-                    {tt("settings.versions.loading")}
-                  </div>
-                )}
-                {!isLoadingVersions && (!availableVersions || availableVersions.length === 0) && (
-                  <div className="flex h-full items-center justify-center text-sm text-white/60">
-                    {tt("settings.versions.noneFound")}
-                  </div>
-                )}
-                {!isLoadingVersions && availableVersions && availableVersions.length > 0 && (
-                  <div className="space-y-1.5">
-                    {filteredAvailableVersions.map((v) => {
-                      const installed = isVersionInstalled(v);
-                      const progress = downloadProgress[v.id];
-                      const percent =
-                        progress && progress.total > 0 ? Math.round(progress.percent) : null;
-                      return (
-                        <div
-                          key={v.id}
-                          className="group relative overflow-hidden rounded-xl bg-white/5 px-3 py-2 text-xs text-white/90"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate font-semibold">{v.id}</span>
-                                <span className="rounded-md bg-sky-500/20 px-2 py-0.5 text-[0.75rem] text-sky-200">
-                                  {tt(`settings.versions.loader.${v.loader}`)}
-                                </span>
-                                <span className="rounded-md bg-white/10 px-2 py-0.5 text-[0.75rem] text-white/70">
-                                  {v.version_type}
-                                </span>
-                                {installed && (
-                                  <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[0.75rem] font-semibold text-emerald-300">
-                                    {tt("settings.versions.installedBadge")}
-                                  </span>
-                                )}
+                                <AnimatePresence>
+                                  {isVersionFilterDropdownOpen && (
+                                    <motion.div
+                                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                      exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                                      transition={{ duration: 0.14, ease: "easeOut" }}
+                                      className="glass-popover absolute left-0 z-30 mt-1 w-full p-1"
+                                    >
+                                      <div className="relative px-1 pb-1 pt-0.5">
+                                        <input
+                                          ref={versionFilterInputRef}
+                                          type="text"
+                                          value={versionFilterQuery}
+                                          onChange={(e) => setVersionFilterQuery(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Escape") {
+                                              setIsVersionFilterDropdownOpen(false);
+                                              return;
+                                            }
+                                            if (e.key === "Enter") {
+                                              const q = versionFilterQuery.trim().toLowerCase();
+                                              const exact = q
+                                                ? versionFilterOptions.find(
+                                                    (v) => v.id.toLowerCase() === q,
+                                                  )
+                                                : null;
+                                              const chosen = exact ?? versionFilterOptions[0] ?? null;
+                                              if (chosen) {
+                                                setSelectedVersionFilterId(chosen.id);
+                                                setIsVersionFilterDropdownOpen(false);
+                                              }
+                                            }
+                                          }}
+                                          placeholder={tt("play.version.searchPlaceholder")}
+                                          className={`glass-control h-8 w-full px-3 text-xs text-white/90 outline-none placeholder:text-white/35 ${
+                                            versionFilterQuery ? "pr-8" : ""
+                                          }`}
+                                        />
+                                        <InputClearButton
+                                          value={versionFilterQuery}
+                                          onClear={() => setVersionFilterQuery("")}
+                                          className="absolute right-2 top-1/2 -translate-y-1/2"
+                                          aria-label={tt("common.clear")}
+                                        />
+                                      </div>
+                                      <div
+                                        ref={versionFilterListRef}
+                                        className="custom-scrollbar max-h-[240px] overflow-y-auto px-1 pb-1"
+                                      >
+                                        <button
+                                          type="button"
+                                          ref={(el) => {
+                                            if (selectedVersionFilterId === null) {
+                                              selectedVersionFilterButtonRef.current = el;
+                                            }
+                                          }}
+                                          onClick={() => {
+                                            setSelectedVersionFilterId(null);
+                                            setIsVersionFilterDropdownOpen(false);
+                                          }}
+                                          className={`flex w-full items-center rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+                                            selectedVersionFilterId === null
+                                              ? "seg-on"
+                                              : "text-white/80 hover:bg-white/10"
+                                          }`}
+                                        >
+                                          {tt("settings.versions.versionFilter.all")}
+                                        </button>
+                                        {versionFilterOptions.length === 0 ? (
+                                          <div className="ui-meta px-3 py-2">
+                                            {tt("settings.versions.versionFilter.noneFound")}
+                                          </div>
+                                        ) : (
+                                          versionFilterOptions.map((v) => {
+                                            const selected = selectedVersionFilterId === v.id;
+                                            return (
+                                              <button
+                                                key={v.id}
+                                                ref={(el) => {
+                                                  if (selected) {
+                                                    selectedVersionFilterButtonRef.current = el;
+                                                  }
+                                                }}
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedVersionFilterId(v.id);
+                                                  setIsVersionFilterDropdownOpen(false);
+                                                }}
+                                                className={`flex w-full items-center rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+                                                  selected
+                                                    ? "seg-on"
+                                                    : "text-white/80 hover:bg-white/10"
+                                                }`}
+                                              >
+                                                <span className="truncate">{v.id}</span>
+                                              </button>
+                                            );
+                                          })
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
                               </div>
-                              <div className="mt-0.5 text-[0.8125rem] text-white/60">
-                                {v.release_time
-                                  ? new Date(v.release_time).toLocaleString(
-                                      localeTag(language),
-                                    )
-                                  : "—"}
-                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {showSetting("versions.available") && (
+                          <div className="py-3.5">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <span className="ui-meta">
+                                {label("settings.versions.available.label")}
+                              </span>
+                              {!isLoadingVersions && availableVersions && (
+                                <span className="ui-caption">{filteredAvailableVersions.length}</span>
+                              )}
                             </div>
-                            <div className="flex flex-col items-end gap-1">
-                              {percent !== null && (
-                                <div className="w-32">
-                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                                    <div
-                                      className="h-full rounded-full bg-emerald-400 transition-[width]"
-                                      style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-                                    />
-                                  </div>
-                                  <div className="mt-0.5 text-[0.75rem] text-white/70">
-                                    {percent}%
-                                  </div>
+                            <div className="custom-scrollbar glass-inset max-h-[26rem] min-h-[8rem] overflow-y-auto p-1">
+                              {isLoadingVersions ? (
+                                <div className="ui-meta flex h-32 items-center justify-center">
+                                  {tt("settings.versions.loading")}
+                                </div>
+                              ) : !availableVersions || availableVersions.length === 0 ? (
+                                <div className="ui-meta flex h-32 items-center justify-center px-4 text-center">
+                                  {tt("settings.versions.noneFound")}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-0.5">
+                                  {filteredAvailableVersions.map((v) => {
+                                    const installed = isVersionInstalled(v);
+                                    const progress = downloadProgress[v.id];
+                                    const percent =
+                                      progress && progress.total > 0
+                                        ? Math.round(progress.percent)
+                                        : null;
+                                    const installing = installingVersionId === v.id;
+                                    const checking = checkingVersionId === v.id;
+                                    const deleting = deletingVersionId === v.id;
+                                    return (
+                                      <div
+                                        key={v.id}
+                                        className="flex flex-col gap-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.035] sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                                      >
+                                        <div className="min-w-0">
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="truncate text-sm font-semibold text-white/90">
+                                              {v.id}
+                                            </span>
+                                            <span className="tag">
+                                              {tt(`settings.versions.loader.${v.loader}`)}
+                                            </span>
+                                            {v.version_type && v.version_type !== v.loader && (
+                                              <span className="tag">{v.version_type}</span>
+                                            )}
+                                            {installed && (
+                                              <span className="tag bg-emerald-500/15 text-emerald-300">
+                                                {tt("settings.versions.installedBadge")}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {v.release_time && (
+                                            <div className="ui-caption mt-0.5">
+                                              {new Date(v.release_time).toLocaleDateString(
+                                                localeTag(language),
+                                              )}
+                                            </div>
+                                          )}
+                                          {percent !== null && installing && (
+                                            <div className="mt-1.5 flex items-center gap-2">
+                                              <div className="h-1.5 w-40 overflow-hidden rounded-full bg-white/10">
+                                                <div
+                                                  className="progress-fill h-full rounded-full transition-[width]"
+                                                  style={{
+                                                    width: `${Math.min(100, Math.max(0, percent))}%`,
+                                                  }}
+                                                />
+                                              </div>
+                                              <span className="ui-caption">{percent}%</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-1.5">
+                                          {installed && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                disabled={checking || installing || deleting}
+                                                onClick={() => void handleCheckVersionFiles(v)}
+                                                className="btn btn-sm btn-ghost"
+                                              >
+                                                {checking
+                                                  ? tt("settings.versions.verify.checking")
+                                                  : tt("settings.versions.verify.button")}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={installing || deleting}
+                                                onClick={() => void openDeleteFlow(v)}
+                                                className="icon-btn hover:!bg-red-500/15 hover:!text-red-200"
+                                                title={
+                                                  deleting
+                                                    ? tt("settings.versions.action.deleting")
+                                                    : tt("settings.versions.action.delete")
+                                                }
+                                                aria-label={tt("settings.versions.action.delete")}
+                                              >
+                                                <AssetIcon name="delete" />
+                                              </button>
+                                            </>
+                                          )}
+                                          <button
+                                            type="button"
+                                            disabled={installing || deleting}
+                                            onClick={() =>
+                                              void (installed
+                                                ? openReinstallDialog(v)
+                                                : handleInstallVersion(v))
+                                            }
+                                            className={`btn btn-sm min-w-[7.5rem] ${
+                                              installed ? "btn-soft" : "btn-accent"
+                                            }`}
+                                          >
+                                            {!installed && !installing && (
+                                              <AssetIcon name="download" className="h-3.5 w-3.5" />
+                                            )}
+                                            {installing
+                                              ? tt("settings.versions.action.installing")
+                                              : installed
+                                                ? tt("settings.versions.action.reinstall")
+                                                : tt("settings.versions.action.install")}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
+                            </div>
+                            {installingVersionId && (
+                              <div className="mt-3">
+                                <div className="ui-caption mb-1.5">
+                                  {tt("settings.versions.installLog", {
+                                    version: installingVersionId,
+                                  })}
+                                </div>
+                                <div className="custom-scrollbar max-h-36 min-h-[5rem] overflow-y-auto rounded-xl border border-[color:var(--seam)] bg-black/50 px-3 py-2 font-mono text-[0.75rem] text-white/75">
+                                  {installLogLines.length > 0 ? (
+                                    installLogLines.map((entry, idx) => (
+                                      <div
+                                        key={`${idx}-${entry.line.slice(0, 24)}`}
+                                        className={`whitespace-pre break-all ${
+                                          entry.source === "stderr" ? "text-red-300" : ""
+                                        }`}
+                                      >
+                                        {entry.line}
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="text-white/40">{tt("play.install.logWaiting")}</div>
+                                  )}
+                                  <div ref={installLogEndRef} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </SettingsSection>
+                    )}
+                  </>
+                )}
+
+                {settingsTab === "launcher" && (
+                  <>
+                    {onCheckUpdate && showSetting("launcher.updates") && (
+                      <SettingsSection
+                        title={tt("settings.card.updates")}
+                        icon={<AssetIcon name="updates" />}
+                      >
+                        <SettingsRow
+                          label={
+                            <>
+                              <span>{updateStatusText}</span>
+                              {updateStatus === "downloading" && updateDownloadPercent != null && (
+                                <span className="mt-2 block h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-white/10">
+                                  <span
+                                    className="progress-fill block h-full rounded-full transition-[width]"
+                                    style={{
+                                      width: `${Math.min(100, Math.max(0, updateDownloadPercent))}%`,
+                                    }}
+                                  />
+                                </span>
+                              )}
+                            </>
+                          }
+                        >
+                          {updateStatus === "available" && onInstallUpdate && (
+                            <button
+                              type="button"
+                              onClick={() => void onInstallUpdate()}
+                              className="btn btn-sm btn-accent"
+                            >
+                              <AssetIcon name="download" className="h-3.5 w-3.5" />
+                              {tt("settings.updates.installNow")}
+                            </button>
+                          )}
+                          {updateStatus !== "downloading" && updateStatus !== "installing" && (
+                            <button
+                              type="button"
+                              disabled={updateStatus === "checking"}
+                              title={
+                                onPreviewUpdatePopup ? tt("settings.updates.checkNowHint") : undefined
+                              }
+                              onClick={(e) => {
+                                if (e.shiftKey && onPreviewUpdatePopup) {
+                                  void onPreviewUpdatePopup();
+                                  return;
+                                }
+                                void onCheckUpdate?.();
+                              }}
+                              className="btn btn-sm btn-soft"
+                            >
+                              <AssetIcon
+                                name="updates"
+                                className={`h-3.5 w-3.5 ${updateStatus === "checking" ? "animate-spin" : ""}`}
+                                />
+                              {tt("settings.updates.checkNow")}
+                            </button>
+                          )}
+                        </SettingsRow>
+                        <SettingsSwitchRow
+                          label={tt("settings.updates.checkOnStart.label")}
+                          value={settings?.check_updates_on_start ?? true}
+                          onChange={(v) => updateSettings({ check_updates_on_start: v })}
+                        />
+                        <SettingsSwitchRow
+                          label={tt("settings.updates.autoInstall.label")}
+                          value={settings?.auto_install_updates ?? false}
+                          onChange={(v) => updateSettings({ auto_install_updates: v })}
+                        />
+                      </SettingsSection>
+                    )}
+
+                    {anyVisible(
+                      "launcher.openOnProfiles",
+                      "launcher.uiSounds",
+                      "launcher.discordRpc",
+                      "launcher.minimizeToTray",
+                      "launcher.autostart",
+                      "launcher.splitView",
+                    ) && (
+                      <SettingsSection
+                        title={tt("settings.section.behavior")}
+                        icon={<AssetIcon name="options" />}
+                      >
+                        {showSetting("launcher.openOnProfiles") && (
+                          <SettingsRow label={tt("settings.launcher.openOnProfilesTab.label")}>
+                            <SettingsSegmented
+                              ariaLabel={label("settings.launcher.openOnProfilesTab.label")}
+                              value={settings?.open_launcher_on_profiles_tab ? "profiles" : "home"}
+                              options={[
+                                { value: "home", label: tt("settings.launcher.openOnProfilesTab.no") },
+                                {
+                                  value: "profiles",
+                                  label: tt("settings.launcher.openOnProfilesTab.yes"),
+                                },
+                              ]}
+                              onChange={(value) =>
+                                updateSettings({
+                                  open_launcher_on_profiles_tab: value === "profiles",
+                                })
+                              }
+                            />
+                          </SettingsRow>
+                        )}
+                        {showSetting("launcher.uiSounds") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.uiSounds.label")}
+                            value={settings?.ui_sounds_enabled ?? true}
+                            onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
+                          />
+                        )}
+                        {showSetting("launcher.discordRpc") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.discordRpc.label")}
+                            hint={tt("settings.launcher.discordRpc.hint")}
+                            value={settings?.discord_rpc_enabled ?? true}
+                            onChange={(v) => updateSettings({ discord_rpc_enabled: v })}
+                          />
+                        )}
+                        {showSetting("launcher.minimizeToTray") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.minimizeToTray.label")}
+                            value={settings?.minimize_to_tray_on_close ?? false}
+                            onChange={(v) => updateSettings({ minimize_to_tray_on_close: v })}
+                          />
+                        )}
+                        {showSetting("launcher.autostart") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.autostart.label")}
+                            value={settings?.autostart_enabled ?? false}
+                            onChange={(v) => updateSettings({ autostart_enabled: v })}
+                          />
+                        )}
+                        {showSetting("launcher.splitView") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.splitView.label")}
+                            hint={tt("settings.launcher.splitView.hint")}
+                            value={settings?.split_view_enabled ?? false}
+                            onChange={(v) => updateSettings({ split_view_enabled: v })}
+                          />
+                        )}
+                      </SettingsSection>
+                    )}
+
+                    {anyVisible(
+                      "launcher.language",
+                      "launcher.sidebarPosition",
+                      "launcher.sidebarOrder",
+                    ) && (
+                      <SettingsSection
+                        title={tt("settings.section.interface")}
+                        icon={<AssetIcon name="grid" />}
+                      >
+                        {showSetting("launcher.language") && (
+                          <SettingsRow label={tt("settings.launcher.interfaceLanguage.label")}>
+                            <SettingsSegmented
+                              ariaLabel={label("settings.launcher.interfaceLanguage.label")}
+                              value={language}
+                              options={SUPPORTED_LANGUAGES.map((code) => ({
+                                value: code,
+                                label: tt(`settings.launcher.interfaceLanguage.${code}`),
+                              }))}
+                              onChange={(code) => setLanguage(code)}
+                            />
+                          </SettingsRow>
+                        )}
+                        {showSetting("launcher.sidebarPosition") && (
+                          <SettingsRow
+                            label={tt("settings.launcher.sidebarPosition.label")}
+                            htmlFor="sidebar-position-select"
+                          >
+                            <SettingsSelect
+                              id="sidebar-position-select"
+                              className="w-full sm:w-48"
+                              value={parseSidebarPosition(settings?.sidebar_position)}
+                              options={SIDEBAR_POSITIONS.map((pos) => ({
+                                value: pos,
+                                label: tt(`settings.launcher.sidebarPosition.${pos}`),
+                              }))}
+                              onChange={(pos) => updateSettings({ sidebar_position: pos })}
+                            />
+                          </SettingsRow>
+                        )}
+                        {showSetting("launcher.sidebarOrder") && (
+                          <SettingsRow label={tt("settings.launcher.sidebarOrder.label")} stacked>
+                            <div className="glass-inset flex flex-col gap-0.5 p-1 sm:max-w-sm">
+                              {sidebarOrder.map((id, index) => (
+                                <div
+                                  key={id}
+                                  className="flex items-center justify-between gap-3 rounded-xl py-1 pl-3 pr-1 text-sm text-white/85 hover:bg-white/[0.035]"
+                                >
+                                  <span className="flex items-center gap-2.5">
+                                    <span className="ui-caption w-3 text-right">{index + 1}</span>
+                                    {sidebarItemLabel(id)}
+                                  </span>
+                                  <span className="flex items-center">
+                                    <button
+                                      type="button"
+                                      disabled={index === 0}
+                                      onClick={() => moveSidebarItem(id, "up")}
+                                      className="icon-btn disabled:opacity-30"
+                                      aria-label={tt("settings.launcher.sidebarOrder.moveUp")}
+                                      title={tt("settings.launcher.sidebarOrder.moveUp")}
+                                    >
+                                      <AssetIcon name="arrow_down" className="h-4 w-4 rotate-180" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={index === sidebarOrder.length - 1}
+                                      onClick={() => moveSidebarItem(id, "down")}
+                                      className="icon-btn disabled:opacity-30"
+                                      aria-label={tt("settings.launcher.sidebarOrder.moveDown")}
+                                      title={tt("settings.launcher.sidebarOrder.moveDown")}
+                                    >
+                                      <AssetIcon name="arrow_down" />
+                                    </button>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </SettingsRow>
+                        )}
+                      </SettingsSection>
+                    )}
+
+                    {(anyVisible(
+                      "launcher.accentColor",
+                      "launcher.backgroundImage",
+                      "launcher.backgroundBlur",
+                      "launcher.backgroundAnimation",
+                      "launcher.disableAnimations",
+                      "launcher.hideBanners",
+                    ) ||
+                      (seasonalThemeActive &&
+                        showSetting("launcher.disableThematicDecorations"))) && (
+                      <SettingsSection
+                        title={tt("settings.section.appearance")}
+                        icon={<AssetIcon name="palette" />}
+                      >
+                        {showSetting("launcher.accentColor") && (
+                          <SettingsRow label={tt("settings.launcher.accentColor.label")}>
+                            <div ref={accentPickerRef} className="relative">
                               <button
                                 type="button"
-                                disabled={
-                                  installingVersionId === v.id || deletingVersionId === v.id
-                                }
-                                onClick={() =>
-                                  void (installed ? openReinstallDialog(v) : handleInstallVersion(v))
-                                }
-                                className={`interactive-press rounded-xl px-3 py-1.5 text-[0.8125rem] font-semibold ${
-                                  installingVersionId === v.id
-                                    ? "cursor-default bg-white/10 text-white/60"
-                                    : "accent-bg text-white hover:brightness-110"
-                                }`}
+                                aria-expanded={isAccentPickerOpen}
+                                onClick={() => setIsAccentPickerOpen((v) => !v)}
+                                className="interactive-press glass-control flex h-9 items-center gap-2.5 pl-1.5 pr-3"
                               >
-                                {installingVersionId === v.id
-                                  ? tt("settings.versions.action.installing")
-                                  : installed
-                                    ? tt("settings.versions.action.reinstall")
-                                    : tt("settings.versions.action.install")}
+                                <span
+                                  className="h-6 w-6 rounded-md ring-1 ring-inset ring-white/15"
+                                  style={{ background: accentColor }}
+                                />
+                                <span className="font-mono text-[0.8125rem] text-white/80">
+                                  {accentColor}
+                                </span>
                               </button>
-                              {installed && (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={
-                                      checkingVersionId === v.id ||
-                                      installingVersionId === v.id ||
-                                      deletingVersionId === v.id
-                                    }
-                                    onClick={() => void handleCheckVersionFiles(v)}
-                                    className={`interactive-press rounded-xl px-3 py-1.5 text-[0.8125rem] font-semibold ${
-                                      checkingVersionId === v.id
-                                        ? "cursor-default bg-white/10 text-white/60"
-                                        : "border border-white/15 text-white/80 hover:border-white/20 hover:text-white"
-                                    }`}
+                              {isAccentPickerOpen && (
+                                <div className="glass-popover absolute right-0 top-full z-40 mt-2 w-80 p-3 text-xs text-white">
+                                  <div className="mb-3 text-[0.8125rem] font-semibold text-white/80">
+                                    {tt("settings.launcher.accentColor.popupTitle")}
+                                    </div>
+                                  <div className="mb-3 flex flex-wrap gap-1.5">
+                                    {ACCENT_PRESETS.map((preset) => (
+                                      <button
+                                        key={preset}
+                                        type="button"
+                                        onClick={() => applyAccentColor(preset)}
+                                        aria-label={preset}
+                                        title={preset}
+                                        className={`interactive-press h-7 w-7 rounded-md ring-inset ${
+                                          accentColor.toLowerCase() === preset
+                                            ? "ring-2 ring-white"
+                                            : "ring-1 ring-white/15 hover:ring-white/40"
+                                        }`}
+                                        style={{ background: preset }}
+                                      />
+                                    ))}
+                                  </div>
+                                  <div className="mb-3 flex items-center gap-3">
+                                    <div
+                                      ref={accentHueWheelRef}
+                                      role="slider"
+                                      tabIndex={0}
+                                      aria-label={tt("settings.launcher.accentColor.pickColorAria")}
+                                      aria-valuemin={0}
+                                      aria-valuemax={360}
+                                      aria-valuenow={Math.round(accentColorHsv.h)}
+                                      className="relative h-14 w-14 shrink-0 cursor-crosshair touch-none select-none rounded-full"
+                                      style={{
+                                        boxShadow:
+                                          "0 0 0 1px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.45) inset, 0 8px 28px rgba(0,0,0,0.55)",
+                                      }}
+                                      onPointerDown={handleAccentWheelPointerDown}
+                                      onPointerMove={handleAccentWheelPointerMove}
+                                      onPointerUp={handleAccentWheelPointerEnd}
+                                      onPointerCancel={handleAccentWheelPointerEnd}
+                                      onKeyDown={(e) => {
+                                        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                                        e.preventDefault();
+                                        const rgb = hexToRgb(accentColor);
+                                        if (!rgb) return;
+                                        const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                                        const delta = e.key === "ArrowRight" ? 3 : -3;
+                                        const next = hsvToRgb((hsv.h + delta + 360) % 360, hsv.s, hsv.v);
+                                        applyAccentColor(rgbToHex(next.r, next.g, next.b));
+                                      }}
+                                    >
+                                      <div
+                                        className="pointer-events-none absolute inset-0 overflow-hidden rounded-full [backface-visibility:hidden] [transform:translateZ(0)]"
+                                        style={ACCENT_HUE_RING_STYLE}
+                                      />
+                                      <div className="pointer-events-none absolute inset-[10px] rounded-full ring-1 ring-black/50">
+                                        <div
+                                          className="h-full w-full rounded-full"
+                                          style={{ backgroundColor: accentColor }}
+                                        />
+                                      </div>
+                                      <div
+                                        className="pointer-events-none absolute left-1/2 top-1/2 z-10"
+                                        style={{ width: 0, height: 0 }}
+                                      >
+                                        <div
+                                          style={{
+                                            transform: `rotate(${accentColorHsv.h}deg) translateY(-23px)`,
+                                          }}
+                                        >
+                                          <div
+                                            className="h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white shadow-[0_2px_8px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
+                                            aria-hidden
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                                      <span className="ui-caption">
+                                        {tt("settings.launcher.accentColor.currentLabel")}
+                                      </span>
+                                      <div className="relative">
+                                        <input
+                                          type="text"
+                                          maxLength={7}
+                                          value={accentInput}
+                                          onChange={(e) => setAccentInput(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") e.currentTarget.blur();
+                                          }}
+                                          onBlur={(e) => {
+                                            const raw = e.target.value.trim();
+                                            const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+                                            if (!raw || !/^#[0-9a-fA-F]{6}$/.test(withHash)) {
+                                              setAccentInput(accentColor);
+                                              return;
+                                            }
+                                            applyAccentColor(withHash.toLowerCase());
+                                          }}
+                                          className={`glass-control h-8 w-full px-2.5 font-mono text-[0.8125rem] text-white/85 outline-none ${
+                                            accentInput ? "pr-8" : ""
+                                          }`}
+                                        />
+                                        <InputClearButton
+                                          value={accentInput}
+                                          onClear={() => setAccentInput("")}
+                                          className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+                                          aria-label={tt("common.clear")}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="ui-caption mb-1.5">
+                                    {tt("settings.launcher.accentColor.svPadLabel")}
+                                  </div>
+                                  <div
+                                    ref={accentSvPadRef}
+                                    className="relative h-24 w-full cursor-crosshair touch-none select-none overflow-hidden rounded-xl ring-1 ring-white/10"
+                                    style={{
+                                      backgroundImage: `linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, hsl(${accentColorHsv.h} 100% 50%))`,
+                                    }}
+                                    aria-label={tt("settings.launcher.accentColor.svPadAria")}
+                                    onPointerDown={handleAccentSvPointerDown}
+                                    onPointerMove={handleAccentSvPointerMove}
+                                    onPointerUp={handleAccentSvPointerEnd}
+                                    onPointerCancel={handleAccentSvPointerEnd}
                                   >
-                                    {checkingVersionId === v.id
-                                      ? tt("settings.versions.verify.checking")
-                                      : tt("settings.versions.verify.button")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={
-                                      installingVersionId === v.id || deletingVersionId === v.id
-                                    }
-                                    onClick={() => void openDeleteFlow(v)}
-                                    className={`interactive-press rounded-xl px-3 py-1.5 text-[0.8125rem] font-semibold ${
-                                      deletingVersionId === v.id
-                                        ? "cursor-default bg-white/10 text-white/60"
-                                        : "border border-rose-400/35 text-rose-200 hover:border-rose-300/55 hover:text-rose-100"
-                                    }`}
-                                  >
-                                    {deletingVersionId === v.id
-                                      ? tt("settings.versions.action.deleting")
-                                      : tt("settings.versions.action.delete")}
-                                  </button>
-                                </>
+                                    <div
+                                      className="pointer-events-none absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/95 shadow-[0_2px_8px_rgba(0,0,0,0.45)] ring-1 ring-black/35"
+                                      style={{
+                                        left: `${accentColorHsv.s}%`,
+                                        top: `${100 - accentColorHsv.v}%`,
+                                      }}
+                                      aria-hidden
+                                    />
+                                  </div>
+                                  <p className="ui-caption mt-2">
+                                    {tt("settings.launcher.accentColor.helpText")}
+                                  </p>
+                                </div>
                               )}
                             </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              {installingVersionId && (
-                <div className="mt-3 space-y-1">
-                  <div className="text-[0.75rem] font-semibold text-white/50">
-                    {tt("settings.versions.installLog", { version: installingVersionId })}
-                  </div>
-                  <div className="custom-scrollbar max-h-36 min-h-[5rem] overflow-y-auto rounded-xl border border-white/10 bg-black/80 px-3 py-2 font-mono text-[0.75rem] text-emerald-200/90">
-                    {installLogLines.length > 0 ? (
-                      installLogLines.map((entry, idx) => (
-                        <div
-                          key={`${idx}-${entry.line.slice(0, 24)}`}
-                          className={`whitespace-pre break-all ${
-                            entry.source === "stderr" ? "text-red-300" : ""
-                          }`}
-                        >
-                          {entry.line}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-white/45">{tt("play.install.logWaiting")}</div>
-                    )}
-                    <div ref={installLogEndRef} />
-                  </div>
-                </div>
-              )}
-              </>
-              )}
-              </div>
-              )}
-            </SettingsCard>
-          )}
-
-          {settingsTab === "launcher" && (
-            <SettingsCard title={tt("settings.card.launcher")}>
-              {settingsSearchActive && !searchHasMatchesOnTab ? (
-                <p className="py-6 text-center text-sm text-white/55">
-                  {tt("settings.search.noResults")}
-                </p>
-              ) : (
-              <div className="max-h-[clamp(220px,45vh,520px)] overflow-y-auto pr-1 space-y-3">
-              {onCheckUpdate && showSetting("launcher.updates") && (
-                <div className={`${SETTINGS_DARK_BOX} space-y-2`}>
-                  <span className="text-xs font-semibold text-white/60">
-                    {tt("settings.card.updates")}
-                  </span>
-                  <SettingsToggle
-                    label={tt("settings.updates.checkOnStart.label")}
-                    yesLabel={tt("settings.common.toggle.on")}
-                    noLabel={tt("settings.common.toggle.off")}
-                    value={settings?.check_updates_on_start ?? true}
-                    onChange={(v) => updateSettings({ check_updates_on_start: v })}
-                  />
-                  <SettingsToggle
-                    label={tt("settings.updates.autoInstall.label")}
-                    yesLabel={tt("settings.common.toggle.on")}
-                    noLabel={tt("settings.common.toggle.off")}
-                    value={settings?.auto_install_updates ?? false}
-                    onChange={(v) => updateSettings({ auto_install_updates: v })}
-                  />
-                  <div className="flex items-center justify-between gap-3 pt-1">
-                    <span className="text-xs text-white/70">
-                      {updateStatus === "checking" && tt("settings.updates.checking")}
-                      {updateStatus === "downloading" &&
-                        tt("settings.updates.downloading", {
-                          percent: updateDownloadPercent ?? 0,
-                        })}
-                      {updateStatus === "installing" && tt("settings.updates.installing")}
-                      {updateStatus === "available" &&
-                        updateVersion &&
-                        tt("settings.updates.available", { version: updateVersion })}
-                      {updateStatus === "up-to-date" && tt("settings.updates.upToDate")}
-                      {updateStatus === "error" && tt("settings.updates.checkFailed")}
-                      {updateStatus === "idle" && "\u00A0"}
-                    </span>
-                    <div className="flex gap-2">
-                      {updateStatus === "available" && onInstallUpdate && (
-                        <button
-                          type="button"
-                          onClick={() => void onInstallUpdate()}
-                          className="interactive-press rounded-xl bg-accent-from/20 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
-                        >
-                          {tt("settings.updates.installNow")}
-                        </button>
-                      )}
-                      {(updateStatus === "idle" ||
-                        updateStatus === "up-to-date" ||
-                        updateStatus === "error" ||
-                        updateStatus === "available" ||
-                        updateStatus === "checking") && (
-                        <button
-                          type="button"
-                          disabled={updateStatus === "checking"}
-                          title={
-                            onPreviewUpdatePopup
-                              ? tt("settings.updates.checkNowHint")
-                              : undefined
-                          }
-                          onClick={(e) => {
-                            if (e.shiftKey && onPreviewUpdatePopup) {
-                              void onPreviewUpdatePopup();
-                              return;
-                            }
-                            void onCheckUpdate?.();
-                          }}
-                          className="interactive-press rounded-xl border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/80 hover:border-white/20 hover:text-white disabled:opacity-50"
-                        >
-                          {tt("settings.updates.checkNow")}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {updateStatus === "downloading" && updateDownloadPercent != null && (
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-emerald-400 transition-[width]"
-                        style={{
-                          width: `${Math.min(100, Math.max(0, updateDownloadPercent))}%`,
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              {(
-                !settingsSearchActive ||
-                showSetting("launcher.openOnProfiles") ||
-                showSetting("launcher.uiSounds") ||
-                showSetting("launcher.discordRpc") ||
-                showSetting("launcher.minimizeToTray") ||
-                showSetting("launcher.autostart") ||
-                showSetting("launcher.splitView") ||
-                showSetting("launcher.disableAnimations") ||
-                showSetting("launcher.hideBanners") ||
-                (isSeasonalThemePeriod() && showSetting("launcher.disableThematicDecorations")) ||
-                showSetting("launcher.language") ||
-                showSetting("launcher.accentColor") ||
-                showSetting("launcher.backgroundImage") ||
-                showSetting("launcher.backgroundBlur") ||
-                showSetting("launcher.customThemes") ||
-                showSetting("launcher.sidebarPosition") ||
-                showSetting("launcher.sidebarOrder") ||
-                showSetting("launcher.resetSettings")
-              ) && (
-              <div className={`${SETTINGS_DARK_BOX} space-y-4`}>
-                <span className="text-xs font-semibold text-white/60">
-                  {tt("settings.card.customization")}
-                </span>
-                {showSetting("launcher.openOnProfiles") && (
-                <SettingsToggle
-                  label={tt("settings.launcher.openOnProfilesTab.label")}
-                  yesLabel={tt("settings.launcher.openOnProfilesTab.yes")}
-                  noLabel={tt("settings.launcher.openOnProfilesTab.no")}
-                  value={settings?.open_launcher_on_profiles_tab ?? false}
-                  onChange={(value: boolean) =>
-                    updateSettings({ open_launcher_on_profiles_tab: value })
-                  }
-                />
-                )}
-                {showSetting("launcher.uiSounds") && (
-                <SettingsToggle
-                  label={tt("settings.launcher.uiSounds.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={settings?.ui_sounds_enabled ?? true}
-                  onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
-                />
-                )}
-                {showSetting("launcher.discordRpc") && (
-                <div className="flex flex-col gap-1.5">
-                <SettingsToggle
-                  label={tt("settings.launcher.discordRpc.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={settings?.discord_rpc_enabled ?? true}
-                  onChange={(v) => updateSettings({ discord_rpc_enabled: v })}
-                />
-                <p className="ui-meta pl-0.5 pr-1">
-                  {tt("settings.launcher.discordRpc.hint")}
-                </p>
-                </div>
-                )}
-                {showSetting("launcher.minimizeToTray") && (
-                <SettingsToggle
-                  label={tt("settings.launcher.minimizeToTray.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={settings?.minimize_to_tray_on_close ?? false}
-                  onChange={(v) => updateSettings({ minimize_to_tray_on_close: v })}
-                />
-                )}
-                {showSetting("launcher.autostart") && (
-                <SettingsToggle
-                  label={tt("settings.launcher.autostart.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={settings?.autostart_enabled ?? false}
-                  onChange={(v) => updateSettings({ autostart_enabled: v })}
-                />
-                )}
-                {showSetting("launcher.splitView") && (
-                <div className="flex flex-col gap-1.5">
-                <SettingsToggle
-                  label={tt("settings.launcher.splitView.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={settings?.split_view_enabled ?? false}
-                  onChange={(v) => updateSettings({ split_view_enabled: v })}
-                />
-                <p className="ui-meta pl-0.5 pr-1">
-                  {tt("settings.launcher.splitView.hint")}
-                </p>
-                </div>
-                )}
-                {showSetting("launcher.disableAnimations") && (
-                <SettingsToggle
-                  label={tt("settings.launcher.disableAnimations.label")}
-                  yesLabel={tt("settings.common.yes")}
-                  noLabel={tt("settings.common.no")}
-                  value={settings?.animations_disabled ?? false}
-                  onChange={(v) => updateSettings({ animations_disabled: v })}
-                />
-                )}
-                {showSetting("launcher.backgroundAnimation") && (
-                <div className="flex flex-col gap-1.5">
-                <SettingsToggle
-                  label={tt("settings.launcher.backgroundAnimation.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={!(settings?.background_animation_disabled ?? false)}
-                  onChange={(v) => updateSettings({ background_animation_disabled: !v })}
-                />
-                <p className="ui-meta pl-0.5 pr-1">
-                  {tt("settings.launcher.backgroundAnimation.hint")}
-                </p>
-                </div>
-                )}
-                {showSetting("launcher.hideBanners") && (
-                <div className="flex flex-col gap-1.5">
-                <SettingsToggle
-                  label={tt("settings.launcher.hideBanners.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={!(settings?.show_launcher_banners ?? true)}
-                  onChange={(v) => updateSettings({ show_launcher_banners: !v })}
-                />
-                <p className="ui-meta pl-0.5 pr-1">
-                  {tt("settings.launcher.hideBanners.hint")}
-                </p>
-                </div>
-                )}
-                {isSeasonalThemePeriod() && showSetting("launcher.disableThematicDecorations") && (
-                <div className="flex flex-col gap-1.5">
-                <SettingsToggle
-                  label={tt("settings.launcher.disableThematicDecorations.label")}
-                  yesLabel={tt("settings.common.toggle.on")}
-                  noLabel={tt("settings.common.toggle.off")}
-                  value={settings?.thematic_decorations_disabled ?? false}
-                  onChange={(v) => updateSettings({ thematic_decorations_disabled: v })}
-                />
-                <p className="ui-meta pl-0.5 pr-1">
-                  {tt("settings.launcher.disableThematicDecorations.hint")}
-                </p>
-                </div>
-                )}
-                {showSetting("launcher.language") && (
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-white/90">
-                    {tt("settings.launcher.interfaceLanguage.label")}
-                  </span>
-                  <div
-                    ref={languageToggleContainerRef}
-                    className="relative flex seg-track p-0.5 overflow-hidden"
-                  >
-                    <div
-                      className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-md seg-indicator transition-all duration-200 ease-out"
-                      style={{
-                        left: `${languageIndicator.left}px`,
-                        width: `${languageIndicator.width}px`,
-                      }}
-                    />
-                    {SUPPORTED_LANGUAGES.map((langCode) => (
-                      <button
-                        key={langCode}
-                        type="button"
-                        onClick={() => {
-                          setLanguage(langCode);
-                        }}
-                        ref={(el) => {
-                          languageTabRefs.current[langCode] = el;
-                        }}
-                        className={`interactive-press relative z-10 min-w-[72px] rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          language === langCode ? "text-white" : "text-white/70 hover:text-white"
-                        }`}
-                      >
-                        {tt(`settings.launcher.interfaceLanguage.${langCode}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                )}
-                {showSetting("launcher.accentColor") && (
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-white/90">
-                    {tt("settings.launcher.accentColor.label")}
-                  </span>
-                  <div className="relative flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsAccentPickerOpen((v) => !v)}
-                      className="interactive-press flex h-8 w-16 items-center justify-center rounded-full border border-white/20 bg-black/40 shadow-soft"
-                    >
-                      <span
-                        className="h-5 w-10 rounded-full"
-                        style={{
-                          background:
-                            settings?.background_accent_color ?? "#4a22a8",
-                        }}
-                      />
-                    </button>
-                    <span className="text-xs text-white/60">
-                      {settings?.background_accent_color ?? "#4a22a8"}
-                    </span>
-                    {isAccentPickerOpen && (
-                      <div className="glass-popover absolute right-0 bottom-full z-40 mb-2 w-80 px-3 py-3 text-xs text-white">
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-[0.8125rem] text-white/50">
-                            {tt("settings.launcher.accentColor.popupTitle")}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setIsAccentPickerOpen(false)}
-                            className="interactive-press rounded-xl bg-white/10 px-2 py-0.5 text-[0.75rem] font-semibold text-white/80 hover:bg-white/20"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <div className="mb-2 flex items-center gap-3">
-                          <div
-                            ref={accentHueWheelRef}
-                            role="slider"
-                            tabIndex={0}
-                            aria-label={tt("settings.launcher.accentColor.pickColorAria")}
-                            aria-valuemin={0}
-                            aria-valuemax={360}
-                            aria-valuenow={Math.round(accentColorHsv.h)}
-                            className="relative h-14 w-14 shrink-0 cursor-crosshair touch-none select-none rounded-full"
-                            style={{
-                              boxShadow:
-                                "0 0 0 1px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.45) inset, 0 8px 28px rgba(0,0,0,0.55), 0 0 32px rgba(0,0,0,0.35)",
-                            }}
-                            onPointerDown={handleAccentWheelPointerDown}
-                            onPointerMove={handleAccentWheelPointerMove}
-                            onPointerUp={handleAccentWheelPointerEnd}
-                            onPointerCancel={handleAccentWheelPointerEnd}
-                            onKeyDown={(e) => {
-                              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-                              e.preventDefault();
-                              const cur = settings?.background_accent_color ?? "#4a22a8";
-                              const rgb = hexToRgb(cur);
-                              if (!rgb) return;
-                              const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-                              const delta = e.key === "ArrowRight" ? 3 : -3;
-                              const next = hsvToRgb((hsv.h + delta + 360) % 360, hsv.s, hsv.v);
-                              const hex = rgbToHex(next.r, next.g, next.b);
-                              setAccentInput(hex);
-                              updateSettings({ background_accent_color: hex });
-                            }}
-                          >
-                            <div
-                              className="pointer-events-none absolute inset-0 overflow-hidden rounded-full [transform:translateZ(0)] [backface-visibility:hidden]"
-                              style={{
-                                ...ACCENT_HUE_RING_STYLE,
-                                filter: "saturate(1.05) brightness(1.02)",
-                              }}
-                            />
-                            <div
-                              className="pointer-events-none absolute inset-0 rounded-full"
-                              style={{
-                                boxShadow:
-                                  "inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 -12px 20px rgba(0,0,0,0.35)",
-                              }}
-                            />
-                            <div className="pointer-events-none absolute inset-[10px] rounded-full shadow-[inset_0_2px_6px_rgba(0,0,0,0.45)] ring-1 ring-white/10">
-                              <div
-                                className="h-full w-full rounded-full ring-1 ring-black/50"
-                                style={{
-                                  backgroundColor:
-                                    settings?.background_accent_color ?? "#4a22a8",
-                                  backgroundImage: [
-                                    "radial-gradient(circle at 32% 26%, rgba(255,255,255,0.16), transparent 52%)",
-                                    "linear-gradient(155deg, rgba(255,255,255,0.07), transparent 48%)",
-                                  ].join(", "),
-                                }}
-                              />
-                            </div>
-                            <div
-                              className="pointer-events-none absolute left-1/2 top-1/2 z-10"
-                              style={{ width: 0, height: 0 }}
-                            >
-                              <div
-                                style={{ transform: `rotate(${accentColorHsv.h}deg) translateY(-23px)` }}
-                              >
-                                <div
-                                  className="h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 bg-white shadow-[0_0_12px_rgba(255,255,255,0.55),0_2px_8px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
-                                  aria-hidden
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="text-[0.8125rem] text-white/60">
-                              {tt("settings.launcher.accentColor.currentLabel")}
-                            </span>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-[0.8125rem] text-white/85">
-                                {settings?.background_accent_color ?? "#4a22a8"}
-                              </span>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  maxLength={7}
-                                  value={accentInput}
-                                  onChange={(e) => setAccentInput(e.target.value)}
-                                  onBlur={(e) => {
-                                    const raw = e.target.value.trim();
-                                    if (!raw) {
-                                      const fallback = settings?.background_accent_color ?? "#4a22a8";
-                                      setAccentInput(fallback);
-                                      return;
-                                    }
-                                    const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-                                    const match = /^#[0-9a-fA-F]{6}$/.test(withHash);
-                                    if (!match) {
-                                      const fallback = settings?.background_accent_color ?? "#4a22a8";
-                                      setAccentInput(fallback);
-                                      return;
-                                    }
-                                    const normalized = withHash.toLowerCase();
-                                    setAccentInput(normalized);
-                                    updateSettings({ background_accent_color: normalized });
-                                  }}
-                                  className={`h-6 w-[7.25rem] rounded-lg border border-white/15 bg-black/60 px-2 text-[0.8125rem] font-mono text-white/85 outline-none focus:border-white/50 ${
-                                    accentInput ? "pr-7" : ""
-                                  }`}
-                                />
-                                <InputClearButton
-                                  value={accentInput}
-                                  onClear={() => setAccentInput("")}
-                                  className="absolute right-0.5 top-1/2 h-5 w-5 -translate-y-1/2"
-                                  aria-label={tt("common.clear")}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mb-2">
-                          <div className="mb-1.5 text-[0.75rem] text-white/45">
-                            {tt("settings.launcher.accentColor.svPadLabel")}
-                          </div>
-                          <div
-                            ref={accentSvPadRef}
-                            className="relative h-24 w-full cursor-crosshair touch-none select-none overflow-hidden rounded-xl ring-1 ring-white/12"
-                            style={{
-                              boxShadow:
-                                "inset 0 0 0 1px rgba(0,0,0,0.4), 0 6px 20px rgba(0,0,0,0.35)",
-                              backgroundImage: `linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, hsl(${accentColorHsv.h} 100% 50%))`,
-                            }}
-                            aria-label={tt("settings.launcher.accentColor.svPadAria")}
-                            onPointerDown={handleAccentSvPointerDown}
-                            onPointerMove={handleAccentSvPointerMove}
-                            onPointerUp={handleAccentSvPointerEnd}
-                            onPointerCancel={handleAccentSvPointerEnd}
-                          >
-                            <div
-                              className="pointer-events-none absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 bg-white/95 shadow-[0_0_10px_rgba(255,255,255,0.35),0_2px_8px_rgba(0,0,0,0.45)] ring-1 ring-black/35"
-                              style={{
-                                left: `${accentColorHsv.s}%`,
-                                top: `${100 - accentColorHsv.v}%`,
-                              }}
-                              aria-hidden
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-1 text-[0.8125rem] text-white/55">
-                          {tt("settings.launcher.accentColor.helpText")}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                )}
-                {(showSetting("launcher.backgroundImage") || showSetting("launcher.backgroundBlur")) && (
-                <div className="flex flex-col gap-1.5">
-                  {showSetting("launcher.backgroundImage") && (
-                  <>
-                  <label className="text-sm text-white/90">
-                    {tt("settings.launcher.backgroundImage.label")}
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const path = await openFile({
-                            multiple: false,
-                            directory: false,
-                            filters: [
-                              {
-                                name: tt("settings.common.imagesFilterName"),
-                                extensions: ["png", "jpg", "jpeg", "webp", "gif"],
-                              },
-                            ],
-                          });
-                          if (!path) return;
-                          const stored = await invoke<string | null>(
-                            "set_background_image",
-                            { sourcePath: path },
-                          );
-                          updateSettings({
-                            background_image_url: stored,
-                          });
-                        } catch (e) {
-                          console.error(e);
-                        }
-                      }}
-                      className="interactive-press inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:bg-black/60"
-                    >
-                      <span>
-                        {tt("settings.launcher.backgroundImage.choose")}
-                      </span>
-                    </button>
-                    {settings?.background_image_url && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await invoke("set_background_image", {
-                              sourcePath: null,
-                            });
-                            updateSettings({
-                              background_image_url: null,
-                            });
-                          } catch (e) {
-                            console.error(e);
-                          }
-                        }}
-                        className="interactive-press rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/20"
-                      >
-                        {tt("settings.common.reset")}
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[0.8125rem] text-white/45">
-                    {tt("settings.launcher.backgroundImage.hint")}
-                  </p>
-                  </>
-                  )}
-                  {showSetting("launcher.backgroundBlur") && (
-                  <SettingsToggle
-                    label={tt("settings.launcher.backgroundBlur.label")}
-                    yesLabel={tt("settings.common.toggle.on")}
-                    noLabel={tt("settings.common.toggle.off")}
-                    value={settings?.background_blur_enabled ?? true}
-                    onChange={(v) => updateSettings({ background_blur_enabled: v })}
-                  />
-                  )}
-                </div>
-                )}
-                {showSetting("launcher.customThemes") && (
-                <div className="space-y-3">
-                  <label className="text-sm text-white/90">
-                    {tt("settings.launcher.customThemes.label")}
-                  </label>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2">
-                    <ThemeCard
-                      name={tt("settings.launcher.customThemes.default")}
-                      subtitle="16Launcher"
-                      selected={!activeThemeId}
-                      disabled={editingThemeId != null}
-                      accentColor={settings?.background_accent_color ?? "#4a22a8"}
-                      onClick={() => updateSettings({ custom_theme_id: null })}
-                    />
-                    {installedThemes.map((theme) => (
-                      <ThemeCard
-                        key={theme.id}
-                        name={theme.name}
-                        subtitle={[
-                          theme.author
-                            ? tt("settings.launcher.customThemes.byAuthor", { author: theme.author })
-                            : "",
-                          theme.version ? `v${theme.version}` : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                        title={theme.description || undefined}
-                        selected={activeThemeId === theme.id}
-                        disabled={editingThemeId != null}
-                        preview={theme.preview}
-                        variables={theme.variables}
-                        accentColor={settings?.background_accent_color ?? "#4a22a8"}
-                        onClick={() => updateSettings({ custom_theme_id: theme.id })}
-                      />
-                    ))}
-                  </div>
-                  {themesLoading && installedThemes.length === 0 && (
-                    <p className="text-xs text-white/45">
-                      {tt("settings.launcher.customThemes.loading")}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const path = await openFile({
-                            multiple: false,
-                            directory: false,
-                            filters: [
-                              {
-                                name: tt("settings.launcher.customThemes.zipFilterName"),
-                                extensions: ["zip"],
-                              },
-                            ],
-                          });
-                          if (!path) return;
-                          const imported = await invoke<ThemeInfo>("import_theme_zip", {
-                            sourcePath: path,
-                          });
-                          await refreshThemes();
-                          updateSettings({ custom_theme_id: imported.id });
-                          showNotification(
-                            "success",
-                            tt("settings.launcher.customThemes.imported", {
-                              name: imported.name,
-                            }),
-                          );
-                        } catch (e) {
-                          console.error(e);
-                          showNotification(
-                            "error",
-                            errorMessage(e, tt("settings.launcher.customThemes.importFailed")),
-                          );
-                        }
-                      }}
-                      className="btn btn-sm btn-soft"
-                    >
-                      {tt("settings.launcher.customThemes.importZip")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const name = window.prompt(
-                          tt("settings.launcher.customThemes.createPrompt"),
-                        );
-                        if (!name?.trim()) return;
-                        try {
-                          const created = await invoke<ThemeInfo>("create_empty_theme", {
-                            name: name.trim(),
-                          });
-                          await refreshThemes();
-                          updateSettings({ custom_theme_id: created.id });
-                          setEditingThemeId(created.id);
-                          showNotification(
-                            "success",
-                            tt("settings.launcher.customThemes.created", {
-                              name: created.name,
-                            }),
-                          );
-                        } catch (e) {
-                          console.error(e);
-                          showNotification(
-                            "error",
-                            errorMessage(e, tt("settings.launcher.customThemes.createFailed")),
-                          );
-                        }
-                      }}
-                      className="btn btn-sm btn-soft"
-                    >
-                      {tt("settings.launcher.customThemes.create")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await invoke("open_themes_folder");
-                        } catch (e) {
-                          console.error(e);
-                          showNotification(
-                            "error",
-                            tt("settings.launcher.customThemes.openFolderFailed"),
-                          );
-                        }
-                      }}
-                      className="btn btn-sm btn-ghost"
-                    >
-                      {tt("settings.launcher.customThemes.openFolder")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void refreshThemes()}
-                      className="btn btn-sm btn-ghost"
-                    >
-                      {tt("settings.launcher.customThemes.refresh")}
-                    </button>
-                  </div>
-                  {activeThemeId && (
-                    <div className="glass-inset space-y-3 p-3">
-                      {activeTheme?.description ? (
-                        <p className="text-[0.8125rem] text-white/60">{activeTheme.description}</p>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditingThemeId(activeThemeId)}
-                          disabled={editingThemeId != null}
-                          className="btn btn-sm btn-tint"
-                        >
-                          {tt("settings.launcher.customThemes.openEditor")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await invoke("open_theme_css_file", {
-                                themeId: activeThemeId,
-                              });
-                            } catch (e) {
-                              console.error(e);
-                              showNotification(
-                                "error",
-                                tt("settings.launcher.customThemes.editCssFailed"),
-                              );
-                            }
-                          }}
-                          className="btn btn-sm btn-soft"
-                        >
-                          {tt("settings.launcher.customThemes.editCss")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const name = window.prompt(
-                              tt("settings.launcher.customThemes.duplicatePrompt"),
-                              tt("settings.launcher.customThemes.duplicateDefault", {
-                                name: activeTheme?.name ?? activeThemeId,
-                              }),
-                            );
-                            if (!name?.trim()) return;
-                            try {
-                              const copy = await invoke<ThemeInfo>("duplicate_theme", {
-                                themeId: activeThemeId,
-                                name: name.trim(),
-                              });
-                              await refreshThemes();
-                              updateSettings({ custom_theme_id: copy.id });
-                              showNotification(
-                                "success",
-                                tt("settings.launcher.customThemes.duplicated", {
-                                  name: copy.name,
-                                }),
-                              );
-                            } catch (e) {
-                              showNotification(
-                                "error",
-                                errorMessage(e, tt("settings.launcher.customThemes.duplicateFailed")),
-                              );
-                            }
-                          }}
-                          disabled={editingThemeId != null}
-                          className="btn btn-sm btn-soft"
-                        >
-                          {tt("settings.launcher.customThemes.duplicate")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              const dest = await saveFile({
-                                defaultPath: `${activeThemeId}.zip`,
-                                filters: [
-                                  {
-                                    name: tt("settings.launcher.customThemes.zipFilterName"),
-                                    extensions: ["zip"],
-                                  },
-                                ],
-                              });
-                              if (!dest) return;
-                              await invoke("export_theme_zip", {
-                                themeId: activeThemeId,
-                                destPath: dest,
-                              });
-                              showNotification(
-                                "success",
-                                tt("settings.launcher.customThemes.exported"),
-                              );
-                            } catch (e) {
-                              showNotification(
-                                "error",
-                                errorMessage(e, tt("settings.launcher.customThemes.exportFailed")),
-                              );
-                            }
-                          }}
-                          className="btn btn-sm btn-soft"
-                        >
-                          {tt("settings.launcher.customThemes.exportZip")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const themeName = activeTheme?.name ?? activeThemeId;
-                            const ok = window.confirm(
-                              tt("settings.launcher.customThemes.deleteConfirm", {
-                                name: themeName,
-                              }),
-                            );
-                            if (!ok) return;
-                            try {
-                              setEditingThemeId(null);
-                              await invoke("delete_theme", { themeId: activeThemeId });
-                              await refreshThemes();
-                              updateSettings({ custom_theme_id: null });
-                              showNotification(
-                                "success",
-                                tt("settings.launcher.customThemes.deleted", {
-                                  name: themeName,
-                                }),
-                              );
-                            } catch (e) {
-                              console.error(e);
-                              showNotification(
-                                "error",
-                                errorMessage(e, tt("settings.launcher.customThemes.deleteFailed")),
-                              );
-                            }
-                          }}
-                          className="btn btn-sm btn-danger"
-                        >
-                          {tt("settings.launcher.customThemes.delete")}
-                        </button>
-                      </div>
-                      <SettingsToggle
-                        label={tt("settings.launcher.customThemes.hotReload.label")}
-                        yesLabel={tt("settings.common.toggle.on")}
-                        noLabel={tt("settings.common.toggle.off")}
-                        value={settings?.custom_theme_hot_reload ?? false}
-                        onChange={(v) => updateSettings({ custom_theme_hot_reload: v })}
-                      />
-                      <p className="text-[0.8125rem] text-white/45">
-                        {tt("settings.launcher.customThemes.hotReload.hint")}
-                      </p>
-                    </div>
-                  )}
-                  <p className="text-[0.8125rem] text-white/45">
-                  </p>
-                  {editingThemeId && (
-                    <ThemeEditorPanel
-                      themeId={editingThemeId}
-                      tt={tt}
-                      onClose={() => setEditingThemeId(null)}
-                      onSaved={() => void refreshThemes()}
-                      showNotification={showNotification}
-                    />
-                  )}
-                </div>
-                )}
-                {showSetting("launcher.sidebarPosition") && (
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-white/90">
-                    {tt("settings.launcher.sidebarPosition.label")}
-                  </span>
-                  <div
-                    ref={sidebarPositionDropdownRef}
-                    className="relative min-w-[10rem] shrink-0"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIsSidebarPositionDropdownOpen((prev) => !prev)}
-                      className="interactive-press flex h-10 w-full min-w-[10rem] items-center justify-between rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white/90 transition-colors hover:border-white/20 hover:bg-black/40"
-                    >
-                      <span>
-                        {tt(
-                          `settings.launcher.sidebarPosition.${parseSidebarPosition(settings?.sidebar_position)}`,
+                          </SettingsRow>
                         )}
-                      </span>
-                      <span className="text-[0.75rem] text-white/50">▾</span>
-                    </button>
-                    <AnimatePresence>
-                      {isSidebarPositionDropdownOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                          transition={{ duration: 0.14, ease: "easeOut" }}
-                          className="absolute right-0 z-30 mt-1 w-full min-w-[10rem] overflow-hidden glass-popover p-1"
-                        >
-                          {SIDEBAR_POSITIONS.map((pos) => {
-                            const active =
-                              parseSidebarPosition(settings?.sidebar_position) === pos;
-                            return (
+                        {showSetting("launcher.backgroundImage") && (
+                          <SettingsRow
+                            label={tt("settings.launcher.backgroundImage.label")}
+                            hint={tt("settings.launcher.backgroundImage.hint")}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => void chooseBackgroundImage()}
+                              className="btn btn-sm btn-soft"
+                            >
+                              {tt("settings.launcher.backgroundImage.choose")}
+                            </button>
+                            {settings?.background_image_url && (
                               <button
-                                key={pos}
                                 type="button"
-                                onClick={() => {
-                                  updateSettings({ sidebar_position: pos });
-                                  setIsSidebarPositionDropdownOpen(false);
-                                }}
-                                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                  active
-                                    ? "seg-on"
-                                    : "text-white/80 hover:bg-white/10"
-                                }`}
+                                onClick={() => void resetBackgroundImage()}
+                                className="btn btn-sm btn-ghost"
                               >
-                                <span>{tt(`settings.launcher.sidebarPosition.${pos}`)}</span>
+                                {tt("settings.common.reset")}
                               </button>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-                )}
-                {showSetting("launcher.sidebarOrder") && (
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm text-white/90">
-                    {tt("settings.launcher.sidebarOrder.label")}
-                  </span>
-                  <div className="space-y-1.5 rounded-2xl border border-white/10 bg-black/25 p-2">
-                    {sidebarOrder.map((id) => (
-                      <div
-                        key={id}
-                        className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-1.5 text-xs text-white/85"
+                            )}
+                          </SettingsRow>
+                        )}
+                        {showSetting("launcher.backgroundBlur") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.backgroundBlur.label")}
+                            value={settings?.background_blur_enabled ?? true}
+                            onChange={(v) => updateSettings({ background_blur_enabled: v })}
+                          />
+                        )}
+                        {showSetting("launcher.backgroundAnimation") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.backgroundAnimation.label")}
+                            hint={tt("settings.launcher.backgroundAnimation.hint")}
+                            value={!(settings?.background_animation_disabled ?? false)}
+                            onChange={(v) => updateSettings({ background_animation_disabled: !v })}
+                          />
+                        )}
+                        {showSetting("launcher.disableAnimations") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.disableAnimations.label")}
+                            value={settings?.animations_disabled ?? false}
+                            onChange={(v) => updateSettings({ animations_disabled: v })}
+                          />
+                        )}
+                        {showSetting("launcher.hideBanners") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.hideBanners.label")}
+                            hint={tt("settings.launcher.hideBanners.hint")}
+                            value={!(settings?.show_launcher_banners ?? true)}
+                            onChange={(v) => updateSettings({ show_launcher_banners: !v })}
+                          />
+                        )}
+                        {seasonalThemeActive && showSetting("launcher.disableThematicDecorations") && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.disableThematicDecorations.label")}
+                            hint={tt("settings.launcher.disableThematicDecorations.hint") || undefined}
+                            value={settings?.thematic_decorations_disabled ?? false}
+                            onChange={(v) => updateSettings({ thematic_decorations_disabled: v })}
+                          />
+                        )}
+                      </SettingsSection>
+                    )}
+
+                    {showSetting("launcher.customThemes") && (
+                      <SettingsSection
+                        title={tt("settings.section.themes")}
+                        icon={<AssetIcon name="brush" />}
+                        actions={
+                          <button
+                            type="button"
+                            disabled={themesLoading}
+                            onClick={() => void refreshThemes()}
+                            className="btn btn-sm btn-ghost"
+                          >
+                            <AssetIcon
+                              name="updates"
+                              className={`h-3.5 w-3.5 ${themesLoading ? "animate-spin" : ""}`}
+                              />
+                            {tt("settings.launcher.customThemes.refresh")}
+                          </button>
+                        }
                       >
-                        <span>
-                          {tt(
-                            id === "play"
-                              ? "app.sidebar.play"
-                              : id === "settings"
-                                ? "app.sidebar.settings"
-                                : id === "mods"
-                                  ? "app.sidebar.mods"
-                                  : "app.sidebar.modpacks",
+                        <div className="flex flex-col gap-3 py-3.5">
+                          <div className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2">
+                            <ThemeCard
+                              name={tt("settings.launcher.customThemes.default")}
+                              subtitle="16Launcher"
+                              selected={!activeThemeId}
+                              disabled={editingThemeId != null}
+                              accentColor={accentColor}
+                              onClick={() => updateSettings({ custom_theme_id: null })}
+                            />
+                            {installedThemes.map((theme) => (
+                              <ThemeCard
+                                key={theme.id}
+                                name={theme.name}
+                                subtitle={[
+                                  theme.author
+                                    ? tt("settings.launcher.customThemes.byAuthor", {
+                                        author: theme.author,
+                                      })
+                                    : "",
+                                  theme.version ? `v${theme.version}` : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                                title={theme.description || undefined}
+                                selected={activeThemeId === theme.id}
+                                disabled={editingThemeId != null}
+                                preview={theme.preview}
+                                variables={theme.variables}
+                                accentColor={accentColor}
+                                onClick={() => updateSettings({ custom_theme_id: theme.id })}
+                              />
+                            ))}
+                          </div>
+                          {themesLoading && installedThemes.length === 0 && (
+                            <p className="ui-meta">{tt("settings.launcher.customThemes.loading")}</p>
                           )}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => moveSidebarItem(id, "up")}
-                            className="interactive-press rounded-xl bg-white/10 px-2 py-0.5 text-[0.75rem] font-semibold text-white/80 hover:bg-white/20"
-                            aria-label={tt("settings.launcher.sidebarOrder.moveUp")}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveSidebarItem(id, "down")}
-                            className="interactive-press rounded-xl bg-white/10 px-2 py-0.5 text-[0.75rem] font-semibold text-white/80 hover:bg-white/20"
-                            aria-label={tt("settings.launcher.sidebarOrder.moveDown")}
-                          >
-                            ↓
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void createTheme()}
+                              className="btn btn-sm btn-soft"
+                            >
+                              {tt("settings.launcher.customThemes.create")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void importThemeZip()}
+                              className="btn btn-sm btn-soft"
+                            >
+                              {tt("settings.launcher.customThemes.importZip")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void openThemesFolder()}
+                              className="btn btn-sm btn-ghost"
+                            >
+                              <AssetIcon name="folder" className="h-3.5 w-3.5" />
+                              {tt("settings.launcher.customThemes.openFolder")}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                )}
-                {showSetting("launcher.resetSettings") && (
-                <button
-                  type="button"
-                  onClick={() => void handleResetSettings()}
-                  disabled={isResettingSettings}
-                  className="interactive-press inline-flex items-center justify-center rounded-xl border border-white/15 px-3.5 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:text-white disabled:opacity-60"
-                >
-                  {tt("settings.launcher.resetSettings.button")}
-                </button>
-                )}
-              </div>
-              )}
-              {showSetting("launcher.cache") && (
-              <div className={SETTINGS_DARK_BOX}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-sm text-white/90">
-                        {tt("settings.launcher.cache.label")}
-                      </span>
-                      <span className="text-xs text-white/60">
-                        {tt("settings.launcher.cache.description")}
-                      </span>
-                      <span className="text-xs text-white/60">
-                        {isCacheLoading
-                          ? tt("settings.launcher.cache.loading")
-                          : tt("settings.launcher.cache.sizeLabel", {
-                              size: formatCacheSize(cacheSizeBytes),
-                            })}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleClearCache()}
-                      disabled={isCacheLoading}
-                      className="interactive-press rounded-xl border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/85 hover:border-white/20 hover:text-white disabled:opacity-60"
-                    >
-                      {tt("settings.launcher.cache.clearButton")}
-                    </button>
-                  </div>
-              </div>
-              )}
-              {showSetting("launcher.backup") && (
-              <div className={`${SETTINGS_DARK_BOX} space-y-2`}>
-                    <div className="text-[0.8125rem] text-white/45">
-                      {tt("settings.launcher.backup.title")}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleExportSettings()}
-                        disabled={isExportingSettings}
-                        className="interactive-press inline-flex items-center justify-center rounded-xl border border-white/15 px-3.5 py-2 text-xs font-semibold text-white/85 hover:border-white/20 hover:text-white disabled:opacity-60"
-                      >
-                        {isExportingSettings
-                          ? tt("settings.launcher.backup.exporting")
-                          : tt("settings.launcher.backup.exportButton")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleImportSettings()}
-                        disabled={isImportingSettings}
-                        className="interactive-press inline-flex items-center justify-center rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white/85 hover:bg-white/20 disabled:opacity-60"
-                      >
-                        {isImportingSettings
-                          ? tt("settings.launcher.backup.importing")
-                          : tt("settings.launcher.backup.importButton")}
-                      </button>
-                    </div>
-                    <div className="text-[0.8125rem] text-white/55">
-                      {tt("settings.launcher.backup.hint")}
-                    </div>
-              </div>
-              )}
-              </div>
-              )}
-            </SettingsCard>
-          )}
-          </>
-          )}
+                        {activeThemeId && (
+                          <div className="flex flex-col gap-3 py-3.5">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-white/90">
+                                {activeTheme?.name ?? activeThemeId}
+                              </div>
+                              {activeTheme?.description ? (
+                                <p className="ui-meta mt-0.5">{activeTheme.description}</p>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingThemeId(activeThemeId)}
+                                disabled={editingThemeId != null}
+                                className="btn btn-sm btn-tint"
+                              >
+                                {tt("settings.launcher.customThemes.openEditor")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void openActiveThemeCss()}
+                                className="btn btn-sm btn-soft"
+                              >
+                                {tt("settings.launcher.customThemes.editCss")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void duplicateActiveTheme()}
+                                disabled={editingThemeId != null}
+                                className="btn btn-sm btn-soft"
+                              >
+                                {tt("settings.launcher.customThemes.duplicate")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void exportActiveTheme()}
+                                className="btn btn-sm btn-soft"
+                              >
+                                {tt("settings.launcher.customThemes.exportZip")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void deleteActiveTheme()}
+                                className="btn btn-sm btn-danger"
+                              >
+                                {tt("settings.launcher.customThemes.delete")}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {activeThemeId && (
+                          <SettingsSwitchRow
+                            label={tt("settings.launcher.customThemes.hotReload.label")}
+                            hint={tt("settings.launcher.customThemes.hotReload.hint")}
+                            value={settings?.custom_theme_hot_reload ?? false}
+                            onChange={(v) => updateSettings({ custom_theme_hot_reload: v })}
+                          />
+                        )}
+                        {editingThemeId && (
+                          <ThemeEditorPanel
+                            themeId={editingThemeId}
+                            tt={tt}
+                            onClose={() => setEditingThemeId(null)}
+                            onSaved={() => void refreshThemes()}
+                            showNotification={showNotification}
+                          />
+                        )}
+                      </SettingsSection>
+                    )}
 
-          </div>
-          </div>
-
-          <div className="flex shrink-0 justify-center">
-        <div className="seg-track relative flex items-center gap-0 overflow-hidden p-1">
-          <div
-            className="pointer-events-none absolute top-1 bottom-1 rounded-md seg-indicator transition-all duration-200 ease-out"
-            style={{
-              left: `${settingsIndicator.left}px`,
-              width: `${settingsIndicator.width}px`,
-            }}
-          />
-          {(
-            [
-              { id: "game", label: tt("settings.tab.game") },
-              {
-                id: "versions",
-                label: tt("settings.tab.versions"),
-              },
-              {
-                id: "launcher",
-                label: tt("settings.tab.launcher"),
-              },
-            ] as { id: SettingsTabId; label: string }[]
-          ).map((tab) => {
-            const active = settingsTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                ref={(el) => {
-                  settingsTabRefs.current[tab.id] = el;
-                }}
-                onClick={() => {
-                  if ((settings?.ui_sounds_enabled ?? true) && settingsTab !== tab.id) playTabSwitchSound();
-                  setSettingsTab(tab.id);
-                }}
-                className={`interactive-press relative z-10 rounded-xl px-3.5 py-1.5 text-xs font-semibold text-center transition-colors ${
-                  active
-                    ? "text-white"
-                    : "text-white/70 hover:text-white"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+                    {anyVisible("launcher.cache", "launcher.backup", "launcher.resetSettings") && (
+                      <SettingsSection
+                        title={tt("settings.section.data")}
+                        icon={<AssetIcon name="storage" />}
+                      >
+                        {showSetting("launcher.cache") && (
+                          <SettingsRow
+                            label={tt("settings.launcher.cache.label")}
+                            hint={
+                              <>
+                                {tt("settings.launcher.cache.description")}{" "}
+                                <span className="text-white/70">
+                                  {isCacheLoading
+                                    ? tt("settings.launcher.cache.loading")
+                                    : tt("settings.launcher.cache.sizeLabel", {
+                                        size: formatCacheSize(cacheSizeBytes),
+                                      })}
+                                </span>
+                              </>
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() => void handleClearCache()}
+                              disabled={isCacheLoading}
+                              className="btn btn-sm btn-soft"
+                            >
+                              <AssetIcon name="delete" className="h-3.5 w-3.5" />
+                              {tt("settings.launcher.cache.clearButton")}
+                            </button>
+                          </SettingsRow>
+                        )}
+                        {showSetting("launcher.backup") && (
+                          <SettingsRow
+                            label={tt("settings.launcher.backup.title")}
+                            hint={tt("settings.launcher.backup.hint")}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => void handleExportSettings()}
+                              disabled={isExportingSettings}
+                              className="btn btn-sm btn-soft"
+                            >
+                              {isExportingSettings
+                                ? tt("settings.launcher.backup.exporting").trim()
+                                : tt("settings.launcher.backup.exportButton")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleImportSettings()}
+                              disabled={isImportingSettings}
+                              className="btn btn-sm btn-soft"
+                            >
+                              {isImportingSettings
+                                ? tt("settings.launcher.backup.importing")
+                                : tt("settings.launcher.backup.importButton")}
+                            </button>
+                          </SettingsRow>
+                        )}
+                        {showSetting("launcher.resetSettings") && (
+                          <SettingsRow
+                            label={tt("settings.launcher.resetSettings.button")}
+                            hint={tt("settings.launcher.resetSettings.hint")}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => void handleResetSettings()}
+                              disabled={isResettingSettings}
+                              className="btn btn-sm btn-danger"
+                            >
+                              {tt("settings.common.reset")}
+                            </button>
+                          </SettingsRow>
+                        )}
+                      </SettingsSection>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

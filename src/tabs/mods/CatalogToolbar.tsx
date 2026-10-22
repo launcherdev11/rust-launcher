@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -45,6 +46,7 @@ type CatalogToolbarProps = {
   onGameVersionChange: (v: string) => void;
   onLoaderChange: (v: LoaderFilter) => void;
   onRequestUnlock: () => void;
+  onLockedClick: (e: MouseEvent<HTMLButtonElement>) => void;
   activeProfileId?: string | null;
   layout: "list" | "grid";
   onLayoutChange: (layout: "list" | "grid") => void;
@@ -75,6 +77,7 @@ export function CatalogToolbar({
   onGameVersionChange,
   onLoaderChange,
   onRequestUnlock,
+  onLockedClick,
   activeProfileId,
   layout,
   onLayoutChange,
@@ -153,6 +156,7 @@ export function CatalogToolbar({
           onGameVersionChange={onGameVersionChange}
           onLoaderChange={onLoaderChange}
           onRequestUnlock={onRequestUnlock}
+          onLockedClick={onLockedClick}
           activeProfileId={activeProfileId}
         />
       </div>
@@ -196,6 +200,7 @@ export function CatalogToolbar({
           />
           <input
             type="text"
+            data-hotkey-search
             placeholder={tt("mods.searchPlaceholder")}
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -340,6 +345,7 @@ function VersionLoaderControls({
   onGameVersionChange,
   onLoaderChange,
   onRequestUnlock,
+  onLockedClick,
   activeProfileId,
 }: {
   tt: Tt;
@@ -354,6 +360,7 @@ function VersionLoaderControls({
   onGameVersionChange: (v: string) => void;
   onLoaderChange: (v: LoaderFilter) => void;
   onRequestUnlock: () => void;
+  onLockedClick: (e: MouseEvent<HTMLButtonElement>) => void;
   activeProfileId?: string | null;
 }): ReactNode {
   const versionButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -368,8 +375,8 @@ function VersionLoaderControls({
         <button
           ref={versionButtonRef}
           type="button"
-          onClick={() => {
-            if (versionLoaderLocked) onRequestUnlock();
+          onClick={(e) => {
+            if (versionLoaderLocked) onLockedClick(e);
             else setIsVersionDropdownOpen((c) => !c);
           }}
           aria-disabled={versionLoaderLocked}
@@ -378,7 +385,6 @@ function VersionLoaderControls({
               ? "cursor-not-allowed border-amber-300/30 text-white/75"
               : "hover:border-white/20"
           }`}
-          title={versionLoaderLocked ? tt("mods.syncedHint") : undefined}
         >
           <span className="truncate">
             {gameVersion || tt("mods.loaderAny")}
@@ -432,8 +438,8 @@ function VersionLoaderControls({
         <button
           ref={loaderButtonRef}
           type="button"
-          onClick={() => {
-            if (versionLoaderLocked) onRequestUnlock();
+          onClick={(e) => {
+            if (versionLoaderLocked) onLockedClick(e);
             else setIsLoaderDropdownOpen((c) => !c);
           }}
           aria-disabled={versionLoaderLocked}
@@ -442,7 +448,6 @@ function VersionLoaderControls({
               ? "cursor-not-allowed border-amber-300/30 text-white/75"
               : "hover:border-white/20"
           }`}
-          title={versionLoaderLocked ? tt("mods.syncedHint") : undefined}
         >
           <span>
             {loader === "any"

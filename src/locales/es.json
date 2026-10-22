@@ -11,7 +11,7 @@
     "search": "Buscar…",
     "yes": "Sí",
     "no": "No",
-    "close": "Cerca",
+    "close": "Cerrar",
     "clear": "Borrar",
     "add": "Agregar",
     "rename": "Rebautizar",
@@ -37,12 +37,12 @@
     },
     "unlockTitle": "Versión fijada por el perfil",
     "unlockConfirm": "¿Cambiar versión y cargador? El contenido que instales puede ser incompatible con el perfil.",
-    "lockedBanner": "Fijado por el perfil: Minecraft {{version}} · {{loader}}. Los mods se ajustan a ella.",
+    "lockedHintTitle": "Fijado por el perfil",
+    "lockedHintBody": "Minecraft {{version}} · {{loader}}. Los mods se ajustan a ella.",
     "unlockedBanner": "Estás viendo contenido que no coincide con el perfil seleccionado. Los mods instalados podrían no iniciar.",
     "relock": "Volver al perfil",
     "searchPlaceholder": "Buscar...",
     "version": "Versión",
-    "syncedHint": "Sincronizado con el perfil. Haga clic en «Cambiar» para desbloquear.",
     "loaderAny": "Cualquier",
     "loaderAll": "Todo",
     "tab": {
@@ -92,7 +92,7 @@
     "quickInstall": "Instalar",
     "installing": "Instalando…",
     "batch": {
-      "hint": "Marca varios proyectos y descárgalos en lote.",
+      "hint": "Marca proyectos, haz Ctrl+clic o arrastra un recuadro con Ctrl pulsado y descárgalos en lote.",
       "selectOne": "Seleccionar {{title}}",
       "selected": "Seleccionados: {{count}}",
       "clear": "Quitar selección",
@@ -181,6 +181,16 @@
       "updates": "Actualizaciones del lanzador",
       "interfaceLanguage": "Idioma de la interfaz",
       "customization": "Personalización"
+    },
+    "section": {
+      "display": "Ventana y gráficos",
+      "java": "Java y memoria",
+      "versionList": "Opciones de la lista",
+      "behavior": "Comportamiento",
+      "interface": "Interfaz",
+      "appearance": "Apariencia",
+      "themes": "Temas",
+      "data": "Datos"
     },
     "directories": {
       "comingSoon": "La configuración del directorio se agregará más adelante."
@@ -537,7 +547,9 @@
       "resetSettings": {
         "button": "Restablecer la configuración del iniciador a los valores predeterminados",
         "success": "La configuración del iniciador se ha restablecido a los valores predeterminados.",
-        "failed": "No se pudo restablecer la configuración del iniciador."
+        "failed": "No se pudo restablecer la configuración del iniciador.",
+        "confirm": "¿Restablecer toda la configuración del iniciador? No se puede deshacer.",
+        "hint": "Recupera los valores predeterminados, el fondo estándar y el orden de las pestañas."
       },
       "backup": {
         "title": "Importar/exportar",
@@ -555,6 +567,7 @@
       }
     },
     "updates": {
+      "idle": "Comprueba si hay una versión nueva.",
       "checkOnStart": {
         "label": "Busque actualizaciones al inicio:"
       },
@@ -702,7 +715,10 @@
       "select": "Seleccionar versión",
       "searchPlaceholder": "Escriba la versión...",
       "snapshotHint": "Parece una instantánea. Habilite \"Mostrar versiones de instantáneas\" en Configuración → Versiones.",
-      "nothingFound": "No se encontró nada."
+      "nothingFound": "No se encontró nada.",
+      "lockedHintTitle": "Fijado por el perfil",
+      "lockedHintBody": "Minecraft {{version}} · {{loader}}. Cambia la versión y el loader en los ajustes del perfil.",
+      "lockedHintAction": "Ajustes del perfil"
     },
     "install": {
       "resume": "Reanudar",
@@ -745,6 +761,13 @@
       "attach": "Adjuntar",
       "empty": "Los registros aparecerán después de que comience el juego.",
       "hint": "Controlado por la configuración \"Mostrar consola al iniciar el juego\" en la sección del juego.",
+      "filters": {
+        "label": "Filtros",
+        "warnings": "Advertencias",
+        "errors": "Errores",
+        "crash": "Informe de fallo",
+        "nothing": "Ninguna línea coincide con los filtros."
+      },
       "analyzer": {
         "readingDisk": "Leyendo logs…",
         "okBadge": "Sin errores",
@@ -896,7 +919,7 @@
       "content": "Contenido",
       "folder": "Carpeta",
       "profileId": "ID de perfil",
-      "close": "Cerca",
+      "close": "Cerrar",
       "contentMods": "{{count}} mod(es)",
       "contentResourcepacks": "{{count}} paquete(s)",
       "contentShaders": "{{count}} sombreador(es)"
@@ -917,6 +940,7 @@
       "editGroupMenu": "Editar grupo",
       "deleteGroupMenu": "Eliminar grupo",
       "dropHint": "Arrastra aquí",
+      "deleteSelected": "Eliminar seleccionados",
       "selectedCount": "Seleccionado: {{count}}",
       "title": "Mis perfiles",
       "newGroup": "Nuevo grupo",
@@ -1012,7 +1036,7 @@
       "empty": "Aún no hay capturas de pantalla. Toma uno en el juego (F2) y aparecerá aquí.",
       "refresh": "Refrescar",
       "openFolder": "Abrir carpeta",
-      "close": "Cerca",
+      "close": "Cerrar",
       "open": "Abierto",
       "delete": "Borrar",
       "selectHint": "Seleccione una captura de pantalla de la galería.",
@@ -1021,7 +1045,10 @@
       "deleteConfirm": "¿Eliminar captura de pantalla “{{name}}”?",
       "deleteFailed": "No se pudo eliminar la captura de pantalla: {{msg}}",
       "openFolderFailed": "No se pudo abrir la carpeta: {{msg}}",
-      "openFailed": "No se pudo abrir la captura de pantalla: {{msg}}"
+      "openFailed": "No se pudo abrir la captura de pantalla: {{msg}}",
+      "copy": "Copiar",
+      "copied": "Captura copiada al portapapeles.",
+      "copyFailed": "No se pudo copiar la captura: {{msg}}"
     },
     "import": {
       "title": "Importar paquete Modrinth",
@@ -1076,6 +1103,8 @@
       "profileSelected": "Perfil “{{name}}” seleccionado.",
       "selectProfileFailed": "No se pudo seleccionar el perfil.",
       "profileDeleted": "Perfil eliminado.",
+      "profilesDeleted": "Perfiles eliminados: {{count}}.",
+      "deleteProfilesPartial": "No se pudieron eliminar {{failed}} perfiles.",
       "deleteProfileFailed": "No se pudo eliminar el perfil.",
       "deleteProfileFailedWithMsg": "No se pudo eliminar el perfil: {{msg}}",
       "loadLoaderVersionsFailed": "No se pudieron cargar las versiones del cargador: {{msg}}",
@@ -1141,6 +1170,7 @@
       "pinToSidebar": "Fijar a la barra lateral",
       "unpinFromSidebar": "Desanclar de la barra lateral",
       "deleteProfile": "Eliminar perfil",
+      "deleteSelectedProfiles": "Eliminar seleccionados ({{count}})",
       "renameProfile": "Cambiar nombre de perfil",
       "editProfile": "Editar perfil",
       "createBackup": "Crear copia de seguridad",
@@ -1169,6 +1199,7 @@
       "openFolderFailed": "No se pudo abrir la carpeta de copias."
     },
     "deleteConfirm": {
+      "bulkPrompt": "¿Eliminar los perfiles seleccionados ({{count}})? Esta acción no se puede deshacer.",
       "title": "Eliminar confirmación",
       "prompt": "¿Eliminar perfil “{{name}}”? Esta acción no se puede deshacer."
     },
@@ -1705,6 +1736,34 @@
       "friends": "Amigos",
       "rooms": "Salas"
     },
+    "hotkeys": {
+      "title": "Atajos de teclado",
+      "subtitle": "Activos cuando no hay ningún diálogo abierto ni un campo de texto enfocado.",
+      "groups": {
+        "navigation": "Navegación",
+        "play": "Juego",
+        "content": "Instancias y contenido",
+        "general": "General"
+      },
+      "items": {
+        "tabs": "Pestañas de la barra lateral en orden",
+        "cycleTabs": "Pestaña siguiente / anterior",
+        "history": "Atrás / adelante en el historial",
+        "settings": "Abrir ajustes",
+        "sidebar": "Contraer o expandir la barra lateral",
+        "back": "Volver a la lista de instancias",
+        "launch": "Iniciar la instancia seleccionada",
+        "stop": "Detener el juego",
+        "copyConsole": "Copiar la consola",
+        "detachConsole": "Separar la consola",
+        "create": "Crear una instancia",
+        "import": "Importar una instancia",
+        "screenshots": "Abrir capturas de la instancia",
+        "search": "Ir a la búsqueda",
+        "refresh": "Actualizar la lista",
+        "help": "Mostrar atajos de teclado"
+      }
+    },
     "splitView": {
       "zones": {
         "left": "Izquierda",
@@ -1910,7 +1969,7 @@
       "mojangDisclaimer": "NO ES UN PRODUCTO OFICIAL DE MINECRAFT. NO APROBADO NI ASOCIADO CON MOJANG O MICROSOFT.\n\n16Launcher no está afiliado de ninguna manera con Mojang Studios, ni debe considerarse un proyecto respaldado por Mojang Studios.",
       "apis": "Usamos las API Modrinth, CurseForge y Ely.by",
       "reportBug": "¿Encontraste un error?",
-      "close": "Cerca"
+      "close": "Cerrar"
     },
     "playAction": {
       "play": "JUGAR",

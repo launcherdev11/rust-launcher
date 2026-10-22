@@ -37,12 +37,12 @@
     },
     "unlockTitle": "Version is fixed by the profile",
     "unlockConfirm": "Change version and loader? Content you install may be incompatible with the profile.",
-    "lockedBanner": "Fixed by the profile: Minecraft {{version}} · {{loader}}. Mods are matched to it.",
+    "lockedHintTitle": "Fixed by the profile",
+    "lockedHintBody": "Minecraft {{version}} · {{loader}}. Mods are matched to it.",
     "unlockedBanner": "You're browsing content that doesn't match the selected profile. Installed mods may not launch.",
     "relock": "Match profile again",
     "searchPlaceholder": "Search...",
     "version": "Version",
-    "syncedHint": "Synced with profile. Click «Change» to unlock.",
     "loaderAny": "Any",
     "loaderAll": "All",
     "tab": {
@@ -92,7 +92,7 @@
     "quickInstall": "Install",
     "installing": "Installing…",
     "batch": {
-      "hint": "Check several projects and download them as a batch.",
+      "hint": "Check projects, Ctrl+click them or Ctrl+drag a box around them, then download them as a batch.",
       "selectOne": "Select {{title}}",
       "selected": "Selected: {{count}}",
       "clear": "Clear selection",
@@ -181,6 +181,16 @@
       "updates": "Launcher updates",
       "interfaceLanguage": "Interface language",
       "customization": "Customization"
+    },
+    "section": {
+      "display": "Window and graphics",
+      "java": "Java and memory",
+      "versionList": "List options",
+      "behavior": "Behavior",
+      "interface": "Interface",
+      "appearance": "Appearance",
+      "themes": "Themes",
+      "data": "Data"
     },
     "directories": {
       "comingSoon": "Directory settings will be added later."
@@ -513,7 +523,9 @@
       "resetSettings": {
         "button": "Reset launcher settings to defaults",
         "success": "Launcher settings have been reset to default values.",
-        "failed": "Failed to reset launcher settings."
+        "failed": "Failed to reset launcher settings.",
+        "confirm": "Reset all launcher settings? This cannot be undone.",
+        "hint": "Restores default values, the default background and tab order."
       },
       "backup": {
         "title": "Import / export",
@@ -531,6 +543,7 @@
       }
     },
     "updates": {
+      "idle": "Check whether a new version is available.",
       "checkOnStart": { "label": "Check for updates on start:" },
       "autoInstall": { "label": "Automatically install updates:" },
       "checkNow": "Check for updates",
@@ -674,7 +687,10 @@
       "select": "Select version",
       "searchPlaceholder": "Type version...",
       "snapshotHint": "Looks like a snapshot. Enable “Show snapshot versions” in Settings → Versions.",
-      "nothingFound": "Nothing found."
+      "nothingFound": "Nothing found.",
+      "lockedHintTitle": "Fixed by the profile",
+      "lockedHintBody": "Minecraft {{version}} · {{loader}}. Change the version and loader in the profile settings.",
+      "lockedHintAction": "Profile settings"
     },
     "install": {
       "resume": "Resume",
@@ -717,6 +733,13 @@
       "attach": "Attach",
       "empty": "Logs will appear after the game starts.",
       "hint": "Controlled by the “Show console on game start” setting in the game section.",
+      "filters": {
+        "label": "Filters",
+        "warnings": "Warnings",
+        "errors": "Errors",
+        "crash": "Crash report",
+        "nothing": "No lines match the selected filters."
+      },
       "analyzer": {
         "readingDisk": "Reading logs…",
         "okBadge": "No errors",
@@ -889,6 +912,7 @@
       "editGroupMenu": "Edit group",
       "deleteGroupMenu": "Delete group",
       "dropHint": "Drop here",
+      "deleteSelected": "Delete selected",
       "selectedCount": "Selected: {{count}}",
       "title": "My profiles",
       "newGroup": "New group",
@@ -993,7 +1017,10 @@
       "deleteConfirm": "Delete screenshot “{{name}}”?",
       "deleteFailed": "Failed to delete screenshot: {{msg}}",
       "openFolderFailed": "Failed to open folder: {{msg}}",
-      "openFailed": "Failed to open screenshot: {{msg}}"
+      "openFailed": "Failed to open screenshot: {{msg}}",
+      "copy": "Copy",
+      "copied": "Screenshot copied to clipboard.",
+      "copyFailed": "Failed to copy screenshot: {{msg}}"
     },
     "import": {
       "title": "Import Modrinth pack",
@@ -1048,6 +1075,8 @@
       "profileSelected": "Profile “{{name}}” selected.",
       "selectProfileFailed": "Failed to select profile.",
       "profileDeleted": "Profile deleted.",
+      "profilesDeleted": "Profiles deleted: {{count}}.",
+      "deleteProfilesPartial": "Failed to delete {{failed}} profiles.",
       "deleteProfileFailed": "Failed to delete profile.",
       "deleteProfileFailedWithMsg": "Failed to delete profile: {{msg}}",
       "loadLoaderVersionsFailed": "Failed to load loader versions: {{msg}}",
@@ -1113,6 +1142,7 @@
       "pinToSidebar": "Pin to sidebar",
       "unpinFromSidebar": "Unpin from sidebar",
       "deleteProfile": "Delete profile",
+      "deleteSelectedProfiles": "Delete selected ({{count}})",
       "renameProfile": "Rename profile",
       "editProfile": "Edit profile",
       "createBackup": "Create backup",
@@ -1141,6 +1171,7 @@
       "openFolderFailed": "Failed to open backups folder."
     },
     "deleteConfirm": {
+      "bulkPrompt": "Delete the selected profiles ({{count}})? This action cannot be undone.",
       "title": "Delete confirmation",
       "prompt": "Delete profile “{{name}}”? This action cannot be undone."
     },
@@ -1796,6 +1827,34 @@
       "modpacks": "Modpacks",
       "friends": "Friends",
       "rooms": "Rooms"
+    },
+    "hotkeys": {
+      "title": "Keyboard shortcuts",
+      "subtitle": "Active when no dialog is open and no input is focused.",
+      "groups": {
+        "navigation": "Navigation",
+        "play": "Game",
+        "content": "Builds and content",
+        "general": "General"
+      },
+      "items": {
+        "tabs": "Sidebar tabs in order",
+        "cycleTabs": "Next / previous tab",
+        "history": "Back / forward in history",
+        "settings": "Open settings",
+        "sidebar": "Collapse or expand the sidebar",
+        "back": "Return to the builds list",
+        "launch": "Launch the selected build",
+        "stop": "Stop the game",
+        "copyConsole": "Copy console",
+        "detachConsole": "Detach console",
+        "create": "Create a build",
+        "import": "Import a build",
+        "screenshots": "Open build screenshots",
+        "search": "Jump to search",
+        "refresh": "Refresh the list",
+        "help": "Show keyboard shortcuts"
+      }
     },
     "splitView": {
       "zones": {

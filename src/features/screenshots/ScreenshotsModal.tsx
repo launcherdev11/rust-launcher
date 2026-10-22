@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { RefreshCw } from "lucide-react";
+import { AssetIcon } from "../../components/asset_icon";
+import { ContextMenuPanel } from "../../components/ContextMenuPanel";
 import { DeleteIcon } from "../../components/delete_icon";
 import { formatByteSize, localeTag, useT } from "../../i18n";
 import type { Language } from "../../i18n";
@@ -31,6 +33,7 @@ type ScreenshotGridItemProps = {
   thumb: string | undefined;
   scrollRoot: Element | null;
   onSelect: () => void;
+  onContextMenu: (e: MouseEvent<HTMLButtonElement>) => void;
   onVisible: (name: string) => void;
 };
 
@@ -40,6 +43,7 @@ function ScreenshotGridItem({
   thumb,
   scrollRoot,
   onSelect,
+  onContextMenu,
   onVisible,
 }: ScreenshotGridItemProps) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -62,6 +66,7 @@ function ScreenshotGridItem({
       ref={ref}
       type="button"
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       className={`interactive-press overflow-hidden rounded-xl border text-left transition-colors ${
         active
           ? "border-white/40 bg-white/15"
@@ -104,12 +109,52 @@ export function ScreenshotsModal({
     remove,
     openFolder,
     openInSystem,
+    copyToClipboard,
   } = useScreenshots(open, profileId);
+  const [menu, setMenu] = useState<{ name: string; x: number; y: number } | null>(null);
 
   const selected = useMemo(
     () => items.find((s) => s.name === selectedName) ?? null,
     [items, selectedName],
   );
+
+  const handleCopy = useCallback(
+    async (name: string) => {
+      try {
+        await copyToClipboard(name);
+        showNotification("success", tt("modpacks.screenshots.copied"));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        showNotification("error", tt("modpacks.screenshots.copyFailed", { msg }));
+      }
+    },
+    [copyToClipboard, showNotification, tt],
+  );
+
+  useEffect(() => {
+    if (!open) setMenu(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !selectedName) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "c" || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) {
+        return;
+      }
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return;
+      }
+      if (window.getSelection()?.toString()) return;
+      e.preventDefault();
+      void handleCopy(selectedName);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, selectedName, handleCopy]);
 
   if (!open) return null;
 
@@ -131,6 +176,8 @@ export function ScreenshotsModal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
         className="glass-modal flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden p-5"
         onClick={(e) => e.stopPropagation()}
       >
@@ -202,6 +249,11 @@ export function ScreenshotsModal({
                       thumb={thumbnails[item.name]}
                       scrollRoot={listScrollEl}
                       onSelect={() => setSelectedName(item.name)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setSelectedName(item.name);
+                        setMenu({ name: item.name, x: e.clientX, y: e.clientY });
+                      }}
                       onVisible={requestThumbnail}
                     />
                   ))}
@@ -224,6 +276,14 @@ export function ScreenshotsModal({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="interactive-press inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-1 text-[0.8125rem] font-semibold text-white/85 hover:bg-white/20"
+                      onClick={() => void handleCopy(selected.name)}
+                    >
+                      <AssetIcon name="copy" className="h-3 w-3" />
+                      {tt("modpacks.screenshots.copy")}
+                    </button>
                     <button
                       type="button"
                       className="interactive-press rounded-xl bg-white/10 px-3 py-1 text-[0.8125rem] font-semibold text-white/85 hover:bg-white/20"
@@ -249,7 +309,13 @@ export function ScreenshotsModal({
                     </button>
                   </div>
                 </div>
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/50">
+                <div
+                  className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/50"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setMenu({ name: selected.name, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   {previewLoading && !previewUri ? (
                     <div className="text-xs text-white/55">
                       {tt("modpacks.screenshots.loading")}
@@ -275,6 +341,28 @@ export function ScreenshotsModal({
           </div>
         </div>
       </div>
+      {menu ? (
+        <ContextMenuPanel
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          zIndex={360}
+          className="w-44"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              const name = menu.name;
+              setMenu(null);
+              void handleCopy(name);
+            }}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left hover:bg-white/10"
+          >
+            <AssetIcon name="copy" className="h-3.5 w-3.5" />
+            <span>{tt("modpacks.screenshots.copy")}</span>
+          </button>
+        </ContextMenuPanel>
+      ) : null}
     </div>
   );
 }

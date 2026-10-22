@@ -9,7 +9,18 @@ export type PlayConsoleHotkeyActions = {
 export type ModpackHotkeyActions = {
   openCreate: () => void;
   openImport: () => void;
+  openScreenshots: () => void;
 };
+
+export type AppHotkeyActions = {
+  launchGame: () => void;
+  stopGame: () => void;
+  toggleSidebar: () => void;
+  openHotkeysHelp: () => void;
+};
+
+export const HOTKEY_REFRESH_EVENT = "launcher:hotkey-refresh";
+export const HOTKEY_SEARCH_SELECTOR = "[data-hotkey-search]";
 
 export type ModpackViewId = "list" | "create" | "import" | "manage";
 
@@ -37,6 +48,26 @@ function isEditableTarget(target: EventTarget | null): boolean {
     'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]',
   );
   return el !== null;
+}
+
+function isOverlayOpen(): boolean {
+  return document.querySelector('[aria-modal="true"], .glass-overlay') !== null;
+}
+
+function focusVisibleSearch(): boolean {
+  const fields = document.querySelectorAll<HTMLInputElement>(HOTKEY_SEARCH_SELECTOR);
+  for (const field of fields) {
+    if (field.offsetParent === null || field.disabled) continue;
+    field.focus();
+    field.select();
+    return true;
+  }
+  return false;
+}
+
+function digitFromEvent(e: KeyboardEvent): number | null {
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+  return m ? Number(m[1]) : null;
 }
 
 function isCtrlOrMeta(e: KeyboardEvent): boolean {
@@ -137,6 +168,18 @@ const HOTKEY_BINDINGS: HotkeyBinding[] = [
     },
   },
   {
+    id: "modpacks.openScreenshots",
+    match: { key: "s", ctrl: true, shift: true },
+    when: (ctx) =>
+      isSplittableTabVisible("modpacks", ctx.activeTab, ctx.effectiveTabSplit),
+    run: (ctx) => {
+      const actions = ctx.modpackActionsRef.current;
+      if (!actions) return false;
+      actions.openScreenshots();
+      return true;
+    },
+  },
+  {
     id: "modpacks.openImport",
     match: { key: "i", ctrl: true, shift: false },
     when: (ctx) =>
@@ -156,10 +199,13 @@ export type UseHotkeysOptions = {
   isConsoleVisible: boolean;
   playConsoleActionsRef: MutableRefObject<PlayConsoleHotkeyActions | null>;
   modpackActionsRef: MutableRefObject<ModpackHotkeyActions | null>;
+  appActionsRef: MutableRefObject<AppHotkeyActions | null>;
   settingsTab: SettingsTabId;
   modpackView: ModpackViewId;
   modpackNavRef: MutableRefObject<ModpackNavigationActions | null>;
   setActiveItem: (item: SidebarTabId) => void;
+  tabOrder: SidebarTabId[];
+  activateTab: (item: SidebarTabId) => void;
   setSettingsTab: (tab: SettingsTabId) => void;
   setModpackView: (view: ModpackViewId) => void;
   setRequestedModpackView: (view: ModpackViewId | null) => void;
@@ -171,10 +217,13 @@ export function useHotkeys({
   isConsoleVisible,
   playConsoleActionsRef,
   modpackActionsRef,
+  appActionsRef,
   settingsTab,
   modpackView,
   modpackNavRef,
   setActiveItem,
+  tabOrder,
+  activateTab,
   setSettingsTab,
   setModpackView,
   setRequestedModpackView,
@@ -273,6 +322,98 @@ export function useHotkeys({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat || isEditableTarget(e.target)) return;
 
+      const ctrl = isCtrlOrMeta(e);
+      const overlay = isOverlayOpen();
+
+      if (!ctrl && !e.altKey && !e.shiftKey) {
+        const digit = digitFromEvent(e);
+        const target = digit === null ? undefined : tabOrder[digit - 1];
+        if (target && !overlay) {
+          e.preventDefault();
+          activateTab(target);
+          return;
+        }
+      }
+
+      if (e.key === "F5" && !ctrl && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        if (!overlay) window.dispatchEvent(new Event(HOTKEY_REFRESH_EVENT));
+        return;
+      }
+
+      const runGlobal = (): boolean => {
+        const app = appActionsRef.current;
+
+        if (e.altKey && !ctrl && !e.shiftKey) {
+          if (e.key === "ArrowLeft" && goBack()) e.preventDefault();
+          else if (e.key === "ArrowRight" && goForward()) e.preventDefault();
+          return true;
+        }
+
+        if (ctrl && e.key === "Tab" && !e.altKey) {
+          const idx = tabOrder.indexOf(activeTab);
+          if (tabOrder.length > 0) {
+            const step = e.shiftKey ? -1 : 1;
+            const next = tabOrder[(Math.max(idx, 0) + step + tabOrder.length) % tabOrder.length];
+            e.preventDefault();
+            activateTab(next);
+          }
+          return true;
+        }
+
+        if (ctrl && !e.altKey && !e.shiftKey) {
+          if (e.key === ",") {
+            e.preventDefault();
+            activateTab("settings");
+            return true;
+          }
+          if (e.key.toLowerCase() === "b" && app) {
+            e.preventDefault();
+            app.toggleSidebar();
+            return true;
+          }
+          if (e.key.toLowerCase() === "k") {
+            if (focusVisibleSearch()) e.preventDefault();
+            return true;
+          }
+          if (e.key === "Enter" && app) {
+            e.preventDefault();
+            app.launchGame();
+            return true;
+          }
+        }
+
+        if (ctrl && e.shiftKey && !e.altKey && e.key.toLowerCase() === "k" && app) {
+          e.preventDefault();
+          app.stopGame();
+          return true;
+        }
+
+        if (!ctrl && !e.altKey) {
+          if (e.key === "/" && !e.shiftKey && focusVisibleSearch()) {
+            e.preventDefault();
+            return true;
+          }
+          if ((e.key === "F1" || e.key === "?") && app) {
+            e.preventDefault();
+            app.openHotkeysHelp();
+            return true;
+          }
+          if (
+            e.key === "Escape" &&
+            isModpacksTabVisible(activeTab, effectiveTabSplit) &&
+            modpackView !== "list"
+          ) {
+            e.preventDefault();
+            modpackNavRef.current?.goToList();
+            setModpackView("list");
+            return true;
+          }
+        }
+        return false;
+      };
+      if (!overlay && runGlobal()) return;
+
       const ctx: HotkeyHandlerContext = {
         activeTab,
         effectiveTabSplit,
@@ -316,6 +457,12 @@ export function useHotkeys({
     isConsoleVisible,
     playConsoleActionsRef,
     modpackActionsRef,
+    appActionsRef,
+    modpackView,
+    modpackNavRef,
+    setModpackView,
+    tabOrder,
+    activateTab,
     goBack,
     goForward,
   ]);

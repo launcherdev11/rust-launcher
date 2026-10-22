@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import { CatalogCardSkeleton, EmptyState, Spinner } from "../../components/ui";
+import { useMarqueeSelection } from "../../hooks/useMarqueeSelection";
 import type { CatalogProject, ContentProvider } from "./types";
 
 type Tt = (key: string, vars?: Record<string, string | number>) => string;
@@ -43,6 +45,7 @@ type CatalogGridProps = {
   onSelect: (key: string) => void;
   onQuickInstall?: (key: string) => void;
   onToggleBatchSelect?: (key: string) => void;
+  onSetBatchSelection?: (keys: Set<string>) => void;
   onClearBatchSelection?: () => void;
   onBatchInstall?: () => void;
   page: number;
@@ -70,6 +73,7 @@ export function CatalogGrid({
   onSelect,
   onQuickInstall,
   onToggleBatchSelect,
+  onSetBatchSelection,
   onClearBatchSelection,
   onBatchInstall,
   page,
@@ -87,6 +91,13 @@ export function CatalogGrid({
   const skeletonCount = layout === "grid" ? 8 : 5;
   const batchCount = batchSelectedKeys.size;
   const showBatchBar = allowBatchSelect && batchCount > 0;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const handleMarqueePointerDown = useMarqueeSelection({
+    containerRef: scrollRef,
+    selected: batchSelectedKeys,
+    onChange: (keys) => onSetBatchSelection?.(keys),
+    enabled: allowBatchSelect && Boolean(onSetBatchSelection) && !batchInstalling,
+  });
 
   return (
     <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
@@ -98,7 +109,11 @@ export function CatalogGrid({
           ) : null}
         </div>
       </div>
-      <div className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
+      <div
+        ref={scrollRef}
+        onPointerDown={handleMarqueePointerDown}
+        className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2"
+      >
         {showSkeletons ? (
           <div
             className={
@@ -139,7 +154,8 @@ export function CatalogGrid({
               return (
                 <div
                   key={p.key}
-                  className={`group relative w-full rounded-2xl border text-left transition ${
+                  data-marquee-key={canSelect ? p.key : undefined}
+                  className={`group relative w-full select-none rounded-2xl border text-left transition ${
                     layout === "grid" ? "flex flex-col" : "flex items-stretch"
                   } ${
                     isBatchSelected
@@ -162,14 +178,20 @@ export function CatalogGrid({
                         type="checkbox"
                         checked={isBatchSelected}
                         onChange={() => onToggleBatchSelect?.(p.key)}
-                        className="h-4 w-4 cursor-pointer rounded border-white/20 bg-black/40 accent-sky-400"
+                        className="accent-checkbox accent-checkbox-lg"
                         aria-label={tt("mods.batch.selectOne", { title: p.title })}
                       />
                     </label>
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => onSelect(p.key)}
+                    onClick={(e) => {
+                      if (canSelect && (e.ctrlKey || e.metaKey)) {
+                        onToggleBatchSelect?.(p.key);
+                        return;
+                      }
+                      onSelect(p.key);
+                    }}
                     className={`interactive-press flex w-full min-w-0 flex-1 gap-0 px-3 py-3 text-left ${
                       layout === "grid" ? "flex-col" : "items-stretch"
                     } ${canSelect ? "pl-9" : ""}`}
@@ -254,7 +276,7 @@ export function CatalogGrid({
         )}
       </div>
       {showBatchBar ? (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-[0.8125rem] text-white/85">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-accent-to/30 bg-accent-from/10 px-3 py-2 text-[0.8125rem] text-white/85">
           <span className="font-semibold">
             {tt("mods.batch.selected", { count: batchCount })}
           </span>

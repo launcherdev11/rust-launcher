@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { InputClearButton } from "../components/ui";
 import { useT, type Language } from "../i18n";
+import { SettingsSwitch } from "../settings-ui/SettingsComponents";
 type NotificationKind = "info" | "success" | "error" | "warning";
 
 type JavaSettings = {
@@ -26,6 +27,8 @@ type JavaSettingsProps = {
   systemMemoryGb: number;
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
   profileId?: string | null;
+  /** Rendered inside a page that already scrolls, so no inner scroll area. */
+  embedded?: boolean;
 };
 
 type ValidationState = {
@@ -68,6 +71,7 @@ export function JavaSettingsTab({
   systemMemoryGb,
   showNotification,
   profileId,
+  embedded = false,
 }: JavaSettingsProps) {
   const tt = useT(language);
   const [settings, setSettings] = useState<JavaSettings | null>(null);
@@ -508,7 +512,13 @@ export function JavaSettingsTab({
   const memoryHint = tt("javaSettings.memory.hint");
 
   return (
-    <div className="flex max-h-[clamp(240px,45vh,520px)] flex-col gap-4 overflow-y-auto pr-1">
+    <div
+      className={
+        embedded
+          ? "flex flex-col gap-3"
+          : "flex max-h-[clamp(240px,45vh,520px)] flex-col gap-3 overflow-y-auto pr-1"
+      }
+    >
       {javaManageMode && (
         <div
           className="glass-overlay fixed inset-0 z-[220] flex items-center justify-center"
@@ -537,7 +547,7 @@ export function JavaSettingsTab({
                 return (
                   <label
                     key={major}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/90 hover:bg-black/45"
+                    className="glass-control flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm text-white/90"
                   >
                     <span className="flex items-center gap-2">
                       <input
@@ -561,14 +571,14 @@ export function JavaSettingsTab({
               <button
                 type="button"
                 onClick={() => setSelectedJavaMajors([...AVAILABLE_JAVA_MAJORS])}
-                className="interactive-press rounded-lg bg-white/10 px-3 py-1 text-[0.8125rem] font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("javaSettings.manageDialog.selectAll")}
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedJavaMajors([])}
-                className="interactive-press rounded-lg bg-white/10 px-3 py-1 text-[0.8125rem] font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("javaSettings.manageDialog.selectNone")}
               </button>
@@ -577,7 +587,7 @@ export function JavaSettingsTab({
               <button
                 type="button"
                 onClick={() => setJavaManageMode(null)}
-                className="interactive-press rounded-xl bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("common.cancel")}
               </button>
@@ -585,11 +595,7 @@ export function JavaSettingsTab({
                 type="button"
                 onClick={() => void handleConfirmJavaManage()}
                 disabled={selectedJavaMajors.length === 0}
-                className={`interactive-press rounded-xl px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${
-                  javaManageMode === "verify"
-                    ? "bg-white/20 hover:bg-white/30"
-                    : "bg-amber-500 hover:bg-amber-400"
-                }`}
+                className="btn btn-sm btn-accent"
               >
                 {javaManageMode === "verify"
                   ? tt("javaSettings.manageDialog.verifyConfirm")
@@ -605,7 +611,7 @@ export function JavaSettingsTab({
         </div>
       ) : (
         <>
-          <div className="mb-1 text-xs text-white/60">
+          <div className="ui-meta">
             {tt("javaSettings.description")}
           </div>
           {profileId && (
@@ -614,7 +620,7 @@ export function JavaSettingsTab({
             </div>
           )}
 
-          <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3 space-y-3">
+          <div className="glass-inset px-4 py-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-white/90">
                 {tt("javaSettings.runtime.title")}
@@ -626,7 +632,7 @@ export function JavaSettingsTab({
             <select
               value={selectedRuntimePath}
               onChange={(e) => handleSelectRuntime(e.target.value)}
-              className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-white/35 focus:outline-none"
+              className="launcher-select glass-control w-full px-3 text-sm outline-none"
             >
               <option value="">{tt("javaSettings.runtime.auto")}</option>
               {runtimes.map((runtime) => (
@@ -652,7 +658,7 @@ export function JavaSettingsTab({
                     )
                   }
                   placeholder={tt("javaSettings.javaPath.placeholder")}
-                  className={`glass-control w-full rounded-xl border px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:outline-none ${
+                  className={`glass-control w-full px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none ${
                     effectiveSettings.java_path ? "pr-9" : ""
                   }`}
                 />
@@ -667,7 +673,7 @@ export function JavaSettingsTab({
                 type="button"
                 onClick={handleDetectJava}
                 disabled={javaBusy}
-                className="interactive-press shrink-0 rounded-xl accent-bg px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:brightness-110 disabled:opacity-60"
+                className="btn btn-sm btn-tint"
               >
                 {tt("javaSettings.actions.detect")}
               </button>
@@ -675,7 +681,7 @@ export function JavaSettingsTab({
                 type="button"
                 onClick={handleBrowseJava}
                 disabled={javaBusy}
-                className="interactive-press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60"
+                className="btn btn-sm btn-soft"
               >
                 {tt("javaSettings.actions.browse")}
               </button>
@@ -685,7 +691,7 @@ export function JavaSettingsTab({
                 type="button"
                 onClick={() => void openJavaManageDialog("verify")}
                 disabled={javaBusy}
-                className="interactive-press rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 disabled:opacity-60"
+                className="btn btn-sm btn-soft"
               >
                 {verifyingJava
                   ? tt("javaSettings.actions.verifyChecking")
@@ -695,7 +701,7 @@ export function JavaSettingsTab({
                 type="button"
                 onClick={() => void openJavaManageDialog("reinstall")}
                 disabled={javaBusy}
-                className="interactive-press rounded-xl bg-amber-600/90 px-3 py-1.5 text-xs font-semibold text-white shadow-soft hover:bg-amber-500 disabled:opacity-60"
+                className="btn btn-sm btn-soft"
               >
                 {reinstallingJava
                   ? tt("javaSettings.actions.reinstalling")
@@ -707,67 +713,34 @@ export function JavaSettingsTab({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
-            <label className="flex items-center justify-between gap-3 text-sm text-white/90">
-              <span>
+          <div className="glass-inset divide-y divide-[color:var(--seam)] px-4">
+            <div className="flex items-center justify-between gap-4 py-3">
+              <span className="min-w-0 text-sm text-white/90" title={tt("javaSettings.useCustomArgs.hint")}>
                 {tt("javaSettings.useCustomArgs.label")}
               </span>
-              <button
-                type="button"
-                onClick={() =>
-                  updateField("use_custom_jvm_args", !effectiveSettings.use_custom_jvm_args)
-                }
-                className={`interactive-press relative inline-flex h-6 w-11 items-center rounded-xl border px-0.5 transition ${
-                  effectiveSettings.use_custom_jvm_args
-                    ? "border-accent-to bg-accent-from/20"
-                    : "border-white/15 bg-white/10"
-                }`}
-                title={
-                  tt("javaSettings.useCustomArgs.hint")
-                }
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    effectiveSettings.use_custom_jvm_args ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </label>
-          </div>
-
-          <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
-            <label className="flex items-center justify-between gap-3 text-sm text-white/90">
-              <span className="flex flex-col gap-0.5">
-                <span>{tt("javaSettings.preferIpv6.label")}</span>
-                <span className="text-[0.8125rem] text-white/50">
-                  {tt("javaSettings.preferIpv6.hint")}
-                </span>
+              <SettingsSwitch
+                label={tt("javaSettings.useCustomArgs.label")}
+                checked={effectiveSettings.use_custom_jvm_args}
+                onChange={(value) => updateField("use_custom_jvm_args", value)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4 py-3">
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm text-white/90">{tt("javaSettings.preferIpv6.label")}</span>
+                <span className="ui-meta">{tt("javaSettings.preferIpv6.hint")}</span>
               </span>
-              <button
-                type="button"
-                onClick={() =>
-                  updateField("prefer_ipv6_network", !effectiveSettings.prefer_ipv6_network)
-                }
-                className={`interactive-press relative inline-flex h-6 w-11 shrink-0 items-center rounded-xl border px-0.5 transition ${
-                  effectiveSettings.prefer_ipv6_network
-                    ? "border-accent-to bg-accent-from/20"
-                    : "border-white/15 bg-white/10"
-                }`}
-                title={tt("javaSettings.preferIpv6.hint")}
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    effectiveSettings.prefer_ipv6_network ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </label>
+              <SettingsSwitch
+                label={tt("javaSettings.preferIpv6.label")}
+                checked={effectiveSettings.prefer_ipv6_network}
+                onChange={(value) => updateField("prefer_ipv6_network", value)}
+              />
+            </div>
           </div>
 
           {effectiveSettings.use_custom_jvm_args && (
             <>
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-1">
-                <div className="space-y-2 rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-2 glass-inset px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-white/90">
                     {tt("javaSettings.memory.title")}
@@ -785,7 +758,7 @@ export function JavaSettingsTab({
                         value={effectiveSettings.xms ?? ""}
                         onChange={(e) => updateField("xms", e.target.value || null)}
                         placeholder={tt("javaSettings.memory.xmsPlaceholder")}
-                        className={`glass-control w-full rounded-xl border px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:outline-none ${
+                        className={`glass-control w-full px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none ${
                           effectiveSettings.xms ? "pr-9" : ""
                         }`}
                       />
@@ -810,7 +783,7 @@ export function JavaSettingsTab({
                         value={effectiveSettings.xmx ?? ""}
                         onChange={(e) => updateField("xmx", e.target.value || null)}
                         placeholder={tt("javaSettings.memory.xmxPlaceholder")}
-                        className={`glass-control w-full rounded-xl border px-3 py-1.5 text-xs text-white placeholder:text-white/35 focus:outline-none ${
+                        className={`glass-control w-full px-3 py-2 text-sm text-white placeholder:text-white/35 focus:outline-none ${
                           effectiveSettings.xmx ? "pr-9" : ""
                         }`}
                       />
@@ -834,7 +807,7 @@ export function JavaSettingsTab({
                     <button
                       key={v}
                       type="button"
-                      className="interactive-press rounded-xl bg-white/10 px-3 py-0.5 text-[0.8125rem] font-semibold text-white hover:bg-white/20"
+                      className="btn btn-sm btn-soft"
                       onClick={() => {
                         updateField("xms", v);
                         updateField("xmx", v);
@@ -858,8 +831,8 @@ export function JavaSettingsTab({
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3">
+            <div className="space-y-3">
+              <div className="glass-inset px-4 py-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-white/90">
                     {tt("javaSettings.jvmArgs.title")}
@@ -873,7 +846,7 @@ export function JavaSettingsTab({
                     value={effectiveSettings.jvm_args ?? ""}
                     onChange={(e) => updateField("jvm_args", e.target.value || null)}
                     rows={7}
-                    className={`glass-control w-full rounded-2xl border px-3 py-2 text-xs font-mono text-white placeholder:text-white/30 focus:outline-none ${
+                    className={`glass-control w-full px-3 py-2 text-xs font-mono text-white placeholder:text-white/30 focus:outline-none ${
                       effectiveSettings.jvm_args ? "pr-9" : ""
                     }`}
                     placeholder={
@@ -891,11 +864,11 @@ export function JavaSettingsTab({
                   <span className="text-white/80">
                     {tt("javaSettings.jvmArgs.placeholdersLabel")}
                   </span>
-                  <code className="rounded-md bg-white/10 px-2 py-0.5">${"{classpath}"}</code>
-                  <code className="rounded-md bg-white/10 px-2 py-0.5">${"{natives}"}</code>
-                  <code className="rounded-md bg-white/10 px-2 py-0.5">${"{gameDir}"}</code>
-                  <code className="rounded-md bg-white/10 px-2 py-0.5">${"{assetsDir}"}</code>
-                  <code className="rounded-md bg-white/10 px-2 py-0.5">${"{version}"}</code>
+                  <code className="tag font-mono">${"{classpath}"}</code>
+                  <code className="tag font-mono">${"{natives}"}</code>
+                  <code className="tag font-mono">${"{gameDir}"}</code>
+                  <code className="tag font-mono">${"{assetsDir}"}</code>
+                  <code className="tag font-mono">${"{version}"}</code>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.8125rem] text-white/75">
                   <span className="mr-1">
@@ -904,33 +877,33 @@ export function JavaSettingsTab({
                   <button
                     type="button"
                     onClick={() => applyPreset("balanced")}
-                    className="interactive-press rounded-xl bg-white/10 px-3 py-0.5 text-[0.8125rem] font-semibold text-white hover:bg-white/20"
+                    className="btn btn-sm btn-soft"
                   >
                     {tt("javaSettings.presets.balanced")}
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset("performance")}
-                    className="interactive-press rounded-xl bg-white/10 px-3 py-0.5 text-[0.8125rem] font-semibold text-white hover:bg-white/20"
+                    className="btn btn-sm btn-soft"
                   >
                     {tt("javaSettings.presets.performance")}
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset("low_memory")}
-                    className="interactive-press rounded-xl bg-white/10 px-3 py-0.5 text-[0.8125rem] font-semibold text-white hover:bg-white/20"
+                    className="btn btn-sm btn-soft"
                   >
                     {tt("javaSettings.presets.lowMemory")}
                   </button>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
+              <div className="glass-inset px-4 py-3">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleValidateArgs}
-                    className="interactive-press rounded-xl accent-bg px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft hover:opacity-90"
+                    className="btn btn-sm btn-soft"
                   >
                     {tt("javaSettings.actions.validate")}
                   </button>
@@ -979,27 +952,27 @@ export function JavaSettingsTab({
             </>
           )}
 
-          <div className="rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
+          <div className="glass-inset px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="interactive-press rounded-xl accent-bg px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft hover:brightness-110 disabled:opacity-60"
+                className="btn btn-sm btn-accent"
               >
                 {tt("javaSettings.actions.save")}
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
-                className="interactive-press rounded-xl bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("javaSettings.actions.cancel")}
               </button>
               <button
                 type="button"
                 onClick={handleResetToRecommended}
-                className="interactive-press rounded-xl bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+                className="btn btn-sm btn-ghost"
               >
                 {tt("javaSettings.actions.resetRecommended")}
               </button>
