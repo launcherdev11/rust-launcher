@@ -15,6 +15,8 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AssetIcon } from "../../components/asset_icon";
 import { TextField } from "../../components/ui";
+import { confirmDialog } from "../../lib/confirmDialog";
+import { isHotkeyKey } from "../../lib/hotkeyKey";
 import {
   KNOWN_THEME_VARIABLES,
   THEME_SNIPPETS,
@@ -139,19 +141,27 @@ export function ThemeEditorPanel({ themeId, tt, onClose, onSaved, showNotificati
     }
   }, [theme, saving, variables, themeId, meta, css, livePreview, onSaved, showNotification, te]);
 
-  const requestClose = useCallback(() => {
-    if (dirty && !window.confirm(te("discardConfirm"))) return;
+  const requestClose = useCallback(async () => {
+    if (dirty) {
+      const discard = await confirmDialog({
+        title: tt("common.state.unsavedTitle"),
+        message: te("discardConfirm"),
+        confirmLabel: tt("common.state.discard"),
+        cancelLabel: tt("common.state.keepEditing"),
+      });
+      if (!discard) return;
+    }
     onClose();
-  }, [dirty, onClose, te]);
+  }, [dirty, onClose, te, tt]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      if ((e.ctrlKey || e.metaKey) && isHotkeyKey(e, "s")) {
         e.preventDefault();
         void save();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        requestClose();
+        void requestClose();
       }
     };
     window.addEventListener("keydown", onKeyDown);

@@ -5,11 +5,19 @@ import { OnboardingButton } from "../components/OnboardingButton";
 import { OnboardingLauncherIcon } from "../components/OnboardingLauncherIcon";
 import { OnboardingLayout } from "../components/OnboardingLayout";
 
+const LANGUAGE_OPTIONS: { code: Language; nativeName: string }[] = [
+  { code: "ru", nativeName: "Русский" },
+  { code: "en", nativeName: "English" },
+  { code: "de", nativeName: "Deutsch" },
+  { code: "es", nativeName: "Español" },
+];
+
 type Props = {
   language: Language;
   stepIndex: number;
   accentColor?: string;
   backgroundImageUrl?: string;
+  onSelectLanguage: (code: Language) => void;
   onStart: () => void;
 };
 
@@ -18,6 +26,7 @@ export function WelcomeScreen({
   stepIndex,
   accentColor,
   backgroundImageUrl,
+  onSelectLanguage,
   onStart,
 }: Props) {
   const tt = useT(language);
@@ -49,7 +58,7 @@ export function WelcomeScreen({
         {tt("onboarding.welcome.title")}
       </motion.h1>
       <motion.p
-        className="mx-auto mt-2 max-w-md text-center text-sm text-white/60"
+        className="mx-auto mt-2 max-w-md text-center text-sm leading-relaxed text-white/60"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, delay: 0.1, ease: "easeOut" }}
@@ -63,7 +72,34 @@ export function WelcomeScreen({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, delay: 0.16, ease: "easeOut" }}
       >
-        <OnboardingButton variant="primary" fullWidth onClick={onStart}>
+        <p id="onboarding-language-label" className="mb-1.5 text-xs font-medium text-white/50">
+          {tt("onboarding.welcome.languageLabel")}
+        </p>
+        <div
+          role="radiogroup"
+          aria-labelledby="onboarding-language-label"
+          className="seg-track flex flex-wrap gap-1 p-1"
+        >
+          {LANGUAGE_OPTIONS.map((opt) => {
+            const active = opt.code === language;
+            return (
+              <button
+                key={opt.code}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onSelectLanguage(opt.code)}
+                className={`interactive-press min-w-[5.5rem] flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold ${
+                  active ? "seg-on" : "text-white/70 hover:text-white"
+                }`}
+              >
+                {opt.nativeName}
+              </button>
+            );
+          })}
+        </div>
+
+        <OnboardingButton variant="primary" fullWidth onClick={onStart} className="mt-5">
           {tt("onboarding.welcome.cta")}
         </OnboardingButton>
       </motion.div>

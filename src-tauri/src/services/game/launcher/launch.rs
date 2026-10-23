@@ -8,8 +8,9 @@ use crate::app::paths::{game_root_dir, launcher_data_dir, libraries_dir, version
 use crate::infra::http::http_client;
 use crate::infra::process::hide_console;
 use crate::models::events::{
-    GameConsoleLinePayload, GameProcessExitedPayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload,
-    EVENT_ACTIVE_ACCOUNT_CHANGED, EVENT_GAME_CONSOLE_LINE, EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
+    GameConsoleLinePayload, GameProcessExitedPayload, LastPlayedUpdatedPayload, LaunchStagePayload,
+    PlaytimeUpdatedPayload, EVENT_ACTIVE_ACCOUNT_CHANGED, EVENT_GAME_CONSOLE_LINE,
+    EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_LAUNCH_STAGE, EVENT_PLAYTIME_UPDATED,
 };
 use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
@@ -50,6 +51,15 @@ use crate::services::game::version_types::*;
 use crate::services::game::versions::get_mojang_version_url;
 
 const ELY_AUTHLIB_INJECTOR_TARGET: &str = "ely.by";
+
+fn emit_launch_stage(app: &AppHandle, stage: &str) {
+    let _ = app.emit(
+        EVENT_LAUNCH_STAGE,
+        LaunchStagePayload {
+            stage: stage.to_string(),
+        },
+    );
+}
 
 const FRIEND_WORLD_OFFLINE_ERR: &str = "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.";
 
@@ -215,6 +225,7 @@ pub async fn launch_game(
         }
     }
 
+    emit_launch_stage(&app, "version");
     let (mut detail, is_fabric) = if let Some(ref url) = version_url {
         let local_json = vers_root.join(&version_id).join(format!("{version_id}.json"));
         let local = tokio::fs::read_to_string(&local_json)
@@ -367,6 +378,7 @@ pub async fn launch_game(
         GameFeatures::full()
     };
 
+    emit_launch_stage(&app, "libraries");
     let is_forge = is_forge_profile(&version_id, &detail.main_class, &detail.libraries);
     ensure_library_artifacts_present_for_launch(
         &app,
@@ -575,6 +587,7 @@ pub async fn launch_game(
     let mut assets_str_owned = assets_root.to_string_lossy().into_owned();
     if let Some(ref asset_index) = detail.asset_index {
         let client = http_client(false);
+        emit_launch_stage(&app, "assets");
         ensure_assets_for_launch(&client, asset_index, &root, &app, &version_id, &game_dir).await;
         let legacy = assets_root.join("virtual").join("legacy");
         let index_is_virtual = std::fs::read_to_string(
@@ -686,6 +699,7 @@ pub async fn launch_game(
         let mut ms_refresh_error: Option<String> = None;
 
         if should_refresh_ms {
+            emit_launch_stage(&app, "account");
             match ensure_ms_minecraft_session().await {
                 Ok(Some((mc_name, mc_uuid, mc_access_token))) => {
                     if let Ok(mut p) = get_profile() {
@@ -873,6 +887,7 @@ pub async fn launch_game(
             (major, component.to_string())
         }
     };
+    emit_launch_stage(&app, "java");
     let default_java_path =
         crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
     eprintln!(
@@ -1285,6 +1300,7 @@ pub async fn launch_game(
     );
     hide_console(&mut cmd);
 
+    emit_launch_stage(&app, "starting");
     let mut child = cmd.spawn().map_err(|e| {
 
         if e.kind() == ErrorKind::PermissionDenied {

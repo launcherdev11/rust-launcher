@@ -8,11 +8,10 @@ import { AccountSelectionScreen } from "./screens/AccountSelectionScreen";
 import { ElyLoginScreen } from "./screens/ElyLoginScreen";
 import { FinishScreen } from "./screens/FinishScreen";
 import { ImportMigrationScreen } from "./screens/ImportMigrationScreen";
-import { LanguageScreen } from "./screens/LanguageScreen";
 import { MicrosoftLoginScreen } from "./screens/MicrosoftLoginScreen";
 import { WelcomeScreen } from "./screens/WelcomeScreen";
 import { OnboardingBackgroundAnimatedProvider } from "./backgroundAnimatedContext";
-import type { AccountProvider, OnboardingLanguageOption, OnboardingStep } from "./types";
+import type { AccountProvider, OnboardingStep } from "./types";
 import { stepProgressIndex } from "./types";
 
 type Profile = {
@@ -29,7 +28,7 @@ export type OnboardingFlowProps = {
   backgroundImageUrl?: string;
   backgroundAnimated?: boolean;
   onLanguagePersist: (lang: Language) => void;
-  onComplete: () => void | Promise<void>;
+  onComplete: (options: { tour: boolean }) => void | Promise<void>;
   onProfileUpdated?: () => void | Promise<void>;
 };
 
@@ -44,9 +43,6 @@ export function OnboardingFlow({
 }: OnboardingFlowProps) {
   const tt = useT(language);
   const [step, setStep] = useState<OnboardingStep>("welcome");
-  const [selectedLanguage, setSelectedLanguage] = useState<OnboardingLanguageOption | null>(
-    language,
-  );
 
   const [elyLoading, setElyLoading] = useState(false);
   const [elyError, setElyError] = useState<string | null>(null);
@@ -71,14 +67,6 @@ export function OnboardingFlow({
   const goFinish = useCallback(() => {
     setStep("finish");
   }, []);
-
-  const applyLanguage = useCallback(
-    (code: OnboardingLanguageOption) => {
-      setSelectedLanguage(code);
-      onLanguagePersist(code);
-    },
-    [onLanguagePersist],
-  );
 
   const cleanupElyListeners = useCallback(() => {
     elyListenersRef.current.ok?.();
@@ -180,10 +168,10 @@ export function OnboardingFlow({
     }
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (options: { tour: boolean }) => {
     setFinishing(true);
     try {
-      await onComplete();
+      await onComplete(options);
     } finally {
       setFinishing(false);
     }
@@ -198,20 +186,8 @@ export function OnboardingFlow({
             stepIndex={stepIndex}
             accentColor={accentColor}
             backgroundImageUrl={backgroundImageUrl}
-            onStart={() => setStep("language")}
-          />
-        );
-      case "language":
-        return (
-          <LanguageScreen
-            language={language}
-            selected={selectedLanguage}
-            stepIndex={stepIndex}
-            accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
-            onSelect={applyLanguage}
-            onBack={() => setStep("welcome")}
-            onNext={() => setStep("account-select")}
+            onSelectLanguage={onLanguagePersist}
+            onStart={() => setStep("account-select")}
           />
         );
       case "account-select":
@@ -229,7 +205,7 @@ export function OnboardingFlow({
               setStep(provider === "ely" ? "account-ely" : "account-microsoft");
             }}
             onSkip={goImport}
-            onBack={() => setStep("language")}
+            onBack={() => setStep("welcome")}
           />
         );
       case "account-ely":
@@ -266,7 +242,12 @@ export function OnboardingFlow({
               setStep("account-select");
             }}
             onLogin={() => void handleMicrosoftLogin()}
-            onSkip={goImport}
+            onSkip={() => {
+              cleanupMsListener();
+              setMsLoading(false);
+              setMsAuthUrl(null);
+              goImport();
+            }}
           />
         );
       case "import-migration":
@@ -289,7 +270,7 @@ export function OnboardingFlow({
             accentColor={accentColor}
             backgroundImageUrl={backgroundImageUrl}
             finishing={finishing}
-            onFinish={() => void handleFinish()}
+            onFinish={(options) => void handleFinish(options)}
           />
         );
       default:

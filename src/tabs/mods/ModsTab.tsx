@@ -1262,6 +1262,7 @@ export function ModsTab({
             pageSize={CATALOG_PAGE_SIZE}
             onPageChange={setPage}
             emptyMessage={emptyMessage}
+            onRetry={() => setRefreshNonce((n) => n + 1)}
           />
         )}
       </div>

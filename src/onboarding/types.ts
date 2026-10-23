@@ -2,7 +2,6 @@ import type { Language } from "../i18n";
 
 export type OnboardingStep =
   | "welcome"
-  | "language"
   | "account-select"
   | "account-ely"
   | "account-microsoft"
@@ -12,23 +11,20 @@ export type OnboardingStep =
 export type AccountProvider = "ely" | "microsoft";
 
 export type OnboardingLanguageOption = Language;
-export const ONBOARDING_TOTAL_STEPS = 6;
+export const ONBOARDING_TOTAL_STEPS = 4;
 
 export function stepProgressIndex(step: OnboardingStep): number {
   switch (step) {
     case "welcome":
       return 1;
-    case "language":
-      return 2;
     case "account-select":
-      return 3;
     case "account-ely":
     case "account-microsoft":
-      return 4;
+      return 2;
     case "import-migration":
-      return 5;
+      return 3;
     case "finish":
-      return 6;
+      return 4;
     default:
       return 1;
   }

@@ -1,8 +1,9 @@
-import { AlertCircle, ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { TextField } from "../../components/ui";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
+import { LoginErrorNotice } from "../components/LoginErrorNotice";
 import { OnboardingButton } from "../components/OnboardingButton";
 import { OnboardingLayout } from "../components/OnboardingLayout";
 
@@ -94,10 +95,16 @@ export function ElyLoginScreen({
         <p className="text-[0.8125rem] text-white/45">{tt("onboarding.ely.securityHint")}</p>
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <span>{error}</span>
-          </div>
+          <LoginErrorNotice
+            language={language}
+            message={error}
+            allowCredentialsHint
+            retryDisabled={loading}
+            onRetry={() => {
+              if (username.trim() && password) onLogin(username.trim(), password);
+              else onOAuth?.();
+            }}
+          />
         ) : null}
 
         {success ? (

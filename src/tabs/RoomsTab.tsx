@@ -45,7 +45,9 @@ import { NicknameWithSponsor } from "../components/SponsorBadge";
 import {
   ActionButton,
   AuthGate,
+  ConnectionNotice,
   EmptyState,
+  ErrorState,
   InputClearButton,
   Modal,
   Panel,
@@ -227,6 +229,7 @@ export function RoomsTab({
     minecraftAccountKind === "microsoft" || minecraftAccountKind === "ely";
 
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState("");
   const [userId, setUserId] = useState("");
@@ -318,6 +321,7 @@ export function RoomsTab({
     setRooms(mine);
     setFriendsRooms(friendsOwned);
     setFriends(friendList);
+    setLoadError(null);
     setSelectedRoomId((prev) => {
       if (prev && mine.some((r) => r.id === prev)) return prev;
       return null;
@@ -339,7 +343,9 @@ export function RoomsTab({
     void reloadRooms()
       .catch((e) => {
         if (!cancelled) {
-          showNotification("error", e instanceof ApiError ? e.message : String(e));
+          const msg = e instanceof ApiError ? e.message : String(e);
+          setLoadError(msg);
+          showNotification("error", msg);
         }
       })
       .finally(() => {
@@ -350,6 +356,17 @@ export function RoomsTab({
       cancelled = true;
     };
   }, [accessToken, reloadRooms, showNotification]);
+
+  const retryLoadRooms = useCallback(() => {
+    setLoading(true);
+    void reloadRooms()
+      .catch((e) => {
+        const msg = e instanceof ApiError ? e.message : String(e);
+        setLoadError(msg);
+        showNotification("error", msg);
+      })
+      .finally(() => setLoading(false));
+  }, [reloadRooms, showNotification]);
 
   useEffect(() => {
     const onWs = (ev: Event) => {
@@ -1784,6 +1801,7 @@ export function RoomsTab({
   return (
     <>
       <div className="flex w-full max-w-6xl flex-col gap-4 py-4">
+        <ConnectionNotice language={language} />
         <Panel className="flex flex-wrap items-center gap-2">
           <ActionButton
             size="sm"
@@ -1873,6 +1891,18 @@ export function RoomsTab({
                 <RoomCardSkeleton />
                 <RoomCardSkeleton />
               </div>
+            ) : rooms.length === 0 && loadError ? (
+              <ErrorState
+                compact
+                title={tt("common.state.loadFailed")}
+                description={tt("common.state.loadFailedHint")}
+                details={loadError}
+                action={
+                  <ActionButton size="sm" variant="primary" onClick={retryLoadRooms}>
+                    {tt("common.state.retry")}
+                  </ActionButton>
+                }
+              />
             ) : rooms.length === 0 ? (
               <EmptyState
                 compact

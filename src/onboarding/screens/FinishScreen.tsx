@@ -11,7 +11,7 @@ type Props = {
   accentColor?: string;
   backgroundImageUrl?: string;
   finishing?: boolean;
-  onFinish: () => void;
+  onFinish: (options: { tour: boolean }) => void;
 };
 
 export function FinishScreen({
@@ -43,11 +43,24 @@ export function FinishScreen({
       </motion.div>
 
       <h1 className="mt-1 text-center text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.finish.title")}</h1>
-      <p className="mx-auto mt-2 max-w-md text-center text-sm text-white/60">{tt("onboarding.finish.subtitle")}</p>
+      <p className="mx-auto mt-2 max-w-md text-center text-sm leading-relaxed text-white/60">{tt("onboarding.finish.subtitle")}</p>
 
-      <div className="mt-6 w-full">
-        <OnboardingButton variant="primary" fullWidth onClick={onFinish} disabled={finishing}>
-          {finishing ? tt("common.loading") : tt("onboarding.finish.cta")}
+      <div className="mt-6 flex w-full flex-col gap-2">
+        <OnboardingButton
+          variant="primary"
+          fullWidth
+          onClick={() => onFinish({ tour: false })}
+          disabled={finishing}
+        >
+          {finishing ? tt("common.loading") : tt("onboarding.finish.ctaPlay")}
+        </OnboardingButton>
+        <OnboardingButton
+          variant="secondary"
+          fullWidth
+          onClick={() => onFinish({ tour: true })}
+          disabled={finishing}
+        >
+          {tt("onboarding.finish.ctaTour")}
         </OnboardingButton>
       </div>
     </OnboardingLayout>

@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import { errorMessage, type ThemeInfo } from "../../../lib/customTheme";
 import { invoke } from "@tauri-apps/api/core";
 import { isSeasonalThemePeriod } from "../../../lib/seasonalTheme";
@@ -172,9 +173,11 @@ export function useThemes(deps: ThemesDeps) {
   const deleteActiveTheme = async () => {
     if (!activeThemeId) return;
     const themeName = activeTheme?.name ?? activeThemeId;
-    if (!window.confirm(tt("settings.launcher.customThemes.deleteConfirm", { name: themeName }))) {
-      return;
-    }
+    const ok = await confirmDialog({
+      message: tt("settings.launcher.customThemes.deleteConfirm", { name: themeName }),
+      confirmLabel: tt("common.delete"),
+    });
+    if (!ok) return;
     try {
       setEditingThemeId(null);
       await invoke("delete_theme", { themeId: activeThemeId });

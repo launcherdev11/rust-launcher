@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import {
   type ContentTab,
   type LazyApplyReport,
@@ -136,7 +137,11 @@ export function useLazyMods(deps: LazyModsDeps) {
   }
 
   async function deleteSet(set: LazyModSet) {
-    if (!window.confirm(tt("modpacks.lazy.deleteConfirm", { name: set.name }))) return;
+    const ok = await confirmDialog({
+      message: tt("modpacks.lazy.deleteConfirm", { name: set.name }),
+      confirmLabel: tt("common.delete"),
+    });
+    if (!ok) return;
     try {
       await invoke("delete_lazy_mod_set", { setId: set.id });
       await refresh();

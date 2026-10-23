@@ -20,13 +20,16 @@ import { getStoredAccessToken } from "../api/client";
 import { ApiError } from "../api/client";
 import { localeTag, useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
+import { confirmDialog } from "../lib/confirmDialog";
 import { formatDurationShort, formatPresenceStatus, getElapsedSeconds } from "../lib/socialActivity";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
 import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 import {
   ActionButton,
   AuthGate,
+  ConnectionNotice,
   EmptyState,
+  ErrorState,
   FriendRowSkeleton,
   Panel,
   TextField,
@@ -168,6 +171,7 @@ export function FriendsTab({
 
   const [loading, setLoading] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState("");
   const [userId, setUserId] = useState("");
@@ -224,6 +228,7 @@ export function FriendsTab({
       Object.fromEntries(presenceRes.map((p) => [p.user_id, p])),
     );
     setFriendsRooms(roomsRes);
+    setLoadError(null);
   }, []);
 
   const handleAcceptRequest = async (requestId: string) => {
@@ -290,7 +295,10 @@ export function FriendsTab({
 
   const handleRemoveFriend = async (friend: FriendRow) => {
     if (!accessToken) return;
-    const ok = window.confirm(tt("friends.removeConfirm", { nick: friend.nickname }));
+    const ok = await confirmDialog({
+      message: tt("friends.removeConfirm", { nick: friend.nickname }),
+      confirmLabel: tt("common.delete"),
+    });
     if (!ok) return;
 
     setBusyAction(`remove:${friend.user_id}`);
@@ -314,7 +322,9 @@ export function FriendsTab({
     setRequestsLoading(true);
     void reloadAll()
       .catch((e) => {
-        showNotification("error", e instanceof ApiError ? e.message : String(e));
+        const msg = e instanceof ApiError ? e.message : String(e);
+        setLoadError(msg);
+        showNotification("error", msg);
       })
       .finally(() => {
         setLoading(false);
@@ -367,7 +377,9 @@ export function FriendsTab({
     void reloadAll()
       .catch((e) => {
         if (!cancelled) {
-          showNotification("error", e instanceof ApiError ? e.message : String(e));
+          const msg = e instanceof ApiError ? e.message : String(e);
+          setLoadError(msg);
+          showNotification("error", msg);
         }
       })
       .finally(() => {
@@ -677,6 +689,7 @@ export function FriendsTab({
   return (
     <>
       <div className="flex w-full max-w-6xl flex-col gap-4 py-4">
+        <ConnectionNotice language={language} />
         <Panel className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <TextField
             ref={friendNickInputRef}
@@ -803,6 +816,17 @@ export function FriendsTab({
                 <FriendRowSkeleton />
                 <FriendRowSkeleton />
               </div>
+            ) : friends.length === 0 && loadError ? (
+              <ErrorState
+                title={tt("common.state.loadFailed")}
+                description={tt("common.state.loadFailedHint")}
+                details={loadError}
+                action={
+                  <ActionButton variant="primary" size="sm" onClick={handleRefresh}>
+                    {tt("common.state.retry")}
+                  </ActionButton>
+                }
+              />
             ) : friends.length === 0 ? (
               <EmptyState
                 title={tt("friends.emptyTitle")}

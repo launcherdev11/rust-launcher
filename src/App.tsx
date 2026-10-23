@@ -38,6 +38,7 @@ import { RemoveAccountDialog } from "./app/components/RemoveAccountDialog";
 import { SocialPromptCards } from "./app/components/SocialPromptCards";
 import { TabDragGhost } from "./app/components/TabDragGhost";
 import { TabPaneLoading } from "./app/components/TabPaneLoading";
+import { ConfirmHost, TabErrorBoundary } from "./components/ui";
 import { TabSplitPanes } from "./app/components/TabSplitPanes";
 import { TitleBar } from "./app/components/TitleBar";
 import { toInstanceProfileCard } from "./app/profiles";
@@ -53,6 +54,7 @@ import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import { useGameConsole } from "./hooks/useGameConsole";
 import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
 import { useGameLaunch } from "./hooks/useGameLaunch";
+import { useLaunchStage } from "./hooks/useLaunchStage";
 import { useGameRunState } from "./hooks/useGameRunState";
 import { useGlobalUiListeners } from "./hooks/useGlobalUiListeners";
 import {
@@ -291,6 +293,7 @@ function App() {
     activeInstanceName: activeInstanceProfile?.name ?? null,
   });
   const { gameStatus, isLaunching, isStopping, setRoomPresenceContext, setLaunchPresenceContext } = run;
+  const launchStage = useLaunchStage(isLaunching);
   const {
     runningConsoleProfileId,
     runningConsoleProfileIdRef,
@@ -533,7 +536,7 @@ function App() {
 
   const { accentColor, backgroundImageUrl, backgroundIsAnimated } = useLauncherAppearance(settings, activeItem);
 
-  const renderMainTabContent = useCallback(
+  const renderMainTabContentRaw = useCallback(
     (tab: SplittableTabId, inSplitPane = false) => {
       switch (tab) {
         case "mods":
@@ -687,6 +690,7 @@ function App() {
                 handleCancelInstall={handleCancelInstall}
                 handlePrimaryClick={handlePrimaryClick}
                 isLaunching={isLaunching}
+                launchStage={launchStage}
                 primaryColorClasses={primaryColorClasses}
                 primaryLabel={primaryLabel}
                 progress={progress}
@@ -756,6 +760,7 @@ function App() {
       isConsoleVisible,
       isInstalling,
       isLaunching,
+      launchStage,
       isStopping,
       isLoaderDropdownOpen,
       isVersionDropdownOpen,
@@ -790,6 +795,15 @@ function App() {
     ],
   );
 
+  const renderMainTabContent = useCallback(
+    (tab: SplittableTabId, inSplitPane = false) => (
+      <TabErrorBoundary key={tab} language={language} tabName={tab}>
+        {renderMainTabContentRaw(tab, inSplitPane)}
+      </TabErrorBoundary>
+    ),
+    [language, renderMainTabContentRaw],
+  );
+
   const singleMainTab: SplittableTabId = isSplittableTab(activeItem) ? activeItem : "play";
 
   if (onboardingVisible === null) {
@@ -812,8 +826,8 @@ function App() {
           backgroundAnimated={backgroundIsAnimated}
           onLanguagePersist={persistInterfaceLanguage}
           onProfileUpdated={loadProfile}
-          onComplete={async () => {
-            pendingProductTourRef.current = true;
+          onComplete={async ({ tour }) => {
+            pendingProductTourRef.current = tour;
             try {
               window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
               window.localStorage.removeItem(ONBOARDING_FORCE_STORAGE_KEY);
@@ -835,6 +849,8 @@ function App() {
           backgroundImageUrl={backgroundImageUrl}
           backgroundIsAnimated={backgroundIsAnimated}
         />
+
+        <ConfirmHost language={language} />
 
         <NotificationToasts
           notifications={notifications}
@@ -1030,30 +1046,35 @@ function App() {
               }
               aria-hidden={activeItem !== "rooms"}
             >
-              <RoomsTab
-                showNotification={showNotification}
-                language={language}
-                minecraftAccountKind={activeAccountKind}
-                gameStatus={gameStatus}
-                tabActive={activeItem === "rooms"}
-                onLaunchToServer={handleLaunchToServer}
-                onPresenceContextChange={setRoomPresenceContext}
-                onRoomLaunchContextChange={setLaunchPresenceContext}
-                onOpenAccounts={() => setActiveItemWithSound("accounts")}
-                onApplyRoomGameSettings={applyRoomGameSettings}
-                currentGame={roomCurrentGame}
-              />
+              <TabErrorBoundary language={language} tabName="rooms">
+                <RoomsTab
+                  showNotification={showNotification}
+                  language={language}
+                  minecraftAccountKind={activeAccountKind}
+                  gameStatus={gameStatus}
+                  tabActive={activeItem === "rooms"}
+                  onLaunchToServer={handleLaunchToServer}
+                  onPresenceContextChange={setRoomPresenceContext}
+                  onRoomLaunchContextChange={setLaunchPresenceContext}
+                  onOpenAccounts={() => setActiveItemWithSound("accounts")}
+                  onApplyRoomGameSettings={applyRoomGameSettings}
+                  currentGame={roomCurrentGame}
+                />
+              </TabErrorBoundary>
             </div>
             {activeItem === "friends" ? (
               <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
-                <FriendsTab
-                  showNotification={showNotification}
-                  language={language}
-                  onOpenRooms={() => setActiveItemWithSound("rooms")}
-                  onOpenAccounts={() => setActiveItemWithSound("accounts")}
-                />
+                <TabErrorBoundary language={language} tabName="friends">
+                  <FriendsTab
+                    showNotification={showNotification}
+                    language={language}
+                    onOpenRooms={() => setActiveItemWithSound("rooms")}
+                    onOpenAccounts={() => setActiveItemWithSound("accounts")}
+                  />
+                </TabErrorBoundary>
               </div>
             ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
+              <TabErrorBoundary language={language} tabName="accounts">
               <AccountsTab
                 showNotification={showNotification}
                 language={language}
@@ -1084,6 +1105,7 @@ function App() {
                 onRemoveAccount={removeLauncherAccount}
                 onAddAccount={handleAddLauncherAccount}
               />
+              </TabErrorBoundary>
             ) : effectiveTabSplit ? (
               <TabSplitPanes
                 layout={effectiveTabSplit}

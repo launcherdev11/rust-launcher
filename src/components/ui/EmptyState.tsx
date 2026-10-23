@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { StateFrame } from "./StateView";
 
 type Props = {
   icon?: ReactNode;
@@ -18,13 +19,7 @@ export function EmptyState({
   compact = false,
 }: Props) {
   return (
-    <div
-      className={[
-        "glass-inset flex flex-col items-center justify-center text-center",
-        compact ? "gap-2 px-4 py-6" : "gap-3 px-5 py-10",
-        className,
-      ].join(" ")}
-    >
+    <StateFrame compact={compact} className={className}>
       {icon ? (
         <div className="glass-control flex h-12 w-12 items-center justify-center text-white/55">
           {icon}
@@ -37,6 +32,6 @@ export function EmptyState({
         ) : null}
       </div>
       {action ? <div className="mt-1 flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
-    </div>
+    </StateFrame>
   );
 }

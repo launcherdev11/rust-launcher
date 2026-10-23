@@ -5,6 +5,8 @@ import { ContextMenuPanel } from "../../components/ContextMenuPanel";
 import { DeleteIcon } from "../../components/delete_icon";
 import { formatByteSize, localeTag, useT } from "../../i18n";
 import type { Language } from "../../i18n";
+import { confirmDialog } from "../../lib/confirmDialog";
+import { isHotkeyKey } from "../../lib/hotkeyKey";
 import { useScreenshots } from "./useScreenshots";
 
 type ScreenshotsModalProps = {
@@ -138,7 +140,7 @@ export function ScreenshotsModal({
   useEffect(() => {
     if (!open || !selectedName) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "c" || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) {
+      if (!isHotkeyKey(e, "c") || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) {
         return;
       }
       const target = e.target;
@@ -159,7 +161,10 @@ export function ScreenshotsModal({
   if (!open) return null;
 
   async function handleDelete(name: string) {
-    const confirmed = window.confirm(tt("modpacks.screenshots.deleteConfirm", { name }));
+    const confirmed = await confirmDialog({
+      message: tt("modpacks.screenshots.deleteConfirm", { name }),
+      confirmLabel: tt("common.delete"),
+    });
     if (!confirmed) return;
     try {
       await remove(name);

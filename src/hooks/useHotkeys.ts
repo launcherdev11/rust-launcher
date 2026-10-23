@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
+import { hotkeyKey, isHotkeyKey } from "../lib/hotkeyKey";
 import type { TabSplitLayout } from "../splitView";
 
 export type PlayConsoleHotkeyActions = {
@@ -122,7 +123,7 @@ type HotkeyBinding = {
 };
 
 function matchesHotkey(e: KeyboardEvent, spec: HotkeyMatch): boolean {
-  if (e.key.toLowerCase() !== spec.key.toLowerCase()) return false;
+  if (!isHotkeyKey(e, spec.key)) return false;
   if (spec.ctrl !== isCtrlOrMeta(e)) return false;
   if (spec.shift !== e.shiftKey) return false;
   if (e.altKey) return false;
@@ -362,17 +363,17 @@ export function useHotkeys({
         }
 
         if (ctrl && !e.altKey && !e.shiftKey) {
-          if (e.key === ",") {
+          if (hotkeyKey(e) === ",") {
             e.preventDefault();
             activateTab("settings");
             return true;
           }
-          if (e.key.toLowerCase() === "b" && app) {
+          if (isHotkeyKey(e, "b") && app) {
             e.preventDefault();
             app.toggleSidebar();
             return true;
           }
-          if (e.key.toLowerCase() === "k") {
+          if (isHotkeyKey(e, "k")) {
             if (focusVisibleSearch()) e.preventDefault();
             return true;
           }
@@ -383,18 +384,19 @@ export function useHotkeys({
           }
         }
 
-        if (ctrl && e.shiftKey && !e.altKey && e.key.toLowerCase() === "k" && app) {
+        if (ctrl && e.shiftKey && !e.altKey && isHotkeyKey(e, "k") && app) {
           e.preventDefault();
           app.stopGame();
           return true;
         }
 
         if (!ctrl && !e.altKey) {
-          if (e.key === "/" && !e.shiftKey && focusVisibleSearch()) {
+          if (hotkeyKey(e) === "/" && !e.shiftKey && focusVisibleSearch()) {
             e.preventDefault();
             return true;
           }
-          if ((e.key === "F1" || e.key === "?") && app) {
+          const isQuestionMark = e.key === "?" || (e.shiftKey && e.code === "Slash");
+          if ((e.key === "F1" || isQuestionMark) && app) {
             e.preventDefault();
             app.openHotkeysHelp();
             return true;

@@ -9,6 +9,12 @@ pub const EVENT_PLAYTIME_UPDATED: &str = "playtime-updated";
 pub const EVENT_LAST_PLAYED_UPDATED: &str = "last-played-updated";
 pub const EVENT_GAME_PROCESS_EXITED: &str = "game-process-exited";
 pub const EVENT_ACTIVE_ACCOUNT_CHANGED: &str = "active-account-changed";
+pub const EVENT_LAUNCH_STAGE: &str = "launch-stage";
+
+#[derive(Debug, Serialize, Clone)]
+pub struct LaunchStagePayload {
+    pub stage: String,
+}
 
 #[derive(Debug, Serialize, Clone)]
 pub struct MrpackImportProgressPayload {

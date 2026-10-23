@@ -535,10 +535,45 @@ html.launcher-linux .dock-backdrop img {
   transition: width 0.2s ease;
 }
 
+.dock-progress > .dock-progress-indeterminate {
+  width: 35%;
+  animation: dock-progress-slide 1.3s ease-in-out infinite;
+}
+
+@keyframes dock-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.download-bar-indeterminate {
+  width: 35%;
+  animation: dock-progress-slide 1.3s ease-in-out infinite;
+}
+
+.dock-stage {
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .banner-fade,
   .dock-backdrop img {
     animation: none;
+  }
+
+  .dock-progress > .dock-progress-indeterminate,
+  .download-bar-indeterminate {
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
   }
   .shell-nav-bar,
   .nav-item img,

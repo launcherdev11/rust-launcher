@@ -24,6 +24,7 @@ import {
   type VersionSummary,
 } from "../../../app/types";
 import { invoke } from "@tauri-apps/api/core";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import { subscribeTauriEvent } from "../../../lib/tauriEvents";
 import { isVersionInstallConsoleLine } from "../../../lib/gameConsoleFilter";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
@@ -273,7 +274,12 @@ export function useVersionsManager(deps: VersionsManagerDeps) {
       });
       if (!jsonPath || typeof jsonPath !== "string") return;
 
-      const wantJar = window.confirm(tt("settings.versions.custom.importJarPrompt"));
+      const wantJar = await confirmDialog({
+        message: tt("settings.versions.custom.importJarPrompt"),
+        tone: "default",
+        confirmLabel: tt("common.yes"),
+        cancelLabel: tt("common.no"),
+      });
       let jarPath: string | null = null;
       if (wantJar) {
         const picked = await openFile({

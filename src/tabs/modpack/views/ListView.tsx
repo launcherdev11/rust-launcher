@@ -29,7 +29,12 @@ import {
 } from "lucide-react";
 import { PROFILE_GROUP_COLOR_STYLES } from "../../../lib/profile-groups";
 import { createPortal } from "react-dom";
-import { InputClearButton } from "../../../components/ui";
+import {
+  CatalogCardSkeleton,
+  EmptyState,
+  ErrorState,
+  InputClearButton,
+} from "../../../components/ui";
 import { DeleteIcon } from "../../../components/delete_icon";
 import type { ModpackController } from "../useModpackController";
 
@@ -73,6 +78,7 @@ export function ListView({ ctx }: Props) {
     profiles,
     setPendingBulkDeleteProfileIds,
     loadingProfiles,
+    profilesLoadError,
     openCreateGroupModal,
     profilesScrollRef,
     handleProfilesMarqueePointerDown,
@@ -540,11 +546,57 @@ export function ListView({ ctx }: Props) {
               </section>
             )}
 
-            {!loadingProfiles && filteredProfiles.length === 0 && (
-              <div className="mt-2 rounded-2xl border border-dashed border-white/15 bg-black/40 px-4 py-6 text-center text-sm text-white/70">
-                {tt("modpacks.list.empty")}
+            {loadingProfiles && profiles.length === 0 ? (
+              <div className={profilesGridClass} aria-busy="true">
+                {Array.from({ length: 4 }, (_, i) => (
+                  <CatalogCardSkeleton key={i} layout="list" />
+                ))}
               </div>
-            )}
+            ) : null}
+
+            {!loadingProfiles && profiles.length === 0 && profilesLoadError ? (
+              <ErrorState
+                title={tt("common.state.loadFailed")}
+                description={tt("common.state.loadFailedHint")}
+                action={
+                  <button
+                    type="button"
+                    className="btn btn-accent btn-sm"
+                    onClick={() => void refreshProfiles()}
+                  >
+                    {tt("common.state.retry")}
+                  </button>
+                }
+              />
+            ) : null}
+
+            {!loadingProfiles && filteredProfiles.length === 0 && !profilesLoadError ? (
+              profiles.length === 0 ? (
+                <EmptyState
+                  title={tt("modpacks.list.empty")}
+                  action={
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-accent btn-sm"
+                        onClick={handleOpenCreateView}
+                      >
+                        {tt("modpacks.actions.create")}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-soft btn-sm"
+                        onClick={handleOpenImportView}
+                      >
+                        {tt("modpacks.actions.import")}
+                      </button>
+                    </>
+                  }
+                />
+              ) : (
+                <EmptyState compact title={tt("modpacks.list.noResults")} />
+              )
+            ) : null}
           </div>
         </div>
       </div>

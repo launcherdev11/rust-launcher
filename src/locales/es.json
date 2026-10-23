@@ -1,5 +1,28 @@
 {
   "common": {
+    "state": {
+      "tabCrashed": "Esta pestaña ha fallado",
+      "tabCrashedHint": "El resto del launcher funciona. Recarga la pestaña; tus datos guardados están a salvo.",
+      "reloadTab": "Recargar pestaña",
+      "copyDetails": "Copiar detalles",
+      "copied": "Copiado",
+      "retry": "Reintentar",
+      "loadFailed": "No se pudieron cargar los datos",
+      "loadFailedHint": "Comprueba tu conexión a internet e inténtalo de nuevo.",
+      "offlineTitle": "Sin conexión a internet",
+      "offlineHint": "Las funciones en línea no están disponibles sin red. Jugar en local funciona con normalidad.",
+      "platformDownTitle": "El servidor de 16Launcher no está disponible",
+      "platformDownHint": "No se pudo contactar con el servidor. Las funciones locales siguen funcionando, inténtalo más tarde.",
+      "online": "Conexión restablecida",
+      "unsavedTitle": "Hay cambios sin guardar",
+      "unsavedConfirm": "¿Cerrar sin guardar? Se perderán los cambios.",
+      "discard": "Cerrar sin guardar",
+      "keepEditing": "Seguir editando"
+    },
+    "confirmDialog": {
+      "title": "Confirma la acción",
+      "confirm": "Confirmar"
+    },
     "cancel": "Cancelar",
     "delete": "Borrar",
     "change": "Cambiar",
@@ -931,6 +954,7 @@
       "playtimeLabel": "Recreo",
       "lastPlayed": "Último jugado: {{date}}",
       "empty": "Aún no hay perfiles. Haga clic en \"Crear\" para agregar uno.",
+      "noResults": "No se encontró nada. Prueba con otra búsqueda.",
       "layout": {
         "list": "Lista",
         "grid": "Red"
@@ -1764,6 +1788,17 @@
     }
   },
   "app": {
+    "launchStage": {
+      "version": "Comprobando la versión…",
+      "libraries": "Comprobando bibliotecas…",
+      "assets": "Comprobando recursos del juego…",
+      "account": "Comprobando la cuenta…",
+      "java": "Preparando Java…",
+      "starting": "Iniciando el juego…"
+    },
+    "launchActions": {
+      "retry": "Reintentar"
+    },
     "sidebar": {
       "collapse": "Contraer barra lateral",
       "expand": "Expandir barra lateral",
@@ -2075,17 +2110,9 @@
     },
     "welcome": {
       "title": "¡Bienvenido a 16Launcher!",
-      "subtitle": "Selecciona la configuración básica",
-      "cta": "¡Vamos!"
-    },
-    "language": {
-      "title": "Elige tu idioma",
-      "subtitle": "Puedes cambiar el idioma más tarde en la configuración del iniciador",
-      "comingSoon": "Pronto",
-      "ruDesc": "Interfaz del lanzador ruso",
-      "enDesc": "Interfaz de inicio en inglés",
-      "deDesc": "Interfaz del lanzador en alemán",
-      "esDesc": "Interfaz del lanzador en español"
+      "subtitle": "Elige un idioma, inicia sesión y trae tus instancias de otro launcher. Puedes omitir cualquier paso.",
+      "cta": "¡Vamos!",
+      "languageLabel": "Idioma de la interfaz"
     },
     "account": {
       "title": "Iniciar sesión",
@@ -2116,11 +2143,13 @@
       "cta": "Continuar con Microsoft",
       "waiting": "Esperando iniciar sesión...",
       "success": "¡Inicio de sesión de Microsoft completo!",
-      "errorGeneric": "No se pudo iniciar el inicio de sesión de Microsoft."
+      "errorGeneric": "No se pudo iniciar el inicio de sesión de Microsoft.",
+      "copyLink": "Copiar enlace",
+      "linkHint": "¿No se abrió la página? Copia el enlace y ábrelo en el navegador."
     },
     "import": {
-      "title": "Traemos tus mundos",
-      "subtitle": "Elige launcher y carpeta - o deja Auto para rutas por defecto",
+      "title": "Traer tus instancias",
+      "subtitle": "Buscando instancias en Prism, MultiMC, CurseForge, ATLauncher y GDLauncher.",
       "launcher": "Launcher",
       "launcherAuto": "Auto · todos los launchers",
       "path": "Ruta del launcher",
@@ -2130,19 +2159,37 @@
       "scan": "Buscar instancias",
       "scanning": "Buscando…",
       "emptyTitle": "No hay instancias",
-      "emptyHint": "Elige un launcher, indica la ruta y pulsa Buscar. También puedes importar luego en Builds → Importar.",
-      "cta": "Importar · {{count}}",
+      "emptyHint": "Si tus instancias están en otra carpeta, elígela manualmente. También puedes hacerlo luego en Builds → Importar.",
+      "cta": "Traer · {{count}}",
       "skip": "Omitir",
       "continue": "Continuar",
       "progress": "{{current}}/{{total}} · {{name}}",
       "errorGeneric": "No se pudo importar la instancia",
       "scanFailed": "No se pudo escanear esa ruta",
-      "unknownLauncher": "Otro launcher"
+      "unknownLauncher": "Otro launcher",
+      "foundTitle": "Se encontraron {{count}} instancias",
+      "foundHint": "Marca las que quieras traer.",
+      "selectAll": "Seleccionar todo",
+      "selectNone": "Quitar selección",
+      "selectedCount": "Seleccionadas: {{count}} de {{total}}",
+      "manual": "Elegir carpeta manualmente",
+      "manualHide": "Ocultar",
+      "importing": "Trayendo instancias…",
+      "resultTitle": "Traídas {{done}} de {{total}}",
+      "resultFailed": "No se pudieron traer:"
     },
     "finish": {
       "title": "¡Listo!",
-      "subtitle": "La configuración está completa. A continuación te mostramos el lanzador.",
-      "cta": "Iniciar tour"
+      "subtitle": "La configuración básica está lista. Puedes abrir el recorrido más tarde desde la Ayuda.",
+      "ctaPlay": "Empezar a jugar",
+      "ctaTour": "Ver recorrido"
+    },
+    "errors": {
+      "loginFailed": "No se pudo iniciar sesión",
+      "hintNetwork": "No se puede contactar con el servidor. Revisa internet, VPN o proxy e inténtalo de nuevo.",
+      "hintTimeout": "El inicio de sesión no terminó a tiempo. Completa la autorización en el navegador e inténtalo de nuevo.",
+      "hintCredentials": "Revisa usuario y contraseña. Si tienes verificación en dos pasos, inicia sesión desde el navegador.",
+      "hintOther": "Inténtalo de nuevo. Si sigue fallando, omite este paso: puedes añadir la cuenta más tarde en la pestaña Cuentas."
     }
   },
   "productTour": {

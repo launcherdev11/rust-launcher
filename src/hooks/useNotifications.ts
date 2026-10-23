@@ -5,7 +5,9 @@ import type { SessionNotification } from "../components/SessionNotificationsBell
 import {
   MAX_SESSION_NOTIFICATIONS,
   MAX_VISIBLE_NOTIFICATIONS,
+  NOTIFICATION_DISMISS_MS,
   NOTIFICATION_EXIT_MS,
+  NOTIFICATION_WITH_ACTION_DISMISS_MS,
   notificationsMatch,
   type Notification,
   type NotificationIdentity,
@@ -68,10 +70,10 @@ export function useNotifications(settings: Settings | null) {
   );
 
   const scheduleNotificationDismiss = useCallback(
-    (id: number) => {
+    (id: number, delayMs = NOTIFICATION_DISMISS_MS) => {
       if (!id) return;
       clearNotificationDismissTimers(id);
-      const fade = window.setTimeout(() => beginDismissNotification(id), 4300);
+      const fade = window.setTimeout(() => beginDismissNotification(id), delayMs);
       notificationTimersRef.current.set(id, { fade });
     },
     [clearNotificationDismissTimers, beginDismissNotification],
@@ -144,7 +146,10 @@ export function useNotifications(settings: Settings | null) {
         scheduleNotificationRemoval(id);
       }
 
-      scheduleNotificationDismiss(targetId);
+      scheduleNotificationDismiss(
+        targetId,
+        entry.action ? NOTIFICATION_WITH_ACTION_DISMISS_MS : NOTIFICATION_DISMISS_MS,
+      );
       return { merged };
     },
     [scheduleNotificationDismiss, clearNotificationDismissTimers, scheduleNotificationRemoval],
@@ -156,7 +161,7 @@ export function useNotifications(settings: Settings | null) {
         !(settings && !settings.notify_new_message && kind === "info");
       if (!shouldShow) return;
 
-      const { merged } = pushNotification({ kind, message });
+      const { merged } = pushNotification({ kind, message, action: options?.action });
 
       const uiSoundsEnabled = settings?.ui_sounds_enabled ?? true;
       const shouldSound =

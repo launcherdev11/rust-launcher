@@ -76,6 +76,7 @@ type DownloadProgressPayload = {
 type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
 import type { PlayConsoleHotkeyActions } from "../hooks/useHotkeys";
+import type { LaunchStage } from "../hooks/useLaunchStage";
 
 type PlayTabProps = {
   gameStatus: GameStatus;
@@ -100,6 +101,7 @@ type PlayTabProps = {
   handleCancelInstall: () => void;
   handlePrimaryClick: () => void;
   isLaunching?: boolean;
+  launchStage?: LaunchStage | null;
   primaryColorClasses: string;
   primaryLabel: string;
   progress: DownloadProgressPayload | null;
@@ -154,6 +156,7 @@ export function PlayTab({
   handleCancelInstall,
   handlePrimaryClick,
   isLaunching = false,
+  launchStage = null,
   primaryColorClasses,
   primaryLabel,
   progress,
@@ -773,6 +776,11 @@ export function PlayTab({
             </div>
 
             <div className="dock-actions">
+              {isLaunching ? (
+                <p role="status" aria-live="polite" className="dock-stage">
+                  {launchStage ? tt(`app.launchStage.${launchStage}`) : tt("app.playAction.launching")}
+                </p>
+              ) : null}
               <button
                 type="button"
                 onClick={handleOpenGameFolder}
@@ -820,6 +828,12 @@ export function PlayTab({
               )}
             </div>
           </div>
+
+          {isLaunching && !isInstalling && !installPaused ? (
+            <div className="dock-progress" role="progressbar" aria-busy="true">
+              <span className="dock-progress-indeterminate" />
+            </div>
+          ) : null}
 
           {isInstalling || installPaused ? (
             <div

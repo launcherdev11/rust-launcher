@@ -1,6 +1,9 @@
-import { AlertCircle, ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
+import { LoginErrorNotice } from "../components/LoginErrorNotice";
 import { OnboardingButton } from "../components/OnboardingButton";
 import { OnboardingLayout } from "../components/OnboardingLayout";
 
@@ -43,6 +46,12 @@ export function MicrosoftLoginScreen({
   onSkip,
 }: Props) {
   const tt = useT(language);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copyAuthUrl = async () => {
+    if (!authUrl) return;
+    setLinkCopied(await copyTextToClipboard(authUrl));
+  };
 
   return (
     <OnboardingLayout
@@ -56,8 +65,7 @@ export function MicrosoftLoginScreen({
       <button
         type="button"
         onClick={onBack}
-        disabled={loading}
-        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white disabled:opacity-45"
+        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         {tt("onboarding.nav.back")}
@@ -72,9 +80,13 @@ export function MicrosoftLoginScreen({
       </div>
 
       {error ? (
-        <div className="mb-3 flex w-full items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
+        <div className="mb-3 w-full">
+          <LoginErrorNotice
+            language={language}
+            message={error}
+            retryDisabled={loading}
+            onRetry={onLogin}
+          />
         </div>
       ) : null}
 
@@ -106,10 +118,15 @@ export function MicrosoftLoginScreen({
         </OnboardingButton>
 
         {authUrl && loading ? (
-          <p className="break-all text-[0.8125rem] text-white/40">{authUrl}</p>
+          <div className="glass-inset flex flex-col gap-2 px-3 py-2.5">
+            <p className="text-xs text-white/55">{tt("onboarding.microsoft.linkHint")}</p>
+            <OnboardingButton variant="secondary" onClick={() => void copyAuthUrl()}>
+              {linkCopied ? tt("common.state.copied") : tt("onboarding.microsoft.copyLink")}
+            </OnboardingButton>
+          </div>
         ) : null}
 
-        <OnboardingButton variant="ghost" fullWidth onClick={onSkip} disabled={loading}>
+        <OnboardingButton variant="ghost" fullWidth onClick={onSkip}>
           {tt("onboarding.account.skip")}
         </OnboardingButton>
       </div>

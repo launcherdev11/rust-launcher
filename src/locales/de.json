@@ -1,5 +1,28 @@
 {
   "common": {
+    "state": {
+      "tabCrashed": "Dieser Tab ist abgestürzt",
+      "tabCrashedHint": "Der Rest des Launchers funktioniert. Lade den Tab neu, gespeicherte Daten sind sicher.",
+      "reloadTab": "Tab neu laden",
+      "copyDetails": "Details kopieren",
+      "copied": "Kopiert",
+      "retry": "Erneut versuchen",
+      "loadFailed": "Daten konnten nicht geladen werden",
+      "loadFailedHint": "Prüfe deine Internetverbindung und versuche es erneut.",
+      "offlineTitle": "Keine Internetverbindung",
+      "offlineHint": "Online-Funktionen sind ohne Netz nicht verfügbar. Lokales Spielen funktioniert wie gewohnt.",
+      "platformDownTitle": "16Launcher-Server nicht erreichbar",
+      "platformDownHint": "Der Server ist nicht erreichbar. Lokale Funktionen laufen weiter, versuche es später erneut.",
+      "online": "Verbindung wiederhergestellt",
+      "unsavedTitle": "Nicht gespeicherte Änderungen",
+      "unsavedConfirm": "Ohne Speichern schließen? Die Änderungen gehen verloren.",
+      "discard": "Ohne Speichern schließen",
+      "keepEditing": "Weiter bearbeiten"
+    },
+    "confirmDialog": {
+      "title": "Bitte bestätigen",
+      "confirm": "Bestätigen"
+    },
     "cancel": "Stornieren",
     "delete": "Löschen",
     "change": "Ändern",
@@ -931,6 +954,7 @@
       "playtimeLabel": "Spielzeit",
       "lastPlayed": "Zuletzt gespielt: {{date}}",
       "empty": "Noch keine Profile. Klicken Sie auf „Erstellen“, um eines hinzuzufügen.",
+      "noResults": "Nichts gefunden. Versuche eine andere Suche.",
       "layout": {
         "list": "Liste",
         "grid": "Netz"
@@ -1764,6 +1788,17 @@
     }
   },
   "app": {
+    "launchStage": {
+      "version": "Version wird geprüft…",
+      "libraries": "Bibliotheken werden geprüft…",
+      "assets": "Spielressourcen werden geprüft…",
+      "account": "Konto wird geprüft…",
+      "java": "Java wird vorbereitet…",
+      "starting": "Spiel wird gestartet…"
+    },
+    "launchActions": {
+      "retry": "Erneut versuchen"
+    },
     "sidebar": {
       "collapse": "Seitenleiste einklappen",
       "expand": "Seitenleiste ausklappen",
@@ -2078,17 +2113,9 @@
     },
     "welcome": {
       "title": "Willkommen bei 16Launcher!",
-      "subtitle": "Wählen Sie die Grundeinstellungen aus",
-      "cta": "Lass uns gehen!"
-    },
-    "language": {
-      "title": "Wählen Sie Ihre Sprache",
-      "subtitle": "Sie können die Sprache später in den Launcher-Einstellungen ändern",
-      "comingSoon": "Bald",
-      "ruDesc": "Russische Launcher-Schnittstelle",
-      "enDesc": "Englische Launcher-Oberfläche",
-      "deDesc": "Deutsche Launcher-Oberfläche",
-      "esDesc": "Spanische Launcher-Oberfläche"
+      "subtitle": "Wähle eine Sprache, melde dich an und übernimm deine Instanzen aus einem anderen Launcher. Jeder Schritt lässt sich überspringen.",
+      "cta": "Lass uns gehen!",
+      "languageLabel": "Sprache der Oberfläche"
     },
     "account": {
       "title": "anmelden",
@@ -2119,11 +2146,13 @@
       "cta": "Weiter mit Microsoft",
       "waiting": "Warten auf die Anmeldung…",
       "success": "Microsoft-Anmeldung abgeschlossen!",
-      "errorGeneric": "Die Microsoft-Anmeldung konnte nicht gestartet werden."
+      "errorGeneric": "Die Microsoft-Anmeldung konnte nicht gestartet werden.",
+      "copyLink": "Link kopieren",
+      "linkHint": "Seite nicht geöffnet? Kopiere den Link und öffne ihn im Browser."
     },
     "import": {
-      "title": "Wir holen Ihre Welten",
-      "subtitle": "Launcher und Ordner wählen - oder Auto für Standardpfade lassen",
+      "title": "Instanzen übernehmen",
+      "subtitle": "Wir suchen Instanzen in Prism, MultiMC, CurseForge, ATLauncher und GDLauncher.",
       "launcher": "Launcher",
       "launcherAuto": "Auto · alle Launcher",
       "path": "Launcher-Pfad",
@@ -2133,19 +2162,37 @@
       "scan": "Instanzen suchen",
       "scanning": "Suche…",
       "emptyTitle": "Keine Instanzen gefunden",
-      "emptyHint": "Launcher wählen, Pfad angeben und Suchen tippen. Später auch unter Modpacks → Import.",
-      "cta": "Importieren · {{count}}",
+      "emptyHint": "Liegen deine Instanzen in einem eigenen Ordner, wähle ihn manuell. Das geht auch später unter Modpacks → Import.",
+      "cta": "Übernehmen · {{count}}",
       "skip": "Überspringen",
       "continue": "Weiter",
       "progress": "{{current}}/{{total}} · {{name}}",
       "errorGeneric": "Instanz konnte nicht importiert werden",
       "scanFailed": "Pfad konnte nicht gescannt werden",
-      "unknownLauncher": "Anderer Launcher"
+      "unknownLauncher": "Anderer Launcher",
+      "foundTitle": "{{count}} Instanzen gefunden",
+      "foundHint": "Wähle aus, was übernommen werden soll.",
+      "selectAll": "Alle auswählen",
+      "selectNone": "Auswahl aufheben",
+      "selectedCount": "Ausgewählt: {{count}} von {{total}}",
+      "manual": "Ordner manuell wählen",
+      "manualHide": "Ausblenden",
+      "importing": "Instanzen werden übernommen…",
+      "resultTitle": "{{done}} von {{total}} übernommen",
+      "resultFailed": "Nicht übernommen:"
     },
     "finish": {
       "title": "Alles klar!",
-      "subtitle": "Die Einrichtung ist abgeschlossen. Als Nächstes zeigen wir Ihnen den Launcher.",
-      "cta": "Tour starten"
+      "subtitle": "Die Grundeinrichtung ist abgeschlossen. Die Tour lässt sich später über die Hilfe starten.",
+      "ctaPlay": "Spielen",
+      "ctaTour": "Tour ansehen"
+    },
+    "errors": {
+      "loginFailed": "Anmeldung fehlgeschlagen",
+      "hintNetwork": "Server nicht erreichbar. Prüfe Internet, VPN oder Proxy und versuche es erneut.",
+      "hintTimeout": "Die Anmeldung wurde nicht rechtzeitig abgeschlossen. Schließe die Autorisierung im Browser ab und versuche es erneut.",
+      "hintCredentials": "Prüfe Benutzername und Passwort. Bei aktiver Zwei-Faktor-Authentifizierung melde dich über den Browser an.",
+      "hintOther": "Versuche es erneut. Hilft das nicht, überspringe den Schritt: Das Konto lässt sich später im Tab „Konten“ hinzufügen."
     }
   },
   "productTour": {

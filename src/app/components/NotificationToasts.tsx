@@ -1,4 +1,5 @@
 import type { CSSProperties, Dispatch, SetStateAction } from "react";
+import { readStoredLanguage, t } from "../../i18n";
 import {
   resolveRemoteNotificationBgStyle,
   resolveRemoteNotificationIconSrc,
@@ -74,17 +75,10 @@ export function NotificationToasts({ notifications, setNotifications, onDismiss 
             }}
           >
             <div
-              role="button"
-              tabIndex={0}
+              role={n.kind === "error" ? "alert" : "status"}
               className={`${baseClasses} ${bgClasses}`}
               style={style}
               onClick={() => onDismiss(n.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onDismiss(n.id);
-                }
-              }}
             >
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/15">
                 <img src={iconSrc} alt="" className="h-4 w-4 object-contain" />
@@ -95,6 +89,38 @@ export function NotificationToasts({ notifications, setNotifications, onDismiss 
                   ×{n.count}
                 </span>
               ) : null}
+              {n.action ? (
+                <button
+                  type="button"
+                  className="btn btn-soft btn-sm shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    n.action?.onClick();
+                    onDismiss(n.id);
+                  }}
+                >
+                  {n.action.label}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="icon-btn -mr-1.5 shrink-0"
+                aria-label={t(readStoredLanguage() ?? "ru", "common.close")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismiss(n.id);
+                }}
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true">
+                  <path
+                    d="M6.4 6.4l11.2 11.2M17.6 6.4L6.4 17.6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
             </div>
           </div>
         );

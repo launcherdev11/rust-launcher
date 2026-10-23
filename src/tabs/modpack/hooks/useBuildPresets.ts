@@ -13,6 +13,7 @@ import {
   type NotificationKind,
 } from "../types";
 import { invoke } from "@tauri-apps/api/core";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import { BUILD_PRESETS_UI_ENABLED } from "../helpers";
 
 type BuildPresetsDeps = {
@@ -162,7 +163,10 @@ export function useBuildPresets(deps: BuildPresetsDeps) {
   }
 
   async function handleDeleteBuildPreset(preset: BuildPreset) {
-    const ok = window.confirm(tt("modpacks.presets.deleteConfirm", { name: preset.name }));
+    const ok = await confirmDialog({
+      message: tt("modpacks.presets.deleteConfirm", { name: preset.name }),
+      confirmLabel: tt("common.delete"),
+    });
     if (!ok) return;
     try {
       await invoke("delete_build_preset", { presetId: preset.id });

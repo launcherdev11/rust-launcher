@@ -19,6 +19,7 @@ import {
 import { useMarqueeSelection } from "../../../hooks/useMarqueeSelection";
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../../../i18n";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { disposeWhenResolved } from "../../../lib/tauriEvents";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -70,6 +71,7 @@ export function useProfileItems(deps: ProfileItemsDeps) {
   const [contentFilter, setContentFilter] = useState<ContentFilter>("all");
   const [selectedContentNames, setSelectedContentNames] = useState<Set<string>>(new Set());
   const manageDropZoneRef = useRef<HTMLDivElement | null>(null);
+  const togglingItemsRef = useRef(new Set<string>());
   const [isManageDropTarget, setIsManageDropTarget] = useState(false);
 
   const handleContentMarqueePointerDown = useMarqueeSelection({
@@ -289,7 +291,14 @@ export function useProfileItems(deps: ProfileItemsDeps) {
 
   async function handleToggleItemEnabled(item: ProfileItemEntry) {
     if (!selectedProfile) return;
+    if (togglingItemsRef.current.has(item.name)) return;
     const nextEnabled = !item.enabled;
+    const applyEnabled = (enabled: boolean) =>
+      setItems((prev) =>
+        prev.map((entry) => (entry.name === item.name ? { ...entry, enabled } : entry)),
+      );
+    togglingItemsRef.current.add(item.name);
+    applyEnabled(nextEnabled);
     try {
       const category =
         contentTab === "mods"
@@ -303,11 +312,6 @@ export function useProfileItems(deps: ProfileItemsDeps) {
         filename: item.name,
         enabled: nextEnabled,
       });
-      setItems((prev) =>
-        prev.map((entry) =>
-          entry.name === item.name ? { ...entry, enabled: nextEnabled } : entry,
-        ),
-      );
       if (category === "resourcepacks" || category === "shaderpacks") {
         await refreshItems(selectedProfile.id, contentTab);
       }
@@ -316,10 +320,13 @@ export function useProfileItems(deps: ProfileItemsDeps) {
       }
     } catch (e) {
       console.error(e);
+      applyEnabled(item.enabled);
       showNotification(
         "error",
         tt("modpacks.manage.toggleFailed"),
       );
+    } finally {
+      togglingItemsRef.current.delete(item.name);
     }
   }
 
@@ -372,7 +379,11 @@ export function useProfileItems(deps: ProfileItemsDeps) {
   async function handleBulkDelete() {
     if (!selectedProfile || selectedContentNames.size === 0) return;
     const count = selectedContentNames.size;
-    if (!window.confirm(tt("modpacks.editor.bulkDeleteConfirm", { count }))) return;
+    const ok = await confirmDialog({
+      message: tt("modpacks.editor.bulkDeleteConfirm", { count }),
+      confirmLabel: tt("common.delete"),
+    });
+    if (!ok) return;
     const category = contentCategory();
     const names = [...selectedContentNames];
     try {

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { CatalogCardSkeleton, EmptyState, Spinner } from "../../components/ui";
+import { CatalogCardSkeleton, EmptyState, ErrorState, Spinner } from "../../components/ui";
 import { useMarqueeSelection } from "../../hooks/useMarqueeSelection";
 import type { CatalogProject, ContentProvider } from "./types";
 
@@ -53,6 +53,7 @@ type CatalogGridProps = {
   pageSize: number;
   onPageChange: (page: number) => void;
   emptyMessage: string;
+  onRetry?: () => void;
 };
 
 export function CatalogGrid({
@@ -81,6 +82,7 @@ export function CatalogGrid({
   pageSize,
   onPageChange,
   emptyMessage,
+  onRetry,
 }: CatalogGridProps) {
   const totalPages =
     totalHits > 0 ? Math.max(1, Math.ceil(totalHits / pageSize)) : 1;
@@ -103,7 +105,7 @@ export function CatalogGrid({
     <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
         <div className="flex items-center gap-2">
-          {error ? <span className="text-rose-300">{error}</span> : null}
+          {error && projects.length > 0 ? <span className="text-rose-300">{error}</span> : null}
           {allowBatchSelect && !error ? (
             <span className="text-white/45">{tt("mods.batch.hint")}</span>
           ) : null}
@@ -271,7 +273,22 @@ export function CatalogGrid({
             })}
           </div>
         )}
-        {!loading && projects.length === 0 && (
+        {!loading && projects.length === 0 && error ? (
+          <ErrorState
+            compact
+            title={tt("common.state.loadFailed")}
+            description={tt("common.state.loadFailedHint")}
+            details={error}
+            action={
+              onRetry ? (
+                <button type="button" className="btn btn-accent btn-sm" onClick={onRetry}>
+                  {tt("common.state.retry")}
+                </button>
+              ) : undefined
+            }
+          />
+        ) : null}
+        {!loading && projects.length === 0 && !error && (
           <EmptyState title={emptyMessage} compact />
         )}
       </div>

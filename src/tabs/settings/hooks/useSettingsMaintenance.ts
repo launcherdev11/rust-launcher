@@ -3,6 +3,7 @@ import type { Language } from "../../../i18n";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { clearLauncherAvatarCache } from "../../../lib/avatar";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import { type Settings, type SettingsTabId } from "../../../app/types";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { type LauncherSettingsBackupV1, type SidebarItemId } from "../types";
@@ -98,7 +99,11 @@ export function useSettingsMaintenance(deps: SettingsMaintenanceDeps) {
   };
 
   const handleResetSettings = async () => {
-    if (!window.confirm(tt("settings.launcher.resetSettings.confirm"))) return;
+    const ok = await confirmDialog({
+      message: tt("settings.launcher.resetSettings.confirm"),
+      confirmLabel: tt("settings.launcher.resetSettings.button"),
+    });
+    if (!ok) return;
     setIsResettingSettings(true);
     try {
       try {

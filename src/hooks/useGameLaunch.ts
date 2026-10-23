@@ -164,7 +164,12 @@ export function useGameLaunch({
     } catch (error) {
       setRunningConsoleProfile(null);
       const msg = error instanceof Error ? error.message : String(error);
-      showNotification("error", tt("app.errors.launchError", { msg }));
+      showNotification("error", tt("app.errors.launchError", { msg }), {
+        action: {
+          label: tt("app.launchActions.retry"),
+          onClick: () => void handlePlayPinnedProfileRef.current(profile),
+        },
+      });
     }
   };
 
@@ -349,10 +354,12 @@ export function useGameLaunch({
         setRunningConsoleProfile(null);
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Ошибка запуска игры:", error);
-        showNotification(
-          "error",
-          tt("app.errors.launchError", { msg }),
-        );
+        showNotification("error", tt("app.errors.launchError", { msg }), {
+          action: {
+            label: tt("app.launchActions.retry"),
+            onClick: () => void handlePrimaryClick(),
+          },
+        });
       }
       return;
     }

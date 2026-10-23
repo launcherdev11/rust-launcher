@@ -1,5 +1,28 @@
 {
   "common": {
+    "state": {
+      "tabCrashed": "This tab has crashed",
+      "tabCrashedHint": "The rest of the launcher is fine. Reload the tab; your saved data is safe.",
+      "reloadTab": "Reload tab",
+      "copyDetails": "Copy details",
+      "copied": "Copied",
+      "retry": "Retry",
+      "loadFailed": "Couldn't load data",
+      "loadFailedHint": "Check your internet connection and try again.",
+      "offlineTitle": "No internet connection",
+      "offlineHint": "Online features are unavailable while you're offline. Playing locally works as usual.",
+      "platformDownTitle": "16Launcher server is unavailable",
+      "platformDownHint": "Couldn't reach the server. Local features still work, please try again later.",
+      "online": "Connection restored",
+      "unsavedTitle": "You have unsaved changes",
+      "unsavedConfirm": "Close without saving? Your changes will be lost.",
+      "discard": "Close without saving",
+      "keepEditing": "Keep editing"
+    },
+    "confirmDialog": {
+      "title": "Please confirm",
+      "confirm": "Confirm"
+    },
     "cancel": "Cancel",
     "delete": "Delete",
     "change": "Change",
@@ -903,6 +926,7 @@
       "playtimeLabel": "Playtime",
       "lastPlayed": "Last played: {{date}}",
       "empty": "No profiles yet. Click “Create” to add one.",
+      "noResults": "Nothing found. Try a different search.",
       "layout": {
         "list": "List",
         "grid": "Grid"
@@ -1856,6 +1880,17 @@
     }
   },
   "app": {
+    "launchStage": {
+      "version": "Checking version…",
+      "libraries": "Checking libraries…",
+      "assets": "Checking game assets…",
+      "account": "Checking account…",
+      "java": "Preparing Java…",
+      "starting": "Starting the game…"
+    },
+    "launchActions": {
+      "retry": "Retry"
+    },
     "sidebar": {
       "collapse": "Collapse sidebar",
       "expand": "Expand sidebar",
@@ -2168,17 +2203,9 @@
     },
     "welcome": {
       "title": "16Launcher",
-      "subtitle": "Select basic settings",
-      "cta": "Start"
-    },
-    "language": {
-      "title": "Choose your language",
-      "subtitle": "You can change the language later in launcher settings",
-      "comingSoon": "Soon",
-      "ruDesc": "Russian launcher interface",
-      "enDesc": "English launcher interface",
-      "deDesc": "German launcher interface",
-      "esDesc": "Spanish launcher interface"
+      "subtitle": "Choose a language, sign in and bring over your instances from another launcher. Every step can be skipped.",
+      "cta": "Start",
+      "languageLabel": "Interface language"
     },
     "account": {
       "title": "Sign in",
@@ -2209,11 +2236,13 @@
       "cta": "Continue with Microsoft",
       "waiting": "Waiting for sign-in…",
       "success": "Microsoft sign-in complete!",
-      "errorGeneric": "Could not start Microsoft sign-in."
+      "errorGeneric": "Could not start Microsoft sign-in.",
+      "copyLink": "Copy link",
+      "linkHint": "Page didn't open? Copy the link and open it in your browser."
     },
     "import": {
-      "title": "Import instances",
-      "subtitle": "Pick a launcher and folder - or leave Auto to search default locations",
+      "title": "Move your instances",
+      "subtitle": "Looking for instances in Prism, MultiMC, CurseForge, ATLauncher and GDLauncher.",
       "launcher": "Launcher",
       "launcherAuto": "Auto · all launchers",
       "path": "Launcher path",
@@ -2223,19 +2252,37 @@
       "scan": "Find instances",
       "scanning": "Searching…",
       "emptyTitle": "No instances found",
-      "emptyHint": "Select a launcher, set its folder path, then tap Find. You can also import later from Builds → Import.",
-      "cta": "Import · {{count}}",
+      "emptyHint": "If your instances are in a custom folder, choose it manually. You can also do this later in Builds → Import.",
+      "cta": "Move · {{count}}",
       "skip": "Skip",
       "continue": "Continue",
       "progress": "{{current}}/{{total}} · {{name}}",
       "errorGeneric": "Could not import the instance",
       "scanFailed": "Could not scan that path",
-      "unknownLauncher": "Other launcher"
+      "unknownLauncher": "Other launcher",
+      "foundTitle": "Found {{count}} instances",
+      "foundHint": "Select the ones you want to move.",
+      "selectAll": "Select all",
+      "selectNone": "Clear selection",
+      "selectedCount": "Selected: {{count}} of {{total}}",
+      "manual": "Choose a folder manually",
+      "manualHide": "Hide",
+      "importing": "Moving instances…",
+      "resultTitle": "Moved {{done}} of {{total}}",
+      "resultFailed": "Couldn't move:"
     },
     "finish": {
       "title": "Ready to play",
-      "subtitle": "Basic setup is done. Next is a short look at the tabs.",
-      "cta": "Show the UI"
+      "subtitle": "Basic setup is done. You can open the interface tour later from Help.",
+      "ctaPlay": "Start playing",
+      "ctaTour": "Show tour"
+    },
+    "errors": {
+      "loginFailed": "Couldn't sign in",
+      "hintNetwork": "Can't reach the server. Check your internet, VPN or proxy and try again.",
+      "hintTimeout": "Sign-in didn't finish in time. Complete the authorization in your browser and try again.",
+      "hintCredentials": "Check your username and password. If two-factor authentication is on, sign in through the browser.",
+      "hintOther": "Try again. If it keeps failing, skip this step: you can add an account later in the Accounts tab."
     }
   },
   "productTour": {

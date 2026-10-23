@@ -5,6 +5,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useDeferredValue,
   useMemo,
   useRef,
   useState,
@@ -180,6 +181,7 @@ export function useModpackController(props: ModpackTabProps) {
 
   const [contentTab, setContentTab] = useState<ContentTab>("mods");
   const [loadingProfiles, setLoadingProfiles] = useState(() => !(initialProfiles && initialProfiles.length > 0));
+  const [profilesLoadError, setProfilesLoadError] = useState(false);
   const profilesLoadedRef = useRef(false);
   const onProfilesChangeRef = useRef(onProfilesChange);
 
@@ -735,6 +737,7 @@ export function useModpackController(props: ModpackTabProps) {
 
     try {
       const list = await invoke<InstanceProfile[]>("get_profiles");
+      setProfilesLoadError(false);
       profilesLoadedRef.current = true;
       writeDataCache("profiles", list);
       setProfiles(list);
@@ -749,6 +752,7 @@ export function useModpackController(props: ModpackTabProps) {
     } catch (e) {
       if (!cached) {
         console.error(e);
+        setProfilesLoadError(true);
         showNotification("error", t(language, "modpacks.toast.loadProfilesFailed"));
       }
     } finally {
@@ -874,14 +878,15 @@ export function useModpackController(props: ModpackTabProps) {
     onRequestedProfileSettingsApplied?.();
   }, [requestedProfileSettingsId, onRequestedProfileSettingsApplied]);
 
+  const deferredSearch = useDeferredValue(search);
   const filteredProfiles = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = deferredSearch.trim().toLowerCase();
     if (!query) return profiles;
     return profiles.filter((p) =>
       p.name.toLowerCase().includes(query) ||
       p.game_version.toLowerCase().includes(query),
     );
-  }, [profiles, search]);
+  }, [profiles, deferredSearch]);
 
   const profilesById = useMemo(
     () => new Map(profiles.map((p) => [p.id, p])),
@@ -983,6 +988,7 @@ export function useModpackController(props: ModpackTabProps) {
     itemsLoading,
     itemMetadataByFilename,
     loadingProfiles,
+    profilesLoadError,
     search,
     setSearch,
     createName,

@@ -4,10 +4,16 @@ export const MAX_VISIBLE_NOTIFICATIONS = 2;
 export const MAX_SESSION_NOTIFICATIONS = 80;
 export const NOTIFICATION_EXIT_MS = 200;
 
+export type NotificationAction = {
+  label: string;
+  onClick: () => void;
+};
+
 export type Notification = {
   id: number;
   kind?: NotificationKind;
   message: string;
+  action?: NotificationAction;
   leaving?: boolean;
   entered?: boolean;
   count?: number;
@@ -17,9 +23,16 @@ export type Notification = {
 
 export type ShowNotificationOptions = {
   sound?: boolean;
+  action?: NotificationAction;
 };
 
-export type NotificationIdentity = Pick<Notification, "kind" | "message" | "colorMsg" | "iconMsg">;
+export type NotificationIdentity = Pick<
+  Notification,
+  "kind" | "message" | "colorMsg" | "iconMsg" | "action"
+>;
+
+export const NOTIFICATION_DISMISS_MS = 4300;
+export const NOTIFICATION_WITH_ACTION_DISMISS_MS = 10000;
 
 export function notificationsMatch(a: NotificationIdentity, b: NotificationIdentity): boolean {
   return (

@@ -8,6 +8,7 @@ import {
 } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { formatByteSize } from "../../../i18n";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
 type ProfileWorldsDiskDeps = {
@@ -64,7 +65,11 @@ export function useProfileWorldsDisk(deps: ProfileWorldsDiskDeps) {
   async function handleDeleteSelectedWorlds() {
     if (!selectedProfileId || selectedWorldPaths.size === 0) return;
     const count = selectedWorldPaths.size;
-    if (!window.confirm(tt("modpacks.editor.worldsDeleteConfirm", { count }))) return;
+    const ok = await confirmDialog({
+      message: tt("modpacks.editor.worldsDeleteConfirm", { count }),
+      confirmLabel: tt("common.delete"),
+    });
+    if (!ok) return;
     setWorldsDeleteBusy(true);
     try {
       await invoke("delete_profile_worlds", {
