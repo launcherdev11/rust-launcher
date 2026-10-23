@@ -12,7 +12,7 @@ use sha2::Sha512;
 use tauri::{AppHandle, Emitter};
 
 use crate::app::paths::{game_root_dir, instance_dir};
-use crate::infra::http::http_client;
+use crate::infra::http::{http_client, http_client_for_binary_download};
 use crate::models::events::{MrpackImportProgressPayload, EVENT_MRPACK_IMPORT_PROGRESS};
 use crate::models::profile::InstanceProfileSummary;
 use crate::services::game::cache as cache_service;
@@ -104,15 +104,24 @@ pub(crate) fn resolve_file_path(path_or_uri: &str) -> PathBuf {
 }
 
 enum FetchError {
-    /// Эта ссылка не подойдёт (4xx, неверный хеш): пробуем следующее зеркало.
     Fatal(String),
-    /// Временный сбой: повторяем ту же ссылку.
     Retry(String),
 }
 
-/// Скачивает файл в `<dest>.part`, считает SHA1/SHA512 на лету, сверяет с ожидаемыми и
-/// только потом атомарно переименовывает. Перебирает зеркала и повторяет временные сбои.
-/// Файл целиком в память не загружается.
+fn error_chain(err: &dyn std::error::Error) -> String {
+    let mut msg = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        let text = cause.to_string();
+        if !msg.ends_with(&text) {
+            msg.push_str(": ");
+            msg.push_str(&text);
+        }
+        source = cause.source();
+    }
+    msg
+}
+
 pub(crate) async fn fetch_verified(
     client: &reqwest::Client,
     urls: &[String],
@@ -163,7 +172,7 @@ async fn fetch_once(
         .get(url)
         .send()
         .await
-        .map_err(|e| FetchError::Retry(format!("Ошибка скачивания {url}: {e}")))?;
+        .map_err(|e| FetchError::Retry(format!("Ошибка скачивания {url}: {}", error_chain(&e))))?;
     let status = resp.status();
     if !status.is_success() {
         let msg = format!("Сервер вернул ошибку {status} при скачивании {url}");
@@ -189,7 +198,8 @@ async fn fetch_once(
         let mut stream = resp.bytes_stream();
         while let Some(chunk) = stream.next().await {
             check_download_cancelled().map_err(FetchError::Fatal)?;
-            let chunk = chunk.map_err(|e| FetchError::Retry(format!("Обрыв загрузки {url}: {e}")))?;
+            let chunk = chunk
+                .map_err(|e| FetchError::Retry(format!("Обрыв загрузки {url}: {}", error_chain(&e))))?;
             if let Some(h) = h1.as_mut() {
                 h.update(&chunk);
             }
@@ -252,7 +262,6 @@ async fn fetch_once(
     result
 }
 
-/// Читает `modrinth.index.json`, не распаковывая остальное.
 fn read_mrpack_index(pack_path: &Path) -> Result<MrpackIndex, String> {
     use std::io::Read;
     let file = std::fs::File::open(pack_path)
@@ -269,8 +278,6 @@ fn read_mrpack_index(pack_path: &Path) -> Result<MrpackIndex, String> {
     serde_json::from_str(&buf).map_err(|e| format!("Ошибка разбора modrinth.index.json: {e}"))
 }
 
-/// Распаковывает `overrides/`, затем `client-overrides/` (они имеют приоритет).
-/// Пути, выходящие за пределы папки сборки (`../`, абсолютные), пропускаются.
 fn extract_mrpack_overrides(pack_path: &Path, dir: &Path) -> Result<(), String> {
     let file = std::fs::File::open(pack_path)
         .map_err(|e| format!("Не удалось открыть .mrpack: {e}"))?;
@@ -328,7 +335,6 @@ fn emit_mrpack_progress(
     );
 }
 
-/// Общая часть импорта: overrides + параллельная загрузка файлов сборки с проверкой хешей.
 async fn install_mrpack_contents(
     app: &AppHandle,
     pack_path: &Path,
@@ -390,7 +396,6 @@ async fn install_mrpack_contents(
         })
         .buffer_unordered(DEFAULT_DOWNLOAD_CONCURRENCY);
 
-    // При первой же ошибке выходим: оставшиеся незавершённые загрузки отбрасываются.
     while let Some(res) = downloads.next().await {
         let (current, filename) = res?;
         emit_mrpack_progress(app, "files", Some(current), Some(total), Some(filename));
@@ -458,7 +463,6 @@ pub async fn import_mrpack_as_new_profile(
     let profile_id = profile.id.clone();
     let dir = instance_dir(&profile.id)?;
 
-    // Любой сбой (не только отмена) не должен оставлять наполовину собранный профиль.
     if let Err(e) = install_mrpack_contents(&app, &pack_path, &dir, &index).await {
         let _ = delete_profile(profile_id);
         return Err(e);
@@ -528,7 +532,7 @@ pub async fn download_modrinth_modpack_and_import(
 
     check_download_cancelled()?;
 
-    let client = http_client(false);
+    let client = http_client_for_binary_download(false);
     let downloaded = fetch_verified(&client, &[url], &dest, None, None).await;
 
     let result = match downloaded {
@@ -541,7 +545,6 @@ pub async fn download_modrinth_modpack_and_import(
         Err(e) => Err(format!("Ошибка загрузки Modrinth .mrpack: {e}")),
     };
 
-    // Временный файл убираем при любом исходе, а не только при успехе.
     let _ = tokio::fs::remove_file(&dest).await;
 
     result
@@ -577,8 +580,6 @@ pub async fn save_modrinth_file(
         .await
         .map_err(|e| format!("Не удалось создать папку '{subdir}': {e}"))?;
 
-    // Имя файла приходит из внешнего API/UI — берём только последний компонент,
-    // чтобы `../` не вывело запись за пределы папки контента.
     let safe_name = Path::new(filename)
         .file_name()
         .and_then(|n| n.to_str())

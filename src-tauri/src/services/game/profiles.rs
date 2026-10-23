@@ -78,6 +78,21 @@ pub fn read_instance_config(cfg_path: &Path) -> Result<InstanceConfig, String> {
     Ok(cfg)
 }
 
+fn read_instance_config_retrying(cfg_path: &Path) -> Result<InstanceConfig, String> {
+    const ATTEMPTS: u32 = 4;
+    let mut last_err = String::new();
+    for attempt in 0..ATTEMPTS {
+        match read_instance_config(cfg_path) {
+            Ok(cfg) => return Ok(cfg),
+            Err(e) => last_err = e,
+        }
+        if attempt + 1 < ATTEMPTS {
+            std::thread::sleep(Duration::from_millis(60));
+        }
+    }
+    Err(last_err)
+}
+
 pub fn write_instance_config(cfg_path: &Path, cfg: &InstanceConfig) -> Result<(), String> {
     let new_text = serde_json::to_string_pretty(cfg)
         .map_err(|e| format!("Ошибка сериализации config.json: {e}"))?;
@@ -588,7 +603,7 @@ pub fn load_all_instance_profiles() -> Result<Vec<InstanceProfileSummary>, Strin
         if !config_path.exists() && !backup_path_for(&config_path).exists() {
             continue;
         }
-        let cfg = match read_instance_config(&config_path) {
+        let cfg = match read_instance_config_retrying(&config_path) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!(
@@ -1344,8 +1359,10 @@ pub fn get_profile_icon_data_uri(profile_id: String) -> Result<Option<String>, S
 }
 
 #[command]
-pub fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
-    load_all_instance_profiles()
+pub async fn get_profiles() -> Result<Vec<InstanceProfileSummary>, String> {
+    tauri::async_runtime::spawn_blocking(load_all_instance_profiles)
+        .await
+        .map_err(|e| format!("Ошибка чтения списка сборок: {e}"))?
 }
 
 #[command]

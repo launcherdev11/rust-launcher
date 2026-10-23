@@ -50,8 +50,6 @@ async fn ensure_base_version_json(
     Ok(())
 }
 
-/// Профиль Fabric/Quilt приходит JSON-ом; при 404/HTML-заглушке `resp.json()` давал
-/// невнятную ошибку разбора. Здесь — ретраи и читаемое сообщение.
 async fn fetch_loader_profile(
     client: &reqwest::Client,
     url: &str,
@@ -342,8 +340,6 @@ pub async fn install_fabric(
     tokio::fs::create_dir_all(&profile_dir).await.map_err(|e| format!("{e}"))?;
     write_profile_json(&profile_dir, &profile)?;
 
-    // Старые профили убираем только после успешной установки нового: при обрыве загрузки
-    // у пользователя остаётся рабочая версия, а не пустое место.
     crate::services::game::version_remove::remove_fabric_profiles_for_game_version(
         &game_version,
         Some(&profile_id),
@@ -817,7 +813,6 @@ pub async fn install_forge(
                 cmd.arg("--mirror").arg(FORGE_INSTALLER_MIRROR_URL);
             }
             hide_console(&mut cmd);
-            // Установщик сам качает библиотеки и может зависнуть на сети — не ждём вечно.
             run_with_timeout(cmd, FORGE_INSTALLER_TIMEOUT, || {
                 CANCEL_DOWNLOAD.load(Ordering::SeqCst)
             })
@@ -847,7 +842,6 @@ pub async fn install_forge(
     let output = match output {
         Ok(o) => o,
         Err(e) => {
-            // Мог быть оборван/повреждён — следующая попытка скачает installer заново.
             let _ = tokio::fs::remove_file(&installer_path).await;
             return Err(e);
         }
@@ -1305,8 +1299,6 @@ async fn install_version_from_json(
     if let Some(parent) = version_json_path.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
     }
-    // version.json пишется последним и служит маркером «установка завершена»,
-    // поэтому запись должна быть атомарной.
     crate::infra::fs_atomic::write_atomic(&version_json_path, version_json_text.as_bytes())
         .map_err(|e| format!("Не удалось сохранить описание версии: {e}"))?;
 

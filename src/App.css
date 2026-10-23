@@ -6,7 +6,11 @@
 [style*="--accent-color"] {
   --accent-from: color-mix(in srgb, var(--accent-color) 72%, #7c4dff);
   --accent-to: color-mix(in srgb, var(--accent-color) 38%, #c77dff);
-  --accent-gradient: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+  --accent-gradient: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-from) 88%, #000) 0%,
+    color-mix(in srgb, var(--accent-to) 80%, #000) 100%
+  );
   --accent-hi: color-mix(in srgb, var(--accent-color) 28%, #e7dcff);
   --accent-soft: color-mix(in srgb, var(--accent-from) 16%, transparent);
   --accent-line: color-mix(in srgb, var(--accent-to) 45%, transparent);

@@ -329,6 +329,7 @@ export function LaunchSettingsPanel({
           systemMemoryGb={systemMemoryGb}
           showNotification={showNotification}
           profileId={profileId}
+          embedded
         />
       )}
     </div>
