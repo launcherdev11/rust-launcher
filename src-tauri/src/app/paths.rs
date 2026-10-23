@@ -154,6 +154,10 @@ pub fn build_presets_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("build_presets.json"))
 }
 
+pub fn lazy_mods_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("lazy_mods.json"))
+}
+
 pub fn build_preset_icons_dir() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("build_preset_icons"))
 }

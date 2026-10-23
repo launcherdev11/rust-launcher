@@ -15,6 +15,7 @@ import {
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { BUILD_PRESETS_UI_ENABLED, defaultProfileName } from "../helpers";
+import type { useLazyMods } from "./useLazyMods";
 import { t } from "../../../i18n";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
@@ -43,6 +44,7 @@ type ProfileActionsDeps = {
   setCreateLoaderVersion: Dispatch<SetStateAction<string>>;
   setLoaderVersionOptions: Dispatch<SetStateAction<LoaderVersionOption[]>>;
   clearCreatePresetSelection: () => void;
+  lazy: ReturnType<typeof useLazyMods>;
   setActiveView: Dispatch<SetStateAction<ViewId>>;
   setSelectedProfileId: Dispatch<SetStateAction<string | null>>;
   selectedProfileId: string | null;
@@ -76,6 +78,7 @@ export function useProfileActions(deps: ProfileActionsDeps) {
     setCreateLoaderVersion,
     setLoaderVersionOptions,
     clearCreatePresetSelection,
+    lazy,
     setActiveView,
     setSelectedProfileId,
     selectedProfileId,
@@ -240,6 +243,21 @@ export function useProfileActions(deps: ProfileActionsDeps) {
           e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
         showNotification("warning", t(language, "modpacks.toast.profileCreatedInstallFailed", { msg }));
       }
+
+      if (lazy.createSelectedIds.length > 0) {
+        const lazyJobId = `lazy:${profile.id}`;
+        registerDownloadJob?.({
+          id: lazyJobId,
+          label: t(language, "modpacks.lazy.applyJob"),
+          kind: "mod",
+        });
+        try {
+          await lazy.applyToProfile(profile.id, lazy.createSelectedIds);
+        } finally {
+          finishDownloadJob?.(lazyJobId);
+        }
+      }
+      lazy.resetCreateSelection();
 
       setProfiles((prev) => [...prev, profile]);
       createNameUserEdited.current = false;

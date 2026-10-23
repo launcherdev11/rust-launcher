@@ -10,6 +10,7 @@ import { BackupsModal } from "./modpack/modals/BackupsModal";
 import { GroupModal } from "./modpack/modals/GroupModal";
 import { DeleteConfirmDialogs } from "./modpack/modals/DeleteConfirmDialogs";
 import { PresetsModal } from "./modpack/modals/PresetsModal";
+import { LazyModsModal } from "./modpack/modals/LazyModsModal";
 import { ContentUpdatesModal } from "./modpack/modals/ContentUpdatesModal";
 import { ProfileSettingsModal } from "./modpack/modals/ProfileSettingsModal";
 import { ChangeVersionModal } from "./modpack/modals/ChangeVersionModal";
@@ -78,6 +79,8 @@ export function ModpackTab(props: ModpackTabProps) {
       <DeleteConfirmDialogs ctx={ctx} />
 
       <PresetsModal ctx={ctx} />
+
+      <LazyModsModal ctx={ctx} />
 
       <ContentUpdatesModal ctx={ctx} />
 

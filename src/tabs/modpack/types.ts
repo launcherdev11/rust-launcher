@@ -211,6 +211,32 @@ export type ProfileItemMetadata = {
   iconUrl?: string | null;
   iconDataUri?: string | null;
   source?: string | null;
+  projectId?: string | null;
+};
+
+export type LazyContentType = "mod" | "resourcepack" | "shader";
+
+export type LazyModItem = {
+  provider: "modrinth" | "curseforge";
+  project_id: string;
+  content_type: LazyContentType;
+  title: string;
+  icon_url?: string | null;
+};
+
+export type LazyModSet = {
+  id: string;
+  name: string;
+  items: LazyModItem[];
+  auto_apply: boolean;
+  created_at: number;
+};
+
+export type LazyApplyReport = {
+  installed: number;
+  already_present: number;
+  unavailable: string[];
+  failed: { title: string; reason: string }[];
 };
 
 export type ProfileContentUpdate = {

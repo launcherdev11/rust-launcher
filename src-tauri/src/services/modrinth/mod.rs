@@ -17,8 +17,9 @@ pub use updates::{
 
 use std::path::PathBuf;
 
-use client::modrinth_http_client;
+use client::{modrinth_get_json, modrinth_http_client, project_versions_url};
 use dependencies::collect_modrinth_required_downloads;
+use types::ModrinthVersion;
 use futures_util::stream::{self, StreamExt};
 use installed::{index_content_dir_sha1_for, mark_skipped_already_installed};
 
@@ -39,6 +40,51 @@ fn modrinth_content_dir(
     Ok(root.join(modrinth_content_subdir(category)?))
 }
 
+pub(crate) async fn resolve_latest_project_targets(
+    client: &reqwest::Client,
+    project_id: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<Option<Vec<ModrinthDownloadTarget>>, String> {
+    let url = project_versions_url(project_id, game_version, loader);
+    let versions: Vec<ModrinthVersion> =
+        modrinth_get_json(client, &url, &format!("версии проекта {project_id}")).await?;
+    let Some(latest) = versions.into_iter().next() else {
+        return Ok(None);
+    };
+    collect_modrinth_required_downloads(client, &latest.id, game_version, loader)
+        .await
+        .map(Some)
+}
+
+pub(crate) async fn install_modrinth_targets(
+    category: &str,
+    targets: &mut [ModrinthDownloadTarget],
+    profile_id: Option<&str>,
+) -> Result<(), String> {
+    let content_dir = modrinth_content_dir(category, profile_id)?;
+    let target_names: Vec<&str> = targets.iter().map(|t| t.filename.as_str()).collect();
+    let installed_index = index_content_dir_sha1_for(&content_dir, &target_names).await?;
+    mark_skipped_already_installed(targets, &installed_index);
+
+    let pending: Vec<(String, String, Option<String>)> = targets
+        .iter()
+        .filter(|t| !t.skipped)
+        .map(|t| (t.url.clone(), t.filename.clone(), t.sha1.clone()))
+        .collect();
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let results: Vec<Result<(), String>> = stream::iter(pending.into_iter())
+        .map(|(url, filename, sha1)| async move {
+            save_modrinth_file(category, &url, &filename, profile_id, sha1.as_deref()).await
+        })
+        .buffer_unordered(DOWNLOAD_CONCURRENCY)
+        .collect()
+        .await;
+    results.into_iter().collect()
+}
+
 #[tauri::command]
 pub async fn download_modrinth_with_dependencies(
     category: String,
@@ -50,41 +96,6 @@ pub async fn download_modrinth_with_dependencies(
     let client = modrinth_http_client();
     let mut targets =
         collect_modrinth_required_downloads(&client, &version_id, &game_version, &loader).await?;
-
-    let content_dir = modrinth_content_dir(&category, profile_id.as_deref())?;
-    let target_names: Vec<&str> = targets.iter().map(|t| t.filename.as_str()).collect();
-    let installed_index = index_content_dir_sha1_for(&content_dir, &target_names).await?;
-    mark_skipped_already_installed(&mut targets, &installed_index);
-
-    let pending: Vec<(String, String, Option<String>)> = targets
-        .iter()
-        .filter(|t| !t.skipped)
-        .map(|t| (t.url.clone(), t.filename.clone(), t.sha1.clone()))
-        .collect();
-    if !pending.is_empty() {
-        let results: Vec<Result<(), String>> = stream::iter(pending.into_iter())
-            .map(|(url, filename, sha1)| {
-                let category = category.clone();
-                let profile_id = profile_id.clone();
-                async move {
-                    save_modrinth_file(
-                        &category,
-                        &url,
-                        &filename,
-                        profile_id.as_deref(),
-                        sha1.as_deref(),
-                    )
-                    .await
-                }
-            })
-            .buffer_unordered(DOWNLOAD_CONCURRENCY)
-            .collect()
-            .await;
-
-        for result in results {
-            result?;
-        }
-    }
-
+    install_modrinth_targets(&category, &mut targets, profile_id.as_deref()).await?;
     Ok(targets)
 }

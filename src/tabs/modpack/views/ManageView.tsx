@@ -31,7 +31,8 @@ import {
   MODPACK_MANAGE_SPLIT_MAX,
   MODPACK_MANAGE_SPLIT_MIN,
 } from "../helpers";
-import { ChevronDown, Download } from "lucide-react";
+import { ChevronDown, Download, FolderPlus } from "lucide-react";
+import { lazyItemsFromFiles } from "../hooks/useLazyMods";
 import { type ContentTab, type ProfileItemEntry, type Settings } from "../types";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { type ConflictActionKind, type ProfileConflict } from "../../../lib/profileConflicts";
@@ -145,6 +146,7 @@ export function ManageView({ ctx }: Props) {
     isResourcePackReorderMode,
     setContentFilter,
     selectedContentNames,
+    lazy,
     setSelectedContentNames,
     handleBulkSetEnabled,
     handleBulkDelete,
@@ -710,6 +712,19 @@ export function ManageView({ ctx }: Props) {
                     {tt("modpacks.manage.chooseFileFromPc")}
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddMenuOpen(false);
+                    if (selectedProfile) {
+                      lazy.setModal({ mode: "apply", profileId: selectedProfile.id });
+                    }
+                  }}
+                  className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/10"
+                >
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  <span>{tt("modpacks.lazy.applyMenu")}</span>
+                </button>
                 </div>
               )}
             </div>
@@ -835,6 +850,20 @@ export function ManageView({ ctx }: Props) {
               className="btn btn-sm btn-ghost"
             >
               {tt("modpacks.editor.clearSelection")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { items: lazyItems, skipped } = lazyItemsFromFiles(
+                  selectedContentNames,
+                  itemMetadataByFilename,
+                  contentTab,
+                );
+                lazy.openAddModal(lazyItems, skipped);
+              }}
+              className="btn btn-sm btn-soft"
+            >
+              {tt("modpacks.lazy.addToSet")}
             </button>
             <button
               type="button"

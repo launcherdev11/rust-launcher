@@ -2,6 +2,7 @@ pub mod build_preset;
 pub mod events;
 pub mod export;
 pub mod java;
+pub mod lazy_mods;
 pub mod launcher_account;
 pub mod profile;
 pub mod settings;

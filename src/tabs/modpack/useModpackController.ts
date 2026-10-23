@@ -37,6 +37,7 @@ import { useProfileBackups } from "./hooks/useProfileBackups";
 import { useVersionMigration } from "./hooks/useVersionMigration";
 import { useExternalImport } from "./hooks/useExternalImport";
 import { useBuildPresets } from "./hooks/useBuildPresets";
+import { useLazyMods } from "./hooks/useLazyMods";
 import { useProfileWorldsDisk } from "./hooks/useProfileWorldsDisk";
 import { useResourcePackReorder } from "./hooks/useResourcePackReorder";
 import { useMrpackImport } from "./hooks/useMrpackImport";
@@ -213,6 +214,8 @@ export function useModpackController(props: ModpackTabProps) {
     createGameVersion,
     createIconPath,
   });
+
+  const lazy = useLazyMods({ showNotification, tt });
 
   const [profileIconRevisions, setProfileIconRevisions] = useState<Record<string, number>>({});
 
@@ -639,6 +642,7 @@ export function useModpackController(props: ModpackTabProps) {
     setCreateLoaderVersion,
     setLoaderVersionOptions,
     clearCreatePresetSelection,
+    lazy,
     setActiveView,
     setSelectedProfileId,
     selectedProfileId,
@@ -1005,6 +1009,7 @@ export function useModpackController(props: ModpackTabProps) {
     isPresetsModalOpen,
     setIsPresetsModalOpen,
     presetIconUris,
+    lazy,
     profileIconRevisions,
     versionOptions,
     setVersionOptions,

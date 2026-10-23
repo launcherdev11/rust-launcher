@@ -11,6 +11,7 @@ pub mod files;
 pub mod install;
 pub mod integrity;
 pub mod launcher;
+pub mod lazy_mods;
 pub mod runtime;
 pub mod options_txt;
 pub mod profiles;
@@ -48,6 +49,10 @@ pub use runtime::{
 pub use build_presets::{
     create_build_preset_from_profile, delete_build_preset, get_build_preset_icon_data_uri,
     list_build_presets, save_build_preset,
+};
+pub use lazy_mods::{
+    add_lazy_mod_items, apply_lazy_mod_sets, delete_lazy_mod_set, list_lazy_mod_sets,
+    remove_lazy_mod_item, save_lazy_mod_set,
 };
 pub use profiles::{
     add_profile_files, change_profile_version, create_profile, delete_item, delete_profile,

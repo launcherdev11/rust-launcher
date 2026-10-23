@@ -67,6 +67,7 @@ export function CreateView({ ctx }: Props) {
     createBusy,
     handleSaveBuildPresetFromForm,
     handleCreateProfile,
+    lazy,
   } = ctx;
 
   return (
@@ -352,6 +353,43 @@ export function CreateView({ ctx }: Props) {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="ui-section">{tt("modpacks.lazy.createSection")}</span>
+              <button
+                type="button"
+                onClick={() => lazy.setModal({ mode: "manage" })}
+                className="btn btn-ghost btn-sm"
+              >
+                {tt("modpacks.lazy.createManage")}
+              </button>
+            </div>
+            {lazy.sets.length === 0 ? (
+              <p className="ui-caption">{tt("modpacks.lazy.createNone")}</p>
+            ) : (
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {lazy.sets.map((set) => (
+                  <label
+                    key={set.id}
+                    className="inline-flex cursor-pointer items-center gap-2 text-xs text-[color:var(--fg)]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={lazy.createSelectedIds.includes(set.id)}
+                      onChange={() => lazy.toggleCreateSet(set.id)}
+                      className="accent-checkbox"
+                    />
+                    <span>{set.name}</span>
+                    <span className="tabular-nums text-[color:var(--fg-faint)]">
+                      {set.items.length}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <p className="ui-caption">{tt("modpacks.lazy.createHint")}</p>
           </div>
         </div>
       </div>
