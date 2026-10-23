@@ -717,6 +717,19 @@ pub fn delete_profile(id: String) -> Result<(), String> {
 }
 
 #[command]
+pub fn get_profile_account_id(id: String) -> Result<Option<String>, String> {
+    let path = instance_settings_path(&id)?;
+    if !path.exists() && !backup_path_for(&path).exists() {
+        return Ok(None);
+    }
+    let text = read_to_string_with_backup(&path)
+        .ok_or_else(|| format!("Ошибка чтения settings.json: {}", path.display()))?;
+    let inst = serde_json::from_str::<InstanceSettings>(&text)
+        .map_err(|e| format!("Ошибка разбора settings.json: {e}"))?;
+    Ok(inst.account_id)
+}
+
+#[command]
 pub fn update_profile_settings(id: String, patch: serde_json::Value) -> Result<(), String> {
     let path = instance_settings_path(&id)?;
     let mut current = if path.exists() || backup_path_for(&path).exists() {
@@ -770,6 +783,13 @@ pub fn update_profile_settings(id: String, patch: serde_json::Value) -> Result<(
     }
     if let Some(v) = patch.get("check_game_processes").and_then(|x| x.as_bool()) {
         current.check_game_processes = Some(v);
+    }
+    if patch_obj.map(|o| o.contains_key("account_id")).unwrap_or(false) {
+        current.account_id = patch["account_id"]
+            .as_str()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
     }
 
     let text = serde_json::to_string_pretty(&current).map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;

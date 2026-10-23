@@ -1,5 +1,12 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { SettingsToggle, SettingsSlider } from "../../settings-ui/SettingsComponents";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  SettingsRow,
+  SettingsSelect,
+  SettingsToggle,
+  SettingsSlider,
+} from "../../settings-ui/SettingsComponents";
+import type { LauncherAccountSummary } from "../../app/types";
 import { JavaSettingsTab } from "../../tabs/JavaSettings";
 import { formatByteSize, localeTag, type Language } from "../../i18n";
 
@@ -117,6 +124,71 @@ export function EditorSideNav({
   );
 }
 
+function ProfileAccountRow({
+  profileId,
+  showNotification,
+  tt,
+}: {
+  profileId: string;
+  showNotification: (kind: "info" | "success" | "error" | "warning", message: string) => void;
+  tt: Tt;
+}) {
+  const [accounts, setAccounts] = useState<LauncherAccountSummary[]>([]);
+  const [accountId, setAccountId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [list, bound] = await Promise.all([
+          invoke<LauncherAccountSummary[]>("list_launcher_accounts"),
+          invoke<string | null>("get_profile_account_id", { id: profileId }),
+        ]);
+        if (cancelled) return;
+        setAccounts(list);
+        setAccountId(bound && list.some((a) => a.id === bound) ? bound : "");
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+
+  const options = [
+    { value: "", label: tt("modpacks.profileSettingsModal.accountDefault") },
+    ...accounts.map((a) => ({ value: a.id, label: a.label })),
+  ];
+
+  return (
+    <SettingsRow
+      label={tt("modpacks.profileSettingsModal.account")}
+      hint={tt("modpacks.profileSettingsModal.accountHint")}
+    >
+      <SettingsSelect
+        value={accountId}
+        options={options}
+        onChange={(next) => {
+          const prev = accountId;
+          setAccountId(next);
+          invoke("update_profile_settings", {
+            id: profileId,
+            patch: { account_id: next || null },
+          }).then(
+            () => showNotification("success", tt("modpacks.profileSettings.saved")),
+            (e) => {
+              console.error(e);
+              setAccountId(prev);
+              showNotification("error", tt("modpacks.profileSettings.saveFailed"));
+            },
+          );
+        }}
+      />
+    </SettingsRow>
+  );
+}
+
 export function LaunchSettingsPanel({
   language,
   systemMemoryGb,
@@ -183,6 +255,7 @@ export function LaunchSettingsPanel({
             value={settings?.show_console_on_launch ?? false}
             onChange={(value: boolean) => onPatch({ show_console_on_launch: value })}
           />
+          <ProfileAccountRow profileId={profileId} showNotification={showNotification} tt={tt} />
         </div>
       </div>
 

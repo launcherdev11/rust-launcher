@@ -53,7 +53,7 @@ pub use profiles::{
     add_profile_files, change_profile_version, create_profile, delete_item, delete_profile,
     get_profile_icon_data_uri, get_profile_play_time_seconds, get_profiles, get_selected_profile,
     list_profile_items, rename_profile, reorder_profile_resource_packs, set_profile_icon_from_file,
-    set_profile_item_enabled, set_selected_profile, update_profile_settings,
+    set_profile_item_enabled, set_selected_profile, update_profile_settings, get_profile_account_id,
 };
 pub use external_import::{
     default_external_launcher_path,

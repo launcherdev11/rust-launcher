@@ -237,6 +237,18 @@ pub fn switch_launcher_account(account_id: String) -> Result<(), String> {
     Ok(())
 }
 
+pub fn activate_instance_account(account_id: &str) -> Result<bool, String> {
+    let store = load_accounts_store()?;
+    if store.active_id.as_deref() == Some(account_id) {
+        return Ok(true);
+    }
+    if !store.accounts.iter().any(|a| a.id == account_id) {
+        return Ok(false);
+    }
+    switch_launcher_account(account_id.to_string())?;
+    Ok(true)
+}
+
 #[command]
 pub fn remove_launcher_account(account_id: String) -> Result<(), String> {
     let mut store = load_accounts_store()?;

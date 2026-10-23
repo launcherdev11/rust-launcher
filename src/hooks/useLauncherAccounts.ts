@@ -176,6 +176,22 @@ export function useLauncherAccounts({
   }, [loadProfile]);
 
   useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void listen("active-account-changed", () => {
+      void loadProfile();
+      void refreshLauncherAccounts();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [loadProfile, refreshLauncherAccounts]);
+
+  useEffect(() => {
     if (activeItem === "accounts") {
       loadProfile();
       void refreshLauncherAccounts();

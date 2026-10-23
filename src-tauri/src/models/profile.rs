@@ -30,6 +30,7 @@ pub struct InstanceSettings {
     pub show_console_on_launch: Option<bool>,
     pub close_launcher_on_game_start: Option<bool>,
     pub check_game_processes: Option<bool>,
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]

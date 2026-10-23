@@ -8,6 +8,7 @@ pub const EVENT_EXTERNAL_IMPORT_PROGRESS: &str = "external-import-progress";
 pub const EVENT_PLAYTIME_UPDATED: &str = "playtime-updated";
 pub const EVENT_LAST_PLAYED_UPDATED: &str = "last-played-updated";
 pub const EVENT_GAME_PROCESS_EXITED: &str = "game-process-exited";
+pub const EVENT_ACTIVE_ACCOUNT_CHANGED: &str = "active-account-changed";
 
 #[derive(Debug, Serialize, Clone)]
 pub struct MrpackImportProgressPayload {

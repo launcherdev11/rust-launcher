@@ -1209,6 +1209,9 @@
       "hint": "Estas configuraciones se aplican solo al perfil seleccionado y se utilizan al iniciar el juego.",
       "closeLauncherOnStart": "Cerrar el iniciador cuando comience el juego:",
       "checkGameProcesses": "Verifique los procesos en ejecución del juego:",
+      "account": "Cuenta del perfil:",
+      "accountHint": "Al iniciar este perfil, el launcher cambiará automáticamente a la cuenta seleccionada.",
+      "accountDefault": "Cuenta activa actual",
       "memoryRam": "Memoria (RAM):"
     },
     "conflicts": {

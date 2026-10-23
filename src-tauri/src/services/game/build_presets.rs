@@ -125,9 +125,12 @@ pub fn save_build_preset(
     game_version: String,
     loader: String,
     loader_version: Option<String>,
-    settings: Option<InstanceSettings>,
+    mut settings: Option<InstanceSettings>,
     icon_source_path: Option<String>,
 ) -> Result<BuildPreset, String> {
+    if let Some(s) = settings.as_mut() {
+        s.account_id = None;
+    }
     let trimmed_name = name.trim();
     if trimmed_name.is_empty() {
         return Err("Укажите название пресета.".to_string());
@@ -212,6 +215,10 @@ pub fn create_build_preset_from_profile(profile_id: String, name: String) -> Res
         .and_then(|p| {
             crate::infra::fs_atomic::read_to_string_with_backup(&p)
                 .and_then(|text| serde_json::from_str::<InstanceSettings>(&text).ok())
+        })
+        .map(|mut s| {
+            s.account_id = None;
+            s
         });
 
     let preset_id = generate_preset_id();

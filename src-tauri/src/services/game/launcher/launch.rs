@@ -9,12 +9,12 @@ use crate::infra::http::http_client;
 use crate::infra::process::hide_console;
 use crate::models::events::{
     GameConsoleLinePayload, GameProcessExitedPayload, LastPlayedUpdatedPayload, PlaytimeUpdatedPayload,
-    EVENT_GAME_CONSOLE_LINE, EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
+    EVENT_ACTIVE_ACCOUNT_CHANGED, EVENT_GAME_CONSOLE_LINE, EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_PLAYTIME_UPDATED,
 };
 use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 use crate::services::auth::microsoft::MS_CLIENT_ID;
-use crate::services::game::accounts::{get_profile, save_full_profile};
+use crate::services::game::accounts::{activate_instance_account, get_profile, save_full_profile};
 use crate::services::game::arguments::{
     resolve_arguments, strip_legacy_server_args, strip_quick_play_game_args,
 };
@@ -168,7 +168,6 @@ fn version_supports_quick_play_multiplayer(version_id: &str, jar_version: &str) 
     false
 }
 
-/// Описание базовой (ванильной) версии: сначала с диска, при отсутствии/порче — из сети.
 async fn load_parent_version_detail(
     vers_root: &std::path::Path,
     parent_id: &str,
@@ -204,10 +203,20 @@ pub async fn launch_game(
     let playtime_profile_id = read_selected_profile_id();
     let game_dir = selected_instance_dir().unwrap_or_else(|| root.clone());
 
+    if let Ok(Some((_, inst))) = load_selected_instance_settings() {
+        if let Some(account_id) = inst.account_id.as_deref() {
+            match activate_instance_account(account_id) {
+                Ok(true) => {
+                    let _ = app.emit(EVENT_ACTIVE_ACCOUNT_CHANGED, account_id);
+                }
+                Ok(false) => eprintln!("[Launch] Аккаунт сборки {account_id} не найден, берём активный"),
+                Err(e) => eprintln!("[Launch] Не удалось выбрать аккаунт сборки: {e}"),
+            }
+        }
+    }
+
     let (mut detail, is_fabric) = if let Some(ref url) = version_url {
         let local_json = vers_root.join(&version_id).join(format!("{version_id}.json"));
-        // Установленную версию читаем с диска: запуск не должен зависеть от доступности
-        // серверов Mojang. В сеть идём, только если локального описания нет.
         let local = tokio::fs::read_to_string(&local_json)
             .await
             .ok()
@@ -304,7 +313,6 @@ pub async fn launch_game(
     if let Some(client_dl) = detail.downloads.as_ref().map(|d| &d.client) {
         let size_ok = client_dl.size == 0 || file_len_matches(&jar_path, client_dl.size);
         if !size_ok {
-            // client.jar удалён антивирусом / обрезан — докачиваем вместо отказа в запуске.
             log_to_console(
                 &app,
                 &format!("[Launch] client.jar отсутствует или повреждён, восстанавливаем: {}", jar_path.display()),
@@ -568,7 +576,6 @@ pub async fn launch_game(
     if let Some(ref asset_index) = detail.asset_index {
         let client = http_client(false);
         ensure_assets_for_launch(&client, asset_index, &root, &app, &version_id, &game_dir).await;
-        // Версии MC <= 1.7.2 читают ассеты из assets/virtual/legacy.
         let legacy = assets_root.join("virtual").join("legacy");
         let index_is_virtual = std::fs::read_to_string(
             assets_root.join("indexes").join(format!("{}.json", asset_index.id)),
@@ -584,8 +591,6 @@ pub async fn launch_game(
     let assets_str = assets_str_owned.as_str();
 
     if let Err(e) = refresh_ely_session_internal().await {
-        // Сеть/Ely.by недоступны — не повод отказывать в запуске. Блокируем только если
-        // токен признан недействительным и очищен в профиле (нужен повторный вход).
         let ely_session_left = get_profile()
             .map(|p| p.ely_access_token.as_deref().is_some_and(|t| !t.is_empty()))
             .unwrap_or(false);
