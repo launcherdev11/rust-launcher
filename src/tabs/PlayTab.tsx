@@ -109,7 +109,7 @@ type PlayTabProps = {
   setLoader: (l: LoaderId) => void;
   isLoaderDropdownOpen: boolean;
   setIsLoaderDropdownOpen: (v: boolean) => void;
-  handleOpenGameFolder: () => void;
+  handleOpenGameFolder: (subdir?: "mods" | "logs") => void;
   language: Language;
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
@@ -200,6 +200,7 @@ export function PlayTab({
     () => profiles.find((p) => p.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+  const showModsButton = (selectedProfile?.loader ?? loader).toLowerCase() !== "vanilla";
   const dockIconSrc = useProfileIconSrc(selectedProfile?.id ?? "");
   const lockedHint = useCursorHint();
 
@@ -781,9 +782,27 @@ export function PlayTab({
                   {launchStage ? tt(`app.launchStage.${launchStage}`) : tt("app.playAction.launching")}
                 </p>
               ) : null}
+              {showModsButton ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenGameFolder("mods")}
+                  title={tt("play.dock.modsTitle")}
+                  className="dock-btn"
+                >
+                  {tt("play.dock.mods")}
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={handleOpenGameFolder}
+                onClick={() => handleOpenGameFolder("logs")}
+                title={tt("play.dock.logsTitle")}
+                className="dock-btn"
+              >
+                {tt("play.dock.logs")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenGameFolder()}
                 title={tt("play.gameFolder.openTitle")}
                 className="dock-btn"
               >

@@ -732,6 +732,10 @@
     },
     "dock": {
       "folder": "Folder",
+      "mods": "Mods",
+      "logs": "Logs",
+      "modsTitle": "Open mods folder",
+      "logsTitle": "Open logs folder",
       "settings": "Settings",
       "noBuild": "No build selected"
     },

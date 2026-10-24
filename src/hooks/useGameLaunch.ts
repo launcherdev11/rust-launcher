@@ -258,10 +258,11 @@ export function useGameLaunch({
     void handlePlayPinnedProfileRef.current(profile);
   }, [profilesHydrated, knownProfiles]);
 
-  const handleOpenGameFolder = async () => {
+  const handleOpenGameFolder = async (subdir?: "mods" | "logs") => {
     try {
       await invoke("open_game_folder", {
         profileId: activeInstanceProfile?.id ?? null,
+        subdir: subdir ?? null,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

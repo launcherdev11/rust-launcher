@@ -69,6 +69,7 @@ pub async fn validate_java_args(java_path: Option<String>, args: String) -> Resu
     cmd.args(&filtered_args);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
+    crate::infra::process::hide_console(&mut cmd);
 
     let output = cmd
         .output()

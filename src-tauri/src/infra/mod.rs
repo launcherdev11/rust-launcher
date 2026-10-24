@@ -3,6 +3,7 @@ pub mod api_base;
 pub mod http;
 pub mod fs_atomic;
 pub mod fs_copy;
+pub mod notify;
 pub mod platform;
 pub mod process;
 pub mod tray;

@@ -3,12 +3,20 @@ use crate::app::paths::{game_root_dir, instance_dir};
 
 
 #[tauri::command]
-pub async fn open_game_folder(profile_id: Option<String>) -> Result<(), String> {
-    let root = if let Some(id) = profile_id {
+pub async fn open_game_folder(
+    profile_id: Option<String>,
+    subdir: Option<String>,
+) -> Result<(), String> {
+    let mut root = if let Some(id) = profile_id {
         instance_dir(&id)?
     } else {
         game_root_dir()?
     };
+    match subdir.as_deref() {
+        None => {}
+        Some(name @ ("mods" | "logs")) => root = root.join(name),
+        Some(other) => return Err(format!("Неизвестная подпапка: {other}")),
+    }
     std::fs::create_dir_all(&root).map_err(|e| format!("Не удалось создать папку игры: {e}"))?;
     let path_str = root
         .to_str()

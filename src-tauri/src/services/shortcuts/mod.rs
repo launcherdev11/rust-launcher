@@ -95,15 +95,17 @@ fn create_windows_shortcut(
          $s.Save();"
     );
 
-    let status = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            &script,
-        ])
+    let mut ps = Command::new("powershell");
+    ps.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        &script,
+    ]);
+    crate::infra::process::hide_console(&mut ps);
+    let status = ps
         .status()
         .map_err(|e| format!("Не удалось запустить PowerShell: {e}"))?;
 

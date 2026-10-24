@@ -760,6 +760,10 @@
     },
     "dock": {
       "folder": "Carpeta",
+      "mods": "Mods",
+      "logs": "Registros",
+      "modsTitle": "Abrir carpeta de mods",
+      "logsTitle": "Abrir carpeta de registros",
       "settings": "Ajustes",
       "noBuild": "Ninguna instancia"
     },

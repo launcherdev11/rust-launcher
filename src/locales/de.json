@@ -760,6 +760,10 @@
     },
     "dock": {
       "folder": "Ordner",
+      "mods": "Mods",
+      "logs": "Logs",
+      "modsTitle": "Mods-Ordner öffnen",
+      "logsTitle": "Logs-Ordner öffnen",
       "settings": "Einstellungen",
       "noBuild": "Keine Instanz gewählt"
     },

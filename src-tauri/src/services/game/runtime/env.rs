@@ -18,9 +18,10 @@ pub(crate) fn apply_windows_graphics_preference(
     let key = "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences";
     let escaped_path = path.replace('\'', "''");
     let command = format!("New-Item -Path '{key}' -Force | Out-Null; Set-ItemProperty -Path '{key}' -Name '{escaped_path}' -Value 'GpuPreference={preference};' -Type String");
-    let _ = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &command])
-        .status();
+    let mut ps = std::process::Command::new("powershell");
+    ps.args(["-NoProfile", "-NonInteractive", "-Command", &command]);
+    crate::infra::process::hide_console(&mut ps);
+    let _ = ps.status();
     cmd.env("MC16_SELECTED_GRAPHICS_ADAPTER", adapter);
 }
 

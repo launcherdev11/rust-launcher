@@ -9,6 +9,7 @@ fn detect_java_version(path: &str, source: &str) -> Option<JavaRuntimeInfo> {
     cmd.arg("-version");
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
+    crate::infra::process::hide_console(&mut cmd);
 
     let output = cmd.output().ok()?;
     let text = if !output.stderr.is_empty() {

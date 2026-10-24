@@ -308,8 +308,10 @@ pub fn get_system_memory_gb() -> Result<u64, String> {
 pub fn get_graphics_adapters() -> Result<Vec<String>, String> {
     #[cfg(target_os = "windows")]
     {
-        let output = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"])
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"]);
+        crate::infra::process::hide_console(&mut cmd);
+        let output = cmd
             .output()
             .map_err(|e| format!("Не удалось получить список видеокарт: {e}"))?;
         if !output.status.success() {

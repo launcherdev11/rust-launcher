@@ -70,6 +70,7 @@ use commands::{
     get_optifine_cape, list_build_files, list_mc_capes, list_mc_skins, preview_export,
     set_mc_active_cape, set_mc_active_skin, upload_mc_skin,
 };
+use infra::notify::os_notify;
 use mrpack_open::take_pending_mrpack_open;
 use profile_launch::{
     extract_profile_launch_from_os_args, pending_profile_launch_new, stash_argv_profile_launch_if_any,
@@ -103,6 +104,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_http::init())
         .manage(pending_mrpack.clone())
@@ -161,6 +163,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             discord_presence_update,
             discord_presence_clear,
+            os_notify,
             fetch_all_versions,
             fetch_versions_for_loader,
             check_version_files_integrity,

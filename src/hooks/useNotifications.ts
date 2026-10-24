@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { playNotificationSound } from "../uiSounds";
 import type { SessionNotification } from "../components/SessionNotificationsBell";
 import {
@@ -9,6 +10,7 @@ import {
   NOTIFICATION_EXIT_MS,
   NOTIFICATION_WITH_ACTION_DISMISS_MS,
   notificationsMatch,
+  splitTitleAndSubtitle,
   type Notification,
   type NotificationIdentity,
   type NotificationKind,
@@ -150,6 +152,16 @@ export function useNotifications(settings: Settings | null) {
         targetId,
         entry.action ? NOTIFICATION_WITH_ACTION_DISMISS_MS : NOTIFICATION_DISMISS_MS,
       );
+
+      if (!merged) {
+        const { title, subtitle } = splitTitleAndSubtitle(entry.message);
+        if (title) {
+          invoke("os_notify", {
+            title: subtitle ? title : "16Launcher",
+            body: subtitle ?? title,
+          }).catch(() => {});
+        }
+      }
       return { merged };
     },
     [scheduleNotificationDismiss, clearNotificationDismissTimers, scheduleNotificationRemoval],

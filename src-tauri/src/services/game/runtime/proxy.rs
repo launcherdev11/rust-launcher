@@ -81,9 +81,10 @@ pub(crate) fn ensure_proxy_auth_bootstrap_jar(
     }
 
     if jar_path.exists() {
-        let jar_list = std::process::Command::new("jar")
-            .arg("tf")
-            .arg(&jar_path)
+        let mut jar_tf = std::process::Command::new("jar");
+        jar_tf.arg("tf").arg(&jar_path);
+        crate::infra::process::hide_console(&mut jar_tf);
+        let jar_list = jar_tf
             .output()
             .map_err(|e| format!("Не удалось прочитать bootstrap.jar (jar tf): {e}"))?;
 
@@ -104,8 +105,10 @@ pub(crate) fn ensure_proxy_auth_bootstrap_jar(
     std::fs::write(&java_path, PROXY_AUTH_BOOTSTRAP_JAVA_SOURCE)
         .map_err(|e| format!("Не удалось сохранить ProxyAuthBootstrap.java: {e}"))?;
 
-    if std::process::Command::new("javac")
-        .arg("-version")
+    let mut javac_version = std::process::Command::new("javac");
+    javac_version.arg("-version");
+    crate::infra::process::hide_console(&mut javac_version);
+    if javac_version
         .output()
         .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
     {
@@ -115,14 +118,17 @@ pub(crate) fn ensure_proxy_auth_bootstrap_jar(
         );
     }
 
-    let javac_out = std::process::Command::new("javac")
+    let mut javac = std::process::Command::new("javac");
+    javac
         .arg("-encoding")
         .arg("UTF-8")
         .arg("-cp")
         .arg(installer_jar_path)
         .arg("-d")
         .arg(&classes_dir)
-        .arg(&java_path)
+        .arg(&java_path);
+    crate::infra::process::hide_console(&mut javac);
+    let javac_out = javac
         .output()
         .map_err(|e| format!("Не удалось запустить javac: {e}"))?;
 
@@ -137,12 +143,15 @@ pub(crate) fn ensure_proxy_auth_bootstrap_jar(
 
     let _ = std::fs::remove_file(&jar_path);
 
-    let jar_out = std::process::Command::new("jar")
+    let mut jar_cf = std::process::Command::new("jar");
+    jar_cf
         .arg("cf")
         .arg(&jar_path)
         .arg("-C")
         .arg(&classes_dir)
-        .arg(".")
+        .arg(".");
+    crate::infra::process::hide_console(&mut jar_cf);
+    let jar_out = jar_cf
         .output()
         .map_err(|e| format!("Не удалось запустить jar: {e}"))?;
 
