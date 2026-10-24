@@ -5,53 +5,6 @@ use tauri::command;
 
 use crate::services::game::state::{CANCEL_DOWNLOAD, GAME_PROCESS_PID};
 
-fn is_minecraft_java_process_running_except(exclude_pid: u32) -> bool {
-    let mut sys = System::new_all();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
-    for (pid, process) in sys.processes() {
-        if exclude_pid != 0 && pid.as_u32() == exclude_pid {
-            continue;
-        }
-
-        let name = process.name().to_string_lossy().to_ascii_lowercase();
-        if !(name.contains("javaw.exe")
-            || name == "javaw"
-            || name.contains("java.exe")
-            || name == "java")
-        {
-            continue;
-        }
-
-        let cmd = process
-            .cmd()
-            .iter()
-            .map(|s| s.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_ascii_lowercase();
-
-        let looks_like_client_launch = cmd.contains("net.minecraft.client.main.main")
-            || cmd.contains("--gamedir")
-            || cmd.contains("cpw.mods.bootstraplauncher")
-            || cmd.contains("fabric-loader")
-            || cmd.contains("org.quiltmc.loader")
-            || cmd.contains("minecraft.client.main")
-            || (cmd.contains("main")
-                && cmd.contains("minecraft")
-                && (cmd.contains("natives") || cmd.contains("--accessToken")));
-
-        if looks_like_client_launch {
-            return true;
-        }
-    }
-    false
-}
-
-pub(crate) fn is_external_minecraft_running() -> bool {
-    let our_pid = GAME_PROCESS_PID.load(Ordering::SeqCst) as u32;
-    is_minecraft_java_process_running_except(our_pid)
-}
-
 pub(crate) fn is_our_game_process_alive() -> bool {
     let pid = GAME_PROCESS_PID.load(Ordering::SeqCst);
     if pid == 0 {

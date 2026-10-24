@@ -40,7 +40,7 @@ pub use install::{
 };
 pub use integrity::check_version_files_integrity;
 pub use launcher::{
-    cancel_download, launch_game, reset_download_cancel, stop_game,
+    cancel_download, get_running_game_session, launch_game, reset_download_cancel, stop_game,
 };
 pub use runtime::{
     lan_bridge_attach, lan_bridge_detach, lan_bridge_probe_port, lan_bridge_set_flow,

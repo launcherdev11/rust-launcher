@@ -225,6 +225,32 @@ export function useGameLaunch({
   }, [activeInstanceProfile?.id, flushPendingConsoleLines, restoreHiddenConsoleBuffer, showNotification, tt]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await invoke<{
+          profile_id: string | null;
+          started_at_ms: number;
+        } | null>("get_running_game_session");
+        if (cancelled || !session || lastRunningRef.current) return;
+        lastRunningRef.current = true;
+        gameLaunchStartedAtRef.current = session.started_at_ms;
+        if (session.profile_id) setRunningConsoleProfile(session.profile_id);
+        setLaunchPresenceContext({
+          kind: "modpack",
+          startedAt: new Date(session.started_at_ms).toISOString(),
+        });
+        setGameStatus("running");
+      } catch {
+        //ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     let unlisten: (() => void) | undefined;
     (async () => {
       try {

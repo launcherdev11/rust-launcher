@@ -42,7 +42,8 @@ use crate::services::game::runtime::{
     forge_java_runtime_for_mc_version, uses_natives_subdirectories, download_file_checked,
     ensure_assets_for_launch,
 };
-use crate::services::game::launcher::process::{is_external_minecraft_running, is_our_game_process_alive};
+use crate::services::game::launcher::process::is_our_game_process_alive;
+use crate::services::game::launcher::session::{forget_game_session, remember_game_session};
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{
     BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID, REOPEN_LAUNCHER_ON_GAME_EXIT,
@@ -1278,12 +1279,6 @@ pub async fn launch_game(
     }
     GAME_PROCESS_PID.store(0, Ordering::SeqCst);
 
-    if is_external_minecraft_running() {
-        return Err(
-            "Minecraft уже запущен (другой лаунчер или другой экземпляр). Закройте игру и попробуйте снова.".to_string(),
-        );
-    }
-
     let mut cmd = std::process::Command::new(&java_path);
     cmd.args(&jvm_args)
         .arg(&detail.main_class)
@@ -1316,6 +1311,7 @@ pub async fn launch_game(
     let spawned_pid = child.id();
     GAME_PROCESS_PID.store(spawned_pid as u64, Ordering::SeqCst);
     eprintln!("[Launch] PID: {spawned_pid}");
+    remember_game_session(spawned_pid, playtime_profile_id.clone());
 
     if let Some(ref profile_id) = playtime_profile_id {
         if let Ok(last_played_at) = record_profile_last_played(profile_id) {
@@ -1405,6 +1401,7 @@ pub async fn launch_game(
             }
         };
 
+        forget_game_session();
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
 
         let _ = app_clone_for_playtime.emit(
