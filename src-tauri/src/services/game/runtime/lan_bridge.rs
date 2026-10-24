@@ -1,16 +1,3 @@
-//! LAN-мост комнат: туннелирует TCP-соединения Minecraft через WebRTC DataChannel.
-//!
-//! Внутри одного DataChannel идёт мультиплексированный поток кадров, поэтому каждое
-//! TCP-соединение игры (пинг сервера из меню «Сетевая игра», вход, переподключение)
-//! живёт в собственном канале и не смешивается с соседними.
-//!
-//! Формат кадра: `[kind u8][conn_id u32 BE][len u32 BE][payload]`.
-//! - `OPEN`  (гость → хост): гость принял локальное TCP-соединение, хост открывает своё к LAN-порту мира.
-//! - `DATA`  (в обе стороны): байты соединения.
-//! - `CLOSE` (в обе стороны): соединение закрыто на стороне отправителя.
-//!
-//! Несколько кадров могут идти подряд в одном сообщении DataChannel / одном IPC-вызове.
-
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -35,14 +22,12 @@ const FRAME_HEADER_LEN: usize = 9;
 const MAX_FRAME_PAYLOAD: usize = 1024 * 1024;
 
 const READ_CHUNK: usize = 16 * 1024;
-/// Держим сообщения DataChannel ниже дефолтного SCTP max-message-size (64 KiB).
 const OUTBOUND_BATCH_MAX: usize = 48 * 1024;
 
 const HOST_CONNECT_ATTEMPTS: u32 = 4;
 const HOST_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HOST_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(300);
 
-/// Стабильный диапазон портов гостя, чтобы адрес `127.0.0.1:<port>` не менялся между перезапусками моста.
 const GUEST_PORT_RANGE: RangeInclusive<u16> = 25570..=25599;
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,7 +56,6 @@ fn encode_frame(kind: u8, conn_id: u32, payload: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Разбирает целые кадры из `buf`. Возвращает кадры и число потреблённых байт (хвост — неполный кадр).
 fn parse_frames(buf: &[u8]) -> Result<(Vec<Frame>, usize), String> {
     let mut frames = Vec::new();
     let mut off = 0;
@@ -108,7 +92,6 @@ struct GuestListener {
 
 struct TunnelState {
     outbound: Option<mpsc::UnboundedSender<Vec<u8>>>,
-    /// Растёт при каждом `attach`, чтобы запоздалый `detach` от старого DataChannel не отключил новый.
     generation: u64,
     conns: HashMap<u32, mpsc::UnboundedSender<ConnMsg>>,
     next_conn_id: u32,
@@ -156,8 +139,6 @@ impl Tunnel {
         self.emit("connections", Some(count.to_string()));
     }
 
-    /// Подключает новый исходящий канал (новый DataChannel). Соединения старого канала закрываются:
-    /// удалённая сторона о них уже ничего не знает.
     fn attach(&self, outbound: mpsc::UnboundedSender<Vec<u8>>) -> u64 {
         let (generation, stale) = {
             let mut s = self.lock();
@@ -177,8 +158,6 @@ impl Tunnel {
         generation
     }
 
-    /// Отключает DataChannel, но оставляет слушатель гостя (адрес для игры не меняется).
-    /// С `generation` отключает только если с тех пор не было нового `attach`.
     fn detach(&self, generation: Option<u64>) {
         let stale = {
             let mut s = self.lock();
@@ -207,7 +186,6 @@ impl Tunnel {
         self.lock().listener.as_ref().map(|l| l.port)
     }
 
-    /// Убирает соединение из таблицы, если там всё ещё именно оно. `true` — удалённая сторона о закрытии не знает.
     fn unregister(&self, conn_id: u32, tx: &mpsc::UnboundedSender<ConnMsg>) -> bool {
         let mut s = self.lock();
         match s.conns.get(&conn_id) {
@@ -264,7 +242,6 @@ impl Tunnel {
                     let _ = tx.send(ConnMsg::Close);
                 }
             }
-            // Неизвестные типы кадров игнорируем — задел на расширение протокола.
             _ => {}
         }
     }
@@ -275,7 +252,6 @@ impl Tunnel {
         }
     }
 
-    /// Хост: гость открыл соединение — подключаемся к LAN-порту мира.
     fn open_remote(self: &Arc<Self>, conn_id: u32) {
         let Some(outbound) = self.lock().outbound.clone() else {
             return;
@@ -312,7 +288,6 @@ impl Tunnel {
         });
     }
 
-    /// Гость: игра подключилась к локальному слушателю.
     fn open_local(self: &Arc<Self>, stream: TcpStream) {
         let (tx, rx) = mpsc::unbounded_channel();
         let opened = {
@@ -354,7 +329,6 @@ impl Tunnel {
         {
             let mut s = self.lock();
             if let Some(existing) = s.listener.as_ref() {
-                // Параллельный вызов успел раньше — используем его слушатель.
                 return Ok(existing.port);
             }
             s.listener = Some(GuestListener { port, stop_tx });
@@ -420,7 +394,6 @@ async fn run_conn(
     tx: mpsc::UnboundedSender<ConnMsg>,
     outbound: mpsc::UnboundedSender<Vec<u8>>,
 ) {
-    // Без этого Nagle + delayed ACK добавляют до 200 мс на мелкие пакеты игры.
     let _ = stream.set_nodelay(true);
     let (mut reader, mut writer) = stream.into_split();
     let mut paused_rx = tunnel.paused_tx.subscribe();
@@ -517,8 +490,6 @@ fn existing_tunnel(sid: &str) -> Option<Arc<Tunnel>> {
     tunnels().get(sid).cloned()
 }
 
-/// Подключает DataChannel пира к мосту. Кадры для отправки пиру приходят в `on_frame`.
-/// Возвращает поколение подключения для `lan_bridge_detach`.
 #[tauri::command]
 pub async fn lan_bridge_attach(
     app: AppHandle,
@@ -561,7 +532,6 @@ pub async fn lan_bridge_attach(
     Ok(generation)
 }
 
-/// Кадры, полученные от пира по DataChannel. Тело — сырые байты, сессия — в заголовке `x-lan-session`.
 #[tauri::command]
 pub async fn lan_bridge_write(request: Request<'_>) -> Result<(), String> {
     let sid = request
@@ -570,14 +540,17 @@ pub async fn lan_bridge_write(request: Request<'_>) -> Result<(), String> {
         .and_then(|v| v.to_str().ok())
         .map(normalize_session_id)
         .ok_or_else(|| "lan bridge: missing session header".to_string())?;
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("lan bridge: expected raw body".into());
-    };
     let tunnel = existing_tunnel(&sid).ok_or_else(|| format!("lan bridge is not running ({sid})"))?;
-    tunnel.handle_incoming(bytes)
+    match request.body() {
+        InvokeBody::Raw(bytes) => tunnel.handle_incoming(bytes),
+        InvokeBody::Json(value) => {
+            let bytes: Vec<u8> = serde_json::from_value(value.clone())
+                .map_err(|e| format!("lan bridge: bad body: {e}"))?;
+            tunnel.handle_incoming(&bytes)
+        }
+    }
 }
 
-/// Обратное давление: пока DataChannel не успевает отправлять, перестаём читать из TCP.
 #[tauri::command]
 pub async fn lan_bridge_set_flow(session_id: String, paused: bool) -> Result<(), String> {
     let sid = normalize_session_id(&session_id);
@@ -604,7 +577,6 @@ pub async fn lan_bridge_start_guest(app: AppHandle, session_id: String) -> Resul
     Ok(port)
 }
 
-/// LAN-порт открытого мира хоста (`None` — мир не открыт, входящие соединения отклоняются).
 #[tauri::command]
 pub async fn lan_bridge_set_host_port(port: Option<u16>) -> Result<(), String> {
     HOST_LAN_PORT.store(port.unwrap_or(0) as u32, Ordering::Relaxed);
@@ -612,7 +584,6 @@ pub async fn lan_bridge_set_host_port(port: Option<u16>) -> Result<(), String> {
     Ok(())
 }
 
-/// Проверяет, что мир действительно открыт для сети на указанном порту.
 #[tauri::command]
 pub async fn lan_bridge_probe_port(port: u16) -> Result<bool, String> {
     if port == 0 {
@@ -627,7 +598,6 @@ pub async fn lan_bridge_probe_port(port: u16) -> Result<bool, String> {
     Ok(false)
 }
 
-/// Отключает DataChannel пира, сохраняя слушатель гостя.
 #[tauri::command]
 pub async fn lan_bridge_detach(session_id: String, generation: Option<u64>) -> Result<(), String> {
     let sid = normalize_session_id(&session_id);
@@ -663,7 +633,6 @@ mod tests {
         Arc::new(|_, _| {})
     }
 
-    /// Соединяет два туннеля «проводом», доставляя байты кусками произвольной длины.
     fn wire(from: mpsc::UnboundedReceiver<Vec<u8>>, to: Arc<Tunnel>) {
         let mut from = from;
         tokio::spawn(async move {
@@ -745,7 +714,6 @@ mod tests {
         let (_host, guest) = pair(lan).await;
         let port = guest.start_guest_listener(None).await.unwrap();
 
-        // Как в игре: сначала пинг из списка серверов, он закрывается, затем вход.
         let ping = roundtrip(port, b"status-ping").await;
         drop(ping);
         let mut a = roundtrip(port, b"login-a").await;
@@ -782,7 +750,6 @@ mod tests {
         let port = guest.start_guest_listener(None).await.unwrap();
         let _ = roundtrip(port, b"before").await;
 
-        // Новый DataChannel после переподключения WebRTC.
         let (host_tx, host_rx) = mpsc::unbounded_channel();
         let (guest_tx, guest_rx) = mpsc::unbounded_channel();
         host.attach(host_tx);

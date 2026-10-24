@@ -1,6 +1,3 @@
-# AppRun hook: prefer host libwayland-client over the copy bundled in the AppImage.
-# Fixes WebKit EGL_BAD_ALLOC on Arch / newer Mesa (Wayland).
-
 export DESKTOPINTEGRATION="${DESKTOPINTEGRATION:-1}"
 
 if [ -z "${LD_PRELOAD:-}" ]; then
