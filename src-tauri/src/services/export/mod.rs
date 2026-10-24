@@ -31,6 +31,7 @@ const BUILTIN_MRPACK_IGNORES: &[&str] = &[
     "crash-reports/",
     ".cache/",
     "cache/",
+    ".update-snapshots/",
     "natives/",
     "libraries/",
     ".fabric/",

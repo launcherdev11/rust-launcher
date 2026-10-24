@@ -7,6 +7,7 @@ use futures_util::stream::{self, StreamExt};
 use reqwest::header::USER_AGENT;
 use crate::app::paths::{instance_config_path, instance_dir};
 use crate::models::profile::InstanceConfig;
+use crate::services::game::content_snapshots::UpdateSnapshot;
 use crate::services::game::download::save_modrinth_file;
 use crate::services::game::profiles::{
     profile_item_display_name, profile_item_is_disabled, profile_item_stored_name,
@@ -791,12 +792,14 @@ pub async fn apply_profile_content_updates(
         .await
         .map_err(|e| format!("Не удалось создать папку '{subdir}': {e}"))?;
 
+    let snapshot = Arc::new(UpdateSnapshot::begin(&profile_id, subdir, &content_dir)?);
     let applied = Arc::new(AtomicU32::new(0));
     let results: Vec<Result<(), String>> = stream::iter(updates.into_iter())
         .map(|item| {
             let content_dir = content_dir.clone();
             let profile_id = profile_id.clone();
             let applied = Arc::clone(&applied);
+            let snapshot = Arc::clone(&snapshot);
             async move {
                 let target_display = if item.latest_filename.trim().is_empty() {
                     item.filename.as_str()
@@ -805,6 +808,13 @@ pub async fn apply_profile_content_updates(
                 };
                 let stored_name = profile_item_stored_name(target_display, item.enabled);
                 let dest_path = content_dir.join(&stored_name);
+
+                let old_path = resolve_profile_item_path(&content_dir, &item.filename);
+                if let Some(old) = old_path.as_deref() {
+                    if old == dest_path {
+                        snapshot.stash_copy(old, &stored_name);
+                    }
+                }
 
                 save_modrinth_file(
                     download_category,
@@ -815,9 +825,9 @@ pub async fn apply_profile_content_updates(
                 )
                 .await?;
 
-                if let Some(old_path) = resolve_profile_item_path(&content_dir, &item.filename) {
+                if let Some(old_path) = old_path {
                     if old_path != dest_path && old_path.is_file() {
-                        let _ = tokio::fs::remove_file(&old_path).await;
+                        snapshot.stash_move(&old_path, Some(&stored_name));
                     }
                 }
 
@@ -825,7 +835,7 @@ pub async fn apply_profile_content_updates(
                 if sibling_name != stored_name {
                     let sibling_path = content_dir.join(&sibling_name);
                     if sibling_path.is_file() {
-                        let _ = tokio::fs::remove_file(&sibling_path).await;
+                        snapshot.stash_move(&sibling_path, None);
                     }
                 }
 
@@ -837,9 +847,13 @@ pub async fn apply_profile_content_updates(
         .collect()
         .await;
 
-    for result in results {
-        result?;
+    let snapshot = Arc::try_unwrap(snapshot)
+        .map_err(|_| "Не удалось завершить снимок обновления".to_string())?;
+    if let Some(err) = results.into_iter().find_map(Result::err) {
+        snapshot.rollback();
+        return Err(err);
     }
+    snapshot.finish();
 
     let applied = applied.load(Ordering::SeqCst);
 

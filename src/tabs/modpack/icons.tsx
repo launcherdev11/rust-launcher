@@ -64,6 +64,10 @@ export function RefreshIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/refresh.png" className={className} />;
 }
 
+export function UndoIcon({ className }: IconProps) {
+  return <ImageIcon src="/launcher-assets/undo.png" className={className} />;
+}
+
 export function ModsIcon({ className }: IconProps) {
   return <ImageIcon src="/launcher-assets/mods.svg" className={className} />;
 }

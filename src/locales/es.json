@@ -1088,7 +1088,13 @@
       "applyFailed": "Error en la actualización: {{msg}}",
       "selectAtLeastOne": "Seleccione al menos un archivo para actualizar.",
       "notOnModrinth": "Se omiten los archivos que no se encuentran en Modrinth o CurseForge.",
-      "noneFoundForItem": "No hay actualizaciones para este archivo."
+      "noneFoundForItem": "No hay actualizaciones para este archivo.",
+      "rollback": "Deshacer actualización",
+      "rollbackTitle": "Deshacer la última actualización ({{count}} archivos)",
+      "rollbackConfirm": "¿Restaurar las versiones anteriores de {{count}} archivos? Las versiones nuevas descargadas por la actualización se eliminarán.",
+      "rollbackConfirmLabel": "Deshacer",
+      "rollbackDone": "Archivos restaurados: {{count}}",
+      "rollbackFailed": "No se pudo deshacer la actualización: {{msg}}"
     },
     "screenshots": {
       "title": "Capturas de pantalla",

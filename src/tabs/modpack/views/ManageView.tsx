@@ -19,6 +19,7 @@ import {
   ScreenshotsIcon,
   SearchIcon,
   SettingsIcon,
+  UndoIcon,
   WeightIcon,
 } from "../icons";
 import { formatByteSize, formatPlaytimeShort } from "../../../i18n";
@@ -130,6 +131,9 @@ export function ManageView({ ctx }: Props) {
     contentTab,
     handleCheckContentUpdates,
     contentUpdatesChecking,
+    contentSnapshot,
+    contentRollbackBusy,
+    handleRollbackContentUpdate,
     setIsAddMenuOpen,
     isAddMenuOpen,
     onOpenModsTab,
@@ -673,6 +677,20 @@ export function ManageView({ ctx }: Props) {
                 ? tt("modpacks.contentUpdates.checking")
                 : tt("modpacks.contentUpdates.check")}
             </button>
+            {contentSnapshot && (
+              <button
+                type="button"
+                onClick={() => void handleRollbackContentUpdate()}
+                disabled={contentRollbackBusy || contentUpdatesApplying}
+                className="btn btn-soft w-9 px-0 disabled:cursor-not-allowed"
+                title={tt("modpacks.contentUpdates.rollbackTitle", {
+                  count: contentSnapshot.items.length,
+                })}
+                aria-label={tt("modpacks.contentUpdates.rollback")}
+              >
+                <UndoIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
             <div className="relative">
               <button
                 type="button"

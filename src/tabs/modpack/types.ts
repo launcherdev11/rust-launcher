@@ -253,6 +253,13 @@ export type ProfileContentUpdate = {
   latestSha1?: string | null;
 };
 
+export type ContentSnapshot = {
+  id: string;
+  category: "mods" | "resourcepacks" | "shaderpacks";
+  createdAt: number;
+  items: { oldName: string; newName?: string | null }[];
+};
+
 export type ProfileIncompatibleContent = {
   filename: string;
   enabled: boolean;

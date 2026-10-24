@@ -5,6 +5,7 @@ pub mod build_presets;
 pub mod cache;
 pub mod console;
 pub mod console_filter;
+pub mod content_snapshots;
 pub mod core;
 pub mod download;
 pub mod files;
@@ -30,6 +31,9 @@ pub use accounts::{
     set_profile, switch_launcher_account,
 };
 pub use cache::{clear_launcher_cache, get_launcher_cache_size};
+pub use content_snapshots::{
+    delete_content_snapshot, list_content_snapshots, restore_content_snapshot,
+};
 pub use download::{
     download_modrinth_file, download_modrinth_modpack_and_import,     import_mrpack_as_new_profile,
 };

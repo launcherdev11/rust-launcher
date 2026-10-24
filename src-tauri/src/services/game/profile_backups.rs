@@ -16,7 +16,13 @@ use crate::services::game::profiles::{
     create_profile_impl, instance_profile_summary_for_dir, write_instance_config,
 };
 
-const BACKUP_SKIP_DIRS: &[&str] = &["logs", "crash-reports", ".cache", "cache"];
+const BACKUP_SKIP_DIRS: &[&str] = &[
+    "logs",
+    "crash-reports",
+    ".cache",
+    "cache",
+    super::content_snapshots::SNAPSHOTS_DIR,
+];
 const MANIFEST_NAME: &str = "16launcher-backup.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

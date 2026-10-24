@@ -13,7 +13,13 @@ use crate::services::game::profiles::{
     write_instance_config,
 };
 
-const SKIP_ON_DUPLICATE: &[&str] = &["logs", "crash-reports", ".cache", "cache"];
+const SKIP_ON_DUPLICATE: &[&str] = &[
+    "logs",
+    "crash-reports",
+    ".cache",
+    "cache",
+    super::content_snapshots::SNAPSHOTS_DIR,
+];
 
 const CLEANABLE_REL_PATHS: &[&str] = &[
     "logs",

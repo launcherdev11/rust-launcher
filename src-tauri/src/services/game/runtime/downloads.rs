@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use reqwest::Client;
-use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE, RANGE};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 
@@ -134,7 +134,6 @@ pub(crate) fn forge_installer_url_with_official_maven(installer_url: &str) -> St
 const CANCELLED_MSG: &str = "Загрузка отменена пользователем";
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(120);
 
-/// Удаляет временный файл, если загрузка закончилась ошибкой/отменой/паникой.
 struct TmpFileGuard {
     path: std::path::PathBuf,
     armed: bool,
@@ -159,13 +158,10 @@ impl Drop for TmpFileGuard {
 }
 
 enum AttemptError {
-    /// Повтор не поможет (отмена, ошибка диска, 4xx).
     Fatal(String),
-    /// Сетевая/серверная ошибка или битый файл — стоит попробовать ещё раз.
     Retry(String),
 }
 
-/// Скачивает Forge/NeoForge installer. Сетевые сбои повторяются, «не найден» — нет.
 pub(crate) async fn download_forge_installer_once(
     client: &Client,
     url: &str,
@@ -174,10 +170,11 @@ pub(crate) async fn download_forge_installer_once(
     version_id: &str,
     total_done: Arc<AtomicU64>,
 ) -> Result<u64, String> {
-    const ATTEMPTS: usize = 3;
+    const ATTEMPTS: usize = 6;
     let mut attempt = 0usize;
+    let mut buf: Vec<u8> = Vec::new();
     loop {
-        match download_forge_installer_attempt(client, url, path, app, version_id, &total_done).await {
+        match download_forge_installer_attempt(client, url, path, app, version_id, &total_done, &mut buf).await {
             Ok(n) => return Ok(n),
             Err(AttemptError::Fatal(e)) => return Err(e),
             Err(AttemptError::Retry(e)) => {
@@ -202,6 +199,7 @@ async fn download_forge_installer_attempt(
     app: &AppHandle,
     version_id: &str,
     total_done: &Arc<AtomicU64>,
+    buf: &mut Vec<u8>,
 ) -> Result<u64, AttemptError> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -213,14 +211,20 @@ async fn download_forge_installer_attempt(
         return Err(AttemptError::Fatal(CANCELLED_MSG.to_string()));
     }
 
-    let resp = client
-        .get(url)
-        .header(ACCEPT_ENCODING, "identity")
+    let mut req = client.get(url).header(ACCEPT_ENCODING, "identity");
+    if !buf.is_empty() {
+        req = req.header(RANGE, format!("bytes={}-", buf.len()));
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| AttemptError::Retry(format!("Ошибка запроса Forge installer: {e}")))?;
 
     let status = resp.status();
+    if status.as_u16() == 416 {
+        buf.clear();
+        return Err(AttemptError::Retry("Сервер отклонил докачку installer".to_string()));
+    }
     if !status.is_success() {
         if status.as_u16() == 404 {
             return Err(AttemptError::Fatal("Версия Forge не найдена".to_string()));
@@ -244,30 +248,40 @@ async fn download_forge_installer_attempt(
         return Err(AttemptError::Fatal("Версия Forge не найдена".to_string()));
     }
 
+    if status.as_u16() != 206 {
+        buf.clear();
+    }
     let content_len = resp.content_length().unwrap_or(0);
-    if content_len != 0 && content_len < FORGE_INSTALLER_MIN_BYTES {
+    let expected_total = if content_len == 0 { 0 } else { buf.len() as u64 + content_len };
+    if expected_total != 0 && expected_total < FORGE_INSTALLER_MIN_BYTES {
         return Err(AttemptError::Fatal("Версия Forge не найдена".to_string()));
     }
 
-    let mut raw = resp
-        .bytes()
-        .await
-        .map_err(|e| AttemptError::Retry(format!("Ошибка чтения потока: {e}")))?;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            return Err(AttemptError::Fatal(CANCELLED_MSG.to_string()));
+        }
+        let chunk = chunk.map_err(|e| AttemptError::Retry(format!("Ошибка чтения потока: {e}")))?;
+        buf.extend_from_slice(&chunk);
+    }
 
-    if content_len > 0 && raw.len() as u64 != content_len {
+    if expected_total > 0 && buf.len() as u64 != expected_total {
         return Err(AttemptError::Retry(format!(
-            "Installer получен не полностью ({} из {content_len} байт)",
-            raw.len()
+            "Installer получен не полностью ({} из {expected_total} байт)",
+            buf.len()
         )));
     }
 
+    let mut raw: Vec<u8> = std::mem::take(buf);
+
     if raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b {
-        let mut decoder = GzDecoder::new(raw.as_ref());
+        let mut decoder = GzDecoder::new(&raw[..]);
         let mut out = Vec::new();
         decoder
             .read_to_end(&mut out)
             .map_err(|e| AttemptError::Fatal(format!("Ошибка распаковки gzip (Forge installer): {e}")))?;
-        raw = out.into();
+        raw = out;
     }
 
     if (raw.len() as u64) < FORGE_INSTALLER_MIN_BYTES || !raw.starts_with(b"PK") {
@@ -375,8 +389,6 @@ pub(crate) async fn download_file_checked(
     }
 }
 
-/// Одна попытка загрузки. Счётчик общего прогресса откатывается при неудаче, чтобы
-/// повторы не раздували проценты, а временный файл удаляется в любом случае.
 async fn download_attempt(
     client: &Client,
     url: &str,
@@ -411,7 +423,6 @@ async fn download_attempt(
             .unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
         let body: String = body.chars().take(300).collect();
         let msg = format!("HTTP {status} для {url}: {body}");
-        // 404 повторяем один раз (зеркала иногда отстают), остальные 4xx — нет.
         return Err(if is_retryable_status(status.as_u16(), attempt) {
             AttemptError::Retry(msg)
         } else {
@@ -502,14 +513,12 @@ async fn download_attempt(
     }
     drop(file);
 
-    // Обрезанный ответ без ошибки потока (прокси/CDN закрыли соединение раньше времени).
     if content_len > 0 && downloaded != content_len {
         rollback(counted);
         return Err(AttemptError::Retry(format!(
             "Файл {url} получен не полностью ({downloaded} из {content_len} байт)"
         )));
     }
-    // Пустой ответ допустим только если хеш подтверждает, что файл и должен быть пустым.
     if downloaded == 0 && expected_sha1.is_none() {
         rollback(counted);
         return Err(AttemptError::Retry(format!("Пустой ответ от {url}")));
@@ -528,10 +537,8 @@ async fn download_attempt(
         }
     }
 
-    // Итоговый прогресс файла (последний чанк мог не попасть под троттлинг).
     emit(downloaded, total_done.load(Ordering::SeqCst));
 
-    // Другой поток мог успеть положить такой же файл.
     if path.exists() {
         match expected_sha1 {
             Some(expected) => {
@@ -546,7 +553,6 @@ async fn download_attempt(
         }
     }
 
-    // Антивирус/индексатор на Windows кратко держит свежий файл — rename может падать.
     let mut last_err = None;
     for i in 0..4u64 {
         match tokio::fs::rename(&tmp_path, path).await {
@@ -562,7 +568,6 @@ async fn download_attempt(
     }
     let e = last_err.expect("loop ran at least once");
     if path.exists() {
-        // Файл уже на месте (параллельная загрузка того же артефакта) — это успех.
         return Ok(downloaded);
     }
     Err(AttemptError::Fatal(format!(
@@ -591,7 +596,6 @@ async fn load_asset_index(
         if let Ok(parsed) = serde_json::from_str::<AssetIndexJson>(&text) {
             return Ok(parsed);
         }
-        // Битый/обрезанный индекс остался от прерванной установки — качаем заново.
         let _ = tokio::fs::remove_file(&index_path).await;
     }
 
@@ -627,7 +631,6 @@ pub(crate) async fn download_assets(
     let total_done = Arc::new(AtomicU64::new(total_downloaded));
     let mut tasks = futures_util::stream::FuturesUnordered::new();
     let mut aborts: Vec<tokio::task::AbortHandle> = Vec::new();
-    // Один и тот же объект может встречаться под разными именами — качаем его один раз.
     let mut queued = std::collections::HashSet::<&str>::new();
 
     for obj in index.objects.values() {
@@ -645,7 +648,6 @@ pub(crate) async fn download_assets(
         if !queued.insert(obj.hash.as_str()) {
             continue;
         }
-        // Размер сверяем дёшево; битые/обрезанные объекты перекачиваются, хеш проверит загрузчик.
         if file_len_matches(&obj_path, size) || (size == 0 && obj_path.is_file()) {
             total_done.fetch_add(size, Ordering::SeqCst);
             continue;
@@ -682,7 +684,6 @@ pub(crate) async fn download_assets(
             .map_err(|e| format!("Ошибка задачи загрузки ассетов: {e}"))
             .and_then(|r| r);
         if let Err(e) = outcome {
-            // Не оставляем сотни фоновых загрузок работать после провала установки.
             for a in &aborts {
                 a.abort();
             }
@@ -693,8 +694,6 @@ pub(crate) async fn download_assets(
     Ok(())
 }
 
-/// Для версий со старой схемой ассетов (`virtual` / `map_to_resources`, MC ≤ 1.7.2)
-/// игра ждёт файлы под их реальными именами, а не в `objects/<hash>`.
 fn sync_legacy_assets(
     assets_root: &Path,
     index: &AssetIndexJson,
@@ -737,9 +736,6 @@ fn sync_legacy_assets(
     Ok(())
 }
 
-/// Самовосстановление перед запуском: догружает недостающие/обрезанные ассеты (например,
-/// после очистки кэша или прерванной установки). Никогда не блокирует запуск ошибкой —
-/// игра способна стартовать и без части звуков/языков.
 pub(crate) async fn ensure_assets_for_launch(
     client: &Client,
     asset_index: &AssetIndexRef,
@@ -795,9 +791,6 @@ pub(crate) async fn ensure_assets_for_launch(
     }
 }
 
-/// Распаковывает natives. Пути из архива не могут выйти за `out_dir`; уже распакованные
-/// файлы того же размера пропускаются (быстрее запуск и не трогаем DLL, занятые
-/// другим экземпляром игры на Windows).
 pub(crate) fn extract_natives_jar(jar_path: &Path, out_dir: &Path) -> Result<(), String> {
     let file = std::fs::File::open(jar_path)
         .map_err(|e| format!("Не удалось открыть jar: {e}"))?;
@@ -830,7 +823,6 @@ pub(crate) fn extract_natives_jar(jar_path: &Path, out_dir: &Path) -> Result<(),
             Ok(()) => {
                 if let Err(e) = std::fs::rename(&tmp_path, &out_path) {
                     let _ = std::fs::remove_file(&tmp_path);
-                    // Целевой файл занят запущенной игрой — он уже на месте, это не ошибка.
                     if !out_path.is_file() {
                         return Err(format!("Ошибка записи {}: {e}", out_path.display()));
                     }
@@ -911,7 +903,6 @@ mod tests {
         }
         let out = root.join("natives");
         extract_natives_jar(&jar, &out).unwrap();
-        // повторная распаковка идемпотентна
         extract_natives_jar(&jar, &out).unwrap();
         assert!(out.join("lwjgl.dll").is_file());
         assert!(!root.join("escaped.dll").exists());

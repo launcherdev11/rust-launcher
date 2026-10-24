@@ -102,8 +102,27 @@ pub(crate) async fn download_text_with_retries(client: &Client, url: &str, retri
     }
 }
 
-/// 404 почти всегда окончателен (зеркала редко «догоняют» дольше одной паузы), поэтому
-/// повторяем его один раз; 408/429/5xx — пока не кончатся попытки.
+const FABRIC_META_OFFICIAL: &str = "https://meta.fabricmc.net/";
+const FABRIC_META_MIRROR: &str = "https://bmclapi2.bangbang93.com/fabric-meta/";
+
+fn meta_mirror_url(url: &str) -> Option<String> {
+    url.strip_prefix(FABRIC_META_OFFICIAL)
+        .map(|rest| format!("{FABRIC_META_MIRROR}{rest}"))
+}
+
+pub(crate) async fn download_meta_text(client: &Client, url: &str, retries: usize) -> Result<String, String> {
+    let Some(mirror) = meta_mirror_url(url) else {
+        return download_text_with_retries(client, url, retries).await;
+    };
+    match download_text_with_retries(client, url, retries.min(2)).await {
+        Ok(text) => Ok(text),
+        Err(primary) if CANCEL_DOWNLOAD.load(Ordering::SeqCst) => Err(primary),
+        Err(primary) => download_text_with_retries(client, &mirror, retries)
+            .await
+            .map_err(|fallback| format!("{primary}; зеркало: {fallback}")),
+    }
+}
+
 pub(crate) fn is_retryable_status(status: u16, attempt: usize) -> bool {
     match status {
         404 => attempt == 0,
@@ -112,8 +131,6 @@ pub(crate) fn is_retryable_status(status: u16, attempt: usize) -> bool {
     }
 }
 
-/// Экспоненциальная пауза 1с, 2с, 4с… (потолок 16с) с небольшим джиттером, чтобы
-/// параллельные загрузки не ретраились синхронной волной.
 pub(crate) fn retry_delay(attempt: usize) -> Duration {
     use rand::Rng;
     let base = 1000u64.saturating_mul(1u64 << attempt.min(4));
@@ -128,7 +145,6 @@ pub(crate) fn sha1_hex_of_bytes(bytes: &[u8]) -> String {
     format!("{:x}", out)
 }
 
-/// Потоковый SHA1: не загружает файл целиком в память и не блокирует async-рантайм.
 pub(crate) async fn sha1_hex_of_file(path: &Path) -> Result<String, String> {
     let path_buf = path.to_path_buf();
     tokio::task::spawn_blocking(move || -> Result<String, String> {
@@ -159,8 +175,6 @@ pub(crate) async fn sha1_hex_of_file(path: &Path) -> Result<String, String> {
     .map_err(|e| format!("Ошибка расчёта SHA1: {e}"))?
 }
 
-/// Дешёвая проверка «файл на месте и не обрезан»: без хеширования. `expected_size == 0`
-/// означает «размер неизвестен» — тогда достаточно, чтобы файл был непустым.
 pub(crate) fn file_len_matches(path: &Path, expected_size: u64) -> bool {
     match std::fs::metadata(path) {
         Ok(m) if m.is_file() && m.len() > 0 => expected_size == 0 || m.len() == expected_size,
@@ -168,8 +182,6 @@ pub(crate) fn file_len_matches(path: &Path, expected_size: u64) -> bool {
     }
 }
 
-/// Отбрасывает компоненты пути, которые могут выйти за пределы `base` (`..`, абсолютные
-/// пути, диск). Возвращает `None` для небезопасных путей — защита от zip-slip.
 pub(crate) fn safe_join(base: &Path, rel: &str) -> Option<std::path::PathBuf> {
     use std::path::Component;
     let rel = rel.replace('\\', "/");

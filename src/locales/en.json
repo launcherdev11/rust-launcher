@@ -1060,7 +1060,13 @@
       "applyFailed": "Update failed: {{msg}}",
       "selectAtLeastOne": "Select at least one file to update.",
       "notOnModrinth": "Files not found on Modrinth or CurseForge are skipped.",
-      "noneFoundForItem": "No updates for this file."
+      "noneFoundForItem": "No updates for this file.",
+      "rollback": "Undo update",
+      "rollbackTitle": "Undo the last update ({{count}} files)",
+      "rollbackConfirm": "Restore the previous versions of {{count}} files? The new versions downloaded by the update will be removed.",
+      "rollbackConfirmLabel": "Undo",
+      "rollbackDone": "Files restored: {{count}}",
+      "rollbackFailed": "Could not undo the update: {{msg}}"
     },
     "screenshots": {
       "title": "Screenshots",

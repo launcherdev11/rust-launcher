@@ -63,10 +63,12 @@ pub(crate) fn build_java_command(
     };
 
     #[cfg(target_os = "windows")]
-    if let Some(parent) = java_path.parent() {
-        let candidate = parent.join("java.exe");
-        if candidate.exists() {
-            java_path = candidate;
+    if settings.show_console_on_launch {
+        if let Some(parent) = java_path.parent() {
+            let candidate = parent.join("java.exe");
+            if candidate.exists() {
+                java_path = candidate;
+            }
         }
     }
 

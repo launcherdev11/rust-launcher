@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { confirmDialog } from "../../../lib/confirmDialog";
 import {
+  type ContentSnapshot,
   type ContentTab,
   type InstanceProfile,
   type NotificationKind,
@@ -37,6 +39,35 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
     useState<string | null>(null);
 
   const [isContentUpdatesModalOpen, setIsContentUpdatesModalOpen] = useState(false);
+
+  const [contentSnapshot, setContentSnapshot] = useState<ContentSnapshot | null>(null);
+  const [contentRollbackBusy, setContentRollbackBusy] = useState(false);
+
+  const profileId = selectedProfile?.id ?? null;
+  const snapshotCategory =
+    contentTab === "mods"
+      ? "mods"
+      : contentTab === "resourcepacks"
+        ? "resourcepacks"
+        : "shaderpacks";
+
+  async function refreshContentSnapshot() {
+    if (!profileId) {
+      setContentSnapshot(null);
+      return;
+    }
+    try {
+      const list = await invoke<ContentSnapshot[]>("list_content_snapshots", { profileId });
+      setContentSnapshot(list.find((s) => s.category === snapshotCategory) ?? null);
+    } catch (e) {
+      console.warn("Failed to list content snapshots:", e);
+      setContentSnapshot(null);
+    }
+  }
+
+  useEffect(() => {
+    void refreshContentSnapshot();
+  }, [profileId, snapshotCategory]);
 
   const [selectedContentUpdateFilenames, setSelectedContentUpdateFilenames] = useState<
     Set<string>
@@ -174,6 +205,7 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
       setContentUpdates([]);
       setSelectedContentUpdateFilenames(new Set());
       await refreshItems(selectedProfile.id, contentTab);
+      await refreshContentSnapshot();
     } catch (e) {
       console.error(e);
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
@@ -226,6 +258,7 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
 
       showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
       await refreshItems(selectedProfile.id, contentTab);
+      await refreshContentSnapshot();
       setContentUpdatesAvailableFilenames((prev) => {
         if (!prev.has(item.name)) return prev;
         const next = new Set(prev);
@@ -241,7 +274,37 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
     }
   }
 
+  async function handleRollbackContentUpdate() {
+    if (!selectedProfile || !contentSnapshot) return;
+    const ok = await confirmDialog({
+      message: tt("modpacks.contentUpdates.rollbackConfirm", {
+        count: contentSnapshot.items.length,
+      }),
+      confirmLabel: tt("modpacks.contentUpdates.rollbackConfirmLabel"),
+    });
+    if (!ok) return;
+    setContentRollbackBusy(true);
+    try {
+      const restored = await invoke<number>("restore_content_snapshot", {
+        profileId: selectedProfile.id,
+        snapshotId: contentSnapshot.id,
+      });
+      showNotification("success", tt("modpacks.contentUpdates.rollbackDone", { count: restored }));
+      await refreshItems(selectedProfile.id, contentTab);
+      await refreshContentSnapshot();
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.contentUpdates.rollbackFailed", { msg }));
+    } finally {
+      setContentRollbackBusy(false);
+    }
+  }
+
   return {
+    contentSnapshot,
+    contentRollbackBusy,
+    handleRollbackContentUpdate,
     contentUpdates,
     contentUpdatesChecking,
     contentUpdatesApplying,

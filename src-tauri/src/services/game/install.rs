@@ -11,7 +11,7 @@ use crate::app::paths::{game_root_dir, libraries_dir, versions_dir};
 use crate::infra::process::{hide_console, run_with_timeout};
 use crate::infra::http::{http_client, http_client_for_binary_download};
 use crate::services::game::core::{
-    current_os_name, download_text_with_retries, fabric_library_path, file_len_matches,
+    current_os_name, download_meta_text, download_text_with_retries, fabric_library_path, file_len_matches,
     is_probably_native_jar_path,
     library_applies, resolve_native_artifact, try_fetch_remote_sha1,
 };
@@ -29,7 +29,8 @@ use crate::services::game::state::{
 };
 use crate::services::game::version_types::*;
 use crate::services::game::versions::{
-    get_mojang_version_url, neoforge_minecraft_version_for_install, resolve_mojang_version,
+    get_mojang_version_url, neoforge_minecraft_version_for_install, resolve_forge_installer_url,
+    resolve_mojang_version,
 };
 
 async fn ensure_base_version_json(
@@ -55,7 +56,7 @@ async fn fetch_loader_profile(
     url: &str,
     label: &str,
 ) -> Result<FabricProfile, String> {
-    let text = download_text_with_retries(client, url, DEFAULT_DOWNLOAD_RETRIES)
+    let text = download_meta_text(client, url, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка загрузки профиля {label}: {e}"))?;
     serde_json::from_str(&text).map_err(|e| {
@@ -649,6 +650,12 @@ pub async fn install_forge(
         .await
         .map_err(|e| format!("Не удалось создать папку для Forge installer: {e}"))?;
     let installer_path = installer_dir.join("installer.jar");
+
+    let installer_url = if is_neoforge {
+        installer_url
+    } else {
+        resolve_forge_installer_url(&installer_url, &mc_version, &forge_build).await
+    };
 
     let need_download = if installer_path.exists() {
         let ok = file_starts_with_pk(&installer_path).await.unwrap_or(false);

@@ -1088,7 +1088,13 @@
       "applyFailed": "Aktualisierung fehlgeschlagen: {{msg}}",
       "selectAtLeastOne": "Wählen Sie mindestens eine Datei zum Aktualisieren aus.",
       "notOnModrinth": "Dateien, die nicht auf Modrinth oder CurseForge gefunden werden, werden übersprungen.",
-      "noneFoundForItem": "Keine Updates für diese Datei."
+      "noneFoundForItem": "Keine Updates für diese Datei.",
+      "rollback": "Update rückgängig machen",
+      "rollbackTitle": "Letztes Update rückgängig machen ({{count}} Dateien)",
+      "rollbackConfirm": "Die vorherigen Versionen von {{count}} Dateien wiederherstellen? Die durch das Update heruntergeladenen neuen Versionen werden entfernt.",
+      "rollbackConfirmLabel": "Rückgängig machen",
+      "rollbackDone": "Wiederhergestellte Dateien: {{count}}",
+      "rollbackFailed": "Update konnte nicht rückgängig gemacht werden: {{msg}}"
     },
     "screenshots": {
       "title": "Screenshots",

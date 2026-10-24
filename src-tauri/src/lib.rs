@@ -45,6 +45,7 @@ use services::game::{
     lan_bridge_set_host_port, lan_bridge_start_guest, lan_bridge_stop, lan_bridge_write,
     create_profile_backup, delete_profile_backup, list_profile_backups,
     open_profile_backups_folder, restore_profile_backup_as_new,
+    delete_content_snapshot, list_content_snapshots, restore_content_snapshot,
     cleanup_profile, delete_profile_worlds, duplicate_profile, get_profile_disk_usage,
     list_profile_worlds,
 };
@@ -276,6 +277,9 @@ pub fn run() {
             list_profile_backups,
             delete_profile_backup,
             restore_profile_backup_as_new,
+            list_content_snapshots,
+            restore_content_snapshot,
+            delete_content_snapshot,
             open_profile_backups_folder,
             duplicate_profile,
             list_profile_worlds,

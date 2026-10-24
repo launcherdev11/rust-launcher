@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use crate::app::paths::{game_root_dir, versions_dir};
 use crate::infra::http::http_client;
-use crate::services::game::core::{compare_version_like, download_text_with_retries};
+use crate::services::game::core::{compare_version_like, download_meta_text, download_text_with_retries};
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_GAME, FABRIC_META_LOADERS, FORGE_MAVEN_BASE,
@@ -348,7 +348,7 @@ async fn load_loader_supported_game_ids(loader: &str) -> Result<HashSet<String>,
         _ => return Ok(HashSet::new()),
     };
     let client = http_client(false);
-    let text = download_text_with_retries(&client, url, DEFAULT_DOWNLOAD_RETRIES)
+    let text = download_meta_text(&client, url, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка загрузки списка версий для {loader}: {e}"))?;
     let list: Vec<LoaderMetaGameVersion> = serde_json::from_str(&text).map_err(|e| {
@@ -610,7 +610,7 @@ fn sort_fabric_loader_options(mut entries: Vec<LoaderVersionOption>) -> Vec<Load
 pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let url = format!("{FABRIC_META_LOADERS}/{game_version}");
     let client = http_client(false);
-    let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
+    let text = download_meta_text(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса списка Fabric: {e}"))?;
     let list: Vec<FabricLoaderEntry> = serde_json::from_str(&text).map_err(|e| {
@@ -661,6 +661,44 @@ pub async fn fetch_quilt_loaders(game_version: String) -> Result<Vec<LoaderVersi
         }
     }
     Ok(out)
+}
+
+
+pub(crate) async fn resolve_forge_installer_url(
+    installer_url: &str,
+    mc_version: &str,
+    forge_build: &str,
+) -> String {
+    let plain = format!("{mc_version}-{forge_build}");
+    if !installer_url.contains("/net/minecraftforge/forge/") || !installer_url.contains(&plain) {
+        return installer_url.to_string();
+    }
+
+    let client = http_client(false);
+    let mut metadata = None;
+    for url in [FORGE_MAVEN_METADATA_URL, FORGE_MAVEN_OFFICIAL_METADATA_URL] {
+        if let Ok(text) = download_text_with_retries(&client, url, 2).await {
+            metadata = Some(text);
+            break;
+        }
+    }
+    let Some(metadata) = metadata else {
+        return installer_url.to_string();
+    };
+
+    let versions = parse_maven_metadata_versions(&metadata);
+    if versions.iter().any(|v| *v == plain) {
+        return installer_url.to_string();
+    }
+    let suffixed_prefix = format!("{plain}-");
+    let resolved = versions
+        .iter()
+        .filter(|v| v.starts_with(&suffixed_prefix))
+        .min_by_key(|v| v.len());
+    match resolved {
+        Some(full) => installer_url.replace(&plain, full),
+        None => installer_url.to_string(),
+    }
 }
 
 

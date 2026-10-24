@@ -1059,7 +1059,13 @@
       "applyFailed": "Не удалось обновить: {{msg}}",
       "selectAtLeastOne": "Выберите хотя бы один файл для обновления.",
       "notOnModrinth": "Файлы, не найденные в Modrinth или CurseForge, пропускаются.",
-      "noneFoundForItem": "Для этого файла обновления не найдены."
+      "noneFoundForItem": "Для этого файла обновления не найдены.",
+      "rollback": "Откатить обновление",
+      "rollbackTitle": "Откатить последнее обновление (файлов: {{count}})",
+      "rollbackConfirm": "Вернуть предыдущие версии файлов ({{count}})? Новые версии, загруженные обновлением, будут удалены.",
+      "rollbackConfirmLabel": "Откатить",
+      "rollbackDone": "Возвращено файлов: {{count}}",
+      "rollbackFailed": "Не удалось откатить обновление: {{msg}}"
     },
     "screenshots": {
       "title": "Скриншоты",
