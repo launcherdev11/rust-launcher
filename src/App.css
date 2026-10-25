@@ -8,8 +8,8 @@
   --accent-to: color-mix(in srgb, var(--accent-color) 38%, #c77dff);
   --accent-gradient: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--accent-from) 88%, #000) 0%,
-    color-mix(in srgb, var(--accent-to) 80%, #000) 100%
+    color-mix(in srgb, var(--accent-from) 74%, #000) 0%,
+    color-mix(in srgb, var(--accent-to) 68%, #000) 100%
   );
   --accent-hi: color-mix(in srgb, var(--accent-color) 28%, #e7dcff);
   --accent-soft: color-mix(in srgb, var(--accent-from) 16%, transparent);

@@ -61,6 +61,9 @@ pub struct Settings {
     pub background_accent_color: String,
     pub background_image_url: Option<String>,
 
+    #[serde(default)]
+    pub adaptive_accent_enabled: bool,
+
     #[serde(default = "default_background_blur_enabled")]
     pub background_blur_enabled: bool,
 
@@ -140,6 +143,7 @@ impl Default for Settings {
             interface_language: "ru".to_string(),
             background_accent_color: "#4a22a8".to_string(),
             background_image_url: None,
+            adaptive_accent_enabled: false,
             background_blur_enabled: true,
             split_view_enabled: false,
             sidebar_position: default_sidebar_position(),

@@ -20,11 +20,11 @@ module.exports = {
           hi: mixed("var(--accent-hi)"),
         },
         ink: {
-          950: "#0b0910",
-          900: "#14111b",
-          850: "#1b1724",
-          800: "#241e2f",
-          700: "#2e2739",
+          950: mixed("var(--ink-0)"),
+          900: mixed("var(--ink-1)"),
+          850: mixed("var(--ink-2)"),
+          800: mixed("var(--ink-3)"),
+          700: mixed("var(--ink-4)"),
         },
       },
       fontFamily: {

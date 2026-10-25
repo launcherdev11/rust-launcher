@@ -1,6 +1,6 @@
 :root {
   --shell-edge: var(--accent-to, #975ade);
-  --shell-surface: rgba(20, 17, 27, 0.92);
+  --shell-surface: color-mix(in srgb, var(--ink-1, #14111b) 92%, transparent);
   --shell-line: var(--seam, rgba(214, 200, 240, 0.09));
   --shell-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
 }
@@ -408,7 +408,11 @@ html.launcher-linux .dock-backdrop img {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(11, 9, 16, 0.45), rgba(11, 9, 16, 0.8));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ink-0, #0b0910) 45%, transparent),
+    color-mix(in srgb, var(--ink-0, #0b0910) 80%, transparent)
+  );
 }
 
 .dock-body {
@@ -437,7 +441,7 @@ html.launcher-linux .dock-backdrop img {
   padding: 0 0.625rem;
   border-radius: 0.5rem;
   border: 1px solid var(--seam, rgba(214, 200, 240, 0.09));
-  background: rgba(11, 9, 16, 0.55);
+  background: color-mix(in srgb, var(--ink-0, #0b0910) 55%, transparent);
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--fg, #eee9f6);
@@ -474,7 +478,7 @@ html.launcher-linux .dock-backdrop img {
   padding: 0 1.125rem;
   border-radius: var(--r-control, 0.625rem);
   border: 1px solid var(--seam-strong, rgba(214, 200, 240, 0.16));
-  background: rgba(11, 9, 16, 0.55);
+  background: color-mix(in srgb, var(--ink-0, #0b0910) 55%, transparent);
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--fg, #eee9f6);

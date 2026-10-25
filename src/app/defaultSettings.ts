@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   show_launcher_banners: true,
   background_accent_color: "#4a22a8",
   background_image_url: null,
+  adaptive_accent_enabled: false,
   background_blur_enabled: true,
   split_view_enabled: false,
   sidebar_position: "left",

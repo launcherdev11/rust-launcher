@@ -318,6 +318,7 @@ export function LauncherSection({ ctx }: Props) {
           {(anyVisible(
             "launcher.accentColor",
             "launcher.backgroundImage",
+            "launcher.adaptiveAccent",
             "launcher.backgroundBlur",
             "launcher.backgroundAnimation",
             "launcher.disableAnimations",
@@ -512,6 +513,14 @@ export function LauncherSection({ ctx }: Props) {
                     </button>
                   )}
                 </SettingsRow>
+              )}
+              {showSetting("launcher.adaptiveAccent") && (
+                <SettingsSwitchRow
+                  label={tt("settings.launcher.adaptiveAccent.label")}
+                  hint={tt("settings.launcher.adaptiveAccent.hint")}
+                  value={settings?.adaptive_accent_enabled ?? false}
+                  onChange={(v) => updateSettings({ adaptive_accent_enabled: v })}
+                />
               )}
               {showSetting("launcher.backgroundBlur") && (
                 <SettingsSwitchRow

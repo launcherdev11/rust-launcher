@@ -38,6 +38,22 @@
   --launcher-bg-image: none;
 }
 
+:root[data-adaptive-accent] {
+  --ink-0: color-mix(in srgb, var(--accent-color) 9%, #060608);
+  --ink-1: color-mix(in srgb, var(--accent-color) 13%, #08080b);
+  --ink-2: color-mix(in srgb, var(--accent-color) 17%, #0a0a0e);
+  --ink-3: color-mix(in srgb, var(--accent-color) 22%, #0c0c11);
+  --ink-4: color-mix(in srgb, var(--accent-color) 27%, #0e0e14);
+  --seam: color-mix(in srgb, var(--accent-hi) 11%, transparent);
+  --seam-strong: color-mix(in srgb, var(--accent-hi) 20%, transparent);
+  --fg: color-mix(in srgb, var(--accent-hi) 12%, #f6f6f8);
+  --fg-muted: color-mix(in srgb, var(--accent-hi) 24%, #9c9ca6);
+  --fg-faint: color-mix(in srgb, var(--accent-hi) 20%, #6a6a74);
+  --glass-bg: color-mix(in srgb, var(--ink-1) 90%, transparent);
+  --glass-bg-strong: color-mix(in srgb, var(--ink-0) 97%, transparent);
+  --glass-bg-popover: var(--ink-1);
+}
+
 html {
   font-size: 16px;
 }
@@ -366,7 +382,7 @@ body {
   .seg-track {
     border-radius: var(--r-control);
     border: 1px solid var(--seam);
-    background: rgba(11, 9, 16, 0.6);
+    background: color-mix(in srgb, var(--ink-0) 60%, transparent);
   }
 
   .seg-indicator {
@@ -572,9 +588,12 @@ html.launcher-no-animations *::after {
 html.launcher-no-animations .tab-animate,
 html.launcher-linux.launcher-no-animations .tab-animate,
 html.launcher-no-animations .mods-detail-panel-animate,
-html.launcher-no-animations .animate-notification-slide-in,
-html.launcher-no-animations .animate-notification-slide-out {
+html.launcher-no-animations .animate-notification-slide-in {
   animation: none;
+}
+
+html.launcher-no-animations .animate-notification-slide-out {
+  display: none;
 }
 
 html.launcher-no-animations .interactive-press:hover,

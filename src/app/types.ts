@@ -51,6 +51,7 @@ export type Settings = {
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;
+  adaptive_accent_enabled?: boolean;
   background_blur_enabled: boolean;
   split_view_enabled: boolean;
   sidebar_position?: string;

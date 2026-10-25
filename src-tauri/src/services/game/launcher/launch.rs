@@ -345,7 +345,15 @@ pub async fn launch_game(
             )
             .await
             .map_err(|e| {
-                format!("Не удалось восстановить client.jar ({e}). Переустановите версию.")
+                let dir = jar_path.parent().unwrap_or(&jar_path).display();
+                if e.contains("os error 5") {
+                    format!(
+                        "Не удалось восстановить client.jar: нет прав на запись в папку «{dir}» ({e}). \
+                         Выберите другую папку игры в настройках или проверьте права и антивирус."
+                    )
+                } else {
+                    format!("Не удалось восстановить client.jar ({e}). Переустановите версию.")
+                }
             })?;
         }
     }

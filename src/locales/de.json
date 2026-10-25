@@ -403,6 +403,10 @@
         "choose": "Bild auswählen",
         "hint": "PNG, JPG, WebP und GIF werden unterstützt (Animationen bleiben erhalten). Die Datei wird in den Launcher-Datenordner kopiert. „Zurücksetzen“ stellt den Standardhintergrund wieder her."
       },
+      "adaptiveAccent": {
+        "label": "Farben an Hintergrund anpassen:",
+        "hint": "Die Oberflächenfarbe wird aus dem gewählten Hintergrundbild abgeleitet. Ohne eigenes Bild gilt die manuell gewählte Farbe."
+      },
       "backgroundBlur": {
         "label": "Hintergrundunschärfe:"
       },

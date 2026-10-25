@@ -29,6 +29,7 @@ export type SettingSearchId =
   | "launcher.language"
   | "launcher.accentColor"
   | "launcher.backgroundImage"
+  | "launcher.adaptiveAccent"
   | "launcher.backgroundBlur"
   | "launcher.customThemes"
   | "launcher.sidebarPosition"
@@ -243,6 +244,15 @@ export const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
       "settings.section.appearance",
       "settings.launcher.backgroundImage.label",
       "settings.launcher.backgroundImage.hint",
+    ],
+  },
+  {
+    id: "launcher.adaptiveAccent",
+    tab: "launcher",
+    keys: [
+      "settings.section.appearance",
+      "settings.launcher.adaptiveAccent.label",
+      "settings.launcher.adaptiveAccent.hint",
     ],
   },
   {

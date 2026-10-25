@@ -56,19 +56,14 @@ export function useNotifications(settings: Settings | null) {
 
   const beginDismissNotification = useCallback(
     (id: number) => {
-      clearNotificationDismissTimers(id);
-      let shouldAnimateOut = false;
       setNotifications((prev) => {
         const target = prev.find((n) => n.id === id);
         if (!target || target.leaving) return prev;
-        shouldAnimateOut = true;
         return prev.map((n) => (n.id === id ? { ...n, leaving: true } : n));
       });
-      if (!shouldAnimateOut) return;
-
       scheduleNotificationRemoval(id);
     },
-    [clearNotificationDismissTimers, scheduleNotificationRemoval],
+    [scheduleNotificationRemoval],
   );
 
   const scheduleNotificationDismiss = useCallback(

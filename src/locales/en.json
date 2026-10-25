@@ -379,6 +379,10 @@
         "choose": "Choose image",
         "hint": "PNG, JPG, WebP, and GIF are supported (animations are preserved). The file is copied to the launcher data folder. “Reset” restores the default background."
       },
+      "adaptiveAccent": {
+        "label": "Match colors to background:",
+        "hint": "Interface colors are taken from the chosen background image. Without a custom image, the color you picked manually is used."
+      },
       "backgroundBlur": {
         "label": "Background blur:"
       },

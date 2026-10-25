@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -44,7 +45,11 @@ pub fn set_background_image(source_path: Option<String>) -> Result<Option<String
         let data_dir = launcher_data_dir()?;
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| format!("Не удалось создать папку данных лаунчера: {e}"))?;
-        let dest = data_dir.join(format!("background.{}", ext));
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or_default();
+        let dest = data_dir.join(format!("background-{stamp}.{ext}"));
         std::fs::copy(path, &dest)
             .map_err(|e| format!("Не удалось скопировать файл: {e}"))?;
         Some(
@@ -56,9 +61,9 @@ pub fn set_background_image(source_path: Option<String>) -> Result<Option<String
         None
     };
 
-    if new_path.is_none() {
-        if let Some(old) = settings.background_image_url.as_ref() {
-            let old_path = PathBuf::from(old);
+    if let Some(old) = settings.background_image_url.as_ref() {
+        let old_path = PathBuf::from(old);
+        if Some(old.as_str()) != new_path.as_deref() {
             if let Ok(data_dir) = launcher_data_dir() {
                 if old_path.starts_with(&data_dir) {
                     let _ = std::fs::remove_file(&old_path);

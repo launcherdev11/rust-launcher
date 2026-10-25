@@ -403,6 +403,10 @@
         "choose": "Elige imagen",
         "hint": "Se admiten PNG, JPG, WebP y GIF (se conservan las animaciones). El archivo se copia a la carpeta de datos del iniciador. \"Restablecer\" restaura el fondo predeterminado."
       },
+      "adaptiveAccent": {
+        "label": "Adaptar colores al fondo:",
+        "hint": "El color de la interfaz se toma de la imagen de fondo elegida. Sin una imagen propia se usa el color elegido manualmente."
+      },
       "backgroundBlur": {
         "label": "Fondo borroso:"
       },

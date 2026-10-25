@@ -19,18 +19,20 @@
 **Сайт**: [https://16-launcher.ru](https://16-launcher.ru)
 
 ---
-
-![readme_screen.png](public/launcher-assets/about.png)
-
+<p align="center">
+<img src="public/launcher-assets/about.png" alt="about">
+</p>
 ---
     
 **16Launcher** - Надежный кроссплатформенный лаунчер для Minecraft. Встроенная установка модов, продвинутая оптимизация и продуманный интерфейс. Легкий, стабильный, с гибкими настройками для полного контроля над игрой.
 
+**Языки**: [English](README.md)
+
 ## Установка
 
-1. Download the latest installer from [Official website](https://16-launcher.ru)
-2. Run the installer and follow the setup instructions
-3. Launch 16Launcher and start playing!
+1. Скачайте последнюю версию установщика с [официального сайта](https://16-launcher.ru)
+2. Запустите установщик и следуйте инструкциям
+3. Откройте 16Launcher и начинайте играть!
 
 ## Особенности
 
@@ -55,10 +57,24 @@
 ![readme_screen4.png](public/launcher-assets/readme_screen4.png)
 ![readme_screen5.png](public/launcher-assets/readme_screen5.png)
 
+## Сборка из исходников
+
+Лаунчер написан на Tauri 2: бэкенд на Rust лежит в `src-tauri/`, фронтенд на React 19 + TypeScript + Vite + Tailwind — в `src/`.
+
+Понадобятся Node.js 22, стабильный тулчейн Rust и системные библиотеки для Tauri (WebView2 и MSVC Build Tools на Windows, WebKitGTK 4.1 на Linux).
+
+```bash
+npm ci
+npm run tauri dev      # запуск в режиме разработки
+npm run tauri build    # установщики появятся в src-tauri/target/release/bundle/
+```
+
+Подробная инструкция с зависимостями для разных систем, переменными окружения, подписью обновлений и процессом релиза — в [BUILD.ru.md](BUILD.ru.md).
+
 ## Поддержка
 
 - Email: 16launcher@gmail.com
-- Website: [https://16-launcher.ru](https://16-launcher.ru)
+- Сайт: [https://16-launcher.ru](https://16-launcher.ru)
 - Issues: [GitHub Issues](https://github.com/launcherdev11/rust-launcher/issues)
 
 ## Лицензия
