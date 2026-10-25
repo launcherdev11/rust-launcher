@@ -47,7 +47,6 @@ export type Settings = {
   animations_disabled: boolean;
   background_animation_disabled?: boolean;
   thematic_decorations_disabled?: boolean;
-  show_launcher_banners?: boolean;
   interface_language?: string;
   background_accent_color: string;
   background_image_url: string | null;

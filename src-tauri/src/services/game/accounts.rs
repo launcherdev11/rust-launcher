@@ -6,6 +6,7 @@ use crate::app::paths::{launcher_accounts_path, profile_path};
 use crate::models::launcher_account::{
     LauncherAccountEntry, LauncherAccountSummary, LauncherAccountsStore, Profile,
 };
+use crate::services::game::nickname::sanitize_nickname;
 
 fn new_launcher_account_id() -> String {
     format!(
@@ -184,11 +185,11 @@ pub fn get_profile() -> Result<Profile, String> {
 }
 
 #[command]
-pub fn set_profile(nickname: String) -> Result<(), String> {
+pub fn set_profile(nickname: String) -> Result<String, String> {
     let mut profile = get_profile()?;
-    profile.nickname = nickname;
+    profile.nickname = sanitize_nickname(&nickname);
     save_full_profile(&profile)?;
-    Ok(())
+    Ok(profile.nickname)
 }
 
 #[command]
@@ -280,10 +281,10 @@ pub fn remove_launcher_account(account_id: String) -> Result<(), String> {
 pub fn add_launcher_account(nickname: Option<String>) -> Result<(), String> {
     let mut store = load_accounts_store()?;
     let idx = store.accounts.len() + 1;
-    let nick = match nickname {
-        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
-        _ => format!("Player {}", idx),
-    };
+    let nick = nickname
+        .map(|s| sanitize_nickname(&s))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| format!("Player{}", idx));
     let id = new_launcher_account_id();
     let profile = Profile {
         nickname: nick,

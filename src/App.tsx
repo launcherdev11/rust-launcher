@@ -403,7 +403,6 @@ function App() {
     handleTitleBarProfilePlay,
     handlePrimaryClick,
     handleLaunchToServer,
-    handleBannerPlay,
     primaryColorClasses,
     primaryLabel,
   } = useGameLaunch({
@@ -702,10 +701,8 @@ function App() {
                 language={language}
                 installedVersionIds={installedVersionIdsForDropdown}
                 showSnapshots={settings?.show_snapshots ?? false}
-                showLauncherBanners={settings?.show_launcher_banners !== false}
                 isConsoleDetached={isConsoleDetached}
                 onToggleConsoleDetached={toggleConsoleDetached}
-                onPlayServer={handleBannerPlay}
                 profiles={profilesHydrated ? knownProfiles : []}
                 selectedProfileId={activeInstanceProfile?.id ?? null}
                 onSelectProfile={(profileId) => {
@@ -720,6 +717,10 @@ function App() {
                   void handlePlayPinnedProfile(profile);
                 }}
                 onOpenModpacks={() => activateSidebarTab("modpacks")}
+                onOpenModpackView={(view) => {
+                  setRequestedModpackView(view);
+                  activateSidebarTab("modpacks");
+                }}
                 onOpenProfile={(profileId) => {
                   void handleOpenProfileInModpacks(profileId);
                 }}
@@ -744,7 +745,6 @@ function App() {
       prepareInstallConsole,
       registerModpackHotkeys,
       registerPlayConsoleHotkeys,
-      handleBannerPlay,
       handleOpenGameFolder,
       handlePauseInstall,
       handlePrimaryClick,

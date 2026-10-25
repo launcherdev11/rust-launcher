@@ -2,18 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CursorHint, useCursorHint } from "../components/CursorHint";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
-import { BannerSkeleton, InputClearButton, Spinner } from "../components/ui";
+import { InputClearButton, Spinner } from "../components/ui";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import { useProfileIconSrc } from "../hooks/useProfileIconSrc";
 import { copyTextToClipboard } from "../lib/clipboard";
-import {
-  bannerServerAddress,
-  fetchLauncherBanners,
-  isCarouselBanner,
-  readCachedLauncherBanners,
-  resolveBannerImageUrl,
-  type LauncherBannerData,
-} from "../lib/launcherBanners";
 
 export type PlayHomeProfile = {
   id: string;
@@ -113,14 +105,13 @@ type PlayTabProps = {
   language: Language;
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
-  showLauncherBanners?: boolean;
   fillPane?: boolean;
-  onPlayServer?: (serverAddress: string) => void | Promise<void>;
   profiles?: PlayHomeProfile[];
   selectedProfileId?: string | null;
   onSelectProfile?: (profileId: string) => void;
   onPlayProfile?: (profileId: string) => void;
   onOpenModpacks?: () => void;
+  onOpenModpackView?: (view: "create" | "import") => void;
   onOpenProfile?: (profileId: string) => void;
   onOpenProfileSettings?: () => void;
 };
@@ -168,22 +159,17 @@ export function PlayTab({
   language,
   installedVersionIds,
   showSnapshots,
-  showLauncherBanners = true,
   fillPane = false,
-  onPlayServer,
   profiles = [],
   selectedProfileId = null,
   onSelectProfile,
   onPlayProfile,
   onOpenModpacks,
+  onOpenModpackView,
   onOpenProfile,
   onOpenProfileSettings,
 }: PlayTabProps) {
   const tt = useT(language);
-  const [banners, setBanners] = useState<LauncherBannerData[]>([]);
-  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
-  const [bannerLoading, setBannerLoading] = useState(true);
-  const [bannerError, setBannerError] = useState(false);
 
   const recentProfiles = useMemo(() => {
     return [...profiles]
@@ -229,73 +215,6 @@ export function PlayTab({
     handleToggleConsoleDetached,
     onRegisterConsoleHotkeys,
   ]);
-
-  const currentBanner =
-    banners.length > 0 &&
-    activeBannerIndex >= 0 &&
-    activeBannerIndex < banners.length
-      ? banners[activeBannerIndex]
-      : null;
-  const bannerServerIp = currentBanner ? bannerServerAddress(currentBanner) : "";
-
-  useEffect(() => {
-    if (!showLauncherBanners) {
-      setBanners([]);
-      setBannerLoading(false);
-      setBannerError(false);
-      return;
-    }
-
-    const cached = readCachedLauncherBanners(300_000)?.filter(isCarouselBanner);
-    if (cached?.length) {
-      setBanners(cached);
-      setActiveBannerIndex(0);
-      setBannerLoading(false);
-    } else {
-      setBannerLoading(true);
-    }
-
-    const controller = new AbortController();
-
-    async function fetchBanner() {
-      try {
-        setBannerError(false);
-        const all = await fetchLauncherBanners(controller.signal);
-        const parsed = all.filter(isCarouselBanner);
-        setBanners(parsed);
-        setActiveBannerIndex(0);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        const aborted =
-          error instanceof DOMException && error.name === "AbortError";
-        if (aborted) return;
-        console.error(error);
-        if (!cached?.length) {
-          setBannerError(true);
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setBannerLoading(false);
-        }
-      }
-    }
-
-    void fetchBanner();
-
-    return () => {
-      controller.abort();
-    };
-  }, [showLauncherBanners]);
-
-  useEffect(() => {
-    if (banners.length <= 1) return;
-
-    const interval = setInterval(() => {
-      setActiveBannerIndex((prev) => (prev + 1) % banners.length);
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, [banners.length]);
 
   const versionDisplayName = (v: VersionItem): string => {
     if (isForgeVersion(v)) return `${v.mc_version} (Forge ${v.forge_build})`;
@@ -359,21 +278,54 @@ export function PlayTab({
     });
   }, [isVersionDropdownOpen, filteredVersions.length]);
 
-  const bannerClass = fillPane
-    ? "menu-banner min-h-[7rem] max-h-[min(220px,42%)]"
-    : "menu-banner h-[240px]";
-
   const controlsClass = fillPane
     ? "relative mt-2 w-full shrink-0"
     : "relative mt-auto w-full shrink-0 pt-3";
+
+  const homeEmpty = (
+    <div
+      data-tour-id="tour-profiles"
+      className={`glass-panel flex w-full flex-col items-center justify-center gap-4 px-6 py-10 text-center ${
+        fillPane ? "min-h-0 flex-1" : "min-h-[16rem]"
+      }`}
+    >
+      <img
+        src="/launcher-assets/modpack_icon.svg"
+        alt=""
+        className="h-12 w-12 object-contain opacity-60"
+      />
+      <div className="flex max-w-md flex-col gap-1.5">
+        <h3 className="text-lg font-semibold tracking-tight text-white">
+          {tt("play.home.emptyTitle")}
+        </h3>
+        <p className="text-sm text-white/55">{tt("play.home.emptyHint")}</p>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => onOpenModpackView?.("create")}
+          className="btn btn-lg btn-accent"
+        >
+          {tt("play.home.emptyCreate")}
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenModpackView?.("import")}
+          className="btn btn-lg btn-soft"
+        >
+          {tt("play.home.emptyImport")}
+        </button>
+      </div>
+    </div>
+  );
 
   const homeCards = (
     <div
       data-tour-id="tour-profiles"
       className={
         fillPane
-          ? "mt-2 flex min-h-0 w-full flex-1 flex-col gap-2"
-          : "mt-3 flex min-h-0 w-full flex-col gap-2"
+          ? "flex min-h-0 w-full flex-1 flex-col gap-2"
+          : "flex min-h-0 w-full flex-col gap-2"
       }
     >
       <div className="flex items-center justify-between px-1">
@@ -501,86 +453,7 @@ export function PlayTab({
 
   const shell = (
     <>
-      {showLauncherBanners ? (
-      <div className={bannerClass}>
-        {bannerLoading ? (
-          <BannerSkeleton />
-        ) : bannerError ? (
-          <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
-            <span className="text-sm font-medium tracking-wide text-red-300">
-              {tt("play.banner.loadFailedTitle")}
-            </span>
-            <span className="mt-1 text-xs text-white/60">
-              {tt("play.banner.loadFailedHint")}
-            </span>
-          </div>
-        ) : currentBanner ? (
-          <>
-            <img
-              key={currentBanner.imageUrl}
-              src={resolveBannerImageUrl(currentBanner.imageUrl)}
-              alt={
-                currentBanner.title ??
-                tt("play.banner.defaultAlt")
-              }
-              className="banner-fade absolute inset-0 h-full w-full object-cover"
-            />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
-
-            <div className="relative z-10 flex w-full flex-col justify-center px-8 py-6">
-              {currentBanner.title && (
-                <h2 className="mb-2 text-xl font-semibold tracking-wide text-white">
-                  {currentBanner.title}
-                </h2>
-              )}
-              {currentBanner.subtitle && (
-                <p className="max-w-xl text-sm text-white/80">
-                  {currentBanner.subtitle}
-                </p>
-              )}
-              {(bannerServerIp || currentBanner.link) && (
-                <div className="pointer-events-auto mt-4 flex flex-wrap items-center gap-2">
-                  {bannerServerIp && onPlayServer && (
-                    <button
-                      type="button"
-                      disabled={isLaunching || isInstalling}
-                      onClick={() => void onPlayServer(bannerServerIp)}
-                      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft ${primaryColorClasses} ${
-                        isLaunching || isInstalling
-                          ? "cursor-not-allowed opacity-60"
-                          : "interactive-press hover:opacity-90"
-                      }`}
-                    >
-                      {isLaunching ? <Spinner className="h-3.5 w-3.5" /> : null}
-                      {tt("play.banner.play")}
-                    </button>
-                  )}
-                  {currentBanner.link && (
-                    <a
-                      href={currentBanner.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-xl border border-white/15 bg-ink-950/60 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-800"
-                    >
-                      {tt("play.banner.learnMore")}
-                      <span className="ml-1 text-[0.75rem]">↗</span>
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <span className="text-sm font-medium tracking-wide text-white/70">
-              {tt("play.banner.empty")}
-            </span>
-          </div>
-        )}
-      </div>
-      ) : null}
-
-      {homeCards}
+      {profiles.length === 0 && onOpenModpackView ? homeEmpty : homeCards}
 
       <div className={controlsClass}>
         <div className="dock" data-tour-id="tour-launch-controls">

@@ -373,6 +373,10 @@ body {
     color: var(--fg);
   }
 
+  .titlebar-social-icon {
+    mix-blend-mode: overlay;
+  }
+
   .seg-on {
     background: var(--ink-4);
     color: #fff;

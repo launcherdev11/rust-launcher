@@ -17,6 +17,12 @@
   --glass-tint: transparent;
 }
 
+:root[data-adaptive-accent] {
+  --accent-from: color-mix(in oklch, var(--accent-color) 92%, white);
+  --accent-to: color-mix(in oklch, var(--accent-color) 72%, white);
+  --accent-hi: color-mix(in oklch, var(--accent-color) 38%, white);
+}
+
 .accent-bg {
   background: var(--accent-gradient);
   color: #fff;
@@ -37,7 +43,7 @@
   cursor: pointer;
   appearance: none;
   border-radius: 0.3125rem;
-  border: 1.5px solid rgba(220, 208, 245, 0.32);
+  border: 1.5px solid color-mix(in srgb, var(--accent-hi) 32%, transparent);
   background-color: var(--ink-0, #0b0910);
   background-position: center;
   background-repeat: no-repeat;
@@ -48,7 +54,7 @@
 }
 
 .accent-checkbox:hover {
-  border-color: rgba(220, 208, 245, 0.5);
+  border-color: color-mix(in srgb, var(--accent-hi) 50%, transparent);
 }
 
 .accent-checkbox:checked {

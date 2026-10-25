@@ -492,18 +492,6 @@ export function useGameLaunch({
     ],
   );
 
-  const handleBannerPlay = useCallback(
-    async (serverAddress: string) => {
-      try {
-        await handleLaunchToServer(serverAddress);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        showNotification("error", tt("app.errors.launchError", { msg }));
-      }
-    },
-    [handleLaunchToServer, showNotification, tt],
-  );
-
   const primaryColorClasses =
     isLaunching
       ? "accent-bg opacity-60 cursor-not-allowed"
@@ -531,7 +519,6 @@ export function useGameLaunch({
     handleTitleBarProfilePlay,
     handlePrimaryClick,
     handleLaunchToServer,
-    handleBannerPlay,
     primaryColorClasses,
     primaryLabel,
   };

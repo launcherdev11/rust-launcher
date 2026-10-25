@@ -9,7 +9,6 @@ type Props = {
   disabled?: boolean;
   preview?: string | null;
   variables?: ThemeVariables;
-  accentColor: string;
   onClick: () => void;
 };
 
@@ -21,13 +20,15 @@ export function ThemeCard({
   disabled,
   preview,
   variables = {},
-  accentColor,
   onClick,
 }: Props) {
-  const ink0 = variables["--ink-0"] || "#0b0910";
-  const ink1 = variables["--ink-1"] || "#14111b";
-  const fg = variables["--fg"] || "#eee9f6";
-  const accent = variables["--accent-color"] || accentColor;
+  const ink0 = variables["--ink-0"] || "var(--ink-0)";
+  const ink1 = variables["--ink-1"] || "var(--ink-1)";
+  const fg = variables["--fg"] || "var(--fg)";
+  const themeAccent = variables["--accent-color"];
+  const accent = themeAccent
+    ? `linear-gradient(135deg, color-mix(in oklch, ${themeAccent} 92%, white), color-mix(in oklch, ${themeAccent} 72%, white))`
+    : "var(--accent-gradient)";
   const radius = variables["--r-card"] || "6px";
 
   return (

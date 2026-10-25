@@ -19,6 +19,7 @@ import { usePlatformNotifications } from "../hooks/usePlatformNotifications";
 import { usePlatformSelf } from "../hooks/usePlatformSelf";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import type { ProfileAvatarInput } from "../lib/avatar";
+import { sanitizeNicknameInput } from "../lib/nickname";
 import { PlatformAccountPanel } from "./PlatformAccountPanel";
 
 type NotificationKind = "info" | "success" | "error" | "warning";
@@ -107,6 +108,7 @@ export function AccountsTab({
   const [subTab, setSubTab] = useState<AccountsSubTab>("overview");
   const [pendingRemoveAccountId, setPendingRemoveAccountId] = useState<string | null>(null);
   const [headerNicknameEditing, setHeaderNicknameEditing] = useState(false);
+  const [nicknameHintVisible, setNicknameHintVisible] = useState(false);
   const nicknameInputFocusedRef = useRef(false);
 
   const self = usePlatformSelf();
@@ -136,6 +138,7 @@ export function AccountsTab({
   const handleHeaderNicknameBlur = async (value: string) => {
     nicknameInputFocusedRef.current = false;
     setHeaderNicknameEditing(false);
+    setNicknameHintVisible(false);
     if (isAuthorized) return;
     const trimmed = value.trim();
     const prevNick = profile.nickname.trim();
@@ -230,7 +233,8 @@ export function AccountsTab({
                       autoFocus
                       value={nicknameDraft}
                       onChange={(e) => {
-                        const v = e.target.value;
+                        const { value: v, changed } = sanitizeNicknameInput(e.target.value);
+                        setNicknameHintVisible(changed);
                         setNicknameDraft(v);
                         setProfile((p) => ({ ...p, nickname: v }));
                       }}
@@ -275,6 +279,12 @@ export function AccountsTab({
                   </button>
                 ) : null}
               </div>
+
+              {headerNicknameEditing && nicknameHintVisible ? (
+                <p className="mt-1 text-[0.75rem] text-amber-300/80">
+                  {tt("app.accounts.nicknameRules")}
+                </p>
+              ) : null}
 
               {statsLine.length > 0 ? (
                 <p className="mt-1 truncate text-[0.8125rem] text-white/40">{statsLine.join(" · ")}</p>

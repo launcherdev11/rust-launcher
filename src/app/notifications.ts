@@ -173,3 +173,5 @@ export function splitTitleAndSubtitle(textMsg: string): { title: string; subtitl
 
 export const DISCORD_LINK = "https://discord.gg/cpW2AnW9Vy";
 export const TELEGRAM_LINK = "https://t.me/of16launcher";
+export const TIKTOK_LINK = "https://www.tiktok.com/@16launchermc";
+export const BOOSTY_LINK = "https://boosty.to/16steyy";

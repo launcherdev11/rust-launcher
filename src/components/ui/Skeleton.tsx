@@ -11,25 +11,6 @@ export function Skeleton({ className = "" }: SkeletonProps) {
   );
 }
 
-export function BannerSkeleton({ className = "" }: SkeletonProps) {
-  return (
-    <div
-      className={`relative flex h-full w-full flex-col justify-center overflow-hidden px-8 py-6 ${className}`}
-      aria-busy="true"
-      aria-label="Loading"
-    >
-      <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-white/5 via-white/10 to-white/5" />
-      <Skeleton className="relative z-10 h-6 w-48 rounded-lg" />
-      <Skeleton className="relative z-10 mt-3 h-3.5 w-80 max-w-full rounded-lg" />
-      <Skeleton className="relative z-10 mt-2 h-3.5 w-56 max-w-full rounded-lg" />
-      <div className="relative z-10 mt-5 flex gap-2">
-        <Skeleton className="h-8 w-24 rounded-full" />
-        <Skeleton className="h-8 w-28 rounded-full" />
-      </div>
-    </div>
-  );
-}
-
 export function CatalogCardSkeleton({
   layout = "grid",
 }: {

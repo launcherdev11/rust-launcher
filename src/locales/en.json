@@ -347,10 +347,6 @@
         "label": "Animated background:",
         "hint": "Slow movement of the coloured glow behind the interface. Turn off if the launcher feels heavy on your GPU."
       },
-      "hideBanners": {
-        "label": "Disable ad banner:",
-        "hint": "Hides the news and banner carousel on the Play tab."
-      },
       "disableThematicDecorations": {
         "label": "Thematic design:",
         "hint": ""
@@ -699,15 +695,6 @@
     }
   },
   "play": {
-    "banner": {
-      "loading": "Loading launcher news...",
-      "loadFailedTitle": "Failed to load launcher banner.",
-      "loadFailedHint": "Check your internet connection or access to GitHub.",
-      "defaultAlt": "Launcher banner",
-      "learnMore": "Learn more",
-      "play": "Play",
-      "empty": "Launcher news and game banner"
-    },
     "version": {
       "label": "Version",
       "loading": "Loading...",
@@ -748,6 +735,9 @@
       "seeAll": "All packs",
       "emptyCreate": "Create a pack",
       "emptySlot": "Browse packs",
+      "emptyTitle": "Create your first pack",
+      "emptyHint": "A pack is a separate copy of the game with its own version, mods and settings. Create a new one or import an existing one from a file or another launcher.",
+      "emptyImport": "Import",
       "modsCount": "{{count}} mods",
       "playTitle": "Launch this pack",
       "selectedBadge": "Selected"
@@ -1975,7 +1965,6 @@
       "managerTitle": "Account manager",
       "managerSubtitle": "",
       "currentProfileSection": "Active account",
-      "newAccountNameBase": "Player",
       "addAccount": "Add account",
       "sidebarTooltip": "Accounts",
       "offlineBadge": "offline",
@@ -1999,6 +1988,7 @@
       "providerSignIn": "Minecraft sign-in",
       "editNickname": "Edit nickname",
       "nicknamePlaceholder": "Player",
+      "nicknameRules": "Only Latin letters, digits and _ (up to 16 characters).",
       "systemNicknameSignedOut": "Not signed in to 16Launcher",
       "signedInAsPrefix": "Signed in as: ",
       "hint": "Configure your profile and appearance after you sign in.",

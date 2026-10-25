@@ -223,9 +223,9 @@ export function useLauncherAccounts({
 
   const handleSaveNickname = async (nickname: string) => {
     try {
-      await invoke("set_profile", { nickname });
-      setProfile((prev) => ({ ...prev, nickname }));
-      maybePlayNecoArcSecret(nickname);
+      const saved = await invoke<string>("set_profile", { nickname });
+      setProfile((prev) => ({ ...prev, nickname: saved }));
+      maybePlayNecoArcSecret(saved);
       showNotification(
         "success",
         tt("app.accounts.toast.nicknameSaved"),
@@ -410,8 +410,7 @@ export function useLauncherAccounts({
     if (addingAccount) return;
     setAddingAccount(true);
     try {
-      const nick = `${tt("app.accounts.newAccountNameBase")} ${launcherAccounts.length + 1}`;
-      await invoke("add_launcher_account", { nickname: nick });
+      await invoke("add_launcher_account", { nickname: null });
       await loadProfile();
       await refreshLauncherAccounts();
       setAccountSwitcherOpen(false);

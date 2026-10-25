@@ -167,7 +167,7 @@ export function ProjectDetailPage({
             <button
               type="button"
               onClick={onOpenExternal}
-              className="interactive-press rounded-xl bg-white/10 px-5 py-2.5 text-sm font-semibold text-violet-200 hover:bg-white/20"
+              className="interactive-press rounded-xl bg-white/10 px-5 py-2.5 text-sm font-semibold text-accent-hi hover:bg-white/20"
             >
               {provider === "modrinth"
                 ? tt("mods.openOnModrinth")
@@ -369,7 +369,7 @@ function DetailLinks({
           href={l.url}
           target="_blank"
           rel="noreferrer noopener"
-          className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-violet-200 hover:bg-white/20"
+          className="interactive-press rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-accent-hi hover:bg-white/20"
         >
           {l.label}
         </a>

@@ -365,10 +365,6 @@
         "label": "Animierter Hintergrund:",
         "hint": "Langsame Bewegung der Farbverläufe im Hintergrund. Deaktivieren, wenn der Launcher die Grafikkarte stark belastet."
       },
-      "hideBanners": {
-        "label": "Werbebanner deaktivieren:",
-        "hint": "Blendet das Nachrichten- und Bannerkarussell auf dem Spielen-Tab aus."
-      },
       "disableThematicDecorations": {
         "label": "Thematisches Design:",
         "hint": ""
@@ -727,15 +723,6 @@
     }
   },
   "play": {
-    "banner": {
-      "loading": "Launcher-Neuigkeiten werden geladen...",
-      "loadFailedTitle": "Das Launcher-Banner konnte nicht geladen werden.",
-      "loadFailedHint": "Überprüfen Sie Ihre Internetverbindung oder Ihren Zugriff auf GitHub.",
-      "defaultAlt": "Launcher-Banner",
-      "learnMore": "Erfahren Sie mehr",
-      "play": "Spielen",
-      "empty": "Launcher-Neuigkeiten und Spielebanner"
-    },
     "version": {
       "label": "Version",
       "loading": "Laden...",
@@ -776,6 +763,9 @@
       "seeAll": "Alle Packs",
       "emptyCreate": "Pack erstellen",
       "emptySlot": "Packs öffnen",
+      "emptyTitle": "Erstelle dein erstes Pack",
+      "emptyHint": "Ein Pack ist eine eigene Spielkopie mit eigener Version, eigenen Mods und Einstellungen. Erstelle ein neues oder importiere einen vorhandenen aus einer Datei oder einem anderen Launcher.",
+      "emptyImport": "Importieren",
       "modsCount": "{{count}} Mods",
       "playTitle": "Dieses Pack starten",
       "selectedBadge": "Aktiv"
@@ -1883,7 +1873,6 @@
       "managerTitle": "Account-Manager",
       "managerSubtitle": "",
       "currentProfileSection": "Aktives Konto",
-      "newAccountNameBase": "Spieler",
       "addAccount": "Konto hinzufügen",
       "sidebarTooltip": "Konten",
       "offlineBadge": "offline",
@@ -1909,7 +1898,8 @@
       "settingsTabNotifications": "Benachrichtigungen",
       "providerSignIn": "Minecraft-Anmeldung",
       "editNickname": "Spitzname bearbeiten",
-      "nicknamePlaceholder": "Spieler",
+      "nicknamePlaceholder": "Player",
+      "nicknameRules": "Nur lateinische Buchstaben, Ziffern und _ (bis zu 16 Zeichen).",
       "systemNicknameSignedOut": "Nicht bei 16Launcher angemeldet",
       "signedInAsPrefix": "Angemeldet als:",
       "hint": "Konfigurieren Sie Ihr Profil und Ihr Erscheinungsbild, nachdem Sie sich angemeldet haben.",

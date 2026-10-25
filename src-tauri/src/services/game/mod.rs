@@ -13,6 +13,7 @@ pub mod install;
 pub mod integrity;
 pub mod launcher;
 pub mod lazy_mods;
+pub mod nickname;
 pub mod runtime;
 pub mod options_txt;
 pub mod profiles;

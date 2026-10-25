@@ -26,7 +26,6 @@ export const DEFAULT_SETTINGS: Settings = {
   animations_disabled: false,
   background_animation_disabled: false,
   thematic_decorations_disabled: false,
-  show_launcher_banners: true,
   background_accent_color: "#4a22a8",
   background_image_url: null,
   adaptive_accent_enabled: false,

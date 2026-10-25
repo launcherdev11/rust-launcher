@@ -277,21 +277,6 @@
 }
 
 
-.menu-banner {
-  position: relative;
-  display: flex;
-  width: 100%;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-radius: var(--r-panel, 1.125rem);
-  border: 1px solid var(--shell-line);
-  background: var(--ink-1, #14111b);
-}
-
-.banner-fade {
-  animation: banner-fade-in 0.5s ease both;
-}
-
 @keyframes banner-fade-in {
   from {
     opacity: 0;
@@ -568,7 +553,6 @@ html.launcher-linux .dock-backdrop img {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .banner-fade,
   .dock-backdrop img {
     animation: none;
   }

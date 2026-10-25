@@ -365,10 +365,6 @@
         "label": "Fondo animado:",
         "hint": "Movimiento lento de los destellos de color del fondo. Desactívalo si el launcher sobrecarga tu GPU."
       },
-      "hideBanners": {
-        "label": "Desactivar banner publicitario:",
-        "hint": "Oculta el carrusel de noticias y banners en la pestaña Jugar."
-      },
       "disableThematicDecorations": {
         "label": "Diseño temático",
         "hint": "Oculta la decoración estacional del lanzador (disponible del 1 de octubre al 1 de noviembre)."
@@ -727,15 +723,6 @@
     }
   },
   "play": {
-    "banner": {
-      "loading": "Cargando noticias del lanzador...",
-      "loadFailedTitle": "No se pudo cargar el banner del iniciador.",
-      "loadFailedHint": "Verifica tu conexión a Internet o acceso a GitHub.",
-      "defaultAlt": "Bandera del lanzador",
-      "learnMore": "Más información",
-      "play": "Jugar",
-      "empty": "Banner de noticias y juegos del lanzador"
-    },
     "version": {
       "label": "Versión",
       "loading": "Cargando...",
@@ -776,6 +763,9 @@
       "seeAll": "Todos los packs",
       "emptyCreate": "Crear un pack",
       "emptySlot": "Ver packs",
+      "emptyTitle": "Crea tu primer pack",
+      "emptyHint": "Un pack es una copia independiente del juego con su propia versión, mods y ajustes. Crea una nueva o importa una existente desde un archivo u otro launcher.",
+      "emptyImport": "Importar",
       "modsCount": "{{count}} mods",
       "playTitle": "Iniciar este pack",
       "selectedBadge": "Seleccionado"
@@ -1883,7 +1873,6 @@
       "managerTitle": "Gerente de cuentas",
       "managerSubtitle": "",
       "currentProfileSection": "Cuenta activa",
-      "newAccountNameBase": "Jugador",
       "addAccount": "Agregar cuenta",
       "sidebarTooltip": "Cuentas",
       "offlineBadge": "offline",
@@ -1906,7 +1895,8 @@
       "settingsTabNotifications": "Notificaciones",
       "providerSignIn": "Inicio de sesión en Minecraft",
       "editNickname": "Editar apodo",
-      "nicknamePlaceholder": "Jugador",
+      "nicknamePlaceholder": "Player",
+      "nicknameRules": "Solo letras latinas, números y _ (hasta 16 caracteres).",
       "systemNicknameSignedOut": "No has iniciado sesión en 16Launcher",
       "signedInAsPrefix": "Iniciado sesión como:",
       "hint": "Configure su perfil y apariencia después de iniciar sesión.",

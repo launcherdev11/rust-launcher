@@ -26,6 +26,7 @@ use crate::services::game::core::{
     resolve_native_artifact,
 };
 use crate::services::game::console::log_to_console;
+use crate::services::game::nickname::launch_nickname;
 use crate::services::game::profiles::{
     finish_playtime_session, flush_active_playtime, load_selected_instance_settings,
     read_selected_profile_id, record_profile_last_played, selected_instance_dir,
@@ -638,13 +639,7 @@ pub async fn launch_game(
         .as_deref()
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            if profile.nickname.is_empty() {
-                "Player".to_string()
-            } else {
-                profile.nickname.clone()
-            }
-        });
+        .unwrap_or_else(|| launch_nickname(&profile.nickname));
     let mut auth_uuid: String = profile
         .ely_uuid
         .as_deref()

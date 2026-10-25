@@ -322,7 +322,6 @@ export function LauncherSection({ ctx }: Props) {
             "launcher.backgroundBlur",
             "launcher.backgroundAnimation",
             "launcher.disableAnimations",
-            "launcher.hideBanners",
           ) ||
             (seasonalThemeActive &&
               showSetting("launcher.disableThematicDecorations"))) && (
@@ -544,14 +543,6 @@ export function LauncherSection({ ctx }: Props) {
                   onChange={(v) => updateSettings({ animations_disabled: v })}
                 />
               )}
-              {showSetting("launcher.hideBanners") && (
-                <SettingsSwitchRow
-                  label={tt("settings.launcher.hideBanners.label")}
-                  hint={tt("settings.launcher.hideBanners.hint")}
-                  value={!(settings?.show_launcher_banners ?? true)}
-                  onChange={(v) => updateSettings({ show_launcher_banners: !v })}
-                />
-              )}
               {seasonalThemeActive && showSetting("launcher.disableThematicDecorations") && (
                 <SettingsSwitchRow
                   label={tt("settings.launcher.disableThematicDecorations.label")}
@@ -589,7 +580,6 @@ export function LauncherSection({ ctx }: Props) {
                     subtitle="16Launcher"
                     selected={!activeThemeId}
                     disabled={editingThemeId != null}
-                    accentColor={accentColor}
                     onClick={() => updateSettings({ custom_theme_id: null })}
                   />
                   {installedThemes.map((theme) => (
@@ -611,7 +601,6 @@ export function LauncherSection({ ctx }: Props) {
                       disabled={editingThemeId != null}
                       preview={theme.preview}
                       variables={theme.variables}
-                      accentColor={accentColor}
                       onClick={() => updateSettings({ custom_theme_id: theme.id })}
                     />
                   ))}

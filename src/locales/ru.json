@@ -347,10 +347,6 @@
         "label": "Анимация фона:",
         "hint": "Плавное движение цветных пятен на заднем фоне. Отключите, если лаунчер нагружает видеокарту."
       },
-      "hideBanners": {
-        "label": "Отключить рекламный баннер:",
-        "hint": "Скрывает карусель новостей и баннеров на вкладке «Играть»."
-      },
       "disableThematicDecorations": {
         "label": "Тематическое оформление:",
         "hint": ""
@@ -698,15 +694,6 @@
     }
   },
   "play": {
-    "banner": {
-      "loading": "Загрузка новостей лаунчера...",
-      "loadFailedTitle": "Не удалось загрузить баннер лаунчера.",
-      "loadFailedHint": "Проверь подключение к интернету или доступ к GitHub.",
-      "defaultAlt": "Баннер лаунчера",
-      "learnMore": "Подробнее",
-      "play": "Играть",
-      "empty": "Новости лаунчера и баннер игры"
-    },
     "version": {
       "label": "Версия",
       "loading": "Загрузка...",
@@ -747,6 +734,9 @@
       "seeAll": "Все сборки",
       "emptyCreate": "Создать сборку",
       "emptySlot": "Открыть сборки",
+      "emptyTitle": "Создайте первую сборку",
+      "emptyHint": "Сборка — это отдельная копия игры со своей версией, модами и настройками. Создайте новую или импортируйте готовую из файла или другого лаунчера.",
+      "emptyImport": "Импортировать",
       "modsCount": "{{count}} мод.",
       "playTitle": "Запустить эту сборку",
       "selectedBadge": "Выбрана"
@@ -1974,7 +1964,6 @@
       "managerTitle": "Менеджер аккаунтов",
       "managerSubtitle": "",
       "currentProfileSection": "Текущий аккаунт",
-      "newAccountNameBase": "Игрок",
       "addAccount": "Добавить аккаунт",
       "sidebarTooltip": "Аккаунты",
       "offlineBadge": "offline",
@@ -1997,7 +1986,8 @@
       "settingsTabNotifications": "Уведомления",
       "providerSignIn": "Вход в Minecraft",
       "editNickname": "Редактировать никнейм",
-      "nicknamePlaceholder": "Игрок",
+      "nicknamePlaceholder": "Player",
+      "nicknameRules": "Только латиница, цифры и _ (до 16 символов).",
       "systemNicknameSignedOut": "Не выполнен вход в 16Launcher",
       "signedInAsPrefix": "Вход: ",
       "hint": "Войдите в систему.",

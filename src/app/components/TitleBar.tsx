@@ -4,6 +4,7 @@ import { SelectedProfileTitleBar } from "../../components/selected_profile_title
 import type { Language } from "../../i18n";
 import { CloseIcon, MaximizeIcon, MinimizeIcon } from "../icons";
 import type { GameStatus, InstanceProfileSummary, Tt } from "../types";
+import { TitleBarSocials } from "./TitleBarSocials";
 
 type Props = {
   tt: Tt;
@@ -63,7 +64,7 @@ export function TitleBar({
 
   return (
     <div
-      className="relative z-20 flex h-11 items-center justify-between gap-3 px-3 select-none"
+      className="relative flex h-11 items-center justify-between gap-3 px-3 select-none"
       onMouseDown={handleTitleBarMouseDown}
     >
       <div className="flex min-w-0 items-center gap-2 pl-1 select-none">
@@ -110,6 +111,7 @@ export function TitleBar({
         >
           <img src="/launcher-assets/help.png" alt="" className="h-3.5 w-3.5 object-contain opacity-70" />
         </button>
+        <TitleBarSocials />
       </div>
       {activeInstanceProfile ? (
         <div className="pointer-events-none absolute inset-x-0 flex justify-center px-20">

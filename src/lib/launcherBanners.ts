@@ -11,7 +11,6 @@ export type LauncherBannerData = {
   title?: string;
   subtitle?: string;
   link?: string;
-  ip?: string;
 };
 
 type LauncherBannerResponse =
@@ -19,42 +18,16 @@ type LauncherBannerResponse =
   | LauncherBannerData[]
   | { banners: LauncherBannerData[] };
 
-export { BANNER_BASE_URL } from "./remoteMirrors";
-
 const BANNER_CACHE_KEY = "play-banners";
 
 export function resolveBannerImageUrl(url: string): string {
   return resolveLauncherNewsAssetUrl(url);
 }
 
-export function normalizeBannerServerIp(raw: unknown): string {
-  if (typeof raw !== "string") return "";
-  let ip = raw.trim();
-  if (!ip) return "";
-  ip = ip.replace(/^https?:\/\//i, "");
-  const cut = ip.search(/[/?#]/);
-  if (cut >= 0) ip = ip.slice(0, cut);
-  return ip.trim();
-}
-
-export function bannerServerAddress(banner: LauncherBannerData): string {
-  const extra = banner as Record<string, unknown>;
-  return (
-    normalizeBannerServerIp(banner.ip) ||
-    normalizeBannerServerIp(extra.IP) ||
-    normalizeBannerServerIp(extra.Ip) ||
-    normalizeBannerServerIp(extra.serverIp)
-  );
-}
-
 export function isPopupBanner(banner: LauncherBannerData): boolean {
   return String(banner.type ?? "")
     .trim()
     .toLowerCase() === "popup";
-}
-
-export function isCarouselBanner(banner: LauncherBannerData): boolean {
-  return !isPopupBanner(banner);
 }
 
 export function repairLooseJson(text: string): string {
@@ -86,13 +59,11 @@ function normalizeBanners(raw: LauncherBannerResponse): LauncherBannerData[] {
   return parsed
     .filter((b) => typeof b?.imageUrl === "string" && b.imageUrl.trim().length > 0)
     .map((b) => {
-      const ip = bannerServerAddress(b);
       const type =
         typeof b.type === "string" && b.type.trim() ? b.type.trim() : undefined;
       return {
         ...b,
         ...(type ? { type } : {}),
-        ...(ip ? { ip } : {}),
       };
     });
 }
