@@ -21,6 +21,7 @@ import { PlayTab } from "./tabs/PlayTab";
 import { FriendsTab } from "./tabs/FriendsTab";
 import { RoomsTab } from "./tabs/RoomsTab";
 import { AccountsTab } from "./tabs/AccountsTab";
+import { DEFAULT_ACCENT_COLOR } from "./tabs/settings/accentColor";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { HotkeysModal } from "./components/HotkeysModal";
 import { SessionNotificationsBell } from "./components/SessionNotificationsBell";
@@ -821,10 +822,11 @@ function App() {
       <LauncherAnimationScope animationsDisabled={animationsDisabled}>
         <OnboardingFlow
           language={language}
-          accentColor={settings?.background_accent_color ?? "#4a22a8"}
+          accentColor={settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR}
           backgroundImageUrl={backgroundImageUrl}
           backgroundAnimated={backgroundIsAnimated}
           onLanguagePersist={persistInterfaceLanguage}
+          onAccentPersist={(color) => void updateSettings({ background_accent_color: color })}
           onProfileUpdated={loadProfile}
           onComplete={async ({ tour }) => {
             pendingProductTourRef.current = tour;

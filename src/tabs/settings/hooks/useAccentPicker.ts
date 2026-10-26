@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import {
+  DEFAULT_ACCENT_COLOR,
   hexToRgb,
   hexWithHueFromWheel,
   hsvToRgb,
@@ -34,12 +35,12 @@ export function useAccentPicker(deps: AccentPickerDeps) {
   const accentPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const current = settings?.background_accent_color ?? "#4a22a8";
+    const current = settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
     setAccentInput(current);
   }, [settings?.background_accent_color]);
 
   const accentColorHsv = useMemo(() => {
-    const c = settings?.background_accent_color ?? "#4a22a8";
+    const c = settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
     const rgb = hexToRgb(c);
     if (!rgb) return { h: 0, s: 0, v: 0 };
     return rgbToHsv(rgb.r, rgb.g, rgb.b);
@@ -51,7 +52,7 @@ export function useAccentPicker(deps: AccentPickerDeps) {
     const hue = hueDegFromWheelClientPos(el, clientX, clientY);
     if (hue === null) return;
     const base =
-      accentHueDragBaseRef.current ?? settings?.background_accent_color ?? "#4a22a8";
+      accentHueDragBaseRef.current ?? settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
     const next = hexWithHueFromWheel(base, hue);
     setAccentInput(next);
     updateSettings({ background_accent_color: next });
@@ -59,7 +60,7 @@ export function useAccentPicker(deps: AccentPickerDeps) {
 
   const handleAccentWheelPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    accentHueDragBaseRef.current = settings?.background_accent_color ?? "#4a22a8";
+    accentHueDragBaseRef.current = settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
     e.currentTarget.setPointerCapture(e.pointerId);
     applyAccentHueFromPointer(e.clientX, e.clientY);
   };
@@ -98,7 +99,7 @@ export function useAccentPicker(deps: AccentPickerDeps) {
 
   const handleAccentSvPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const c = settings?.background_accent_color ?? "#4a22a8";
+    const c = settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
     const rgb = hexToRgb(c);
     accentSvDragHueRef.current = rgb ? rgbToHsv(rgb.r, rgb.g, rgb.b).h : accentColorHsv.h;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -120,7 +121,7 @@ export function useAccentPicker(deps: AccentPickerDeps) {
     }
   };
 
-  const accentColor = settings?.background_accent_color ?? "#4a22a8";
+  const accentColor = settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
 
   const applyAccentColor = (hex: string) => {
     setAccentInput(hex);

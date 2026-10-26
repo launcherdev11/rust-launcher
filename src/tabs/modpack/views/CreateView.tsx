@@ -12,13 +12,13 @@ const LOADER_IDS: LoaderId[] = ["vanilla", "forge", "fabric", "quilt", "neoforge
 
 const CHANNEL_BADGE = {
   stable: "bg-emerald-500/20 text-emerald-200",
-  alpha: "bg-violet-500/20 text-violet-200",
+  alpha: "bg-zinc-400/20 text-zinc-200",
   other: "bg-amber-500/20 text-amber-200",
 } as const;
 
 const CHANNEL_BADGE_SELECTED = {
   stable: "bg-emerald-600/25 text-emerald-900",
-  alpha: "bg-violet-600/25 text-violet-900",
+  alpha: "bg-zinc-500/25 text-zinc-900",
   other: "bg-amber-600/25 text-amber-900",
 } as const;
 

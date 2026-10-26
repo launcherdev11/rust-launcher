@@ -133,7 +133,7 @@ impl Default for Settings {
             background_animation_disabled: false,
             thematic_decorations_disabled: false,
             interface_language: "ru".to_string(),
-            background_accent_color: "#4a22a8".to_string(),
+            background_accent_color: "#ffffff".to_string(),
             background_image_url: None,
             adaptive_accent_enabled: false,
             background_blur_enabled: true,

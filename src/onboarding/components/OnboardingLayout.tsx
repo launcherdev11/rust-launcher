@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
+import { DEFAULT_ACCENT_COLOR } from "../../tabs/settings/accentColor";
 import { OnboardingBackground } from "./OnboardingBackground";
 import { OnboardingButton } from "./OnboardingButton";
 import { ProgressIndicator } from "./ProgressIndicator";
@@ -47,7 +48,7 @@ export function OnboardingLayout({
   return (
     <div
       className="relative flex min-h-screen w-full flex-col overflow-hidden text-white"
-      style={{ "--accent-color": accentColor ?? "#4a22a8" } as CSSProperties}
+      style={{ "--accent-color": accentColor ?? DEFAULT_ACCENT_COLOR } as CSSProperties}
     >
       <OnboardingBackground accentColor={accentColor} backgroundImageUrl={backgroundImageUrl} />
 

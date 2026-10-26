@@ -229,7 +229,7 @@ pub fn sanitize_imported_settings(settings: &mut Settings, java_settings: &mut J
         settings.interface_language = default_interface_language();
     }
     if settings.background_accent_color.trim().is_empty() {
-        settings.background_accent_color = "#4a22a8".to_string();
+        settings.background_accent_color = "#ffffff".to_string();
     }
     if let Some(ref theme_id) = settings.custom_theme_id {
         let trimmed = theme_id.trim();

@@ -28,6 +28,7 @@ export type OnboardingFlowProps = {
   backgroundImageUrl?: string;
   backgroundAnimated?: boolean;
   onLanguagePersist: (lang: Language) => void;
+  onAccentPersist: (color: string) => void;
   onComplete: (options: { tour: boolean }) => void | Promise<void>;
   onProfileUpdated?: () => void | Promise<void>;
 };
@@ -38,6 +39,7 @@ export function OnboardingFlow({
   backgroundImageUrl,
   backgroundAnimated = false,
   onLanguagePersist,
+  onAccentPersist,
   onComplete,
   onProfileUpdated,
 }: OnboardingFlowProps) {
@@ -187,6 +189,7 @@ export function OnboardingFlow({
             accentColor={accentColor}
             backgroundImageUrl={backgroundImageUrl}
             onSelectLanguage={onLanguagePersist}
+            onSelectAccent={onAccentPersist}
             onStart={() => setStep("account-select")}
           />
         );

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { extractBackgroundAccent } from "../lib/backgroundAccent";
 import { applyAccentColor } from "../lib/customTheme";
+import { DEFAULT_ACCENT_COLOR } from "../tabs/settings/accentColor";
 import {
   isAnimatedBackgroundPath,
   resolveLauncherBackgroundUrl,
@@ -60,7 +61,7 @@ export function useLauncherAppearance(settings: Settings | null, activeItem: Sid
   }, [adaptiveSource]);
 
   const accentColor =
-    adaptiveAccent ?? settings?.background_accent_color ?? "#4a22a8";
+    adaptiveAccent ?? settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR;
 
   useLayoutEffect(() => {
     applyAccentColor(accentColor);

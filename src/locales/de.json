@@ -2119,7 +2119,10 @@
       "title": "Willkommen bei 16Launcher!",
       "subtitle": "Wähle eine Sprache, melde dich an und übernimm deine Instanzen aus einem anderen Launcher. Jeder Schritt lässt sich überspringen.",
       "cta": "Lass uns gehen!",
-      "languageLabel": "Sprache der Oberfläche"
+      "languageLabel": "Sprache der Oberfläche",
+      "colorLabel": "Farbschema",
+      "colorWhite": "Weiß",
+      "colorViolet": "Violett"
     },
     "account": {
       "title": "anmelden",

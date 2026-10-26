@@ -2209,7 +2209,10 @@
       "title": "16Launcher",
       "subtitle": "Choose a language, sign in and bring over your instances from another launcher. Every step can be skipped.",
       "cta": "Start",
-      "languageLabel": "Interface language"
+      "languageLabel": "Interface language",
+      "colorLabel": "Color scheme",
+      "colorWhite": "White",
+      "colorViolet": "Violet"
     },
     "account": {
       "title": "Sign in",

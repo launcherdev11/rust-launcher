@@ -2116,7 +2116,10 @@
       "title": "¡Bienvenido a 16Launcher!",
       "subtitle": "Elige un idioma, inicia sesión y trae tus instancias de otro launcher. Puedes omitir cualquier paso.",
       "cta": "¡Vamos!",
-      "languageLabel": "Idioma de la interfaz"
+      "languageLabel": "Idioma de la interfaz",
+      "colorLabel": "Esquema de color",
+      "colorWhite": "Blanco",
+      "colorViolet": "Violeta"
     },
     "account": {
       "title": "Iniciar sesión",

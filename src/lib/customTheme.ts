@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { accentTraits } from "../tabs/settings/accentColor";
 
 export type ThemeVariables = Record<string, string>;
 
@@ -83,11 +84,17 @@ function upsertStyle(id: string, text: string, before?: HTMLElement | null) {
 }
 
 export function applyAccentColor(color: string) {
+  const { neutral, light } = accentTraits(color);
   upsertStyle(
     ACCENT_STYLE_ID,
-    `:root {\n  --accent-color: ${color};\n}\n`,
+    `:root {\n  --accent-color: ${color};\n  --on-accent: ${light ? "#0d0d10" : "#ffffff"};\n}\n`,
     document.getElementById(THEME_STYLE_ID),
   );
+  const root = document.documentElement;
+  if (neutral) root.dataset.accentNeutral = "";
+  else delete root.dataset.accentNeutral;
+  if (light) root.dataset.accentLight = "";
+  else delete root.dataset.accentLight;
 }
 
 let previewActive = false;
@@ -199,24 +206,24 @@ export const THEME_VARIABLE_GROUPS: ThemeVariableGroup[] = [
   {
     id: "surfaces",
     vars: [
-      { name: "--ink-0", kind: "color", fallback: "#0b0910" },
-      { name: "--ink-1", kind: "color", fallback: "#14111b" },
-      { name: "--ink-2", kind: "color", fallback: "#1b1724" },
-      { name: "--ink-3", kind: "color", fallback: "#241e2f" },
-      { name: "--ink-4", kind: "color", fallback: "#2e2739" },
-      { name: "--glass-bg", kind: "color", fallback: "rgba(20, 17, 27, 0.9)" },
-      { name: "--glass-bg-strong", kind: "color", fallback: "rgba(17, 14, 23, 0.97)" },
-      { name: "--glass-bg-popover", kind: "color", fallback: "#17131f" },
-      { name: "--seam", kind: "color", fallback: "rgba(214, 200, 240, 0.09)" },
-      { name: "--seam-strong", kind: "color", fallback: "rgba(214, 200, 240, 0.16)" },
+      { name: "--ink-0", kind: "color", fallback: "#0a0a0b" },
+      { name: "--ink-1", kind: "color", fallback: "#121214" },
+      { name: "--ink-2", kind: "color", fallback: "#19191c" },
+      { name: "--ink-3", kind: "color", fallback: "#222226" },
+      { name: "--ink-4", kind: "color", fallback: "#2b2b30" },
+      { name: "--glass-bg", kind: "color", fallback: "rgba(18, 18, 20, 0.9)" },
+      { name: "--glass-bg-strong", kind: "color", fallback: "rgba(14, 14, 16, 0.97)" },
+      { name: "--glass-bg-popover", kind: "color", fallback: "#151517" },
+      { name: "--seam", kind: "color", fallback: "rgba(255, 255, 255, 0.09)" },
+      { name: "--seam-strong", kind: "color", fallback: "rgba(255, 255, 255, 0.16)" },
     ],
   },
   {
     id: "text",
     vars: [
-      { name: "--fg", kind: "color", fallback: "#eee9f6" },
-      { name: "--fg-muted", kind: "color", fallback: "#a49cb4" },
-      { name: "--fg-faint", kind: "color", fallback: "#716a82" },
+      { name: "--fg", kind: "color", fallback: "#f1f1f3" },
+      { name: "--fg-muted", kind: "color", fallback: "#a1a1aa" },
+      { name: "--fg-faint", kind: "color", fallback: "#71717a" },
     ],
   },
   {
@@ -288,8 +295,8 @@ export const THEME_SNIPPETS: ThemeSnippet[] = [
   {
     id: "glass",
     css: `:root {
-  --glass-bg: rgba(20, 17, 27, 0.55);
-  --glass-bg-strong: rgba(17, 14, 23, 0.8);
+  --glass-bg: rgba(18, 18, 20, 0.55);
+  --glass-bg-strong: rgba(14, 14, 16, 0.8);
 }
 
 .glass-panel,

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "../onboarding";
 import { isLanguage, readStoredLanguage, type Language } from "../i18n";
 import { DEFAULT_SETTINGS } from "../app/defaultSettings";
+import { DEFAULT_ACCENT_COLOR } from "../tabs/settings/accentColor";
 import type { NotificationKind } from "../app/notifications";
 import type { Settings, SidebarItemId, Tt } from "../app/types";
 
@@ -90,7 +91,7 @@ export function useLauncherSettings({
       if (settingsSavePendingRef.current) return;
       const s =
         loaded.background_accent_color?.trim().toLowerCase() === "#0b1530"
-          ? { ...loaded, background_accent_color: "#4a22a8" }
+          ? { ...loaded, background_accent_color: DEFAULT_ACCENT_COLOR }
           : loaded;
       const storedLang = readStoredLanguage();
       if (storedLang && storedLang !== s.interface_language) {

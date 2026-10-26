@@ -1028,8 +1028,8 @@ export function ManageView({ ctx }: Props) {
                         }
                       >
                         <span
-                          className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-[left] ${
-                            item.enabled ? "left-[1.375rem]" : "left-0.5"
+                          className={`absolute top-0.5 h-6 w-6 rounded-full shadow transition-[left] ${
+                            item.enabled ? "left-[1.375rem] bg-[var(--on-accent,#fff)]" : "left-0.5 bg-white"
                           }`}
                         />
                       </button>
@@ -1136,8 +1136,8 @@ export function ManageView({ ctx }: Props) {
                       }
                     >
                       <span
-                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-[left] ${
-                          item.enabled ? "left-[1.375rem]" : "left-0.5"
+                        className={`absolute top-0.5 h-6 w-6 rounded-full shadow transition-[left] ${
+                          item.enabled ? "left-[1.375rem] bg-[var(--on-accent,#fff)]" : "left-0.5 bg-white"
                         }`}
                       />
                     </button>

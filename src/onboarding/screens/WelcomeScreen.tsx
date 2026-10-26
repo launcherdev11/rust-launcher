@@ -4,6 +4,7 @@ import { useT } from "../../i18n";
 import { OnboardingButton } from "../components/OnboardingButton";
 import { OnboardingLauncherIcon } from "../components/OnboardingLauncherIcon";
 import { OnboardingLayout } from "../components/OnboardingLayout";
+import { ACCENT_VIOLET, ACCENT_WHITE } from "../../tabs/settings/accentColor";
 
 const LANGUAGE_OPTIONS: { code: Language; nativeName: string }[] = [
   { code: "ru", nativeName: "Русский" },
@@ -12,12 +13,18 @@ const LANGUAGE_OPTIONS: { code: Language; nativeName: string }[] = [
   { code: "es", nativeName: "Español" },
 ];
 
+const ACCENT_OPTIONS = [
+  { color: ACCENT_WHITE, labelKey: "onboarding.welcome.colorWhite" },
+  { color: ACCENT_VIOLET, labelKey: "onboarding.welcome.colorViolet" },
+] as const;
+
 type Props = {
   language: Language;
   stepIndex: number;
   accentColor?: string;
   backgroundImageUrl?: string;
   onSelectLanguage: (code: Language) => void;
+  onSelectAccent: (color: string) => void;
   onStart: () => void;
 };
 
@@ -27,6 +34,7 @@ export function WelcomeScreen({
   accentColor,
   backgroundImageUrl,
   onSelectLanguage,
+  onSelectAccent,
   onStart,
 }: Props) {
   const tt = useT(language);
@@ -94,6 +102,38 @@ export function WelcomeScreen({
                 }`}
               >
                 {opt.nativeName}
+              </button>
+            );
+          })}
+        </div>
+
+        <p id="onboarding-accent-label" className="mb-1.5 mt-4 text-xs font-medium text-white/50">
+          {tt("onboarding.welcome.colorLabel")}
+        </p>
+        <div
+          role="radiogroup"
+          aria-labelledby="onboarding-accent-label"
+          className="seg-track flex gap-1 p-1"
+        >
+          {ACCENT_OPTIONS.map((opt) => {
+            const active = (accentColor ?? ACCENT_WHITE).toLowerCase() === opt.color;
+            return (
+              <button
+                key={opt.color}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onSelectAccent(opt.color)}
+                className={`interactive-press flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-1.5 text-xs font-semibold ${
+                  active ? "seg-on" : "text-white/70 hover:text-white"
+                }`}
+              >
+                <span
+                  className="h-3 w-3 rounded-md border border-white/25"
+                  style={{ backgroundColor: opt.color }}
+                  aria-hidden
+                />
+                {tt(opt.labelKey)}
               </button>
             );
           })}

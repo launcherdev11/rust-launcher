@@ -1,5 +1,6 @@
 :root {
-  --accent-color: #4a22a8;
+  --accent-color: #ffffff;
+  --on-accent: #0d0d10;
 }
 
 :root,
@@ -17,6 +18,23 @@
   --glass-tint: transparent;
 }
 
+:root[data-accent-neutral],
+:root[data-accent-neutral] [style*="--accent-color"] {
+  --accent-from: var(--accent-color);
+  --accent-to: color-mix(in srgb, var(--accent-color) 78%, #5c5c66);
+  --accent-gradient: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+  --accent-hi: var(--accent-color);
+  --accent-soft: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+:root[data-accent-neutral] .launcher-gradient {
+  background:
+    var(--launcher-bg-image, none) center / cover no-repeat,
+    radial-gradient(80% 60% at 0% 0%, color-mix(in srgb, var(--accent-color) 6%, transparent) 0%, transparent 70%),
+    var(--ink-0, #0a0a0b);
+}
+
 :root[data-adaptive-accent] {
   --accent-from: color-mix(in oklch, var(--accent-color) 92%, white);
   --accent-to: color-mix(in oklch, var(--accent-color) 72%, white);
@@ -25,7 +43,7 @@
 
 .accent-bg {
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--on-accent, #fff);
 }
 
 .accent-border {
@@ -44,7 +62,7 @@
   appearance: none;
   border-radius: 0.3125rem;
   border: 1.5px solid color-mix(in srgb, var(--accent-hi) 32%, transparent);
-  background-color: var(--ink-0, #0b0910);
+  background-color: var(--ink-0, #0a0a0b);
   background-position: center;
   background-repeat: no-repeat;
   background-size: 0.7rem 0.7rem;
@@ -67,6 +85,20 @@
   border-color: transparent;
   background-color: var(--accent-from);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8h8' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+:root[data-accent-light] .accent-checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.5 6.5 11.5 12.5 4.5' stroke='%230d0d10' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:root[data-accent-light] .accent-checkbox:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 8h8' stroke='%230d0d10' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+:root[data-accent-light] .accent-bg:not(:disabled),
+:root[data-accent-light] .btn-accent:not(:disabled),
+:root[data-accent-light] .play-btn.accent-bg {
+  color: var(--on-accent);
 }
 
 .accent-checkbox:focus-visible {
@@ -214,7 +246,7 @@
 
 .tab-split-divider {
   flex-shrink: 0;
-  background: var(--seam, rgba(214, 200, 240, 0.09));
+  background: var(--seam, rgba(255, 255, 255, 0.09));
   transition: background-color 0.15s ease-out;
 }
 

@@ -143,7 +143,7 @@ export const SettingsSlider: React.FC<SettingsSliderProps> = ({
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={handlePointerUp}
         style={{
-          background: `linear-gradient(to right, var(--accent-from) 0%, var(--accent-to) ${percent}%, rgba(214,200,240,0.12) ${percent}%, rgba(214,200,240,0.12) 100%)`,
+          background: `linear-gradient(to right, var(--accent-from) 0%, var(--accent-to) ${percent}%, rgba(255, 255, 255,0.12) ${percent}%, rgba(255, 255, 255,0.12) 100%)`,
         }}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full"
       />
@@ -272,8 +272,8 @@ export const SettingsSwitch: React.FC<SettingsSwitchProps> = ({
     }`}
   >
     <span
-      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ease-out ${
-        checked ? "translate-x-5" : "translate-x-0"
+      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow transition-transform duration-200 ease-out ${
+        checked ? "translate-x-5 bg-[var(--on-accent,#fff)]" : "translate-x-0 bg-white"
       }`}
     />
   </button>

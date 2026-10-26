@@ -92,7 +92,24 @@ export function hueDegFromWheelClientPos(el: HTMLElement, clientX: number, clien
   return (angleDeg + 90 + 360) % 360;
 }
 
+export const ACCENT_WHITE = "#ffffff";
+export const ACCENT_VIOLET = "#4a22a8";
+export const DEFAULT_ACCENT_COLOR = ACCENT_WHITE;
+
+export function accentTraits(hex: string): { neutral: boolean; light: boolean } {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return { neutral: false, light: false };
+  const { s } = rgbToHsv(rgb.r, rgb.g, rgb.b);
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+  return { neutral: s < 12, light: luminance > 0.55 };
+}
+
 export const ACCENT_PRESETS = [
+  "#ffffff",
   "#4a22a8",
   "#7c3aed",
   "#c026d3",

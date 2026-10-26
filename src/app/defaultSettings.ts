@@ -1,4 +1,5 @@
 import type { Settings } from "./types";
+import { DEFAULT_ACCENT_COLOR } from "../tabs/settings/accentColor";
 
 export const DEFAULT_SETTINGS: Settings = {
   game_directory: null,
@@ -26,7 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animations_disabled: false,
   background_animation_disabled: false,
   thematic_decorations_disabled: false,
-  background_accent_color: "#4a22a8",
+  background_accent_color: DEFAULT_ACCENT_COLOR,
   background_image_url: null,
   adaptive_accent_enabled: false,
   background_blur_enabled: true,

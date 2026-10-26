@@ -5,27 +5,27 @@
 :root {
   color-scheme: dark;
 
-  --ink-0: #0b0910;
-  --ink-1: #14111b;
-  --ink-2: #1b1724;
-  --ink-3: #241e2f;
-  --ink-4: #2e2739;
-  --seam: rgba(214, 200, 240, 0.09);
-  --seam-strong: rgba(214, 200, 240, 0.16);
-  --fg: #eee9f6;
-  --fg-muted: #a49cb4;
-  --fg-faint: #716a82;
+  --ink-0: #0a0a0b;
+  --ink-1: #121214;
+  --ink-2: #19191c;
+  --ink-3: #222226;
+  --ink-4: #2b2b30;
+  --seam: rgba(255, 255, 255, 0.09);
+  --seam-strong: rgba(255, 255, 255, 0.16);
+  --fg: #f1f1f3;
+  --fg-muted: #a1a1aa;
+  --fg-faint: #71717a;
 
   --r-badge: 0.375rem;
   --r-control: 0.625rem;
   --r-card: 0.875rem;
   --r-panel: 1.125rem;
 
-  --glass-bg: rgba(20, 17, 27, 0.9);
-  --glass-bg-strong: rgba(17, 14, 23, 0.97);
+  --glass-bg: rgba(18, 18, 20, 0.9);
+  --glass-bg-strong: rgba(14, 14, 16, 0.97);
   --glass-bg-inset: rgba(255, 255, 255, 0.025);
   --glass-bg-control: var(--ink-2);
-  --glass-bg-popover: #17131f;
+  --glass-bg-popover: #151517;
   --glass-border: var(--seam);
   --glass-border-soft: var(--seam);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -36,6 +36,22 @@
 
   --font-sans: "Onest Variable", "Onest", "Segoe UI", system-ui, sans-serif;
   --launcher-bg-image: none;
+}
+
+:root:not([data-accent-neutral]) {
+  --ink-0: #0b0910;
+  --ink-1: #14111b;
+  --ink-2: #1b1724;
+  --ink-3: #241e2f;
+  --ink-4: #2e2739;
+  --seam: rgba(214, 200, 240, 0.09);
+  --seam-strong: rgba(214, 200, 240, 0.16);
+  --fg: #eee9f6;
+  --fg-muted: #a49cb4;
+  --fg-faint: #716a82;
+  --glass-bg: rgba(20, 17, 27, 0.9);
+  --glass-bg-strong: rgba(17, 14, 23, 0.97);
+  --glass-bg-popover: #17131f;
 }
 
 :root[data-adaptive-accent] {
@@ -75,12 +91,12 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent-to, #975ade) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-to, #d4d4d8) 45%, transparent);
   color: #fff;
 }
 
 :focus-visible {
-  outline-color: var(--accent-to, #975ade);
+  outline-color: var(--accent-to, #d4d4d8);
 }
 
 .ui-title {
@@ -194,8 +210,8 @@ body {
   input.glass-control:focus,
   textarea.glass-control:focus,
   select.glass-control:focus {
-    border-color: var(--accent-line, rgba(151, 90, 222, 0.45));
-    box-shadow: 0 0 0 3px var(--accent-soft, rgba(88, 46, 192, 0.16)) !important;
+    border-color: var(--accent-line, rgba(255, 255, 255, 0.45));
+    box-shadow: 0 0 0 3px var(--accent-soft, rgba(255, 255, 255, 0.16)) !important;
   }
 
   .launcher-select {
@@ -229,7 +245,7 @@ body {
 
   .launcher-select option:checked {
     background: var(--accent-from);
-    color: #ffffff;
+    color: var(--on-accent, #ffffff);
   }
 
   .glass-popover {
@@ -251,7 +267,7 @@ body {
   }
 
   .glass-overlay {
-    background: rgba(6, 4, 10, 0.72) !important;
+    background: rgba(5, 5, 6, 0.72) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
   }
@@ -305,7 +321,7 @@ body {
 
   .btn-accent {
     background: var(--accent-gradient);
-    color: #fff;
+    color: var(--on-accent, #fff);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.18),
       0 6px 18px color-mix(in srgb, var(--accent-from) 30%, transparent);
@@ -418,7 +434,7 @@ body {
 }
 
 input[type="range"] {
-  accent-color: var(--accent-to, #975ade);
+  accent-color: var(--accent-to, #d4d4d8);
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -429,7 +445,7 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 9999px;
   border: 3px solid var(--ink-0);
   background: #fff;
-  box-shadow: 0 0 0 1px var(--accent-line, rgba(151, 90, 222, 0.45));
+  box-shadow: 0 0 0 1px var(--accent-line, rgba(255, 255, 255, 0.45));
   cursor: pointer;
 }
 
@@ -494,7 +510,7 @@ html.launcher-linux .glass-toolbar {
 }
 
 html.launcher-linux .glass-overlay {
-  background: rgba(6, 4, 10, 0.82) !important;
+  background: rgba(5, 5, 6, 0.82) !important;
 }
 
 html.launcher-linux .backdrop-blur,
@@ -639,7 +655,7 @@ html.launcher-no-animations .interactive-press:active {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(214, 200, 240, 0.18) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -652,14 +668,14 @@ html.launcher-no-animations .interactive-press:active {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(214, 200, 240, 0.14);
+  background-color: rgba(255, 255, 255, 0.14);
   border-radius: 9999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(214, 200, 240, 0.26);
+  background-color: rgba(255, 255, 255, 0.26);
 }
 
 *::-webkit-scrollbar-corner {
