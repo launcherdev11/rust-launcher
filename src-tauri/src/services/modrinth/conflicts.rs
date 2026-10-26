@@ -1,6 +1,7 @@
-use crate::app::paths::instance_dir;
+use crate::app::paths::{instance_config_path, instance_dir};
 use crate::services::game::profiles::{
-    profile_item_display_name, profile_item_is_disabled, resolve_profile_item_path,
+    profile_item_display_name, profile_item_is_disabled, read_instance_config,
+    resolve_profile_item_path,
 };
 
 use super::jar_compat::{read_jar_mod_info, JarModInfo};
@@ -8,6 +9,12 @@ use super::jar_compat::{read_jar_mod_info, JarModInfo};
 #[tauri::command]
 pub async fn scan_profile_mod_jars(profile_id: String) -> Result<Vec<JarModInfo>, String> {
     let profile_dir = instance_dir(&profile_id)?;
+    // Multi-loader jars carry several metadata files; read the one this profile's loader uses.
+    let loader = instance_config_path(&profile_id)
+        .and_then(|p| read_instance_config(&p))
+        .map(|cfg| cfg.loader.trim().to_ascii_lowercase())
+        .ok()
+        .filter(|l| !l.is_empty());
     let content_dir = profile_dir.join("mods");
     if !content_dir.is_dir() {
         return Ok(Vec::new());
@@ -45,7 +52,9 @@ pub async fn scan_profile_mod_jars(profile_id: String) -> Result<Vec<JarModInfo>
     let infos = tokio::task::spawn_blocking(move || {
         files
             .into_iter()
-            .map(|(filename, enabled, path)| read_jar_mod_info(&path, &filename, enabled))
+            .map(|(filename, enabled, path)| {
+                read_jar_mod_info(&path, &filename, enabled, loader.as_deref())
+            })
             .collect::<Vec<_>>()
     })
     .await

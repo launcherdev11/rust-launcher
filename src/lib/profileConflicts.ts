@@ -2,7 +2,17 @@ export type ConflictActionKind =
   | "disable_all_but"
   | "keep_latest"
   | "disable_all"
-  | "disable_wrong_loader";
+  | "disable_wrong_loader"
+  | "enable";
+
+export type ConflictAction = {
+  id: string;
+  label: string;
+  kind: ConflictActionKind;
+  keep?: string;
+  /** Files to switch on for `enable`. */
+  targets?: string[];
+};
 
 export type ProfileConflict = {
   id: string;
@@ -12,12 +22,19 @@ export type ProfileConflict = {
   affected: string[];
   solutions: string[];
   category?: "duplicate" | "loader" | "incompatible" | "dependency" | "breaks";
-  actions?: { id: string; label: string; kind: ConflictActionKind; keep?: string }[];
+  actions?: ConflictAction[];
 };
 
 export type JarModRelation = {
   modId: string;
   optional: boolean;
+  /** Version predicates, any may match; empty means any version. */
+  versions?: string[];
+};
+
+export type JarNestedMod = {
+  modId: string;
+  version?: string | null;
 };
 
 export type JarModInfo = {
@@ -27,7 +44,10 @@ export type JarModInfo = {
   title?: string | null;
   version?: string | null;
   loader?: string | null;
+  loaders?: string[];
+  environment?: string | null;
   provides?: string[];
+  nested?: JarNestedMod[];
   depends?: JarModRelation[];
   breaks?: JarModRelation[];
 };
@@ -47,6 +67,14 @@ const PLATFORM_IDS = new Set([
   "fabric",
   "quilt",
 ]);
+
+/** Libraries the loaders ship themselves (Fabric Loader 0.15+, NeoForge bundle MixinExtras). */
+const LOADER_BUNDLED_IDS = new Set(["mixinextras", "quilt_base", "javafml", "lowcodefml"]);
+
+/** Sinytra Connector runs Fabric mods on Forge/NeoForge. */
+const FABRIC_ON_FORGE_BRIDGE_IDS = new Set(["connector"]);
+
+const MAX_AFFECTED = 12;
 
 function stripExt(s: string) {
   return s.replace(/\.(jar|zip|disabled)$/i, "").replace(/\.disabled$/i, "");
@@ -105,6 +133,17 @@ export function pickLatestFilename(files: string[]): string | null {
   return best?.file ?? null;
 }
 
+/** Newest file by the version declared in its metadata, falling back to the file name. */
+function pickLatestByMetadata(files: string[], infoByFile: Map<string, JarModInfo>): string | null {
+  let best: { file: string; ver: SemVer } | null = null;
+  for (const f of files) {
+    const ver = parseSemVer(infoByFile.get(f)?.version ?? "");
+    if (!ver) return pickLatestFilename(files);
+    if (!best || compareSemVer(ver, best.ver) > 0) best = { file: f, ver };
+  }
+  return best?.file ?? pickLatestFilename(files);
+}
+
 export function guessLoaderVariant(filename: string): string | null {
   const f = stripExt(filename).toLowerCase();
   if (/(^|[-_.])(neoforge)([-_.]|$)/.test(f)) return "neoforge";
@@ -133,23 +172,227 @@ function normalizeId(id: string) {
   return id.trim().toLowerCase();
 }
 
-function collectProvidedIds(info: JarModInfo): string[] {
-  const ids: string[] = [];
-  if (info.modId) ids.push(normalizeId(info.modId));
-  for (const p of info.provides ?? []) {
-    if (p) ids.push(normalizeId(p));
+// ---------------------------------------------------------------------------
+// Version predicates
+
+type SemVer = { core: number[]; pre: string[] };
+
+/** `0.92.2+1.20.1` → core [0,92,2]; `1.0.0-beta.2` → pre ["beta","2"]. Non-numeric cores → null. */
+function parseSemVer(raw: string): SemVer | null {
+  const s = raw.trim().replace(/^v/i, "").split("+")[0];
+  if (!s) return null;
+  const dash = s.indexOf("-");
+  const coreStr = dash >= 0 ? s.slice(0, dash) : s;
+  const preStr = dash >= 0 ? s.slice(dash + 1) : "";
+  if (!/^\d+(?:\.\d+)*$/.test(coreStr)) return null;
+  return {
+    core: coreStr.split(".").map((p) => Number.parseInt(p, 10)),
+    pre: preStr ? preStr.split(".") : [],
+  };
+}
+
+function compareSemVer(a: SemVer, b: SemVer): number {
+  const c = cmpVersionParts(a.core, b.core);
+  if (c !== 0) return c;
+  if (!a.pre.length || !b.pre.length) return b.pre.length - a.pre.length;
+  const n = Math.max(a.pre.length, b.pre.length);
+  for (let i = 0; i < n; i++) {
+    const x = a.pre[i];
+    const y = b.pre[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    if (xn && yn) {
+      const d = Number(x) - Number(y);
+      if (d !== 0) return d < 0 ? -1 : 1;
+    } else if (xn !== yn) {
+      return xn ? -1 : 1;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
   }
-  return [...new Set(ids)];
+  return 0;
+}
+
+function bumpCore(v: SemVer, index: number): SemVer {
+  const core = v.core.slice(0, index + 1);
+  while (core.length <= index) core.push(0);
+  core[index] += 1;
+  // `-` makes the bound exclusive of pre-releases of the next version too.
+  return { core, pre: [""] };
+}
+
+/** One Fabric/Quilt predicate term: `>=1.2`, `~1.2.3`, `^1.0`, `1.2.x`, `*`. */
+function matchFabricTerm(term: string, version: SemVer): boolean | null {
+  const m = term.trim().match(/^(>=|<=|>|<|=|~|\^)?\s*(.+)$/);
+  if (!m) return null;
+  const op = m[1] ?? "";
+  const body = m[2].trim();
+  if (body === "*" || /^[xX]$/.test(body)) return true;
+
+  const wildcardAt = body.split(".").findIndex((p) => /^[xX*]$/.test(p));
+  if (wildcardAt > 0 && (op === "" || op === "=")) {
+    const floor = parseSemVer(body.split(".").slice(0, wildcardAt).join("."));
+    if (!floor) return null;
+    return compareSemVer(version, floor) >= 0 && compareSemVer(version, bumpCore(floor, wildcardAt - 1)) < 0;
+  }
+
+  const target = parseSemVer(body);
+  if (!target) return null;
+  const cmp = compareSemVer(version, target);
+  switch (op) {
+    case "":
+    case "=":
+      return cmp === 0;
+    case ">=":
+      return cmp >= 0;
+    case ">":
+      return cmp > 0;
+    case "<=":
+      return cmp <= 0;
+    case "<":
+      return cmp < 0;
+    case "~":
+      return cmp >= 0 && compareSemVer(version, bumpCore(target, Math.min(1, target.core.length - 1))) < 0;
+    case "^":
+      return cmp >= 0 && compareSemVer(version, bumpCore(target, 0)) < 0;
+    default:
+      return null;
+  }
+}
+
+function matchFabricPredicate(predicate: string, version: SemVer): boolean | null {
+  const p = predicate.trim();
+  if (!p || p === "*") return true;
+  let unknown = false;
+  for (const alt of p.split("||")) {
+    let all: boolean | null = true;
+    for (const term of alt.trim().split(/\s+/).filter(Boolean)) {
+      const r = matchFabricTerm(term, version);
+      if (r === false) {
+        all = false;
+        break;
+      }
+      if (r === null) all = null;
+    }
+    if (all === true) return true;
+    if (all === null) unknown = true;
+  }
+  return unknown ? null : false;
+}
+
+/** Plain dotted numbers only: Forge mod versions often embed the game version and are not comparable. */
+function parseNumericVersion(raw: string): number[] | null {
+  const s = raw.trim();
+  return /^\d+(?:\.\d+)*$/.test(s) ? s.split(".").map((p) => Number.parseInt(p, 10)) : null;
+}
+
+/** Maven range as used by Forge/NeoForge: `[1.2,)`, `[1.0,2.0)`, unions, bare `1.2` (= any). */
+function matchMavenRange(range: string, rawVersion: string): boolean | null {
+  const r = range.trim();
+  if (!r || r === "*") return true;
+  if (!/^[[(]/.test(r)) return true;
+  const version = parseNumericVersion(rawVersion);
+  if (!version) return null;
+  let unknown = false;
+  for (const m of r.matchAll(/([[(])([^\])]*)([\])])/g)) {
+    const [, open, inner, close] = m;
+    const [lo, hi] = inner.includes(",") ? inner.split(",", 2) : [inner, inner];
+    const loV = lo.trim() ? parseNumericVersion(lo) : null;
+    const hiV = hi.trim() ? parseNumericVersion(hi) : null;
+    if ((lo.trim() && !loV) || (hi.trim() && !hiV)) {
+      unknown = true;
+      continue;
+    }
+    const loOk = !loV || (open === "[" ? cmpVersionParts(version, loV) >= 0 : cmpVersionParts(version, loV) > 0);
+    const hiOk = !hiV || (close === "]" ? cmpVersionParts(version, hiV) <= 0 : cmpVersionParts(version, hiV) < 0);
+    if (loOk && hiOk) return true;
+  }
+  return unknown ? null : false;
+}
+
+/** Whether `version` satisfies any of the relation's predicates; null when it can't be told. */
+function versionSatisfies(
+  predicates: string[] | undefined,
+  version: string | null | undefined,
+  mavenSyntax: boolean,
+): boolean | null {
+  if (!predicates || predicates.length === 0) return true;
+  if (!version) return null;
+  let unknown = false;
+  for (const p of predicates) {
+    let r: boolean | null;
+    if (mavenSyntax) {
+      r = matchMavenRange(p, version);
+    } else {
+      const v = parseSemVer(version);
+      r = v ? matchFabricPredicate(p, v) : null;
+    }
+    if (r === true) return true;
+    if (r === null) unknown = true;
+  }
+  return unknown ? null : false;
+}
+
+// ---------------------------------------------------------------------------
+// Loader compatibility
+
+function compatibleLoaders(loader: string, gameVersion: string): string[] {
+  switch (loader) {
+    case "forge":
+      return ["forge"];
+    case "neoforge":
+      // NeoForge for 1.20.1 is a fork that still loads Forge mods.
+      return gameVersion.trim() === "1.20.1" ? ["neoforge", "forge"] : ["neoforge"];
+    case "fabric":
+      return ["fabric"];
+    case "quilt":
+      return ["quilt", "fabric"];
+    default:
+      return [];
+  }
+}
+
+/** Fabric API is split into modules; mods often depend on those directly. */
+function isFabricApiModule(id: string): boolean {
+  return (
+    id === "fabric-api" ||
+    id === "fabric-api-base" ||
+    /^fabric-[a-z0-9-]+-(?:api|v\d+)$/.test(id) ||
+    /^fabric-[a-z0-9-]+-api-v\d+$/.test(id)
+  );
+}
+
+type Provider = { file: string; version?: string | null; enabled: boolean };
+
+/** Sinytra Connector and Forgified Fabric API expose `fabric-api` as `fabric_api`. */
+function providerKey(id: string): string {
+  return normalizeId(id).replace(/_/g, "-");
+}
+
+function addProvider(map: Map<string, Provider[]>, id: string | null | undefined, p: Provider) {
+  if (!id) return;
+  const key = providerKey(id);
+  if (!key) return;
+  const list = map.get(key) ?? [];
+  if (!list.some((x) => x.file === p.file)) list.push(p);
+  map.set(key, list);
+}
+
+function displayName(info: JarModInfo | undefined, fallback: string): string {
+  return info?.title?.trim() || info?.modId?.trim() || fallback;
 }
 
 export function detectProfileConflicts(opts: {
   entries: { name: string; enabled: boolean }[];
-  profile: { loader?: string | null };
+  profile: { loader?: string | null; game_version?: string | null };
   jarInfos?: JarModInfo[];
   tt: Tt;
 }): ProfileConflict[] {
   const { entries, profile, jarInfos = [], tt } = opts;
-  const enabled = (entries ?? []).filter((e) => e && e.enabled && e.name);
+  const all = (entries ?? []).filter((e) => e && e.name);
+  const enabled = all.filter((e) => e.enabled);
   const conflicts: ProfileConflict[] = [];
   const claimedFilenames = new Set<string>();
 
@@ -157,11 +400,35 @@ export function detectProfileConflicts(opts: {
   for (const info of jarInfos) {
     if (info?.filename) infoByFile.set(info.filename, info);
   }
+  const hasMetadata = (name: string) => !!infoByFile.get(name)?.modId;
 
+  const loader = (profile.loader ?? "").toLowerCase();
+  const gameVersion = profile.game_version ?? "";
+  const accepted = compatibleLoaders(loader, gameVersion);
+  const hasFabricBridge =
+    (loader === "forge" || loader === "neoforge") &&
+    enabled.some((e) => {
+      const id = infoByFile.get(e.name)?.modId;
+      return !!id && FABRIC_ON_FORGE_BRIDGE_IDS.has(normalizeId(id));
+    });
+
+  /** null: unknown (no metadata or no loader selected). */
+  const runsOnProfileLoader = (info: JarModInfo | undefined): boolean | null => {
+    if (!accepted.length) return null;
+    const loaders = (info?.loaders?.length ? info.loaders : info?.loader ? [info.loader] : []).map(
+      (l) => l.toLowerCase(),
+    );
+    if (!loaders.length) return null;
+    if (loaders.some((l) => accepted.includes(l))) return true;
+    if (hasFabricBridge && loaders.some((l) => l === "fabric" || l === "quilt")) return true;
+    return false;
+  };
+
+  // --- Same mod id in several enabled files -------------------------------------------
   const byModId = new Map<string, string[]>();
   for (const e of enabled) {
     const info = infoByFile.get(e.name);
-    if (!info?.modId) continue;
+    if (!info?.modId || runsOnProfileLoader(info) === false) continue;
     const id = normalizeId(info.modId);
     if (!id || PLATFORM_IDS.has(id)) continue;
     const arr = byModId.get(id) ?? [];
@@ -171,7 +438,7 @@ export function detectProfileConflicts(opts: {
 
   for (const [modId, files] of byModId.entries()) {
     if (files.length < 2) continue;
-    const keepLatest = pickLatestFilename(files);
+    const keepLatest = pickLatestByMetadata(files, infoByFile);
     const title =
       files.map((f) => infoByFile.get(f)?.title).find((t) => t && t.trim()) || modId;
     for (const f of files) claimedFilenames.add(f);
@@ -181,7 +448,7 @@ export function detectProfileConflicts(opts: {
       category: "duplicate",
       title: tt("modpacks.conflicts.duplicateId.title"),
       reason: tt("modpacks.conflicts.duplicateId.reason", { name: title, id: modId }),
-      affected: files.slice(0, 12),
+      affected: files.slice(0, MAX_AFFECTED),
       solutions: [
         tt("modpacks.conflicts.duplicate.solutionDisableExtra"),
         tt("modpacks.conflicts.duplicate.solutionKeepLatest"),
@@ -206,42 +473,52 @@ export function detectProfileConflicts(opts: {
     });
   }
 
+  // --- File-name guesses, only for jars whose metadata could not be read ----------------
   const byKey = new Map<string, string[]>();
-  const byKeyVariants = new Map<string, Set<string>>();
   for (const e of enabled) {
-    if (claimedFilenames.has(e.name)) continue;
+    if (claimedFilenames.has(e.name) || hasMetadata(e.name)) continue;
     const key = guessModKey(e.name);
     if (!key || key.length < 3) continue;
     const arr = byKey.get(key) ?? [];
     arr.push(e.name);
     byKey.set(key, arr);
-    const metaLoader = infoByFile.get(e.name)?.loader?.toLowerCase() ?? null;
-    const v = metaLoader || guessLoaderVariant(e.name);
-    if (v) {
-      const vs = byKeyVariants.get(key) ?? new Set<string>();
-      vs.add(v);
-      byKeyVariants.set(key, vs);
-    }
   }
 
   for (const [key, files] of byKey.entries()) {
     if (files.length < 2) continue;
-    const modIds = new Set(
-      files
-        .map((f) => infoByFile.get(f)?.modId)
-        .filter((id): id is string => !!id)
-        .map(normalizeId),
-    );
-    if (modIds.size >= 2) continue;
-
+    const variants = new Set(files.map(guessLoaderVariant).filter((v): v is string => !!v));
+    if (variants.size > 1 && loader && loader !== "vanilla") {
+      conflicts.push({
+        id: `mixed:${key}`,
+        severity: "warning",
+        category: "loader",
+        title: tt("modpacks.conflicts.mixedVariants.title"),
+        reason: tt("modpacks.conflicts.mixedVariants.reason", {
+          variants: [...variants].join(", "),
+        }),
+        affected: files.slice(0, MAX_AFFECTED),
+        solutions: [
+          tt("modpacks.conflicts.mixedVariants.solutionKeepOne"),
+          tt("modpacks.conflicts.mixedVariants.solutionUseUniversal"),
+        ],
+        actions: [
+          {
+            id: "disable_wrong",
+            label: tt("modpacks.conflicts.actions.disableWrongLoader"),
+            kind: "disable_wrong_loader",
+          },
+        ],
+      });
+      continue;
+    }
     const keepLatest = pickLatestFilename(files);
     conflicts.push({
       id: `dup:${key}`,
-      severity: "error",
+      severity: "warning",
       category: "duplicate",
       title: tt("modpacks.conflicts.duplicate.title"),
       reason: tt("modpacks.conflicts.duplicate.reason", { name: key }),
-      affected: files.slice(0, 12),
+      affected: files.slice(0, MAX_AFFECTED),
       solutions: [
         tt("modpacks.conflicts.duplicate.solutionDisableExtra"),
         tt("modpacks.conflicts.duplicate.solutionKeepLatest"),
@@ -266,34 +543,48 @@ export function detectProfileConflicts(opts: {
     });
   }
 
-  const loader = (profile.loader ?? "").toLowerCase();
-  if (loader && loader !== "vanilla") {
-    const mismatchByVariant = new Map<string, string[]>();
+  // --- Wrong loader --------------------------------------------------------------------
+  const wrongLoader = new Set<string>();
+  if (accepted.length) {
+    const mismatch = new Map<string, { files: string[]; fromMetadata: boolean }>();
     for (const e of enabled) {
       const info = infoByFile.get(e.name);
-      const v = (info?.loader || guessLoaderVariant(e.name) || "").toLowerCase();
-      if (!v) continue;
-      const compatible =
-        v === loader ||
-        (loader === "fabric" && v === "quilt") ||
-        (loader === "quilt" && v === "fabric");
-      if (compatible) continue;
-      const arr = mismatchByVariant.get(v) ?? [];
-      arr.push(e.name);
-      mismatchByVariant.set(v, arr);
+      const runs = runsOnProfileLoader(info);
+      let variant: string | null = null;
+      let fromMetadata = false;
+      if (runs === false) {
+        variant = (info?.loaders?.length ? info.loaders : [info?.loader ?? ""]).join("/");
+        fromMetadata = true;
+      } else if (runs === null && !hasMetadata(e.name)) {
+        const guess = guessLoaderVariant(e.name);
+        const guessRuns =
+          !guess ||
+          accepted.includes(guess) ||
+          (hasFabricBridge && (guess === "fabric" || guess === "quilt"));
+        if (!guessRuns) variant = guess;
+      }
+      if (!variant) continue;
+      if (fromMetadata) wrongLoader.add(e.name);
+      const key = `${variant}|${fromMetadata ? "meta" : "name"}`;
+      const group = mismatch.get(key) ?? { files: [], fromMetadata };
+      group.files.push(e.name);
+      mismatch.set(key, group);
     }
 
-    for (const [variant, files] of mismatchByVariant.entries()) {
+    for (const [key, group] of mismatch.entries()) {
+      const variant = key.split("|")[0];
       conflicts.push({
-        id: `loader:${variant}`,
+        id: `loader:${key}`,
         severity: "warning",
         category: "loader",
         title: tt("modpacks.conflicts.loaderMismatch.title"),
-        reason: tt("modpacks.conflicts.loaderMismatch.reason", {
-          loader,
-          variants: variant,
-        }),
-        affected: files.slice(0, 12),
+        reason: tt(
+          group.fromMetadata
+            ? "modpacks.conflicts.loaderMismatch.reasonMeta"
+            : "modpacks.conflicts.loaderMismatch.reason",
+          { loader, variants: variant },
+        ),
+        affected: group.files.slice(0, MAX_AFFECTED),
         solutions: [
           tt("modpacks.conflicts.loaderMismatch.solutionPickCorrect", { loader }),
           tt("modpacks.conflicts.loaderMismatch.solutionSwitchLoader"),
@@ -307,52 +598,77 @@ export function detectProfileConflicts(opts: {
         ],
       });
     }
-
-    for (const [key, variants] of byKeyVariants.entries()) {
-      if (variants.size <= 1) continue;
-      const affected = (byKey.get(key) ?? []).slice(0, 12);
-      conflicts.push({
-        id: `mixed:${key}`,
-        severity: "error",
-        category: "loader",
-        title: tt("modpacks.conflicts.mixedVariants.title"),
-        reason: tt("modpacks.conflicts.mixedVariants.reason", {
-          variants: [...variants].join(", "),
-        }),
-        affected,
-        solutions: [
-          tt("modpacks.conflicts.mixedVariants.solutionKeepOne"),
-          tt("modpacks.conflicts.mixedVariants.solutionUseUniversal"),
-        ],
-        actions: [
-          {
-            id: "disable_wrong",
-            label: tt("modpacks.conflicts.actions.disableWrongLoader"),
-            kind: "disable_wrong_loader",
-          },
-        ],
-      });
-    }
   }
 
-  const provided = new Set<string>();
-  const enabledInfos: JarModInfo[] = [];
+  // --- Providers: mod ids, `provides`, bundled (Jar-in-Jar) mods ------------------------
+  const providers = new Map<string, Provider[]>();
+  for (const e of all) {
+    const info = infoByFile.get(e.name);
+    if (!info || wrongLoader.has(e.name)) continue;
+    const base = { file: e.name, enabled: e.enabled };
+    addProvider(providers, info.modId, { ...base, version: info.version });
+    for (const p of info.provides ?? []) addProvider(providers, p, { ...base, version: info.version });
+    for (const n of info.nested ?? []) addProvider(providers, n.modId, { ...base, version: n.version });
+  }
+  const allProviders = (id: string) => providers.get(providerKey(id)) ?? [];
+  const enabledProviders = (id: string) => allProviders(id).filter((p) => p.enabled);
+  const isFabricApiPresent = enabledProviders("fabric-api").length > 0;
+
+  // Mods the game will actually load: enabled, for this loader, not server-only.
+  const activeInfos: JarModInfo[] = [];
   for (const e of enabled) {
     const info = infoByFile.get(e.name);
-    if (!info) continue;
-    enabledInfos.push(info);
-    for (const id of collectProvidedIds(info)) provided.add(id);
+    if (!info || wrongLoader.has(e.name)) continue;
+    if ((info.environment ?? "").toLowerCase() === "server") continue;
+    activeInfos.push(info);
   }
 
+  // --- Dependencies --------------------------------------------------------------------
   const missingByDep = new Map<string, string[]>();
-  for (const info of enabledInfos) {
+  const disabledByDep = new Map<string, { dependents: string[]; targets: string[] }>();
+  const wrongVersionByDep = new Map<
+    string,
+    { dependents: string[]; required: Set<string>; installed: Set<string> }
+  >();
+
+  for (const info of activeInfos) {
+    const maven = info.loader === "forge" || info.loader === "neoforge";
     for (const dep of info.depends ?? []) {
       if (!dep?.modId || dep.optional) continue;
       const id = normalizeId(dep.modId);
-      if (!id || PLATFORM_IDS.has(id) || provided.has(id)) continue;
-      const arr = missingByDep.get(id) ?? [];
-      arr.push(info.filename);
-      missingByDep.set(id, arr);
+      if (!id || PLATFORM_IDS.has(id) || LOADER_BUNDLED_IDS.has(id)) continue;
+
+      const present = enabledProviders(id);
+      if (present.length === 0) {
+        // Fabric API modules come together with Fabric API, report them as one.
+        const fabricModule = isFabricApiModule(providerKey(id));
+        if (fabricModule && isFabricApiPresent) continue;
+        const reportId = fabricModule ? "fabric-api" : id;
+        const off = [...allProviders(reportId), ...allProviders(id)].filter((p) => !p.enabled);
+        if (off.length > 0) {
+          const entry = disabledByDep.get(reportId) ?? { dependents: [], targets: [] };
+          entry.dependents.push(info.filename);
+          for (const p of off) if (!entry.targets.includes(p.file)) entry.targets.push(p.file);
+          disabledByDep.set(reportId, entry);
+        } else {
+          const arr = missingByDep.get(reportId) ?? [];
+          arr.push(info.filename);
+          missingByDep.set(reportId, arr);
+        }
+        continue;
+      }
+
+      const results = present.map((p) => versionSatisfies(dep.versions, p.version, maven));
+      if (results.some((r) => r !== false)) continue;
+      const entry = wrongVersionByDep.get(id) ?? {
+        dependents: [],
+        required: new Set<string>(),
+        installed: new Set<string>(),
+      };
+      entry.dependents.push(info.filename);
+      for (const v of dep.versions ?? []) entry.required.add(v);
+      for (const p of present) if (p.version) entry.installed.add(p.version);
+      wrongVersionByDep.set(id, entry);
     }
   }
 
@@ -364,7 +680,7 @@ export function detectProfileConflicts(opts: {
       category: "dependency",
       title: tt("modpacks.conflicts.missingDep.title"),
       reason: tt("modpacks.conflicts.missingDep.reason", { id: depId }),
-      affected: uniqueFiles.slice(0, 12),
+      affected: uniqueFiles.slice(0, MAX_AFFECTED),
       solutions: [
         tt("modpacks.conflicts.missingDep.solutionInstall"),
         tt("modpacks.conflicts.missingDep.solutionDisable"),
@@ -379,27 +695,85 @@ export function detectProfileConflicts(opts: {
     });
   }
 
+  for (const [depId, entry] of disabledByDep.entries()) {
+    const dependents = [...new Set(entry.dependents)];
+    const target = entry.targets[0];
+    conflicts.push({
+      id: `disabled-dep:${depId}`,
+      severity: "error",
+      category: "dependency",
+      title: tt("modpacks.conflicts.disabledDep.title"),
+      reason: tt("modpacks.conflicts.disabledDep.reason", {
+        id: depId,
+        file: displayName(infoByFile.get(target), target),
+      }),
+      affected: [...entry.targets, ...dependents].slice(0, MAX_AFFECTED),
+      solutions: [
+        tt("modpacks.conflicts.disabledDep.solutionEnable"),
+        tt("modpacks.conflicts.missingDep.solutionDisable"),
+      ],
+      actions: [
+        {
+          id: "enable_dependency",
+          label: tt("modpacks.conflicts.actions.enableDependency"),
+          kind: "enable",
+          targets: entry.targets.slice(0, 1),
+        },
+      ],
+    });
+  }
+
+  for (const [depId, entry] of wrongVersionByDep.entries()) {
+    const dependents = [...new Set(entry.dependents)];
+    const holders = enabledProviders(depId).map((p) => p.file);
+    conflicts.push({
+      id: `dep-version:${depId}`,
+      severity: "error",
+      category: "dependency",
+      title: tt("modpacks.conflicts.depVersion.title"),
+      reason: tt("modpacks.conflicts.depVersion.reason", {
+        id: depId,
+        required: [...entry.required].join(" | ") || "?",
+        installed: [...entry.installed].join(", ") || "?",
+      }),
+      affected: [...new Set([...holders, ...dependents])].slice(0, MAX_AFFECTED),
+      solutions: [
+        tt("modpacks.conflicts.depVersion.solutionUpdate"),
+        tt("modpacks.conflicts.missingDep.solutionDisable"),
+      ],
+      actions: [
+        {
+          id: "disable_dependents",
+          label: tt("modpacks.conflicts.actions.disableDependents"),
+          kind: "disable_all",
+          targets: dependents,
+        },
+      ],
+    });
+  }
+
+  // --- Declared incompatibilities (breaks / incompatible) ------------------------------
   const breakPairs = new Map<string, { a: string; b: string; soft: boolean }>();
-  for (const info of enabledInfos) {
+  for (const info of activeInfos) {
+    const maven = info.loader === "forge" || info.loader === "neoforge";
     for (const br of info.breaks ?? []) {
       if (!br?.modId) continue;
       const id = normalizeId(br.modId);
-      if (!id || PLATFORM_IDS.has(id) || !provided.has(id)) continue;
-      const other = enabledInfos.find((o) => collectProvidedIds(o).includes(id));
-      if (!other || other.filename === info.filename) continue;
-      const pairKey = [info.filename, other.filename].sort().join("||");
-      if (breakPairs.has(pairKey)) continue;
-      breakPairs.set(pairKey, {
-        a: info.filename,
-        b: other.filename,
-        soft: !!br.optional,
-      });
+      if (!id || PLATFORM_IDS.has(id)) continue;
+      for (const other of enabledProviders(id)) {
+        if (other.file === info.filename || wrongLoader.has(other.file)) continue;
+        // `breaks: { sodium: "<0.5" }` only targets old versions; unknown versions are skipped.
+        if (versionSatisfies(br.versions, other.version, maven) !== true) continue;
+        const pairKey = [info.filename, other.file].sort().join("||");
+        if (breakPairs.has(pairKey)) continue;
+        breakPairs.set(pairKey, { a: info.filename, b: other.file, soft: !!br.optional });
+      }
     }
   }
 
   for (const [pairKey, pair] of breakPairs.entries()) {
-    const titleA = infoByFile.get(pair.a)?.title || pair.a;
-    const titleB = infoByFile.get(pair.b)?.title || pair.b;
+    const titleA = displayName(infoByFile.get(pair.a), pair.a);
+    const titleB = displayName(infoByFile.get(pair.b), pair.b);
     conflicts.push({
       id: `breaks:${pairKey}`,
       severity: pair.soft ? "warning" : "error",
@@ -431,19 +805,21 @@ export function detectProfileConflicts(opts: {
     });
   }
 
-  const catWeight: Record<string, number> = {
-    duplicate: 0,
-    breaks: 1,
-    dependency: 2,
-    loader: 3,
-    incompatible: 4,
-  };
-  conflicts.sort((a, b) => {
-    if (a.severity !== b.severity) return a.severity === "error" ? -1 : 1;
-    return (catWeight[a.category ?? ""] ?? 9) - (catWeight[b.category ?? ""] ?? 9);
-  });
-
+  conflicts.sort(compareConflicts);
   return conflicts;
+}
+
+const CATEGORY_WEIGHT: Record<string, number> = {
+  duplicate: 0,
+  breaks: 1,
+  dependency: 2,
+  loader: 3,
+  incompatible: 4,
+};
+
+export function compareConflicts(a: ProfileConflict, b: ProfileConflict): number {
+  if (a.severity !== b.severity) return a.severity === "error" ? -1 : 1;
+  return (CATEGORY_WEIGHT[a.category ?? ""] ?? 9) - (CATEGORY_WEIGHT[b.category ?? ""] ?? 9);
 }
 
 export function conflictAffectedSet(conflicts: ProfileConflict[]): Set<string> {

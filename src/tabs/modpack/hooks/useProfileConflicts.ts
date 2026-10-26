@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   type ConflictActionKind,
+  compareConflicts,
   conflictAffectedSet,
   detectProfileConflicts as detectProfileConflictsCore,
   guessLoaderVariant,
@@ -114,10 +115,7 @@ export function useProfileConflicts(deps: ProfileConflictsDeps) {
           ...heuristic,
           ...incompatible.filter((c) => !seen.has(c.id)),
         ];
-        merged.sort((a, b) => {
-          if (a.severity !== b.severity) return a.severity === "error" ? -1 : 1;
-          return 0;
-        });
+        merged.sort(compareConflicts);
         setProfileConflicts(merged);
       } catch {
         if (!cancelled) setProfileConflicts([]);
@@ -143,10 +141,14 @@ export function useProfileConflicts(deps: ProfileConflictsDeps) {
 
   async function applyConflictAction(
     conflict: ProfileConflict,
-    action: { kind: ConflictActionKind; keep?: string },
+    action: { kind: ConflictActionKind; keep?: string; targets?: string[] },
   ) {
     if (!selectedProfile) return;
-    const affected = conflict.affected.slice();
+    const affected = action.targets?.length ? action.targets.slice() : conflict.affected.slice();
+    if (action.kind === "enable") {
+      await setItemsEnabled(affected, true);
+      return;
+    }
     let toDisable: string[] = [];
     if (action.kind === "disable_all") {
       toDisable = affected;
@@ -162,14 +164,18 @@ export function useProfileConflicts(deps: ProfileConflictsDeps) {
       if (!keep) return;
       toDisable = affected.filter((f) => f && f !== keep);
     }
-    if (toDisable.length === 0) return;
+    await setItemsEnabled(toDisable, false);
+  }
+
+  async function setItemsEnabled(files: string[], enabled: boolean) {
+    if (!selectedProfile || files.length === 0) return;
     try {
-      for (const f of toDisable) {
+      for (const f of files) {
         await invoke("set_profile_item_enabled", {
           id: selectedProfile.id,
           category: "mods",
           filename: f,
-          enabled: false,
+          enabled,
         });
       }
       await refreshItems(selectedProfile.id, "mods");

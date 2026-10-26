@@ -797,6 +797,8 @@
         "sourceConsole": "consola",
         "sourceLatest": "latest.log",
         "sourceCrash": "crash reports: {{count}}",
+        "sourceJvmCrash": "registro de error de la JVM (hs_err)",
+        "staleSkipped": "Crash reports antiguos de lanzamientos anteriores omitidos: {{count}}",
         "diskReadFailed": "No se pudieron leer los logs del disco.",
         "title": "Analizador de logs",
         "show": "Mostrar",
@@ -809,7 +811,9 @@
           },
           "wrongJava": {
             "title": "Versión de Java incorrecta",
-            "fix": "Las versiones nuevas de Minecraft necesitan Java 17/21. Elige un runtime adecuado en Ajustes → Java."
+            "fix": "Las versiones nuevas de Minecraft necesitan Java 17/21. Elige un runtime adecuado en Ajustes → Java.",
+            "fixNeed": "Se necesita Java {{java}} o superior. Elígela en los ajustes de Java del perfil o instálala automáticamente.",
+            "fixTooNew": "Java {{java}} es demasiado nueva para esta versión del loader. Elige un runtime más antiguo en los ajustes de Java del perfil (normalmente 8 o 17)."
           },
           "mixinConflict": {
             "title": "Conflicto de Mixin / inyección",
@@ -853,7 +857,9 @@
           },
           "nativeCrash": {
             "title": "Crash nativo de la JVM",
-            "fix": "Actualiza drivers, cambia Java y desactiva temporalmente mods con nativos (Sodium/Iris)."
+            "fix": "Actualiza drivers, cambia Java y desactiva temporalmente mods con nativos (Sodium/Iris).",
+            "fixDriver": "El crash ocurrió dentro del driver gráfico ({{module}}). Actualiza el driver de la GPU desde la web del fabricante y desactiva overlays y shaders.",
+            "fixJvm": "Falló la propia máquina virtual de Java ({{module}}). Cambia el runtime de Java en los ajustes del perfil y revisa la memoria asignada."
           },
           "fabricLoader": {
             "title": "Problema de Fabric Loader / API",
@@ -862,6 +868,38 @@
           "forgeVersion": {
             "title": "Problema de versión de Forge",
             "fix": "Instala la versión de Forge recomendada o actualiza los mods para tu Forge."
+          },
+          "jvmStart": {
+            "title": "Java no pudo iniciarse",
+            "fix": "Normalmente se asignó más memoria de la disponible (o se usa Java de 32 bits). Reduce la RAM en los ajustes de Java del perfil o instala Java de 64 bits."
+          },
+          "badJvmArgs": {
+            "title": "Argumentos de JVM no válidos",
+            "fix": "Java no reconoce una de las opciones de inicio. Quítala de los argumentos JVM adicionales en los ajustes del perfil."
+          },
+          "dependencyVersion": {
+            "title": "Versión de dependencia incorrecta",
+            "fix": "El mod requerido está instalado, pero en otra versión. Actualízalo (o el mod dependiente) a una versión compatible."
+          },
+          "duplicateMods": {
+            "title": "Mods duplicados",
+            "fix": "El mismo mod está instalado más de una vez. Deja una sola versión; puedes hacerlo en la pestaña «Conflictos» del perfil."
+          },
+          "apiMismatch": {
+            "title": "Mod compilado para otra versión",
+            "fix": "Un mod llama a una clase o método que no existe. Normalmente el mod o su librería es de otra versión de Minecraft. Actualiza el mod y sus dependencias."
+          },
+          "crashReport": {
+            "title": "El juego se cerró (crash report)",
+            "fix": "Abajo está la causa del informe. Si aparecen mods, empieza por ellos."
+          },
+          "worldCorruption": {
+            "title": "Mundo dañado",
+            "fix": "Parte de los datos del mundo no se puede leer. Restaura el mundo desde una copia o borra las regiones dañadas."
+          },
+          "shaderCrash": {
+            "title": "Error de shaders",
+            "fix": "El shaderpack no se pudo compilar. Actualiza Iris/Oculus y el shaderpack o desactiva los shaders."
           }
         }
       }
@@ -1296,7 +1334,8 @@
         "disableIncompatible": "Desactivar",
         "disableDependents": "Desactivar dependientes",
         "disableFirst": "Desactivar el primero",
-        "disableSecond": "Desactivar el segundo"
+        "disableSecond": "Desactivar el segundo",
+        "enableDependency": "Activar dependencia"
       },
       "severity": {
         "error": "Error",
@@ -1323,6 +1362,7 @@
       "loaderMismatch": {
         "title": "Incompatibilidad de loader (probable)",
         "reason": "El perfil usa {{loader}}, pero el nombre del archivo sugiere: {{variants}}.",
+        "reasonMeta": "El perfil usa {{loader}}, pero el mod solo es para: {{variants}}. El loader no lo cargará.",
         "solutionPickCorrect": "Instale la versión del mod para {{loader}} (o una compilación universal).",
         "solutionSwitchLoader": "O cambie el loader del perfil para que coincida con el conjunto de mods."
       },
@@ -1331,6 +1371,16 @@
         "reason": "Se requiere el mod «{{id}}», pero no está entre los archivos activos.",
         "solutionInstall": "Instale el mod que falta desde el catálogo.",
         "solutionDisable": "O desactive los mods que lo necesitan."
+      },
+      "disabledDep": {
+        "title": "Dependencia desactivada",
+        "reason": "Se requiere el mod «{{id}}». Está en el perfil ({{file}}), pero desactivado.",
+        "solutionEnable": "Active este mod."
+      },
+      "depVersion": {
+        "title": "Versión de dependencia incorrecta",
+        "reason": "«{{id}}» se requiere en la versión {{required}}, pero está instalada {{installed}}.",
+        "solutionUpdate": "Actualice el mod a una versión adecuada o instale una versión compatible del mod dependiente."
       },
       "breaks": {
         "title": "Mods incompatibles entre sí",

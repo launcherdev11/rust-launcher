@@ -769,6 +769,8 @@
         "sourceConsole": "console",
         "sourceLatest": "latest.log",
         "sourceCrash": "crash reports: {{count}}",
+        "sourceJvmCrash": "JVM error log (hs_err)",
+        "staleSkipped": "Old crash reports from earlier launches skipped: {{count}}",
         "diskReadFailed": "Couldn't read logs from disk.",
         "title": "Log analyzer",
         "show": "Show",
@@ -781,7 +783,9 @@
           },
           "wrongJava": {
             "title": "Wrong Java version",
-            "fix": "Newer Minecraft versions need Java 17/21. Pick a matching runtime in Java settings or install one automatically."
+            "fix": "Newer Minecraft versions need Java 17/21. Pick a matching runtime in Java settings or install one automatically.",
+            "fixNeed": "Java {{java}} or newer is required. Select it in the profile's Java settings or install it automatically.",
+            "fixTooNew": "Java {{java}} is too new for this loader version. Pick an older runtime in the profile's Java settings (usually 8 or 17)."
           },
           "mixinConflict": {
             "title": "Mixin / injection conflict",
@@ -825,7 +829,9 @@
           },
           "nativeCrash": {
             "title": "Native JVM crash",
-            "fix": "Update drivers, switch Java runtime, and temporarily disable mods with native libs (Sodium/Iris, etc.)."
+            "fix": "Update drivers, switch Java runtime, and temporarily disable mods with native libs (Sodium/Iris, etc.).",
+            "fixDriver": "The crash happened inside the graphics driver ({{module}}). Update the GPU driver from the vendor's site and turn off overlays and shaders.",
+            "fixJvm": "The Java VM itself crashed ({{module}}). Switch the Java runtime in the profile settings and check the allocated memory."
           },
           "fabricLoader": {
             "title": "Fabric Loader / API issue",
@@ -834,6 +840,38 @@
           "forgeVersion": {
             "title": "Forge version issue",
             "fix": "Install the recommended Forge version for this pack, or update mods to match your Forge."
+          },
+          "jvmStart": {
+            "title": "Java failed to start",
+            "fix": "Usually more memory is allocated than available (or a 32-bit Java is used). Lower RAM in the profile's Java settings or install a 64-bit Java."
+          },
+          "badJvmArgs": {
+            "title": "Invalid JVM arguments",
+            "fix": "Java doesn't recognize one of the launch options. Remove it from the extra JVM arguments in the profile settings."
+          },
+          "dependencyVersion": {
+            "title": "Wrong dependency version",
+            "fix": "The required mod is installed, but in the wrong version. Update it (or the dependent mod) to a compatible version."
+          },
+          "duplicateMods": {
+            "title": "Duplicate mods",
+            "fix": "The same mod is installed more than once. Keep a single version — the pack's Conflicts tab can do it."
+          },
+          "apiMismatch": {
+            "title": "Mod built for another version",
+            "fix": "A mod calls a class or method that doesn't exist. Usually the mod or its library is for a different Minecraft version. Update the mod and its dependencies."
+          },
+          "crashReport": {
+            "title": "Game crashed (crash report)",
+            "fix": "The cause from the report is shown below. If mods are listed, start with them."
+          },
+          "worldCorruption": {
+            "title": "World corruption",
+            "fix": "Part of the world data can't be read. Restore the world from a backup or delete the damaged regions."
+          },
+          "shaderCrash": {
+            "title": "Shader error",
+            "fix": "The shader pack failed to compile. Update Iris/Oculus and the shader pack, or turn shaders off."
           }
         }
       }
@@ -1344,7 +1382,8 @@
         "disableIncompatible": "Disable",
         "disableDependents": "Disable dependents",
         "disableFirst": "Disable first",
-        "disableSecond": "Disable second"
+        "disableSecond": "Disable second",
+        "enableDependency": "Enable dependency"
       },
       "severity": {
         "error": "Error",
@@ -1381,6 +1420,7 @@
       "loaderMismatch": {
         "title": "Loader mismatch (likely)",
         "reason": "The profile uses {{loader}}, but the mod filename hints: {{variants}}.",
+        "reasonMeta": "The profile uses {{loader}}, but the mod is made only for: {{variants}}. The loader won't run it.",
         "solutionPickCorrect": "Install the {{loader}} version of the mod (or use a universal build).",
         "solutionSwitchLoader": "Or switch the profile loader to match the mod set."
       },
@@ -1389,6 +1429,16 @@
         "reason": "Mod “{{id}}” is required but not found among enabled files.",
         "solutionInstall": "Install the missing mod from the catalog.",
         "solutionDisable": "Or disable the mods that require it."
+      },
+      "disabledDep": {
+        "title": "Dependency is disabled",
+        "reason": "Mod “{{id}}” is required. It's in the pack ({{file}}) but disabled.",
+        "solutionEnable": "Enable this mod."
+      },
+      "depVersion": {
+        "title": "Wrong dependency version",
+        "reason": "“{{id}}” is required in version {{required}}, but {{installed}} is installed.",
+        "solutionUpdate": "Update the mod to a matching version, or install a compatible version of the dependent mod."
       },
       "breaks": {
         "title": "Mods break each other",

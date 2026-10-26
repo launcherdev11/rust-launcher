@@ -19,6 +19,7 @@ use crate::infra::api_base::curseforge_api_base;
 use super::client::{modrinth_http_client, should_filter_by_loader, MODRINTH_API_BASE};
 use super::content_metadata::curseforge_file_fingerprint;
 use super::installed::index_content_dir_sha1;
+use super::jar_compat::{compatible_loaders, jar_supports_game_version};
 use super::types::{
     ApplyProfileContentUpdate, ModrinthVersion, ProfileContentUpdate, ProfileIncompatibleContent,
     MODRINTH_USER_AGENT,
@@ -149,25 +150,53 @@ fn cf_game_versions_include(versions: &[String], needle: &str) -> bool {
         .any(|gv| gv.trim().eq_ignore_ascii_case(needle))
 }
 
-fn cf_file_supports_loader(versions: &[String], file_name: &str, loader: &str) -> bool {
+const KNOWN_LOADER_TAGS: [&str; 4] = ["forge", "neoforge", "fabric", "quilt"];
+
+fn modrinth_version_fits(version: &ModrinthVersion, game_version: &str, loader: &str) -> bool {
+    let game_version = game_version.trim();
+    let game_ok = version.game_versions.is_empty()
+        || version.game_versions.iter().any(|g| g.trim() == game_version);
+    let wanted = compatible_loaders(loader, game_version);
+    let declares_known_loader = version
+        .loaders
+        .iter()
+        .any(|l| KNOWN_LOADER_TAGS.iter().any(|k| l.eq_ignore_ascii_case(k)));
+    let loader_ok = wanted.is_empty()
+        || !declares_known_loader
+        || version
+            .loaders
+            .iter()
+            .any(|l| wanted.iter().any(|w| l.eq_ignore_ascii_case(w)));
+    game_ok && loader_ok
+}
+
+fn cf_file_supports_loader(
+    versions: &[String],
+    file_name: &str,
+    loader: &str,
+    game_version: &str,
+) -> bool {
     let l = loader.trim().to_ascii_lowercase();
     if l.is_empty() || l == "any" || l == "vanilla" {
         return true;
     }
 
-    let loader_aliases: &[&str] = match l.as_str() {
-        "forge" => &["forge"],
-        "neoforge" => &["neoforge"],
-        "fabric" => &["fabric"],
-        "quilt" => &["quilt", "fabric"],
-        _ => return true,
-    };
+    let loader_aliases = compatible_loaders(&l, game_version);
+    if loader_aliases.is_empty() {
+        return true;
+    }
 
-    let has_loader_tag = versions.iter().any(|gv| {
-        let g = gv.trim().to_ascii_lowercase();
-        loader_aliases.iter().any(|a| g == *a)
-    });
-    if has_loader_tag {
+    // CurseForge lists loaders next to game versions; when any loader tag is present it is
+    // authoritative and the file name is not consulted.
+    let tags: Vec<String> = versions
+        .iter()
+        .map(|gv| gv.trim().to_ascii_lowercase())
+        .filter(|g| KNOWN_LOADER_TAGS.contains(&g.as_str()))
+        .collect();
+    if !tags.is_empty() {
+        return tags.iter().any(|t| loader_aliases.contains(&t.as_str()));
+    }
+    if loader_aliases.contains(&"forge") && l == "neoforge" {
         return true;
     }
 
@@ -218,7 +247,7 @@ fn pick_cf_latest_for_target<'a>(
         f.id != exact.file.id
             && f.download_url.as_ref().map(|u| !u.trim().is_empty()).unwrap_or(false)
             && cf_game_versions_include(&f.game_versions, game_version)
-            && cf_file_supports_loader(&f.game_versions, &f.file_name, loader)
+            && cf_file_supports_loader(&f.game_versions, &f.file_name, loader, game_version)
     })
 }
 
@@ -335,7 +364,12 @@ async fn check_curseforge_content(
         let enabled = enabled_by_filename.get(&filename).copied().unwrap_or(true);
         let current = &exact.file;
         let current_supports = cf_game_versions_include(&current.game_versions, game_version_trimmed)
-            && cf_file_supports_loader(&current.game_versions, &current.file_name, loader);
+            && cf_file_supports_loader(
+                &current.game_versions,
+                &current.file_name,
+                loader,
+                game_version_trimmed,
+            );
 
         if let Some(latest) = pick_cf_latest_for_target(&exact, game_version_trimmed, loader) {
             if let Some(download_url) = latest.download_url.clone() {
@@ -459,6 +493,8 @@ fn build_incompatible_for_batch(
     enabled_by_filename: &HashMap<String, bool>,
     current_map: &HashMap<String, ModrinthVersion>,
     latest_map: &HashMap<String, ModrinthVersion>,
+    game_version: &str,
+    loader: &str,
 ) -> Vec<ProfileIncompatibleContent> {
     let mut out = Vec::new();
 
@@ -467,6 +503,11 @@ fn build_incompatible_for_batch(
             continue;
         };
         if latest_map.contains_key(sha1) {
+            continue;
+        }
+        // No update for this exact loader does not mean the installed file is wrong:
+        // Quilt runs Fabric builds, NeoForge 1.20.1 runs Forge builds.
+        if modrinth_version_fits(current, game_version, loader) {
             continue;
         }
         out.push(ProfileIncompatibleContent {
@@ -727,6 +768,8 @@ pub async fn check_profile_incompatible_content(
         &enabled_by_filename,
         &current_map,
         &latest_map,
+        &game_version,
+        &loader,
     );
 
     if let Ok(cf) =
@@ -748,24 +791,39 @@ pub async fn check_profile_incompatible_content(
     }
 
     if category == "mods" {
-        let known: std::collections::HashSet<String> =
-            incompatible.iter().map(|i| i.filename.clone()).collect();
+        // The jar's own metadata is what the loader enforces, so it settles disagreements:
+        // a file the platform marks as incompatible still loads if its metadata accepts
+        // this version, and unknown files are flagged only when the metadata rejects it.
+        let mut jar_verdicts: HashMap<String, (Option<bool>, Option<String>)> = HashMap::new();
         for filename in sha_by_filename.keys() {
-            if updatable.contains(filename) || known.contains(filename) {
+            if updatable.contains(filename) {
                 continue;
             }
             let Some(path) = resolve_profile_item_path(&content_dir, filename) else {
                 continue;
             };
-            let (supports, title) = super::jar_compat::jar_supports_game_version(&path, &game_version);
-            if supports == Some(false) {
-                incompatible.push(ProfileIncompatibleContent {
-                    filename: filename.clone(),
-                    enabled: *enabled_by_filename.get(filename).unwrap_or(&true),
-                    title: title.unwrap_or_else(|| filename.clone()),
-                    project_id: None,
-                });
+            jar_verdicts.insert(
+                filename.clone(),
+                jar_supports_game_version(&path, &game_version, &loader),
+            );
+        }
+
+        incompatible.retain(|i| {
+            !matches!(jar_verdicts.get(&i.filename), Some((Some(true), _)))
+        });
+
+        let known: std::collections::HashSet<String> =
+            incompatible.iter().map(|i| i.filename.clone()).collect();
+        for (filename, (supports, title)) in jar_verdicts {
+            if supports != Some(false) || known.contains(&filename) {
+                continue;
             }
+            incompatible.push(ProfileIncompatibleContent {
+                enabled: *enabled_by_filename.get(&filename).unwrap_or(&true),
+                title: title.unwrap_or_else(|| filename.clone()),
+                filename,
+                project_id: None,
+            });
         }
     }
 

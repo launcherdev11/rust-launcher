@@ -797,6 +797,8 @@
         "sourceConsole": "Konsole",
         "sourceLatest": "latest.log",
         "sourceCrash": "Crash-Reports: {{count}}",
+        "sourceJvmCrash": "JVM-Fehlerprotokoll (hs_err)",
+        "staleSkipped": "Alte Crash-Reports früherer Starts übersprungen: {{count}}",
         "diskReadFailed": "Logs konnten nicht von der Festplatte gelesen werden.",
         "title": "Log-Analyse",
         "show": "Zeigen",
@@ -809,7 +811,9 @@
           },
           "wrongJava": {
             "title": "Falsche Java-Version",
-            "fix": "Neuere Minecraft-Versionen brauchen Java 17/21. Wähle eine passende Runtime in den Java-Einstellungen."
+            "fix": "Neuere Minecraft-Versionen brauchen Java 17/21. Wähle eine passende Runtime in den Java-Einstellungen.",
+            "fixNeed": "Java {{java}} oder neuer wird benötigt. Wähle sie in den Java-Einstellungen des Profils oder installiere sie automatisch.",
+            "fixTooNew": "Java {{java}} ist zu neu für diese Loader-Version. Wähle in den Java-Einstellungen des Profils eine ältere Runtime (meist 8 oder 17)."
           },
           "mixinConflict": {
             "title": "Mixin-/Injektionskonflikt",
@@ -853,7 +857,9 @@
           },
           "nativeCrash": {
             "title": "Nativer JVM-Absturz",
-            "fix": "Treiber aktualisieren, Java wechseln und Mods mit Natives (Sodium/Iris) testweise deaktivieren."
+            "fix": "Treiber aktualisieren, Java wechseln und Mods mit Natives (Sodium/Iris) testweise deaktivieren.",
+            "fixDriver": "Der Absturz passierte im Grafiktreiber ({{module}}). Aktualisiere den GPU-Treiber von der Herstellerseite und deaktiviere Overlays und Shader.",
+            "fixJvm": "Die Java-VM selbst ist abgestürzt ({{module}}). Wechsle die Java-Runtime in den Profileinstellungen und prüfe den zugewiesenen Speicher."
           },
           "fabricLoader": {
             "title": "Fabric Loader / API-Problem",
@@ -862,6 +868,38 @@
           "forgeVersion": {
             "title": "Forge-Versionsproblem",
             "fix": "Installiere die empfohlene Forge-Version oder aktualisiere Mods für deinen Forge."
+          },
+          "jvmStart": {
+            "title": "Java konnte nicht starten",
+            "fix": "Meist ist mehr Speicher zugewiesen als verfügbar (oder es läuft ein 32-Bit-Java). Verringere den RAM in den Java-Einstellungen des Profils oder installiere 64-Bit-Java."
+          },
+          "badJvmArgs": {
+            "title": "Ungültige JVM-Argumente",
+            "fix": "Java erkennt eine der Startoptionen nicht. Entferne sie aus den zusätzlichen JVM-Argumenten in den Profileinstellungen."
+          },
+          "dependencyVersion": {
+            "title": "Falsche Version einer Abhängigkeit",
+            "fix": "Der benötigte Mod ist installiert, aber in der falschen Version. Aktualisiere ihn (oder den abhängigen Mod) auf eine kompatible Version."
+          },
+          "duplicateMods": {
+            "title": "Doppelte Mods",
+            "fix": "Derselbe Mod ist mehrfach installiert. Behalte nur eine Version – das geht im Tab „Konflikte“ des Profils."
+          },
+          "apiMismatch": {
+            "title": "Mod für eine andere Version gebaut",
+            "fix": "Ein Mod ruft eine Klasse oder Methode auf, die es nicht gibt. Meist ist der Mod oder seine Bibliothek für eine andere Minecraft-Version. Aktualisiere den Mod und seine Abhängigkeiten."
+          },
+          "crashReport": {
+            "title": "Spiel abgestürzt (Crash-Report)",
+            "fix": "Unten steht die Ursache aus dem Report. Sind Mods genannt, beginne mit ihnen."
+          },
+          "worldCorruption": {
+            "title": "Beschädigte Welt",
+            "fix": "Ein Teil der Weltdaten ist nicht lesbar. Stelle die Welt aus einem Backup wieder her oder lösche die beschädigten Regionen."
+          },
+          "shaderCrash": {
+            "title": "Shader-Fehler",
+            "fix": "Das Shaderpack ließ sich nicht kompilieren. Aktualisiere Iris/Oculus und das Shaderpack oder schalte Shader aus."
           }
         }
       }
@@ -1296,7 +1334,8 @@
         "disableIncompatible": "Deaktivieren",
         "disableDependents": "Abhängige deaktivieren",
         "disableFirst": "Ersten deaktivieren",
-        "disableSecond": "Zweiten deaktivieren"
+        "disableSecond": "Zweiten deaktivieren",
+        "enableDependency": "Abhängigkeit aktivieren"
       },
       "severity": {
         "error": "Fehler",
@@ -1323,6 +1362,7 @@
       "loaderMismatch": {
         "title": "Loader passt nicht (wahrscheinlich)",
         "reason": "Das Profil nutzt {{loader}}, aber der Dateiname deutet auf: {{variants}}.",
+        "reasonMeta": "Das Profil nutzt {{loader}}, der Mod ist aber nur für: {{variants}}. Der Loader startet ihn nicht.",
         "solutionPickCorrect": "Installiere die {{loader}}-Version des Mods (oder eine universelle Build).",
         "solutionSwitchLoader": "Oder stelle den Profil-Loader passend zum Mod-Set um."
       },
@@ -1331,6 +1371,16 @@
         "reason": "Mod „{{id}}“ wird benötigt, ist aber nicht unter den aktivierten Dateien.",
         "solutionInstall": "Installiere den fehlenden Mod aus dem Katalog.",
         "solutionDisable": "Oder deaktiviere die Mods, die ihn brauchen."
+      },
+      "disabledDep": {
+        "title": "Abhängigkeit deaktiviert",
+        "reason": "Mod „{{id}}“ wird benötigt. Er ist im Profil ({{file}}), aber deaktiviert.",
+        "solutionEnable": "Aktiviere diesen Mod."
+      },
+      "depVersion": {
+        "title": "Falsche Version einer Abhängigkeit",
+        "reason": "„{{id}}“ wird in Version {{required}} benötigt, installiert ist {{installed}}.",
+        "solutionUpdate": "Aktualisiere den Mod auf eine passende Version oder installiere eine kompatible Version des abhängigen Mods."
       },
       "breaks": {
         "title": "Mods sind inkompatibel",

@@ -20,6 +20,7 @@ type DiskLogSourceDto = {
 
 type InstanceAnalysisLogsDto = {
   sources: DiskLogSourceDto[];
+  skippedStale?: number;
 };
 
 type LogAnalyzerPanelProps = {
@@ -29,6 +30,8 @@ type LogAnalyzerPanelProps = {
   gameStatus?: string;
   className?: string;
   compact?: boolean;
+  /** Disk logs describe the latest launch; off when an older console session is shown. */
+  includeDiskLogs?: boolean;
 };
 
 function severityBar(severity: LogAnalyzerSeverity): string {
@@ -67,8 +70,21 @@ function FindingCard({
         ) : null}
       </div>
       <p className="mt-0.5 text-[0.8125rem] leading-snug text-white/60">
-        {tt(finding.fixKey)}
+        {tt(finding.fixKey, finding.fixVars)}
       </p>
+      {finding.subjects && finding.subjects.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {finding.subjects.map((s) => (
+            <span
+              key={s}
+              className="max-w-full truncate rounded-md bg-white/[0.07] px-1.5 py-0.5 font-mono text-[0.6875rem] text-white/70"
+              title={s}
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {finding.detail ? (
         <p
           className="mt-1.5 line-clamp-2 rounded-md bg-[var(--ink-0)] px-2 py-1 font-mono text-[0.75rem] leading-snug text-white/55"
@@ -76,7 +92,7 @@ function FindingCard({
         >
           {finding.detail}
         </p>
-      ) : finding.sample ? (
+      ) : finding.sample && !finding.subjects?.length ? (
         <p
           className="mt-1.5 truncate rounded-md bg-[var(--ink-0)] px-2 py-1 font-mono text-[0.75rem] text-white/40"
           title={finding.sample}
@@ -95,7 +111,7 @@ function FindingCard({
 
 function toInputSources(disk: DiskLogSourceDto[]): LogAnalyzerInputSource[] {
   return disk.map((s) => ({
-    id: s.kind === "latest" ? "latest" : `crash:${s.name}`,
+    id: s.kind === "latest" ? "latest" : s.kind === "jvm_crash" ? `jvm:${s.name}` : `crash:${s.name}`,
     label: s.kind === "latest" ? "latest.log" : s.name,
     text: s.content,
   }));
@@ -108,15 +124,18 @@ export function LogAnalyzerPanel({
   gameStatus,
   className = "",
   compact = false,
+  includeDiskLogs = true,
 }: LogAnalyzerPanelProps) {
   const tt = useT(language);
   const [open, setOpen] = useState(false);
   const [diskSources, setDiskSources] = useState<DiskLogSourceDto[]>([]);
+  const [skippedStale, setSkippedStale] = useState(0);
   const [diskLoading, setDiskLoading] = useState(false);
   const [diskError, setDiskError] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
 
   const canReadDisk =
+    includeDiskLogs &&
     !!profileId &&
     profileId !== INSTALL_CONSOLE_PROFILE_ID &&
     !profileId.startsWith("__");
@@ -124,7 +143,9 @@ export function LogAnalyzerPanel({
   useEffect(() => {
     if (!canReadDisk || !profileId) {
       setDiskSources([]);
+      setSkippedStale(0);
       setDiskError(false);
+      setDiskLoading(false);
       return;
     }
 
@@ -140,9 +161,11 @@ export function LogAnalyzerPanel({
         );
         if (cancelled) return;
         setDiskSources(result.sources ?? []);
+        setSkippedStale(result.skippedStale ?? 0);
       } catch {
         if (!cancelled) {
           setDiskSources([]);
+          setSkippedStale(0);
           setDiskError(true);
         }
       } finally {
@@ -187,6 +210,9 @@ export function LogAnalyzerPanel({
         ? tt("play.console.analyzer.sourceCrash", {
             count: diskSources.filter((s) => s.kind === "crash_report").length,
           })
+        : null,
+      diskSources.some((s) => s.kind === "jvm_crash")
+        ? tt("play.console.analyzer.sourceJvmCrash")
         : null,
     ].filter(Boolean) as string[];
   }, [lines.length, diskSources, tt]);
@@ -296,6 +322,11 @@ export function LogAnalyzerPanel({
             {sourceSummary.length > 0 ? (
               <p className="mb-2 px-1 text-[0.75rem] text-white/40">
                 {tt("play.console.analyzer.sourcesLabel")}: {sourceSummary.join(", ")}
+                {skippedStale > 0 ? (
+                  <span className="block">
+                    {tt("play.console.analyzer.staleSkipped", { count: skippedStale })}
+                  </span>
+                ) : null}
                 {diskError ? (
                   <span className="block text-amber-200/70">
                     {tt("play.console.analyzer.diskReadFailed")}

@@ -532,6 +532,7 @@ export function ManageView({ ctx }: Props) {
             void applyConflictAction(c as ProfileConflict, {
               kind: action.kind as ConflictActionKind,
               keep: action.keep,
+              targets: action.targets,
             });
           }}
           tt={tt}
@@ -1324,6 +1325,7 @@ export function ManageView({ ctx }: Props) {
               language={language}
               profileId={selectedProfile?.id ?? selectedProfileId}
               gameStatus={gameStatus}
+              includeDiskLogs={selectedLogSessionId === "live"}
               compact
               className="mb-2"
             />

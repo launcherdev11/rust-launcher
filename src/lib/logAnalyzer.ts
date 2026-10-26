@@ -5,9 +5,12 @@ export type LogAnalyzerFinding = {
   severity: LogAnalyzerSeverity;
   titleKey: string;
   fixKey: string;
+  fixVars?: Record<string, string | number>;
   matchCount: number;
   sample?: string;
   detail?: string;
+  /** Concrete mods, files or options the finding points at. */
+  subjects?: string[];
   sources?: string[];
 };
 
@@ -17,125 +20,323 @@ export type LogAnalyzerInputSource = {
   text: string;
 };
 
+type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+type RuleMatch = {
+  /** Mod, file or option the line is about. */
+  subject?: string;
+  fixKey?: string;
+  fixVars?: Record<string, string | number>;
+};
+
 type AnalyzerRule = {
   id: string;
   severity: LogAnalyzerSeverity;
   pattern: RegExp;
+  /** Also match lines logged at INFO/DEBUG. Most problems are logged at WARN or above. */
+  anyLevel?: boolean;
+  /** Ignore WARN too: the same text at WARN is a recoverable, optional failure. */
+  strict?: boolean;
+  exclude?: RegExp;
+  /** Return null to reject the match (e.g. the line belongs to a more specific rule). */
+  inspect?: (line: string, m: RegExpMatchArray) => RuleMatch | null;
+  /** Summary rules that are hidden once a more specific cause is found. */
+  generic?: boolean;
 };
+
+/** Ids handled by dedicated rules (game, loader, runtime), not by dependency rules. */
+const PLATFORM_DEP = /^(?:minecraft|java|fabricloader|fabric-loader|forge|neoforge|quilt_loader)$/i;
+
+function cleanSubject(raw: string | undefined | null): string | undefined {
+  const s = (raw ?? "").trim().replace(/^['"`]+|['"`,.!]+$/g, "");
+  return s ? s : undefined;
+}
+
+function classVersionToJava(classVersion: number): number | null {
+  return classVersion >= 45 ? classVersion - 44 : null;
+}
+
+/** `'Sodium' (sodium)` → `Sodium (sodium)`; `mod sodium` → `sodium`. */
+function fabricModRef(text: string): { name: string; id?: string } | null {
+  const quoted = text.match(/'([^']+)'(?:\s*\(([\w\-.]+)\))?/);
+  if (quoted) return { name: quoted[1], id: quoted[2] };
+  const bare = text.match(/(?:mod\s+)?([\w\-.]+)/);
+  return bare ? { name: bare[1], id: bare[1] } : null;
+}
+
+function describeModRef(ref: { name: string; id?: string }): string {
+  return ref.id && ref.id !== ref.name ? `${ref.name} (${ref.id})` : ref.name;
+}
 
 const RULES: AnalyzerRule[] = [
   {
+    id: "jvmStart",
+    severity: "error",
+    anyLevel: true,
+    pattern:
+      /Could not reserve enough space for (?:\d+\w* )?object heap|Invalid (?:maximum|initial) heap size|Initial heap size set to a larger value than the maximum heap size|Too small (?:maximum|initial) heap|Error occurred during initialization of VM|Could not create the Java Virtual Machine/i,
+  },
+  {
+    id: "badJvmArgs",
+    severity: "error",
+    anyLevel: true,
+    pattern: /Unrecognized VM option '([^']+)'|Unrecognized option: (\S+)|Improperly specified VM option '([^']+)'/i,
+    inspect: (_line, m) => ({ subject: cleanSubject(m[1] ?? m[2] ?? m[3]) }),
+  },
+  {
     id: "oom",
     severity: "error",
-    pattern: /OutOfMemoryError|Java heap space|GC overhead limit exceeded|Metaspace/i,
+    anyLevel: true,
+    pattern:
+      /OutOfMemoryError|Java heap space|GC overhead limit exceeded|Native memory allocation \(\w+\) failed|Out of memory: Java process/i,
+    // JVM argument dumps mention `-XX:MaxMetaspaceSize` etc.
+    exclude: /\s-X(?:X:|mx|ms|ss)/,
   },
   {
     id: "wrongJava",
     severity: "error",
+    anyLevel: true,
     pattern:
-      /UnsupportedClassVersionError|class file version|has been compiled by a more recent version of the Java Runtime|Unsupported Java detected|This Java version is unrecognized|Unsupported class file major version/i,
+      /UnsupportedClassVersionError|has been compiled by a more recent version of the Java Runtime|Unsupported class file major version (\d+)|Unsupported Java detected|This Java version is unrecognized|requires Java (\d+)|Java (\d+) or (?:later|newer|above) is required/i,
+    inspect: (line) => {
+      const compiled = line.match(/class file version (\d+)(?:\.\d+)?/i);
+      if (compiled && /more recent version/i.test(line)) {
+        const java = classVersionToJava(Number(compiled[1]));
+        if (java) return { fixKey: "play.console.analyzer.rules.wrongJava.fixNeed", fixVars: { java } };
+      }
+      const tooNew = line.match(/Unsupported class file major version (\d+)/i);
+      if (tooNew) {
+        const java = classVersionToJava(Number(tooNew[1]));
+        if (java) return { fixKey: "play.console.analyzer.rules.wrongJava.fixTooNew", fixVars: { java } };
+      }
+      const needs = line.match(/requires Java (\d+)|Java (\d+) or (?:later|newer|above) is required/i);
+      const java = Number(needs?.[1] ?? needs?.[2]);
+      if (java >= 8) {
+        return { fixKey: "play.console.analyzer.rules.wrongJava.fixNeed", fixVars: { java } };
+      }
+      return {};
+    },
   },
   {
-    id: "mixinConflict",
+    id: "corruptJar",
     severity: "error",
+    anyLevel: true,
     pattern:
-      /Mixin apply failed|mixin\.injection|Critical injection failure|MixinPrepareError|MixinTransformerError|@Mixin\([^)]+\).*failed|Unable to apply mixin|Mixin apply for callback/i,
-  },
-  {
-    id: "modIncompatible",
-    severity: "error",
-    pattern:
-      /Incompatible mods? found|ModResolutionException|failed to load mod|Duplicate Mods Found|Mod Loading has failed|net\.minecraftforge\.fml\.ModLoadingException|LoaderException|ModLoadingException|Failed to load mods/i,
+      /Invalid or corrupt jarfile|zip END header not found|Error opening zip file|ZipException|truncated ZIP|Unexpected end of ZLIB input stream|Error reading zip|Not a valid zip|invalid (?:LOC|CEN) header/i,
+    // The same zlib errors come from damaged region files, see worldCorruption.
+    exclude: /region|chunk|\.mca\b|level\.dat/i,
+    inspect: (line) => ({ subject: cleanSubject(line.match(/([^\s\\/:'"]+\.(?:jar|zip))/i)?.[1]) }),
   },
   {
     id: "missingDependency",
     severity: "error",
     pattern:
-      /missing (required )?mod|requires? .+ (of|version)|Mod .+ requires|dependency .+ (was not found|is missing)|No providers? available|Mod .+ is missing|requires .+ which is missing/i,
+      /requires .+? of (.+?),? which is missing|Mod ID: '([^']+)', Requested by: '([^']+)'.*Actual version: '\[MISSING\]'|Currently, ([\w\-.]+) is not installed|Missing (?:required )?(?:mod|dependency|dependencies)\b|dependency .+ (?:was not found|is missing)|requires mod ([\w\-.]+), which is missing/i,
+    exclude: /\b(?:optional|recommends|suggests)\b/i,
+    inspect: (line, m) => {
+      if (m[1]) {
+        const ref = fabricModRef(m[1]);
+        if (ref && PLATFORM_DEP.test(ref.id ?? ref.name)) return null;
+        const requester = line.match(/Mod '([^']+)'(?:\s*\(([\w\-.]+)\))?/);
+        const dep = ref ? describeModRef(ref) : undefined;
+        return {
+          subject: requester && dep ? `${dep} ← ${requester[1]}` : dep,
+        };
+      }
+      if (m[2]) {
+        if (PLATFORM_DEP.test(m[2])) return null;
+        return { subject: `${m[2]} ← ${m[3]}` };
+      }
+      const id = m[4] ?? m[5];
+      if (id && PLATFORM_DEP.test(id)) return null;
+      return { subject: cleanSubject(id) };
+    },
+  },
+  {
+    id: "dependencyVersion",
+    severity: "error",
+    pattern:
+      /requires .+? of (.+?), but only the wrong version is present|Mod ID: '([^']+)', Requested by: '([^']+)', Expected range: '([^']*)', Actual version: '([^'\]]+)'|Currently, ([\w\-.]+) is (?!not installed)(\S+)/i,
+    inspect: (_line, m) => {
+      if (m[1]) {
+        const ref = fabricModRef(m[1]);
+        if (!ref || PLATFORM_DEP.test(ref.id ?? ref.name)) return null;
+        return { subject: describeModRef(ref) };
+      }
+      if (m[2]) {
+        if (PLATFORM_DEP.test(m[2])) return null;
+        return { subject: `${m[2]} ${m[5]} → ${m[4]} (${m[3]})` };
+      }
+      if (!m[6] || PLATFORM_DEP.test(m[6])) return null;
+      return { subject: `${m[6]} ${m[7]}` };
+    },
+  },
+  {
+    id: "duplicateMods",
+    severity: "error",
+    pattern:
+      /Duplicate mods? found|Found duplicate mods|Mod ID '?([\w\-.]+)'? is (?:present|provided) (?:by|in) (?:multiple|several)|Mod ID: '([^']+)' from mod files: (.+)|Duplicate mods? (?:id|ID)s? ['`"]?([\w\-.]+)/i,
+    // Loaders log Jar-in-Jar de-duplication at INFO, that is not a problem.
+    exclude: /ignoring|using the newest|Jar-in-Jar|JarJar/i,
+    inspect: (_line, m) => ({
+      subject: cleanSubject(m[2] ? `${m[2]}: ${m[3]}` : (m[1] ?? m[4])),
+    }),
   },
   {
     id: "versionMismatch",
     severity: "error",
     pattern:
-      /version mismatch|was designed for (Minecraft|version)|mod was made for|requires Minecraft|needs Minecraft|incompatible with (Minecraft|game version)/i,
-  },
-  {
-    id: "corruptJar",
-    severity: "error",
-    pattern:
-      /Invalid or corrupt jarfile|zip END header not found|Error opening zip file|ZipException|truncated ZIP|Unexpected end of ZLIB|Error reading zip|Not a valid zip/i,
-  },
-  {
-    id: "openglGlfw",
-    severity: "error",
-    pattern:
-      /GLFW error|Failed to create the GLFW window|Failed to create window|No OpenGL context|Pixel format not accelerated|GLXBadFBConfig|Couldn't set pixel format|Failed to create Display|lwjgl\.opengl/i,
-  },
-  {
-    id: "authFailed",
-    severity: "error",
-    pattern:
-      /Invalid session|Failed to login|authentication (failed|error)|Not authenticated|ForbiddenOperationException|multiplayer\.disconnect\.unverified_username|Invalid token/i,
-  },
-  {
-    id: "exitCode",
-    severity: "error",
-    pattern: /Process exited with code (?!0\b)\d+|exit(?:ed)? with code (?!0\b)\d+|Exit code: (?!0\b)\d+/i,
-  },
-  {
-    id: "diskSpace",
-    severity: "error",
-    pattern: /No space left on device|ENOSPC|not enough space|disk (is )?full/i,
-  },
-  {
-    id: "accessDenied",
-    severity: "warning",
-    pattern: /Access is denied|Permission denied|AccessDeniedException|операция не разрешена/i,
-  },
-  {
-    id: "nativeCrash",
-    severity: "error",
-    pattern:
-      /EXCEPTION_ACCESS_VIOLATION|SIGSEGV|SIGABRT|hs_err_pid|Problematic frame:|# Problematic frame|A fatal error has been detected by the Java Runtime Environment/i,
+      /requires .+? of (?:'Minecraft' \(minecraft\)|minecraft\b)|Mod ID: 'minecraft', Requested by: '([^']+)'|Mod ([\w\-.]+) requires minecraft |was designed for Minecraft|incompatible with (?:Minecraft|game version)/i,
+    inspect: (line, m) => {
+      const fabricOwner = line.match(/Mod '([^']+)'/)?.[1];
+      return { subject: cleanSubject(fabricOwner ?? m[1] ?? m[2]) };
+    },
   },
   {
     id: "fabricLoader",
     severity: "error",
     pattern:
-      /Incompatible Fabric Loader|needs Fabric Loader|requires Fabric API|Fabric Loader \d|net\.fabricmc\.loader\.impl\.FormattedException/i,
+      /requires .+? of (?:'Fabric Loader' \(fabricloader\)|fabricloader\b)|Incompatible Fabric Loader|needs (?:a newer )?Fabric Loader|requires .+? of (?:'Quilt Loader' \(quilt_loader\)|quilt_loader\b)/i,
+    inspect: (line) => ({ subject: cleanSubject(line.match(/Mod '([^']+)'/)?.[1]) }),
   },
   {
     id: "forgeVersion",
     severity: "error",
     pattern:
-      /Forge Mod Loader has found a problem|missing or wrong version of Forge|requires Forge|NeoForge.*incompatible|requires NeoForge/i,
+      /Mod ID: '(?:forge|neoforge)', Requested by: '([^']+)'|missing or wrong version of Forge|Mod ([\w\-.]+) requires (?:forge|neoforge) \S+ or above|requires (?:Minecraft )?Forge (?:version )?\d/i,
+    inspect: (_line, m) => ({ subject: cleanSubject(m[1] ?? m[2]) }),
+  },
+  {
+    id: "mixinConflict",
+    severity: "error",
+    pattern:
+      /Mixin apply(?: for mod [\w\-.]+)? failed|Mixin prepare for mod [\w\-.]+ failed|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinPrepareError|MixinTransformerError|Mixin transformation of [\w$.]+ failed|@(?:Redirect|Overwrite) conflict|Unable to apply mixin/i,
+    // Optional mixins that fail are logged at WARN and the game keeps running.
+    strict: true,
+    inspect: (line) => {
+      const mod = line.match(/(?:for|from) mod ['"]?([\w\-.]+)/i)?.[1];
+      const config = line.match(/([\w\-.]+\.mixins?\.json)/i)?.[1];
+      return { subject: cleanSubject(mod ?? config) };
+    },
+  },
+  {
+    id: "apiMismatch",
+    severity: "error",
+    pattern:
+      /(?:NoSuchMethodError|NoSuchFieldError|AbstractMethodError|IncompatibleClassChangeError|NoClassDefFoundError|ClassNotFoundException)(?::\s*['"]?([\w$/.]+))?/,
+    // Optional mixin targets and soft integrations log ClassNotFound at WARN/INFO.
+    strict: true,
+    exclude: /Error loading class|was not found .*mixin|@Mixin target|Skipping|optional|soft dependency/i,
+    inspect: (line) => {
+      // Only exception headers count: `Caused by: …` or a bare exception line.
+      if (!/^\s*(?:Caused by:\s*|Exception in thread "[^"]*"\s*)?(?:[\w$]+\.)+[\w$]+(?:Error|Exception)\b/.test(line)) {
+        return null;
+      }
+      // `NoSuchMethodError: 'void net.foo.Bar.baz()'` → `net.foo.Bar.baz`.
+      const cls = line
+        .match(/(?:Error|Exception):\s*'?(?:[\w$[\]<>]+\s+)?([\w$]+(?:[./][\w$]+)+)/)?.[1]
+        ?.replace(/\//g, ".");
+      if (!cls) return {};
+      return { subject: cls.split(".").slice(0, 5).join(".") };
+    },
+  },
+  {
+    id: "openglGlfw",
+    severity: "error",
+    anyLevel: true,
+    pattern:
+      /Failed to create the GLFW window|Failed to create window|No OpenGL context|Pixel format not accelerated|GLXBadFBConfig|Couldn't set pixel format|Failed to create Display|WGL: The driver does not appear to support OpenGL|OpenGL \d\.\d(?: core)?(?: profile)? (?:is )?not supported|GLFW error 6554[23]|Unable to initiali[sz]e OpenGL|Couldn't initiali[sz]e OpenGL|does not support OpenGL/i,
+  },
+  {
+    id: "nativeCrash",
+    severity: "error",
+    anyLevel: true,
+    pattern:
+      /EXCEPTION_ACCESS_VIOLATION|EXCEPTION_STACK_OVERFLOW|\bSIG(?:SEGV|BUS|ILL|ABRT)\b|A fatal error has been detected by the Java Runtime Environment|An error report file with more information is saved as/i,
+  },
+  {
+    id: "diskSpace",
+    severity: "error",
+    anyLevel: true,
+    pattern: /No space left on device|ENOSPC|There is not enough space on the disk|disk (?:is )?full/i,
+  },
+  {
+    id: "accessDenied",
+    severity: "warning",
+    pattern: /AccessDeniedException|Access is denied|Permission denied|операция не разрешена|Отказано в доступе/i,
+    inspect: (line) => ({
+      subject: cleanSubject(line.match(/AccessDeniedException:\s*(.+)$/)?.[1]?.split(/[\\/]/).pop()),
+    }),
+  },
+  {
+    id: "authFailed",
+    severity: "warning",
+    pattern:
+      /Invalid session|Failed to login:|authentication (?:failed|error)|ForbiddenOperationException|multiplayer\.disconnect\.unverified_username|Not authenticated with Minecraft\.net|UserBannedException/i,
+  },
+  {
+    id: "worldCorruption",
+    severity: "warning",
+    pattern:
+      /Failed to load level|Exception loading world|Couldn't load chunk|Chunk file at .* is (?:corrupt|in the wrong location)|Region file .* (?:corrupt|invalid)|Failed to read chunk|Error loading region|level\.dat.*(?:corrupt|failed)|Unexpected end of ZLIB input stream.*(?:region|chunk)/i,
+  },
+  {
+    id: "shaderCrash",
+    severity: "warning",
+    pattern:
+      /Failed to (?:load|compile|link) (?:shader|program)|Shader compilation failed|Couldn't compile (?:shader|program)|Iris (?:has )?crashed|Failed to load shader ?pack/i,
+    inspect: (line) => ({ subject: cleanSubject(line.match(/([\w\-. ]+\.zip)/i)?.[1]) }),
+  },
+  {
+    id: "modIncompatible",
+    severity: "error",
+    generic: true,
+    pattern:
+      /Incompatible mods? found|Some of your mods are incompatible|ModResolutionException|Mod resolution failed|Mod Loading has failed|ModLoadingException|LoadingFailedException|Failed to load mods|Mod loading error has occurred|Forge Mod Loader has found a problem|FormattedException/i,
   },
   {
     id: "crashReport",
     severity: "error",
+    generic: true,
+    anyLevel: true,
     pattern:
-      /---- Minecraft Crash Report ----|#@!@# Game crashed!|Crash report saved to|Saving crash report to/i,
+      /---- Minecraft Crash Report ----|#@!@# Game crashed!|Crash report saved to|Saving crash report to|This crash report has been saved to/i,
   },
   {
-    id: "worldCorruption",
+    id: "exitCode",
     severity: "error",
-    pattern:
-      /Failed to load level|Exception loading world|Chunk.*(?:corrupt|failed)|Region file.*(?:corrupt|invalid)|Unexpected end of ZLIB input stream.*region/i,
-  },
-  {
-    id: "shaderCrash",
-    severity: "error",
-    pattern:
-      /Shader.*(?:error|failed|compile)|Iris.*(?:crash|error)|Failed to (?:load|compile) shader|sodium.*crash/i,
+    generic: true,
+    anyLevel: true,
+    pattern: /Process exited with code (?!0\b)\d+|exit(?:ed)? with code (?!0\b)\d+|Exit code: (?!0\b)\d+/i,
   },
 ];
+
+/** Rules that already explain why mod loading failed. */
+const MOD_LOADING_CAUSES = new Set([
+  "missingDependency",
+  "dependencyVersion",
+  "duplicateMods",
+  "versionMismatch",
+  "fabricLoader",
+  "forgeVersion",
+  "mixinConflict",
+  "wrongJava",
+  "corruptJar",
+]);
+
+const MAX_SUBJECTS = 8;
 
 type HitAccum = {
   count: number;
   sample: string;
   detail?: string;
+  fixKey?: string;
+  fixVars?: Record<string, string | number>;
+  subjects: Set<string>;
   sources: Set<string>;
 };
+
+type Accumulator = Map<string, HitAccum>;
 
 function truncateSample(line: string, max = 200): string {
   const trimmed = line.replace(/\s+/g, " ").trim();
@@ -147,37 +348,159 @@ function splitLines(text: string): string[] {
   return text.split(/\r?\n/);
 }
 
+const LEVEL_RE = /\/(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\]/;
+const STACK_FRAME_RE = /^\s*(?:at\s+[\w$./<>\-]+[.(]|\.\.\.\s*\d+\s+(?:more|common frames omitted))/;
+const TIMESTAMP_PREFIX_RE = /^\s*\[[^\]]*\d{2}:\d{2}:\d{2}[^\]]*\]\s*/;
+const COMMAND_LINE_RE = /\s-(?:cp|classpath)\s|-Djava\.library\.path=|--accessToken\s/;
+
+function explicitLevel(line: string): LogLevel | null {
+  if (line.includes("[STDERR]")) return "warn";
+  const m = line.match(LEVEL_RE);
+  if (!m) return null;
+  const lvl = m[1].toLowerCase();
+  return (lvl === "warning" ? "warn" : lvl) as LogLevel;
+}
+
+function isQuietLevel(level: LogLevel | null): boolean {
+  return level === "info" || level === "debug" || level === "trace";
+}
+
+/** Same line as seen in the console and in latest.log, without the timestamp. */
+function normalizeForDedupe(line: string): string {
+  return line.replace(TIMESTAMP_PREFIX_RE, "").replace(/\s+/g, " ").trim();
+}
+
+function recordHit(
+  acc: Accumulator,
+  ruleId: string,
+  sampleLine: string,
+  sourceLabel: string,
+  extra?: RuleMatch & { detail?: string },
+) {
+  let hit = acc.get(ruleId);
+  if (!hit) {
+    hit = {
+      count: 0,
+      sample: truncateSample(sampleLine),
+      subjects: new Set(),
+      sources: new Set(),
+    };
+    acc.set(ruleId, hit);
+  }
+  hit.count += 1;
+  hit.sources.add(sourceLabel);
+  if (extra?.subject && hit.subjects.size < MAX_SUBJECTS) {
+    hit.subjects.add(truncateSample(extra.subject, 120));
+  }
+  if (!hit.detail && extra?.detail) hit.detail = extra.detail;
+  if (!hit.fixKey && extra?.fixKey) {
+    hit.fixKey = extra.fixKey;
+    hit.fixVars = extra.fixVars;
+  }
+}
+
+type ScanState = {
+  /** Lines already counted from an earlier source (console vs latest.log). */
+  seenBefore: Set<string>;
+};
+
+function scanLines(
+  lines: string[],
+  sourceLabel: string,
+  acc: Accumulator,
+  state: ScanState,
+  opts: { structuredLog: boolean },
+) {
+  const seenHere = new Set<string>();
+  let level: LogLevel | null = null;
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) continue;
+
+    const own = explicitLevel(line);
+    if (own) {
+      level = own;
+    } else if (/^\s*\[/.test(line)) {
+      // Launcher lines like `[Launch] …` start a new, level-less record.
+      level = null;
+    } else if (isQuietLevel(level)) {
+      // A continuation of an INFO record is usually a printed exception: judge it by content.
+      level = null;
+    }
+
+    if (STACK_FRAME_RE.test(line) || COMMAND_LINE_RE.test(line)) continue;
+
+    const key = normalizeForDedupe(line);
+    seenHere.add(key);
+    if (state.seenBefore.has(key)) continue;
+
+    const effective = opts.structuredLog ? level : null;
+    for (const rule of RULES) {
+      if (!rule.anyLevel && isQuietLevel(effective)) continue;
+      if (rule.strict && (isQuietLevel(effective) || effective === "warn")) continue;
+      const m = line.match(rule.pattern);
+      if (!m) continue;
+      if (rule.exclude?.test(line)) continue;
+      const extra = rule.inspect ? rule.inspect(line, m) : {};
+      if (extra === null) continue;
+      recordHit(acc, rule.id, line, sourceLabel, extra);
+    }
+  }
+
+  for (const key of seenHere) state.seenBefore.add(key);
+}
+
 function extractCrashReportHints(text: string): {
   description?: string;
   suspectedMods?: string;
   exception?: string;
   causedBy?: string;
+  modFiles: string[];
+  mixinConfigs: string[];
 } {
   const description = text.match(/^\s*Description:\s*(.+)$/im)?.[1]?.trim();
-  const suspected =
-    text.match(/^\s*Suspected Mods:\s*(.+)$/im)?.[1]?.trim() ??
-    text.match(/^\s*Suspected Mods:\s*\n((?:\s{2,}.+\n?)+)/im)?.[1]
-      ?.split(/\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .slice(0, 8)
-      .join(", ");
+  const suspectedInline = text.match(/^\s*Suspected Mods?:\s*(.+)$/im)?.[1]?.trim();
+  const suspectedBlock = text
+    .match(/^\s*Suspected Mods?:\s*\n((?:[ \t]{2,}.+\n?)+)/im)?.[1]
+    ?.split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(", ");
+  const suspectedRaw = suspectedInline || suspectedBlock;
+  const suspected = suspectedRaw && !/^(?:unknown|none)$/i.test(suspectedRaw) ? suspectedRaw : undefined;
 
   const exception =
-    text.match(
-      /^\s*([a-zA-Z0-9_.$]*(?:Exception|Error|Throwable)(?::\s*.+)?)\s*$/m,
-    )?.[1]?.trim() ??
+    text.match(/^\s*((?:[\w$]+\.)+[\w$]*(?:Exception|Error|Throwable)(?::\s*.+)?)\s*$/m)?.[1]?.trim() ??
     text.match(/---- Minecraft Crash Report ----[\s\S]*?\n([^\n]+Exception[^\n]*)/i)?.[1]?.trim();
 
-  const causedBy = text
-    .match(/Caused by:\s*([^\n]+)/i)?.[1]
-    ?.trim();
+  const causedBy = text.match(/Caused by:\s*([^\n]+)/i)?.[1]?.trim();
+
+  // Forge/NeoForge name the mod jar in the crash details.
+  const modFiles = [
+    ...new Set(
+      [...text.matchAll(/^\s*Mod File:\s*(.+)$/gim)]
+        .map((m) => m[1].trim().split(/[\\/]/).pop() ?? "")
+        .filter((f) => f && !/^(?:minecraft|forge|neoforge|client|server)[-\w.]*\.jar$/i.test(f)),
+    ),
+  ].slice(0, 4);
+
+  // Mixin configs annotated on the first stack trace frames point at the involved mods.
+  const head = text.split(/\r?\n/).slice(0, 60).join("\n");
+  const mixinConfigs = [
+    ...new Set([...head.matchAll(/([\w\-]+)\.mixins?\.json/gi)].map((m) => m[1])),
+  ]
+    .filter((c) => !/^(?:mixins|minecraft|fabric-[\w-]+-v\d|forge|neoforge)$/i.test(c))
+    .slice(0, 4);
 
   return {
     description: description ? truncateSample(description, 240) : undefined,
     suspectedMods: suspected ? truncateSample(suspected, 240) : undefined,
     exception: exception ? truncateSample(exception, 240) : undefined,
     causedBy: causedBy ? truncateSample(causedBy, 240) : undefined,
+    modFiles,
+    mixinConfigs,
   };
 }
 
@@ -185,127 +508,111 @@ function buildCrashDetail(hints: ReturnType<typeof extractCrashReportHints>): st
   const parts: string[] = [];
   if (hints.description) parts.push(hints.description);
   if (hints.exception && hints.exception !== hints.description) parts.push(hints.exception);
-  if (hints.causedBy) parts.push(`Caused by: ${hints.causedBy}`);
-  if (hints.suspectedMods) parts.push(`Mods: ${hints.suspectedMods}`);
+  if (hints.causedBy && hints.causedBy !== hints.exception) parts.push(`Caused by: ${hints.causedBy}`);
   return parts.length ? parts.join(" · ") : undefined;
 }
 
 function isLikelyCrashReport(text: string): boolean {
-  return (
-    /---- Minecraft Crash Report ----/i.test(text) ||
-    /^\s*Description:\s+/im.test(text) ||
-    /#@!@# Game crashed!/i.test(text)
-  );
+  return /---- Minecraft Crash Report ----/i.test(text) || /#@!@# Game crashed!/i.test(text);
 }
 
-function recordHit(
-  counts: Map<string, HitAccum>,
-  ruleId: string,
-  sampleLine: string,
-  sourceLabel: string,
-  detail?: string,
-) {
-  const prev = counts.get(ruleId);
-  if (prev) {
-    prev.count += 1;
-    prev.sources.add(sourceLabel);
-    if (!prev.detail && detail) prev.detail = detail;
-  } else {
-    counts.set(ruleId, {
-      count: 1,
-      sample: truncateSample(sampleLine),
-      detail,
-      sources: new Set([sourceLabel]),
-    });
-  }
-}
-
-function scanLines(
-  lines: string[],
-  sourceLabel: string,
-  counts: Map<string, HitAccum>,
-) {
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    if (!line) continue;
-    for (const rule of RULES) {
-      if (!rule.pattern.test(line)) continue;
-      recordHit(counts, rule.id, line, sourceLabel);
-    }
-  }
-}
-
-function analyzeCrashBody(
-  text: string,
-  sourceLabel: string,
-  counts: Map<string, HitAccum>,
-) {
+function analyzeCrashBody(text: string, sourceLabel: string, acc: Accumulator, state: ScanState) {
   const hints = extractCrashReportHints(text);
-  const detail = buildCrashDetail(hints);
   const sample =
     hints.description ||
     hints.exception ||
     text.split(/\r?\n/).find((l) => l.trim()) ||
     "Minecraft Crash Report";
 
-  recordHit(counts, "crashReport", sample, sourceLabel, detail);
-
-  // Also run normal rules on crash body — often has the real exception.
-  scanLines(splitLines(text), sourceLabel, counts);
-
-  // Heuristic: mixin / mod load often appear only in crash Description.
-  if (hints.description) {
-    if (/mixin|injection/i.test(hints.description)) {
-      recordHit(counts, "mixinConflict", hints.description, sourceLabel, detail);
-    }
-    if (/mod|incompatible|loading/i.test(hints.description)) {
-      recordHit(counts, "modIncompatible", hints.description, sourceLabel, detail);
-    }
-    if (/OutOfMemory|heap space/i.test(hints.description)) {
-      recordHit(counts, "oom", hints.description, sourceLabel, detail);
-    }
-    if (/OpenGL|GLFW|graphics|render/i.test(hints.description)) {
-      recordHit(counts, "openglGlfw", hints.description, sourceLabel, detail);
-    }
+  const culprits = [
+    ...(hints.suspectedMods ? [hints.suspectedMods] : []),
+    ...hints.modFiles,
+    ...hints.mixinConfigs,
+  ];
+  recordHit(acc, "crashReport", sample, sourceLabel, { detail: buildCrashDetail(hints) });
+  const crash = acc.get("crashReport");
+  for (const c of culprits) {
+    if (crash && crash.subjects.size < MAX_SUBJECTS) crash.subjects.add(c);
   }
+
+  if (hints.description && /^Mod loading error has occurred/i.test(hints.description)) {
+    recordHit(acc, "modIncompatible", hints.description, sourceLabel);
+  }
+
+  // The crash body has no log levels; every line counts.
+  scanLines(splitLines(text), sourceLabel, acc, state, { structuredLog: false });
+}
+
+/** Problematic frame in hs_err_pid*.log tells whether a driver or the JVM itself crashed. */
+function analyzeJvmCrash(text: string, sourceLabel: string, acc: Accumulator, state: ScanState) {
+  scanLines(splitLines(text), sourceLabel, acc, state, { structuredLog: false });
+  const frame = text.match(/Problematic frame:\s*\r?\n#\s*\w\s+\[([^\]+]+)/i)?.[1]?.trim();
+  if (!frame) return;
+  const isDriver =
+    /atio6axx|atig6|amdx|aticfx|nvoglv|nvd3d|libnvidia|ig\d+icd|igxel|igd\w*|radeonsi|iris_dri|i965|opengl32|lwjgl|glfw/i.test(
+      frame,
+    );
+  const isJvm = /^(?:lib)?jvm\.(?:dll|so|dylib)$/i.test(frame);
+  recordHit(acc, "nativeCrash", `Problematic frame: ${frame}`, sourceLabel, {
+    subject: frame,
+    fixKey: isDriver
+      ? "play.console.analyzer.rules.nativeCrash.fixDriver"
+      : isJvm
+        ? "play.console.analyzer.rules.nativeCrash.fixJvm"
+        : undefined,
+    fixVars: { module: frame },
+  });
 }
 
 export function analyzeGameLogs(
   lines: string[],
   diskSources: LogAnalyzerInputSource[] = [],
 ): LogAnalyzerFinding[] {
-  const counts = new Map<string, HitAccum>();
+  const acc: Accumulator = new Map();
+  const state: ScanState = { seenBefore: new Set() };
 
-  if (lines.length) {
-    scanLines(lines, "console", counts);
-  }
-
-  for (const src of diskSources) {
+  // Crash reports first: they are the richest, and lines repeated in latest.log or the
+  // console are then not counted twice.
+  const ordered = [...diskSources].sort((a, b) => rankSource(a) - rankSource(b));
+  for (const src of ordered) {
     const text = src.text;
     if (!text.trim()) continue;
-    if (isLikelyCrashReport(text) || src.id.startsWith("crash")) {
-      analyzeCrashBody(text, src.label, counts);
+    if (src.id.startsWith("jvm")) {
+      analyzeJvmCrash(text, src.label, acc, state);
+    } else if (src.id.startsWith("crash") || isLikelyCrashReport(text)) {
+      analyzeCrashBody(text, src.label, acc, state);
     } else {
-      scanLines(splitLines(text), src.label, counts);
+      scanLines(splitLines(text), src.label, acc, state, { structuredLog: true });
     }
   }
 
-  if (!counts.size) return [];
+  if (lines.length) {
+    scanLines(lines, "console", acc, state, { structuredLog: true });
+  }
+
+  if (!acc.size) return [];
+
+  const specificErrors = RULES.filter(
+    (r) => !r.generic && r.severity === "error" && acc.has(r.id),
+  ).map((r) => r.id);
+  const hasModLoadingCause = specificErrors.some((id) => MOD_LOADING_CAUSES.has(id));
 
   const findings: LogAnalyzerFinding[] = [];
   for (const rule of RULES) {
-    const hit = counts.get(rule.id);
+    const hit = acc.get(rule.id);
     if (!hit) continue;
-    // Don't surface generic "exit code" if we already have a concrete crash.
-    if (rule.id === "exitCode" && counts.has("crashReport")) continue;
+    if (rule.id === "exitCode" && (specificErrors.length > 0 || acc.has("crashReport"))) continue;
+    if (rule.id === "modIncompatible" && hasModLoadingCause) continue;
     findings.push({
       id: rule.id,
       severity: rule.severity,
       titleKey: `play.console.analyzer.rules.${rule.id}.title`,
-      fixKey: `play.console.analyzer.rules.${rule.id}.fix`,
+      fixKey: hit.fixKey ?? `play.console.analyzer.rules.${rule.id}.fix`,
+      fixVars: hit.fixVars,
       matchCount: hit.count,
       sample: hit.sample,
       detail: hit.detail,
+      subjects: hit.subjects.size ? [...hit.subjects] : undefined,
       sources: [...hit.sources],
     });
   }
@@ -315,11 +622,19 @@ export function analyzeGameLogs(
     warning: 1,
     info: 2,
   };
+  const genericIds = new Set(RULES.filter((r) => r.generic).map((r) => r.id));
   findings.sort(
     (a, b) =>
       severityRank[a.severity] - severityRank[b.severity] ||
+      Number(genericIds.has(a.id)) - Number(genericIds.has(b.id)) ||
       b.matchCount - a.matchCount,
   );
 
   return findings;
+}
+
+function rankSource(src: LogAnalyzerInputSource): number {
+  if (src.id.startsWith("jvm")) return 0;
+  if (src.id.startsWith("crash")) return 1;
+  return 2;
 }

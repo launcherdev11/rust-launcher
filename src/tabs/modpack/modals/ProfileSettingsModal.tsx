@@ -232,6 +232,7 @@ export function ProfileSettingsModal({ ctx }: Props) {
                                     void applyConflictAction(c, {
                                       kind: a.kind,
                                       keep: a.keep,
+                                      targets: a.targets,
                                     });
                                   }}
                                 >

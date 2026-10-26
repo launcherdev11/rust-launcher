@@ -27,7 +27,7 @@ export type ProfileConflictView = {
   affected: string[];
   solutions: string[];
   category?: string;
-  actions?: { id: string; label: string; kind: string; keep?: string }[];
+  actions?: { id: string; label: string; kind: string; keep?: string; targets?: string[] }[];
 };
 
 export type ProfileWorldView = {

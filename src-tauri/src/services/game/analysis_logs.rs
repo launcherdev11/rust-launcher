@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -8,8 +9,15 @@ use crate::app::paths::instance_dir;
 
 /// Soft cap per file so we don't ship multi‑MB logs to the UI.
 const MAX_FILE_CHARS: usize = 512_000;
+/// JVM fatal error logs keep the useful part (problematic frame, cause) at the top.
+const MAX_JVM_CRASH_HEAD_BYTES: usize = 64 * 1024;
 /// How many newest crash reports to include.
 const MAX_CRASH_REPORTS: usize = 3;
+/// Slack around the session window: the crash report and the last log line are
+/// written a few seconds apart.
+const SESSION_SLACK_SECS: u64 = 120;
+/// Used when latest.log has no readable timestamps.
+const FALLBACK_SESSION_SECS: u64 = 10 * 60;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +34,8 @@ pub struct AnalysisLogSource {
 #[serde(rename_all = "camelCase")]
 pub struct InstanceAnalysisLogs {
     pub sources: Vec<AnalysisLogSource>,
+    /// Crash reports left over from earlier launches that were not included.
+    pub skipped_stale: usize,
 }
 
 fn modified_secs(path: &Path) -> u64 {
@@ -58,18 +68,25 @@ fn read_text_tail(path: &Path, max_chars: usize) -> Result<(String, bool), Strin
     Ok((trimmed.to_string(), true))
 }
 
-fn push_file_source(
-    out: &mut Vec<AnalysisLogSource>,
-    kind: &str,
-    path: &Path,
-    max_chars: usize,
-) {
-    if !path.is_file() {
-        return;
+fn read_text_head(path: &Path, max_bytes: usize) -> Result<(String, bool), String> {
+    let file = fs::File::open(path).map_err(|e| format!("Не удалось прочитать {}: {e}", path.display()))?;
+    let mut raw = Vec::with_capacity(max_bytes.min(64 * 1024));
+    file.take(max_bytes as u64 + 1)
+        .read_to_end(&mut raw)
+        .map_err(|e| format!("Не удалось прочитать {}: {e}", path.display()))?;
+    let truncated = raw.len() > max_bytes;
+    raw.truncate(max_bytes);
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    if !truncated {
+        return Ok((text, false));
     }
-    let Ok((content, truncated)) = read_text_tail(path, max_chars) else {
-        return;
-    };
+    // Drop the partial last line.
+    let cut = text.rfind('\n').unwrap_or(text.len());
+    Ok((text[..cut].to_string(), true))
+}
+
+fn push_source(out: &mut Vec<AnalysisLogSource>, kind: &str, path: &Path, read: (String, bool)) {
+    let (content, truncated) = read;
     if content.trim().is_empty() {
         return;
     }
@@ -88,7 +105,53 @@ fn push_file_source(
     });
 }
 
-fn collect_crash_reports(crash_dir: &Path) -> Vec<PathBuf> {
+fn push_file_source(out: &mut Vec<AnalysisLogSource>, kind: &str, path: &Path, max_chars: usize) {
+    if !path.is_file() {
+        return;
+    }
+    if let Ok(read) = read_text_tail(path, max_chars) {
+        push_source(out, kind, path, read);
+    }
+}
+
+/// Seconds since midnight from a log line prefix: `[12:34:56]`, `[26Oct2026 12:34:56.789]`.
+fn line_time_of_day(line: &str) -> Option<u64> {
+    let head = line.trim_start();
+    if !head.starts_with('[') {
+        return None;
+    }
+    let end = head.find(']')?.min(40);
+    let bytes = &head.as_bytes()[..end];
+    bytes.windows(8).find_map(|w| {
+        let is_digit = |i: usize| w[i].is_ascii_digit();
+        if !(is_digit(0) && is_digit(1) && w[2] == b':' && is_digit(3) && is_digit(4) && w[5] == b':' && is_digit(6) && is_digit(7)) {
+            return None;
+        }
+        let num = |i: usize| u64::from(w[i] - b'0') * 10 + u64::from(w[i + 1] - b'0');
+        let (h, m, s) = (num(0), num(3), num(6));
+        (h < 24 && m < 60 && s < 61).then_some(h * 3600 + m * 60 + s)
+    })
+}
+
+/// Unix time when the session in latest.log started. The log has only wall-clock
+/// times, so the session length is measured between its first and last stamps and
+/// subtracted from the file's mtime.
+fn latest_log_session_start(path: &Path, tail: &str) -> Option<u64> {
+    let mtime = modified_secs(path);
+    if mtime == 0 {
+        return None;
+    }
+    let (head, _) = read_text_head(path, 16 * 1024).ok()?;
+    let first = head.lines().find_map(line_time_of_day);
+    let last = tail.lines().rev().find_map(line_time_of_day);
+    let duration = match (first, last) {
+        (Some(a), Some(b)) => (b + 86_400 - a) % 86_400,
+        _ => FALLBACK_SESSION_SECS,
+    };
+    Some(mtime.saturating_sub(duration))
+}
+
+fn collect_crash_reports(crash_dir: &Path) -> Vec<(u64, PathBuf)> {
     let Ok(entries) = fs::read_dir(crash_dir) else {
         return Vec::new();
     };
@@ -112,60 +175,99 @@ fn collect_crash_reports(crash_dir: &Path) -> Vec<PathBuf> {
         .collect();
     files.sort_by(|a, b| b.0.cmp(&a.0));
     files
-        .into_iter()
-        .take(MAX_CRASH_REPORTS)
-        .map(|(_, p)| p)
-        .collect()
 }
 
-/// Read `logs/latest.log`, optional `crash-report.log`, and newest crash-reports
-/// for the given profile/instance.
+fn collect_jvm_crash_logs(root: &Path) -> Vec<(u64, PathBuf)> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    let mut files: Vec<(u64, PathBuf)> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("hs_err_pid") && n.ends_with(".log"))
+        })
+        .map(|p| (modified_secs(&p), p))
+        .collect();
+    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files
+}
+
+/// Read `logs/latest.log` plus crash reports and JVM fatal error logs that belong to
+/// the same launch. Reports from earlier launches are skipped: they describe problems
+/// that may already be fixed.
 #[tauri::command]
 pub fn read_instance_analysis_logs(profile_id: String) -> Result<InstanceAnalysisLogs, String> {
     let id = profile_id.trim();
     if id.is_empty() || id.starts_with("__") {
         return Ok(InstanceAnalysisLogs {
             sources: Vec::new(),
+            skipped_stale: 0,
         });
     }
 
     let root = instance_dir(id)?;
     let mut sources: Vec<AnalysisLogSource> = Vec::new();
 
-    let logs_dir = root.join("logs");
-    push_file_source(&mut sources, "latest", &logs_dir.join("latest.log"), MAX_FILE_CHARS);
-    // Some packs / tools write a flat crash-report.log next to latest.log
-    push_file_source(
-        &mut sources,
-        "crash_report",
-        &logs_dir.join("crash-report.log"),
-        MAX_FILE_CHARS,
-    );
-    push_file_source(
-        &mut sources,
-        "crash_report",
-        &root.join("crash-report.log"),
-        MAX_FILE_CHARS,
-    );
+    let latest_path = root.join("logs").join("latest.log");
+    push_file_source(&mut sources, "latest", &latest_path, MAX_FILE_CHARS);
+    let session_start = sources
+        .first()
+        .and_then(|latest| latest_log_session_start(&latest_path, &latest.content))
+        .map(|start| start.saturating_sub(SESSION_SLACK_SECS));
+    let is_current = |mtime: u64| session_start.map_or(true, |start| mtime >= start);
 
-    let crash_dir = root.join("crash-reports");
-    for path in collect_crash_reports(&crash_dir) {
+    let mut crash_files: Vec<(u64, PathBuf)> = Vec::new();
+    // Some packs / tools write a flat crash-report.log next to latest.log
+    for flat in [root.join("logs").join("crash-report.log"), root.join("crash-report.log")] {
+        if flat.is_file() {
+            crash_files.push((modified_secs(&flat), flat));
+        }
+    }
+    crash_files.extend(collect_crash_reports(&root.join("crash-reports")));
+    crash_files.sort_by(|a, b| b.0.cmp(&a.0));
+
+    let mut skipped_stale = 0usize;
+    let mut taken = 0usize;
+    for (mtime, path) in crash_files {
+        // Without latest.log there is no session to compare with: keep only the newest.
+        let keep = if session_start.is_some() { is_current(mtime) } else { taken == 0 };
+        if !keep || taken >= MAX_CRASH_REPORTS {
+            skipped_stale += usize::from(!keep);
+            continue;
+        }
         push_file_source(&mut sources, "crash_report", &path, MAX_FILE_CHARS);
+        taken += 1;
+    }
+
+    if let Some((mtime, path)) = collect_jvm_crash_logs(&root).into_iter().next() {
+        if session_start.is_some() && is_current(mtime) {
+            if let Ok(read) = read_text_head(&path, MAX_JVM_CRASH_HEAD_BYTES) {
+                push_source(&mut sources, "jvm_crash", &path, read);
+            }
+        }
     }
 
     // Prefer richer crash reports first when the UI lists sources.
     sources.sort_by(|a, b| {
         let rank = |k: &str| match k {
-            "crash_report" => 0,
-            "latest" => 1,
-            _ => 2,
+            "jvm_crash" => 0,
+            "crash_report" => 1,
+            "latest" => 2,
+            _ => 3,
         };
         rank(&a.kind)
             .cmp(&rank(&b.kind))
             .then(b.modified_at.cmp(&a.modified_at))
     });
 
-    Ok(InstanceAnalysisLogs { sources })
+    Ok(InstanceAnalysisLogs {
+        sources,
+        skipped_stale,
+    })
 }
 
 #[cfg(test)]
@@ -192,5 +294,19 @@ mod tests {
         assert!(truncated);
         assert!(!content.is_empty());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn line_time_of_day_parses_vanilla_and_forge_prefixes() {
+        assert_eq!(
+            line_time_of_day("[12:34:56] [Render thread/INFO]: hi"),
+            Some(12 * 3600 + 34 * 60 + 56)
+        );
+        assert_eq!(
+            line_time_of_day("[26Oct2026 01:02:03.456] [main/INFO] [cpw.mods/]: x"),
+            Some(3600 + 2 * 60 + 3)
+        );
+        assert_eq!(line_time_of_day("\tat net.minecraft.Foo.bar(Foo.java:1)"), None);
+        assert_eq!(line_time_of_day("[main/INFO]: no time"), None);
     }
 }
