@@ -4,6 +4,7 @@ export type HotkeyHelpEntry = {
   id: string;
   group: HotkeyGroupId;
   keys: string[][];
+  labelKey?: string;
 };
 
 export const HOTKEY_GROUP_ORDER: HotkeyGroupId[] = ["navigation", "play", "content", "general"];
@@ -22,7 +23,8 @@ export const HOTKEY_HELP: HotkeyHelpEntry[] = [
   { id: "create", group: "content", keys: [["Ctrl", "N"]] },
   { id: "import", group: "content", keys: [["Ctrl", "I"]] },
   { id: "screenshots", group: "content", keys: [["Ctrl", "Shift", "S"]] },
-  { id: "search", group: "content", keys: [["Ctrl", "K"], ["/"]] },
+  { id: "palette", group: "general", keys: [["Ctrl", "K"]], labelKey: "commandPalette.hotkey" },
+  { id: "search", group: "content", keys: [["/"]] },
   { id: "refresh", group: "content", keys: [["F5"]] },
   { id: "help", group: "general", keys: [["F1"], ["?"]] },
 ];

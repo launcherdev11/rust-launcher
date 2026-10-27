@@ -2391,5 +2391,35 @@
         "body": "Replay anytime: ? at the top → UI overview."
       }
     }
+  },
+  "commandPalette": {
+    "title": "Command palette",
+    "hotkey": "Command palette",
+    "placeholder": "Instance, tab, setting or action…",
+    "nothing": "Nothing found",
+    "openTab": "Open tab",
+    "openInstance": "Open instance",
+    "playInstance": "Play: {{name}}",
+    "group": {
+      "recent": "Recent",
+      "actions": "Actions",
+      "navigation": "Go to",
+      "instances": "Instances",
+      "settings": "Settings"
+    },
+    "action": {
+      "launch": "Launch the game",
+      "stop": "Stop the game",
+      "create": "Create an instance",
+      "import": "Import an instance",
+      "gameFolder": "Open the game folder",
+      "sidebar": "Collapse or expand the sidebar",
+      "hotkeys": "Keyboard shortcuts"
+    },
+    "footer": {
+      "navigate": "↑↓ select",
+      "run": "Enter run",
+      "close": "Esc close"
+    }
   }
 }

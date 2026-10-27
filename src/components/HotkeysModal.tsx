@@ -51,7 +51,9 @@ export function HotkeysModal({ language, open, onClose }: HotkeysModalProps) {
                     key={entry.id}
                     className="flex items-center justify-between gap-4 text-sm text-white/85"
                   >
-                    <span className="min-w-0">{tt(`app.hotkeys.items.${entry.id}`)}</span>
+                    <span className="min-w-0">
+                      {tt(entry.labelKey ?? `app.hotkeys.items.${entry.id}`)}
+                    </span>
                     <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
                       {entry.keys.map((combo, i) => (
                         <KeyCombo key={i} keys={combo} />

@@ -24,6 +24,8 @@ import { AccountsTab } from "./tabs/AccountsTab";
 import { DEFAULT_ACCENT_COLOR } from "./tabs/settings/accentColor";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { HotkeysModal } from "./components/HotkeysModal";
+import { CommandPalette } from "./features/command-palette/CommandPalette";
+import { usePaletteCommands } from "./features/command-palette/usePaletteCommands";
 import { SessionNotificationsBell } from "./components/SessionNotificationsBell";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
 import { UpdatePopupModal } from "./components/UpdatePopupModal";
@@ -49,7 +51,7 @@ import {
   isSidebarHorizontal,
   parseSidebarPosition,
 } from "./app/sidebar";
-import type { Settings, SettingsTabId, SidebarItemId } from "./app/types";
+import type { InstanceProfileCard, Settings, SettingsTabId, SidebarItemId } from "./app/types";
 import { useDiscordPresence } from "./hooks/useDiscordPresence";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import { useGameConsole } from "./hooks/useGameConsole";
@@ -193,6 +195,7 @@ function App() {
   const modpackHotkeysRef = useRef<ModpackHotkeyActions | null>(null);
   const appHotkeysRef = useRef<AppHotkeyActions | null>(null);
   const [showHotkeysModal, setShowHotkeysModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const modpackNavRef = useRef<ModpackNavigationActions | null>(null);
 
   const registerPlayConsoleHotkeys = useCallback(
@@ -527,7 +530,47 @@ function App() {
     stopGame: () => void handleStopGame(),
     toggleSidebar: toggleSidebarCollapsed,
     openHotkeysHelp: () => setShowHotkeysModal(true),
+    openCommandPalette: () => setShowCommandPalette(true),
   };
+
+  const paletteActionsRef = useRef({
+    handleOpenProfileInModpacks,
+    handlePlayPinnedProfile,
+    handleOpenGameFolder,
+  });
+  paletteActionsRef.current = {
+    handleOpenProfileInModpacks,
+    handlePlayPinnedProfile,
+    handleOpenGameFolder,
+  };
+  const paletteCommands = usePaletteCommands({
+    tt,
+    profiles: knownProfiles,
+    hotkeyForTab,
+    gameRunning: gameStatus === "running",
+    activateTab: activateHotkeyTab,
+    setSettingsTab,
+    openModpackView: useCallback(
+      (view: ModpackViewId) => {
+        setRequestedModpackView(view);
+        activateSidebarTab("modpacks");
+      },
+      [activateSidebarTab],
+    ),
+    openProfile: useCallback((id: string) => {
+      void paletteActionsRef.current.handleOpenProfileInModpacks(id);
+    }, []),
+    playProfile: useCallback((p: InstanceProfileCard) => {
+      void paletteActionsRef.current.handlePlayPinnedProfile(p);
+    }, []),
+    launchGame: useCallback(() => appHotkeysRef.current?.launchGame(), []),
+    stopGame: useCallback(() => appHotkeysRef.current?.stopGame(), []),
+    openGameFolder: useCallback(() => {
+      void paletteActionsRef.current.handleOpenGameFolder();
+    }, []),
+    toggleSidebar: useCallback(() => appHotkeysRef.current?.toggleSidebar(), []),
+    openHotkeysHelp: useCallback(() => setShowHotkeysModal(true), []),
+  });
   const handleTitleBarProfileSettings = () => {
     if (!activeInstanceProfile) return;
     setActiveItemWithSound("modpacks");
@@ -887,6 +930,12 @@ function App() {
           language={language}
           open={showHotkeysModal}
           onClose={() => setShowHotkeysModal(false)}
+        />
+        <CommandPalette
+          open={showCommandPalette}
+          onClose={() => setShowCommandPalette(false)}
+          commands={paletteCommands}
+          tt={tt}
         />
         {showHelpModal && (
           <HelpModal

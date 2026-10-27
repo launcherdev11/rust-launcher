@@ -18,6 +18,7 @@ export type AppHotkeyActions = {
   stopGame: () => void;
   toggleSidebar: () => void;
   openHotkeysHelp: () => void;
+  openCommandPalette: () => void;
 };
 
 export const HOTKEY_REFRESH_EVENT = "launcher:hotkey-refresh";
@@ -321,6 +322,19 @@ export function useHotkeys({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        !e.repeat &&
+        isCtrlOrMeta(e) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        isHotkeyKey(e, "k") &&
+        !isOverlayOpen() &&
+        appActionsRef.current
+      ) {
+        e.preventDefault();
+        appActionsRef.current.openCommandPalette();
+        return;
+      }
       if (e.repeat || isEditableTarget(e.target)) return;
 
       const ctrl = isCtrlOrMeta(e);
@@ -371,10 +385,6 @@ export function useHotkeys({
           if (isHotkeyKey(e, "b") && app) {
             e.preventDefault();
             app.toggleSidebar();
-            return true;
-          }
-          if (isHotkeyKey(e, "k")) {
-            if (focusVisibleSearch()) e.preventDefault();
             return true;
           }
           if (e.key === "Enter" && app) {

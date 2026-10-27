@@ -2298,5 +2298,35 @@
         "body": "Ya conoces lo básico. ¡Disfruta!\n\nRepite el tour en cualquier momento - ? arriba → Repetir tour."
       }
     }
+  },
+  "commandPalette": {
+    "title": "Paleta de comandos",
+    "hotkey": "Paleta de comandos",
+    "placeholder": "Instancia, pestaña, ajuste o acción…",
+    "nothing": "No se encontró nada",
+    "openTab": "Abrir pestaña",
+    "openInstance": "Abrir instancia",
+    "playInstance": "Jugar: {{name}}",
+    "group": {
+      "recent": "Recientes",
+      "actions": "Acciones",
+      "navigation": "Ir a",
+      "instances": "Instancias",
+      "settings": "Ajustes"
+    },
+    "action": {
+      "launch": "Iniciar el juego",
+      "stop": "Detener el juego",
+      "create": "Crear una instancia",
+      "import": "Importar una instancia",
+      "gameFolder": "Abrir la carpeta del juego",
+      "sidebar": "Contraer o expandir la barra lateral",
+      "hotkeys": "Atajos de teclado"
+    },
+    "footer": {
+      "navigate": "↑↓ elegir",
+      "run": "Enter ejecutar",
+      "close": "Esc cerrar"
+    }
   }
 }

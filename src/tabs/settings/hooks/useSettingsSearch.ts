@@ -8,6 +8,10 @@ import {
 import { SETTING_SEARCH_CATALOG, type SettingSearchId } from "../searchCatalog";
 import { isSeasonalThemePeriod } from "../../../lib/seasonalTheme";
 import { type SettingsTabId } from "../../../app/types";
+import {
+  SETTINGS_SEARCH_EVENT,
+  takePendingSettingsSearch,
+} from "../../../lib/settingsSearchBridge";
 
 type SettingsSearchDeps = {
   tt: (key: string, vars?: Record<string, string | number>) => string;
@@ -24,7 +28,16 @@ export function useSettingsSearch(deps: SettingsSearchDeps) {
     setSettingsTab,
   } = deps;
 
-  const [settingsSearch, setSettingsSearch] = useState("");
+  const [settingsSearch, setSettingsSearch] = useState(() => takePendingSettingsSearch() ?? "");
+
+  useEffect(() => {
+    const onRequest = (e: Event) => {
+      takePendingSettingsSearch();
+      setSettingsSearch((e as CustomEvent<string>).detail ?? "");
+    };
+    window.addEventListener(SETTINGS_SEARCH_EVENT, onRequest);
+    return () => window.removeEventListener(SETTINGS_SEARCH_EVENT, onRequest);
+  }, []);
 
   const settingsSearchQuery = settingsSearch.trim().toLowerCase();
 

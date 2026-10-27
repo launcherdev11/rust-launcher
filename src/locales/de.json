@@ -2301,5 +2301,35 @@
         "body": "Sie kennen die Grundlagen. Viel Spaß!\n\nTour jederzeit über ? oben → Tour wiederholen."
       }
     }
+  },
+  "commandPalette": {
+    "title": "Befehlspalette",
+    "hotkey": "Befehlspalette",
+    "placeholder": "Instanz, Tab, Einstellung oder Aktion…",
+    "nothing": "Nichts gefunden",
+    "openTab": "Tab öffnen",
+    "openInstance": "Instanz öffnen",
+    "playInstance": "Spielen: {{name}}",
+    "group": {
+      "recent": "Zuletzt",
+      "actions": "Aktionen",
+      "navigation": "Gehe zu",
+      "instances": "Instanzen",
+      "settings": "Einstellungen"
+    },
+    "action": {
+      "launch": "Spiel starten",
+      "stop": "Spiel beenden",
+      "create": "Instanz erstellen",
+      "import": "Instanz importieren",
+      "gameFolder": "Spielordner öffnen",
+      "sidebar": "Seitenleiste ein- oder ausklappen",
+      "hotkeys": "Tastenkürzel"
+    },
+    "footer": {
+      "navigate": "↑↓ auswählen",
+      "run": "Enter ausführen",
+      "close": "Esc schließen"
+    }
   }
 }
