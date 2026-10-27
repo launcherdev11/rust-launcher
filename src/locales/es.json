@@ -2310,6 +2310,40 @@
       }
     }
   },
+  "crashRules": {
+    "tickingEntity": {
+      "title": "El juego falló al procesar un objeto del mundo",
+      "fix": "Una entidad o bloque roto (a menudo de un mod) tumba el mundo al cargarlo. Actualice o desactive el mod al que pertenece; con objetos vanilla ayuda restaurar el chunk afectado desde una copia."
+    },
+    "serverWatchdog": {
+      "title": "El servidor integrado se colgó",
+      "fix": "Un solo tick del juego tardó demasiado y el watchdog detuvo el juego. Suelen ser mods pesados de generación de mundo o granjas enormes. Dé más memoria al juego y revise los mods añadidos hace poco."
+    },
+    "stackOverflow": {
+      "title": "Desbordamiento de pila",
+      "fix": "El código se llama a sí mismo sin fin. Casi siempre son dos mods que se llaman mutuamente. Desactive los mods añadidos hace poco de uno en uno."
+    },
+    "missingRegistries": {
+      "title": "El mundo tiene bloques u objetos de mods eliminados",
+      "fix": "El mundo se guardó con mods que ahora no están instalados. Vuelva a instalarlos o confirme la eliminación de su contenido al entrar (haga antes una copia)."
+    },
+    "linuxXrandr": {
+      "title": "No se encontró xrandr",
+      "fix": "Las versiones antiguas de Minecraft en Linux necesitan la utilidad xrandr. Instale x11-xserver-utils (Debian/Ubuntu) o xorg-xrandr (Arch)."
+    },
+    "optifineConflict": {
+      "title": "OptiFine entra en conflicto con sus mods",
+      "fix": "OptiFine modifica el código del juego de forma incompatible con los mods Mixin. Desactívelo y use Sodium + Iris (Fabric/Quilt) o Embeddium + Oculus (Forge/NeoForge)."
+    }
+  },
+  "crashFixes": {
+    "disableMod": "Desactivar {{mod}}",
+    "raiseMemory": "Memoria {{from}} → {{to}} GB",
+    "resetJava": "Elegir Java automáticamente",
+    "applied": "Hecho: {{action}}",
+    "failed": "No se pudo aplicar, hágalo manualmente",
+    "gameRunning": "Cierre el juego para aplicarlo"
+  },
   "runHistory": {
     "nav": "Sesiones",
     "title": "Historial de sesiones",

@@ -2403,6 +2403,40 @@
       }
     }
   },
+  "crashRules": {
+    "tickingEntity": {
+      "title": "The game crashed while ticking an object in the world",
+      "fix": "A broken entity or block (often from a mod) takes the world down when it loads. Update or disable the mod that owns it; for vanilla objects, restoring the affected chunk from a backup helps."
+    },
+    "serverWatchdog": {
+      "title": "The integrated server hung",
+      "fix": "A single game tick took too long and the watchdog stopped the game. Heavy world-generation mods or huge farms are the usual cause. Give the game more memory and check recently added mods."
+    },
+    "stackOverflow": {
+      "title": "Stack overflow",
+      "fix": "Code ended up calling itself endlessly. Most often two mods keep calling each other. Disable recently added mods one at a time."
+    },
+    "missingRegistries": {
+      "title": "The world contains blocks or items from removed mods",
+      "fix": "The world was saved with mods that are not installed now. Bring those mods back, or confirm removing their content when you join the world (make a backup first)."
+    },
+    "linuxXrandr": {
+      "title": "xrandr not found",
+      "fix": "Older Minecraft versions on Linux need the xrandr tool. Install x11-xserver-utils (Debian/Ubuntu) or xorg-xrandr (Arch)."
+    },
+    "optifineConflict": {
+      "title": "OptiFine conflicts with your mods",
+      "fix": "OptiFine changes game code in a way Mixin mods cannot work with. Disable it and use Sodium + Iris (Fabric/Quilt) or Embeddium + Oculus (Forge/NeoForge)."
+    }
+  },
+  "crashFixes": {
+    "disableMod": "Disable {{mod}}",
+    "raiseMemory": "Memory {{from}} → {{to}} GB",
+    "resetJava": "Use automatic Java",
+    "applied": "Done: {{action}}",
+    "failed": "Could not apply it, try doing it manually",
+    "gameRunning": "Close the game to apply"
+  },
   "runHistory": {
     "nav": "Runs",
     "title": "Run history",

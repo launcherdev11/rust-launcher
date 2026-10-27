@@ -2313,6 +2313,40 @@
       }
     }
   },
+  "crashRules": {
+    "tickingEntity": {
+      "title": "Das Spiel ist beim Verarbeiten eines Objekts in der Welt abgestürzt",
+      "fix": "Eine defekte Entität oder ein Block (oft aus einer Mod) bringt die Welt beim Laden zum Absturz. Aktualisieren oder deaktivieren Sie die zugehörige Mod; bei Vanilla-Objekten hilft es, den betroffenen Chunk aus einem Backup wiederherzustellen."
+    },
+    "serverWatchdog": {
+      "title": "Der integrierte Server hängt",
+      "fix": "Ein einzelner Spieltick hat zu lange gedauert, und der Watchdog hat das Spiel beendet. Meist sind schwere Weltgenerierungs-Mods oder riesige Farmen schuld. Geben Sie dem Spiel mehr Speicher und prüfen Sie kürzlich hinzugefügte Mods."
+    },
+    "stackOverflow": {
+      "title": "Stapelüberlauf",
+      "fix": "Code ruft sich endlos selbst auf. Meist rufen sich zwei Mods gegenseitig auf. Deaktivieren Sie kürzlich hinzugefügte Mods nacheinander."
+    },
+    "missingRegistries": {
+      "title": "Die Welt enthält Blöcke oder Items entfernter Mods",
+      "fix": "Die Welt wurde mit Mods gespeichert, die jetzt fehlen. Installieren Sie sie wieder oder bestätigen Sie beim Betreten das Entfernen ihrer Inhalte (vorher ein Backup anlegen)."
+    },
+    "linuxXrandr": {
+      "title": "xrandr nicht gefunden",
+      "fix": "Ältere Minecraft-Versionen unter Linux brauchen das Programm xrandr. Installieren Sie x11-xserver-utils (Debian/Ubuntu) oder xorg-xrandr (Arch)."
+    },
+    "optifineConflict": {
+      "title": "OptiFine verträgt sich nicht mit Ihren Mods",
+      "fix": "OptiFine verändert den Spielcode so, dass Mixin-Mods nicht damit funktionieren. Deaktivieren Sie es und nutzen Sie Sodium + Iris (Fabric/Quilt) oder Embeddium + Oculus (Forge/NeoForge)."
+    }
+  },
+  "crashFixes": {
+    "disableMod": "{{mod}} deaktivieren",
+    "raiseMemory": "Speicher {{from}} → {{to}} GB",
+    "resetJava": "Java automatisch wählen",
+    "applied": "Erledigt: {{action}}",
+    "failed": "Konnte nicht angewendet werden, bitte manuell erledigen",
+    "gameRunning": "Schließen Sie das Spiel, um es anzuwenden"
+  },
   "runHistory": {
     "nav": "Starts",
     "title": "Startverlauf",

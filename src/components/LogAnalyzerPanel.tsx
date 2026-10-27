@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useT, type Language } from "../i18n";
 import {
   analyzeGameLogs,
@@ -8,6 +8,19 @@ import {
   type LogAnalyzerSeverity,
 } from "../lib/logAnalyzer";
 import { INSTALL_CONSOLE_PROFILE_ID } from "../lib/gameConsoleWindow";
+import {
+  loadRemoteCrashRules,
+  toAnalyzerRules,
+  type RemoteRuleSpec,
+} from "../lib/remoteCrashRules";
+import {
+  fixKey,
+  needsModList,
+  planCrashFixes,
+  type CrashFixAction,
+  type CrashFixContext,
+} from "../lib/crashFixes";
+import type { JarModInfo } from "../lib/profileConflicts";
 
 type DiskLogSourceDto = {
   kind: string;
@@ -30,7 +43,6 @@ type LogAnalyzerPanelProps = {
   gameStatus?: string;
   className?: string;
   compact?: boolean;
-  /** Disk logs describe the latest launch; off when an older console session is shown. */
   includeDiskLogs?: boolean;
 };
 
@@ -45,13 +57,85 @@ function severityBar(severity: LogAnalyzerSeverity): string {
   }
 }
 
+type Tt = (key: string, vars?: Record<string, string | number>) => string;
+
+type FixState = "pending" | "done" | "failed";
+
+function fixLabel(action: CrashFixAction, tt: Tt): string {
+  switch (action.kind) {
+    case "disableMod":
+      return tt("crashFixes.disableMod", { mod: action.label });
+    case "raiseMemory":
+      return tt("crashFixes.raiseMemory", {
+        from: (action.fromMb / 1024).toFixed(1),
+        to: (action.toMb / 1024).toFixed(1),
+      });
+    case "resetJava":
+      return tt("crashFixes.resetJava");
+  }
+}
+
+function CrashFixButtons({
+  actions,
+  states,
+  disabled,
+  onApply,
+  tt,
+}: {
+  actions: CrashFixAction[];
+  states: Record<string, FixState>;
+  disabled: boolean;
+  onApply: (action: CrashFixAction) => void;
+  tt: Tt;
+}) {
+  if (!actions.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {actions.map((action) => {
+        const key = fixKey(action);
+        const state = states[key];
+        if (state === "done") {
+          return (
+            <span key={key} className="rounded-md bg-emerald-500/15 px-2 py-1 text-[0.75rem] text-emerald-200/90">
+              {tt("crashFixes.applied", { action: fixLabel(action, tt) })}
+            </span>
+          );
+        }
+        return (
+          <button
+            key={key}
+            type="button"
+            disabled={disabled || state === "pending"}
+            onClick={() => onApply(action)}
+            className="btn btn-sm btn-tint max-w-full disabled:opacity-50"
+            title={disabled ? tt("crashFixes.gameRunning") : undefined}
+          >
+            <span className="truncate">{fixLabel(action, tt)}</span>
+          </button>
+        );
+      })}
+      {actions.some((a) => states[fixKey(a)] === "failed") ? (
+        <span className="text-[0.75rem] text-red-200/80">{tt("crashFixes.failed")}</span>
+      ) : null}
+    </div>
+  );
+}
+
 function FindingCard({
   finding,
   tt,
+  actions = [],
+  fixStates = {},
+  fixesDisabled = false,
+  onApplyFix,
 }: {
   finding: LogAnalyzerFinding;
-  tt: (key: string, vars?: Record<string, string | number>) => string;
+  tt: Tt;
   compact?: boolean;
+  actions?: CrashFixAction[];
+  fixStates?: Record<string, FixState>;
+  fixesDisabled?: boolean;
+  onApplyFix?: (action: CrashFixAction) => void;
 }) {
   return (
     <div className="relative overflow-hidden rounded-lg bg-white/[0.04] py-2 pl-3.5 pr-2.5">
@@ -61,7 +145,7 @@ function FindingCard({
       />
       <div className="flex items-start justify-between gap-2">
         <p className="text-[0.8125rem] font-semibold leading-snug text-white/90">
-          {tt(finding.titleKey)}
+          {finding.title ?? tt(finding.titleKey)}
         </p>
         {finding.matchCount > 1 ? (
           <span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-white/60">
@@ -70,7 +154,7 @@ function FindingCard({
         ) : null}
       </div>
       <p className="mt-0.5 text-[0.8125rem] leading-snug text-white/60">
-        {tt(finding.fixKey, finding.fixVars)}
+        {finding.fix ?? tt(finding.fixKey, finding.fixVars)}
       </p>
       {finding.subjects && finding.subjects.length > 0 ? (
         <div className="mt-1.5 flex flex-wrap gap-1">
@@ -105,8 +189,80 @@ function FindingCard({
           {finding.sources.join(", ")}
         </p>
       ) : null}
+      {onApplyFix ? (
+        <CrashFixButtons
+          actions={actions}
+          states={fixStates}
+          disabled={fixesDisabled}
+          onApply={onApplyFix}
+          tt={tt}
+        />
+      ) : null}
     </div>
   );
+}
+
+function useCrashFixContext(profileId: string | null, findings: LogAnalyzerFinding[], reloadTick: number) {
+  const [ctx, setCtx] = useState<CrashFixContext | null>(null);
+  const relevant = findings.some(
+    (f) => f.id === "oom" || f.id === "wrongJava",
+  ) || needsModList(findings);
+
+  useEffect(() => {
+    if (!profileId || !relevant) {
+      setCtx(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const [mods, settings, systemGb, java] = await Promise.all([
+        invoke<JarModInfo[]>("scan_profile_mod_jars", { profileId }).catch(() => []),
+        invoke<{ ram_mb: number }>("get_effective_settings", { profileId }).catch(() => null),
+        invoke<number>("get_system_memory_gb").catch(() => 0),
+        invoke<{ java_path?: string | null }>("get_profile_java_settings", { id: profileId }).catch(
+          () => null,
+        ),
+      ]);
+      if (cancelled) return;
+      setCtx({
+        mods,
+        memoryMb: settings?.ram_mb ?? 0,
+        systemMemoryMb: Math.round(systemGb * 1024),
+        hasJavaOverride: !!java?.java_path?.trim(),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, relevant, reloadTick]);
+
+  return ctx;
+}
+
+async function applyCrashFix(profileId: string, action: CrashFixAction): Promise<void> {
+  switch (action.kind) {
+    case "disableMod":
+      await invoke("set_profile_item_enabled", {
+        id: profileId,
+        category: "mods",
+        filename: action.filename,
+        enabled: false,
+      });
+      return;
+    case "raiseMemory":
+      await invoke("update_profile_settings", { id: profileId, patch: { ram_mb: action.toMb } });
+      return;
+    case "resetJava": {
+      const current = await invoke<Record<string, unknown>>("get_profile_java_settings", {
+        id: profileId,
+      });
+      await invoke("update_profile_settings", {
+        id: profileId,
+        patch: { java_settings: { ...current, java_path: null } },
+      });
+      return;
+    }
+  }
 }
 
 function toInputSources(disk: DiskLogSourceDto[]): LogAnalyzerInputSource[] {
@@ -190,10 +346,66 @@ export function LogAnalyzerPanel({
 
   const inputSources = useMemo(() => toInputSources(diskSources), [diskSources]);
 
+  const [remoteSpecs, setRemoteSpecs] = useState<RemoteRuleSpec[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadRemoteCrashRules().then((specs) => {
+      if (!cancelled) setRemoteSpecs(specs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const remoteRules = useMemo(() => toAnalyzerRules(remoteSpecs, language), [remoteSpecs, language]);
+
   const findings = useMemo(
-    () => analyzeGameLogs(lines, inputSources),
-    [lines, inputSources],
+    () => analyzeGameLogs(lines, inputSources, remoteRules),
+    [lines, inputSources, remoteRules],
   );
+
+  const [fixTick, setFixTick] = useState(0);
+  const [fixStates, setFixStates] = useState<Record<string, FixState>>({});
+  const [appliedFixes, setAppliedFixes] = useState<Record<string, CrashFixAction[]>>({});
+  const fixProfileId = canReadDisk ? profileId : null;
+  const fixContext = useCrashFixContext(fixProfileId, findings, fixTick);
+  const fixesDisabled = gameStatus === "running";
+
+  useEffect(() => {
+    setFixStates({});
+    setAppliedFixes({});
+  }, [profileId]);
+
+  const handleApplyFix = useCallback(
+    (findingId: string, action: CrashFixAction) => {
+      if (!fixProfileId) return;
+      const key = fixKey(action);
+      setFixStates((prev) => ({ ...prev, [key]: "pending" }));
+      void applyCrashFix(fixProfileId, action)
+        .then(() => {
+          setFixStates((prev) => ({ ...prev, [key]: "done" }));
+          setAppliedFixes((prev) => ({
+            ...prev,
+            [findingId]: [...(prev[findingId] ?? []), action],
+          }));
+          setFixTick((n) => n + 1);
+        })
+        .catch(() => setFixStates((prev) => ({ ...prev, [key]: "failed" })));
+    },
+    [fixProfileId],
+  );
+
+  const fixesByFinding = useMemo(() => {
+    const map = new Map<string, CrashFixAction[]>();
+    for (const f of findings) {
+      const planned = fixContext ? planCrashFixes(f, fixContext, findings) : [];
+      const done = (appliedFixes[f.id] ?? []).filter(
+        (a) => !planned.some((p) => fixKey(p) === fixKey(a)),
+      );
+      const actions = [...done, ...planned];
+      if (actions.length) map.set(f.id, actions);
+    }
+    return map;
+  }, [findings, fixContext, appliedFixes]);
 
   const errorCount = useMemo(
     () => findings.filter((f) => f.severity === "error").length,
@@ -342,7 +554,17 @@ export function LogAnalyzerPanel({
                 }`}
               >
                 {findings.map((finding) => (
-                  <FindingCard key={finding.id} finding={finding} tt={tt} />
+                  <FindingCard
+                    key={finding.id}
+                    finding={finding}
+                    tt={tt}
+                    actions={fixesByFinding.get(finding.id)}
+                    fixStates={fixStates}
+                    fixesDisabled={fixesDisabled}
+                    onApplyFix={
+                      fixProfileId ? (action) => handleApplyFix(finding.id, action) : undefined
+                    }
+                  />
                 ))}
               </div>
             ) : (

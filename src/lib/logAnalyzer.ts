@@ -5,11 +5,12 @@ export type LogAnalyzerFinding = {
   severity: LogAnalyzerSeverity;
   titleKey: string;
   fixKey: string;
+  title?: string;
+  fix?: string;
   fixVars?: Record<string, string | number>;
   matchCount: number;
   sample?: string;
   detail?: string;
-  /** Concrete mods, files or options the finding points at. */
   subjects?: string[];
   sources?: string[];
 };
@@ -23,28 +24,25 @@ export type LogAnalyzerInputSource = {
 type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 type RuleMatch = {
-  /** Mod, file or option the line is about. */
   subject?: string;
   fixKey?: string;
   fixVars?: Record<string, string | number>;
 };
 
-type AnalyzerRule = {
+export type AnalyzerRule = {
   id: string;
   severity: LogAnalyzerSeverity;
   pattern: RegExp;
-  /** Also match lines logged at INFO/DEBUG. Most problems are logged at WARN or above. */
+  i18nBase?: string;
+  text?: { title: string; fix: string };
+  hidden?: boolean;
   anyLevel?: boolean;
-  /** Ignore WARN too: the same text at WARN is a recoverable, optional failure. */
   strict?: boolean;
   exclude?: RegExp;
-  /** Return null to reject the match (e.g. the line belongs to a more specific rule). */
   inspect?: (line: string, m: RegExpMatchArray) => RuleMatch | null;
-  /** Summary rules that are hidden once a more specific cause is found. */
   generic?: boolean;
 };
 
-/** Ids handled by dedicated rules (game, loader, runtime), not by dependency rules. */
 const PLATFORM_DEP = /^(?:minecraft|java|fabricloader|fabric-loader|forge|neoforge|quilt_loader)$/i;
 
 function cleanSubject(raw: string | undefined | null): string | undefined {
@@ -56,7 +54,6 @@ function classVersionToJava(classVersion: number): number | null {
   return classVersion >= 45 ? classVersion - 44 : null;
 }
 
-/** `'Sodium' (sodium)` → `Sodium (sodium)`; `mod sodium` → `sodium`. */
 function fabricModRef(text: string): { name: string; id?: string } | null {
   const quoted = text.match(/'([^']+)'(?:\s*\(([\w\-.]+)\))?/);
   if (quoted) return { name: quoted[1], id: quoted[2] };
@@ -89,7 +86,6 @@ const RULES: AnalyzerRule[] = [
     anyLevel: true,
     pattern:
       /OutOfMemoryError|Java heap space|GC overhead limit exceeded|Native memory allocation \(\w+\) failed|Out of memory: Java process/i,
-    // JVM argument dumps mention `-XX:MaxMetaspaceSize` etc.
     exclude: /\s-X(?:X:|mx|ms|ss)/,
   },
   {
@@ -123,7 +119,6 @@ const RULES: AnalyzerRule[] = [
     anyLevel: true,
     pattern:
       /Invalid or corrupt jarfile|zip END header not found|Error opening zip file|ZipException|truncated ZIP|Unexpected end of ZLIB input stream|Error reading zip|Not a valid zip|invalid (?:LOC|CEN) header/i,
-    // The same zlib errors come from damaged region files, see worldCorruption.
     exclude: /region|chunk|\.mca\b|level\.dat/i,
     inspect: (line) => ({ subject: cleanSubject(line.match(/([^\s\\/:'"]+\.(?:jar|zip))/i)?.[1]) }),
   },
@@ -176,7 +171,6 @@ const RULES: AnalyzerRule[] = [
     severity: "error",
     pattern:
       /Duplicate mods? found|Found duplicate mods|Mod ID '?([\w\-.]+)'? is (?:present|provided) (?:by|in) (?:multiple|several)|Mod ID: '([^']+)' from mod files: (.+)|Duplicate mods? (?:id|ID)s? ['`"]?([\w\-.]+)/i,
-    // Loaders log Jar-in-Jar de-duplication at INFO, that is not a problem.
     exclude: /ignoring|using the newest|Jar-in-Jar|JarJar/i,
     inspect: (_line, m) => ({
       subject: cleanSubject(m[2] ? `${m[2]}: ${m[3]}` : (m[1] ?? m[4])),
@@ -211,7 +205,6 @@ const RULES: AnalyzerRule[] = [
     severity: "error",
     pattern:
       /Mixin apply(?: for mod [\w\-.]+)? failed|Mixin prepare for mod [\w\-.]+ failed|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinPrepareError|MixinTransformerError|Mixin transformation of [\w$.]+ failed|@(?:Redirect|Overwrite) conflict|Unable to apply mixin/i,
-    // Optional mixins that fail are logged at WARN and the game keeps running.
     strict: true,
     inspect: (line) => {
       const mod = line.match(/(?:for|from) mod ['"]?([\w\-.]+)/i)?.[1];
@@ -224,15 +217,12 @@ const RULES: AnalyzerRule[] = [
     severity: "error",
     pattern:
       /(?:NoSuchMethodError|NoSuchFieldError|AbstractMethodError|IncompatibleClassChangeError|NoClassDefFoundError|ClassNotFoundException)(?::\s*['"]?([\w$/.]+))?/,
-    // Optional mixin targets and soft integrations log ClassNotFound at WARN/INFO.
     strict: true,
     exclude: /Error loading class|was not found .*mixin|@Mixin target|Skipping|optional|soft dependency/i,
     inspect: (line) => {
-      // Only exception headers count: `Caused by: …` or a bare exception line.
       if (!/^\s*(?:Caused by:\s*|Exception in thread "[^"]*"\s*)?(?:[\w$]+\.)+[\w$]+(?:Error|Exception)\b/.test(line)) {
         return null;
       }
-      // `NoSuchMethodError: 'void net.foo.Bar.baz()'` → `net.foo.Bar.baz`.
       const cls = line
         .match(/(?:Error|Exception):\s*'?(?:[\w$[\]<>]+\s+)?([\w$]+(?:[./][\w$]+)+)/)?.[1]
         ?.replace(/\//g, ".");
@@ -288,6 +278,58 @@ const RULES: AnalyzerRule[] = [
     inspect: (line) => ({ subject: cleanSubject(line.match(/([\w\-. ]+\.zip)/i)?.[1]) }),
   },
   {
+    id: "tickingEntity",
+    severity: "error",
+    anyLevel: true,
+    i18nBase: "crashRules.tickingEntity",
+    pattern: /Ticking (?:entity|block entity|player|world)|Entity being ticked|Block entity being ticked/i,
+    inspect: (line) => ({
+      subject: cleanSubject(
+        line.match(/Entity Type:\s*([\w:.\-]+)/i)?.[1] ??
+          line.match(/Block entity being ticked.*?([\w-]+:[\w/.\-]+)/i)?.[1],
+      ),
+    }),
+  },
+  {
+    id: "serverWatchdog",
+    severity: "error",
+    anyLevel: true,
+    i18nBase: "crashRules.serverWatchdog",
+    pattern:
+      /A single server tick took [\d.]+ seconds|ServerHangWatchdog|Considering it to be crashed, server will forcibly shutdown/i,
+  },
+  {
+    id: "stackOverflow",
+    severity: "error",
+    anyLevel: true,
+    i18nBase: "crashRules.stackOverflow",
+    pattern: /java\.lang\.StackOverflowError/,
+  },
+  {
+    id: "missingRegistries",
+    severity: "error",
+    i18nBase: "crashRules.missingRegistries",
+    pattern:
+      /Missing registry entries|Registry remapping failed|Unidentified mapping from registry|Detected missing registry entries/i,
+    inspect: (line) => ({
+      subject: cleanSubject(line.match(/\b([a-z][a-z0-9_\-.]*:[a-z][a-z0-9_\-./]*)/)?.[1]),
+    }),
+  },
+  {
+    id: "linuxXrandr",
+    severity: "error",
+    anyLevel: true,
+    i18nBase: "crashRules.linuxXrandr",
+    pattern: /xrandr: (?:not found|command not found)|Cannot run program "xrandr"|LWJGLException.*XRandR/i,
+  },
+  {
+    id: "optifinePresent",
+    severity: "info",
+    anyLevel: true,
+    hidden: true,
+    pattern: /\bOptiFine\b|optifine[\w.\-]*\.jar/i,
+  },
+  {
     id: "modIncompatible",
     severity: "error",
     generic: true,
@@ -311,7 +353,6 @@ const RULES: AnalyzerRule[] = [
   },
 ];
 
-/** Rules that already explain why mod loading failed. */
 const MOD_LOADING_CAUSES = new Set([
   "missingDependency",
   "dependencyVersion",
@@ -322,7 +363,26 @@ const MOD_LOADING_CAUSES = new Set([
   "mixinConflict",
   "wrongJava",
   "corruptJar",
+  "missingRegistries",
 ]);
+
+function mergeRules(extra: AnalyzerRule[]): AnalyzerRule[] {
+  if (!extra.length) return RULES;
+  const byId = new Map(extra.map((r) => [r.id, r]));
+  const merged = RULES.map((r) => byId.get(r.id) ?? r);
+  const builtinIds = new Set(RULES.map((r) => r.id));
+  const added = extra.filter((r) => !builtinIds.has(r.id));
+  const firstGeneric = merged.findIndex((r) => r.generic);
+  if (firstGeneric < 0) return [...merged, ...added];
+  return [...merged.slice(0, firstGeneric), ...added, ...merged.slice(firstGeneric)];
+}
+
+const OPTIFINE_CONFLICT_RULE: AnalyzerRule = {
+  id: "optifineConflict",
+  severity: "error",
+  i18nBase: "crashRules.optifineConflict",
+  pattern: /(?!)/,
+};
 
 const MAX_SUBJECTS = 8;
 
@@ -365,7 +425,6 @@ function isQuietLevel(level: LogLevel | null): boolean {
   return level === "info" || level === "debug" || level === "trace";
 }
 
-/** Same line as seen in the console and in latest.log, without the timestamp. */
 function normalizeForDedupe(line: string): string {
   return line.replace(TIMESTAMP_PREFIX_RE, "").replace(/\s+/g, " ").trim();
 }
@@ -400,8 +459,8 @@ function recordHit(
 }
 
 type ScanState = {
-  /** Lines already counted from an earlier source (console vs latest.log). */
   seenBefore: Set<string>;
+  rules: AnalyzerRule[];
 };
 
 function scanLines(
@@ -422,10 +481,8 @@ function scanLines(
     if (own) {
       level = own;
     } else if (/^\s*\[/.test(line)) {
-      // Launcher lines like `[Launch] …` start a new, level-less record.
       level = null;
     } else if (isQuietLevel(level)) {
-      // A continuation of an INFO record is usually a printed exception: judge it by content.
       level = null;
     }
 
@@ -436,7 +493,7 @@ function scanLines(
     if (state.seenBefore.has(key)) continue;
 
     const effective = opts.structuredLog ? level : null;
-    for (const rule of RULES) {
+    for (const rule of state.rules) {
       if (!rule.anyLevel && isQuietLevel(effective)) continue;
       if (rule.strict && (isQuietLevel(effective) || effective === "warn")) continue;
       const m = line.match(rule.pattern);
@@ -477,7 +534,6 @@ function extractCrashReportHints(text: string): {
 
   const causedBy = text.match(/Caused by:\s*([^\n]+)/i)?.[1]?.trim();
 
-  // Forge/NeoForge name the mod jar in the crash details.
   const modFiles = [
     ...new Set(
       [...text.matchAll(/^\s*Mod File:\s*(.+)$/gim)]
@@ -486,7 +542,6 @@ function extractCrashReportHints(text: string): {
     ),
   ].slice(0, 4);
 
-  // Mixin configs annotated on the first stack trace frames point at the involved mods.
   const head = text.split(/\r?\n/).slice(0, 60).join("\n");
   const mixinConfigs = [
     ...new Set([...head.matchAll(/([\w\-]+)\.mixins?\.json/gi)].map((m) => m[1])),
@@ -539,11 +594,9 @@ function analyzeCrashBody(text: string, sourceLabel: string, acc: Accumulator, s
     recordHit(acc, "modIncompatible", hints.description, sourceLabel);
   }
 
-  // The crash body has no log levels; every line counts.
   scanLines(splitLines(text), sourceLabel, acc, state, { structuredLog: false });
 }
 
-/** Problematic frame in hs_err_pid*.log tells whether a driver or the JVM itself crashed. */
 function analyzeJvmCrash(text: string, sourceLabel: string, acc: Accumulator, state: ScanState) {
   scanLines(splitLines(text), sourceLabel, acc, state, { structuredLog: false });
   const frame = text.match(/Problematic frame:\s*\r?\n#\s*\w\s+\[([^\]+]+)/i)?.[1]?.trim();
@@ -567,12 +620,12 @@ function analyzeJvmCrash(text: string, sourceLabel: string, acc: Accumulator, st
 export function analyzeGameLogs(
   lines: string[],
   diskSources: LogAnalyzerInputSource[] = [],
+  extraRules: AnalyzerRule[] = [],
 ): LogAnalyzerFinding[] {
   const acc: Accumulator = new Map();
-  const state: ScanState = { seenBefore: new Set() };
+  const rules = mergeRules(extraRules);
+  const state: ScanState = { seenBefore: new Set(), rules };
 
-  // Crash reports first: they are the richest, and lines repeated in latest.log or the
-  // console are then not counted twice.
   const ordered = [...diskSources].sort((a, b) => rankSource(a) - rankSource(b));
   for (const src of ordered) {
     const text = src.text;
@@ -592,22 +645,37 @@ export function analyzeGameLogs(
 
   if (!acc.size) return [];
 
-  const specificErrors = RULES.filter(
-    (r) => !r.generic && r.severity === "error" && acc.has(r.id),
-  ).map((r) => r.id);
+  const optifine = acc.get("optifinePresent");
+  const optifineCause = acc.get("mixinConflict") ?? acc.get("apiMismatch");
+  if (optifine && optifineCause) {
+    acc.set("optifineConflict", {
+      count: 1,
+      sample: optifineCause.sample,
+      subjects: new Set(["OptiFine"]),
+      sources: new Set([...optifineCause.sources, ...optifine.sources]),
+    });
+  }
+
+  const reportable = [...rules, OPTIFINE_CONFLICT_RULE].filter((r) => !r.hidden);
+  const specificErrors = reportable
+    .filter((r) => !r.generic && r.severity === "error" && acc.has(r.id))
+    .map((r) => r.id);
   const hasModLoadingCause = specificErrors.some((id) => MOD_LOADING_CAUSES.has(id));
 
   const findings: LogAnalyzerFinding[] = [];
-  for (const rule of RULES) {
+  for (const rule of reportable) {
     const hit = acc.get(rule.id);
     if (!hit) continue;
     if (rule.id === "exitCode" && (specificErrors.length > 0 || acc.has("crashReport"))) continue;
     if (rule.id === "modIncompatible" && hasModLoadingCause) continue;
+    const base = rule.i18nBase ?? `play.console.analyzer.rules.${rule.id}`;
     findings.push({
       id: rule.id,
       severity: rule.severity,
-      titleKey: `play.console.analyzer.rules.${rule.id}.title`,
-      fixKey: hit.fixKey ?? `play.console.analyzer.rules.${rule.id}.fix`,
+      titleKey: `${base}.title`,
+      fixKey: hit.fixKey ?? `${base}.fix`,
+      title: rule.text?.title,
+      fix: hit.fixKey ? undefined : rule.text?.fix,
       fixVars: hit.fixVars,
       matchCount: hit.count,
       sample: hit.sample,
@@ -622,7 +690,7 @@ export function analyzeGameLogs(
     warning: 1,
     info: 2,
   };
-  const genericIds = new Set(RULES.filter((r) => r.generic).map((r) => r.id));
+  const genericIds = new Set(reportable.filter((r) => r.generic).map((r) => r.id));
   findings.sort(
     (a, b) =>
       severityRank[a.severity] - severityRank[b.severity] ||
