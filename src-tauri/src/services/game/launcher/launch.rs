@@ -1377,6 +1377,13 @@ pub async fn launch_game(
     }
 
     let app_clone_for_playtime = app.clone();
+    let world_backup_profile = playtime_profile_id
+        .clone()
+        .filter(|_| settings.world_auto_backup);
+    let session_started_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
     std::thread::spawn(move || {
         const PLAYTIME_FLUSH_INTERVAL: Duration = Duration::from_secs(30);
         let mut last_flush_at = Instant::now();
@@ -1406,6 +1413,9 @@ pub async fn launch_game(
 
         forget_game_session();
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+        if let Some(profile_id) = world_backup_profile.as_deref() {
+            crate::services::game::worlds::backups::auto_backup_touched_worlds(profile_id, session_started_ms);
+        }
 
         let _ = app_clone_for_playtime.emit(
             EVENT_GAME_PROCESS_EXITED,

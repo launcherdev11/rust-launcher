@@ -669,7 +669,6 @@ export function useModpackController(props: ModpackTabProps) {
         window.localStorage.removeItem("modpacks_selected_profile_id");
       }
     } catch {
-      //ignore
     }
   }, [selectedProfileId]);
 
@@ -1141,6 +1140,7 @@ export function useModpackController(props: ModpackTabProps) {
     setBackupBeforeVersionChange,
     profileWorlds,
     profileWorldsLoading,
+    refreshProfileWorlds,
     selectedWorldPaths,
     setSelectedWorldPaths,
     worldsDeleteBusy,

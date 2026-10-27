@@ -5,6 +5,7 @@ export type SettingSearchId =
   | "game.graphicsAdapter"
   | "game.closeLauncher"
   | "game.checkProcesses"
+  | "game.worldAutoBackup"
   | "game.gameDirectory"
   | "game.windowSize"
   | "game.ram"
@@ -68,6 +69,11 @@ export const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     id: "game.checkProcesses",
     tab: "game",
     keys: ["settings.game.checkGameProcesses.label"],
+  },
+  {
+    id: "game.worldAutoBackup",
+    tab: "game",
+    keys: ["worldTools.autoBackup.label", "worldTools.autoBackup.hint"],
   },
   {
     id: "game.gameDirectory",

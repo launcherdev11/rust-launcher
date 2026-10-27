@@ -48,6 +48,7 @@ use services::game::{
     delete_content_snapshot, list_content_snapshots, restore_content_snapshot,
     cleanup_profile, delete_profile_worlds, duplicate_profile, get_profile_disk_usage,
     list_profile_worlds,
+    create_world_backup, delete_world_backup, list_world_backups, open_world_backups_folder, restore_world_backup, delete_world_chunks, get_world_overview, get_world_region, list_world_dimensions,
 };
 use services::auth::{
     ely_login_with_password, ely_logout, ms_logout,     start_ely_oauth, start_ms_oauth,
@@ -223,6 +224,15 @@ pub fn run() {
             get_effective_settings,
                                     stop_game,
             get_running_game_session,
+            create_world_backup,
+            delete_world_backup,
+            list_world_backups,
+            open_world_backups_folder,
+            restore_world_backup,
+            delete_world_chunks,
+            get_world_overview,
+            get_world_region,
+            list_world_dimensions,
             get_system_memory_gb,
             get_graphics_adapters,
             start_ely_oauth,

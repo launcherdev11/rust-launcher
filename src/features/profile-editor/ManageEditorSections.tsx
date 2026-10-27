@@ -349,6 +349,7 @@ export function WorldsPanel({
   onOpenConfig,
   onDeleteSelected,
   deleteBusy,
+  onOpenDetails,
   tt,
 }: {
   language: Language;
@@ -363,6 +364,7 @@ export function WorldsPanel({
   onOpenConfig: () => void;
   onDeleteSelected: () => void;
   deleteBusy?: boolean;
+  onOpenDetails?: (worldName: string) => void;
   tt: Tt;
 }) {
   const [query, setQuery] = useState("");
@@ -497,6 +499,15 @@ export function WorldsPanel({
                     </div>
                   </div>
                 </label>
+                {onOpenDetails ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetails(w.name)}
+                    className="btn btn-sm btn-soft shrink-0"
+                  >
+                    {tt("worldTools.open")}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onOpenWorld(w.path)}

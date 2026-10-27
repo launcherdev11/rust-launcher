@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   show_alpha_versions: false,
   forge_ipv6_download: false,
   forge_proxy_fallback: true,
+  world_auto_backup: true,
   notify_new_update: true,
   notify_new_message: true,
   notify_system_message: true,

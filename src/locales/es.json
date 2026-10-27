@@ -2328,5 +2328,76 @@
       "run": "Enter ejecutar",
       "close": "Esc cerrar"
     }
+  },
+  "worldTools": {
+    "open": "Copias y mapa",
+    "back": "Volver a los mundos",
+    "loading": "Cargando…",
+    "tab": {
+      "backups": "Copias",
+      "map": "Mapa de chunks"
+    },
+    "autoBackup": {
+      "label": "Copiar los mundos al terminar de jugar",
+      "hint": "Al cerrar el juego se archivan los mundos en los que entró. Se guardan las 4 últimas copias automáticas de cada mundo."
+    },
+    "backups": {
+      "create": "Copiar ahora",
+      "creating": "Archivando…",
+      "created": "Copia del mundo lista",
+      "openFolder": "Carpeta de copias",
+      "hint": "Antes de restaurar, el estado actual del mundo se guarda como copia de seguridad aparte.",
+      "runningHint": "El juego está abierto: puede copiar, pero no restaurar",
+      "empty": "Aún no hay copias de este mundo",
+      "restore": "Restaurar",
+      "restoring": "Restaurando…",
+      "restored": "Mundo restaurado",
+      "restoreTitle": "¿Restaurar el mundo?",
+      "restoreMessage": "El mundo volverá a su estado del {{date}}. Antes se guarda el estado actual como copia de seguridad.",
+      "delete": "Eliminar copia",
+      "deleteTitle": "¿Eliminar la copia?",
+      "deleteMessage": "El archivo se eliminará de forma definitiva.",
+      "kind": {
+        "manual": "Manual",
+        "auto": "Auto",
+        "safety": "Seguridad"
+      }
+    },
+    "map": {
+      "dimension": "Dimensión",
+      "dim": {
+        "overworld": "Superficie",
+        "the_nether": "Nether",
+        "the_end": "End"
+      },
+      "filter": {
+        "none": "Mapa",
+        "unvisited": "Nunca visitados",
+        "outdated": "Desactualizados",
+        "damaged": "Dañados"
+      },
+      "selectFiltered": "Seleccionar resaltados",
+      "selected": "Seleccionados: {{count}}",
+      "clear": "Quitar selección",
+      "delete": "Eliminar chunks",
+      "deleting": "Eliminando…",
+      "deleteTitle": "¿Eliminar los chunks seleccionados?",
+      "deleteMessage": "Chunks: {{count}}. El juego los generará de nuevo en la próxima visita y se perderá todo lo construido en ellos. Antes de eliminar, el mundo se guarda como copia de seguridad.",
+      "deleted": "Chunks eliminados: {{count}}",
+      "closeGame": "Cierre el juego para eliminar chunks",
+      "empty": "Aún no hay chunks generados en esta dimensión",
+      "chunkAt": "Chunk {{x}}, {{z}} · bloques {{bx}}, {{bz}}",
+      "inhabited": "los jugadores pasaron aquí {{minutes}} min",
+      "status": {
+        "absent": "ninguno",
+        "ok": "correcto",
+        "damaged": "dañado",
+        "unreadable": "ilegible",
+        "proto": "sin generar del todo"
+      },
+      "stats": "Chunks cargados: {{total}} · nunca visitados: {{unvisited}} · desactualizados: {{outdated}}",
+      "worldVersion": "Versión del mundo: {{version}}",
+      "controls": "Rueda: zoom · arrastrar: mover · clic: seleccionar · Mayús+arrastrar: seleccionar un área"
+    }
   }
 }

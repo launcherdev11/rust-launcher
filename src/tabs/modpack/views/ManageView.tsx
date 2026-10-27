@@ -38,12 +38,13 @@ import { type ContentTab, type ProfileItemEntry, type Settings } from "../types"
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { type ConflictActionKind, type ProfileConflict } from "../../../lib/profileConflicts";
 import { invoke } from "@tauri-apps/api/core";
-import { type CSSProperties } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { ProfileItemDetails, ProfileItemIcon } from "../ProfileItemParts";
 import { DeleteIcon } from "../../../components/delete_icon";
 import { ConsoleFilterBar, ConsoleLines } from "../../../components/ConsoleLogView";
 import { LogAnalyzerPanel } from "../../../components/LogAnalyzerPanel";
 import { ListView } from "./ListView";
+import { WorldToolsView } from "../../../features/worlds/WorldToolsView";
 import type { ModpackController } from "../useModpackController";
 
 type Props = { ctx: ModpackController };
@@ -98,6 +99,7 @@ export function ManageView({ ctx }: Props) {
     commitProfileRamSaveNow,
     showNotification,
     profileWorldsLoading,
+    refreshProfileWorlds,
     profileWorlds,
     selectedWorldPaths,
     setSelectedWorldPaths,
@@ -190,6 +192,12 @@ export function ManageView({ ctx }: Props) {
     gameStatus,
     visibleConsoleLines,
   } = ctx;
+
+  const [openWorldName, setOpenWorldName] = useState<string | null>(null);
+  const selectedProfileKey = selectedProfile?.id ?? null;
+  useEffect(() => {
+    setOpenWorldName(null);
+  }, [selectedProfileKey, editorSection]);
 
   if (!selectedProfile) return <ListView ctx={ctx} />;
 
@@ -492,8 +500,20 @@ export function ManageView({ ctx }: Props) {
           showNotification={showNotification}
           tt={tt}
         />
+      ) : editorSection === "worlds" && openWorldName ? (
+        <WorldToolsView
+          profileId={selectedProfile.id}
+          world={openWorldName}
+          language={language}
+          gameRunning={gameStatus === "running"}
+          tt={tt}
+          showNotification={showNotification}
+          onBack={() => setOpenWorldName(null)}
+          onWorldChanged={() => void refreshProfileWorlds(selectedProfile.id)}
+        />
       ) : editorSection === "worlds" ? (
         <WorldsPanel
+          onOpenDetails={setOpenWorldName}
           language={language}
           loading={profileWorldsLoading}
           worlds={profileWorlds}

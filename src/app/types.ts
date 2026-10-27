@@ -34,6 +34,7 @@ export type Settings = {
   show_alpha_versions: boolean;
   forge_ipv6_download: boolean;
   forge_proxy_fallback: boolean;
+  world_auto_backup?: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;

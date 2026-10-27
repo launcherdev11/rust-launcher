@@ -2331,5 +2331,76 @@
       "run": "Enter ausführen",
       "close": "Esc schließen"
     }
+  },
+  "worldTools": {
+    "open": "Backups und Karte",
+    "back": "Zurück zu den Welten",
+    "loading": "Wird geladen…",
+    "tab": {
+      "backups": "Backups",
+      "map": "Chunk-Karte"
+    },
+    "autoBackup": {
+      "label": "Welten nach dem Spielen sichern",
+      "hint": "Beim Schließen des Spiels werden die betretenen Welten archiviert. Die letzten 4 automatischen Kopien jeder Welt bleiben erhalten."
+    },
+    "backups": {
+      "create": "Jetzt sichern",
+      "creating": "Wird archiviert…",
+      "created": "Welt-Backup fertig",
+      "openFolder": "Backup-Ordner",
+      "hint": "Vor einer Wiederherstellung wird der aktuelle Zustand der Welt als eigene Sicherheitskopie gespeichert.",
+      "runningHint": "Das Spiel läuft: Sichern geht, Wiederherstellen nicht",
+      "empty": "Noch keine Backups dieser Welt",
+      "restore": "Wiederherstellen",
+      "restoring": "Wird wiederhergestellt…",
+      "restored": "Welt wiederhergestellt",
+      "restoreTitle": "Welt wiederherstellen?",
+      "restoreMessage": "Die Welt wird auf den Stand vom {{date}} zurückgesetzt. Der aktuelle Stand wird vorher als Sicherheitskopie gespeichert.",
+      "delete": "Backup löschen",
+      "deleteTitle": "Backup löschen?",
+      "deleteMessage": "Das Archiv wird endgültig gelöscht.",
+      "kind": {
+        "manual": "Manuell",
+        "auto": "Auto",
+        "safety": "Sicherheit"
+      }
+    },
+    "map": {
+      "dimension": "Dimension",
+      "dim": {
+        "overworld": "Oberwelt",
+        "the_nether": "Nether",
+        "the_end": "Ende"
+      },
+      "filter": {
+        "none": "Karte",
+        "unvisited": "Nie besucht",
+        "outdated": "Veraltet",
+        "damaged": "Beschädigt"
+      },
+      "selectFiltered": "Hervorgehobene auswählen",
+      "selected": "Ausgewählt: {{count}}",
+      "clear": "Auswahl aufheben",
+      "delete": "Chunks löschen",
+      "deleting": "Wird gelöscht…",
+      "deleteTitle": "Ausgewählte Chunks löschen?",
+      "deleteMessage": "Chunks: {{count}}. Das Spiel erzeugt sie beim nächsten Besuch neu, alles dort Gebaute geht verloren. Vor dem Löschen wird die Welt als Sicherheitskopie gespeichert.",
+      "deleted": "Gelöschte Chunks: {{count}}",
+      "closeGame": "Schließen Sie das Spiel, um Chunks zu löschen",
+      "empty": "In dieser Dimension wurden noch keine Chunks erzeugt",
+      "chunkAt": "Chunk {{x}}, {{z}} · Blöcke {{bx}}, {{bz}}",
+      "inhabited": "Spieler waren hier {{minutes}} Min.",
+      "status": {
+        "absent": "keiner",
+        "ok": "in Ordnung",
+        "damaged": "beschädigt",
+        "unreadable": "nicht lesbar",
+        "proto": "nicht fertig erzeugt"
+      },
+      "stats": "Geladene Chunks: {{total}} · nie besucht: {{unvisited}} · veraltet: {{outdated}}",
+      "worldVersion": "Weltversion: {{version}}",
+      "controls": "Mausrad: Zoom · Ziehen: verschieben · Klick: auswählen · Umschalt+Ziehen: Bereich auswählen"
+    }
   }
 }

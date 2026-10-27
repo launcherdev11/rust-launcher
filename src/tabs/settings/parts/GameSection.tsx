@@ -57,6 +57,7 @@ export function GameSection({ ctx }: Props) {
             "game.showConsole",
             "game.closeLauncher",
             "game.checkProcesses",
+            "game.worldAutoBackup",
           ) && (
             <SettingsSection
               title={tt("settings.game.subtab.general")}
@@ -124,6 +125,14 @@ export function GameSection({ ctx }: Props) {
                   label={tt("settings.game.checkGameProcesses.label")}
                   value={settings?.check_game_processes ?? true}
                   onChange={(v) => updateSettings({ check_game_processes: v })}
+                />
+              )}
+              {showSetting("game.worldAutoBackup") && (
+                <SettingsSwitchRow
+                  label={tt("worldTools.autoBackup.label")}
+                  hint={tt("worldTools.autoBackup.hint")}
+                  value={settings?.world_auto_backup ?? true}
+                  onChange={(v) => updateSettings({ world_auto_backup: v })}
                 />
               )}
             </SettingsSection>

@@ -2421,5 +2421,76 @@
       "run": "Enter run",
       "close": "Esc close"
     }
+  },
+  "worldTools": {
+    "open": "Backups and map",
+    "back": "Back to worlds",
+    "loading": "Loading…",
+    "tab": {
+      "backups": "Backups",
+      "map": "Chunk map"
+    },
+    "autoBackup": {
+      "label": "Back up worlds after playing",
+      "hint": "When the game closes, the worlds you entered are archived. The last 4 automatic copies of each world are kept."
+    },
+    "backups": {
+      "create": "Back up now",
+      "creating": "Archiving…",
+      "created": "World backup ready",
+      "openFolder": "Backups folder",
+      "hint": "Before a restore the current state of the world is saved as a separate safety copy.",
+      "runningHint": "The game is running: you can back up, but not restore",
+      "empty": "No backups of this world yet",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restored": "World restored",
+      "restoreTitle": "Restore the world?",
+      "restoreMessage": "The world goes back to its state on {{date}}. The current state is saved as a safety copy first.",
+      "delete": "Delete backup",
+      "deleteTitle": "Delete the backup?",
+      "deleteMessage": "The archive will be deleted for good.",
+      "kind": {
+        "manual": "Manual",
+        "auto": "Auto",
+        "safety": "Safety"
+      }
+    },
+    "map": {
+      "dimension": "Dimension",
+      "dim": {
+        "overworld": "Overworld",
+        "the_nether": "Nether",
+        "the_end": "End"
+      },
+      "filter": {
+        "none": "Map",
+        "unvisited": "Never visited",
+        "outdated": "Outdated",
+        "damaged": "Damaged"
+      },
+      "selectFiltered": "Select highlighted",
+      "selected": "Selected: {{count}}",
+      "clear": "Clear selection",
+      "delete": "Delete chunks",
+      "deleting": "Deleting…",
+      "deleteTitle": "Delete the selected chunks?",
+      "deleteMessage": "Chunks: {{count}}. The game will generate them again on the next visit and anything built there will be gone. The world is saved as a safety copy before deleting.",
+      "deleted": "Chunks deleted: {{count}}",
+      "closeGame": "Close the game to delete chunks",
+      "empty": "No chunks have been generated in this dimension yet",
+      "chunkAt": "Chunk {{x}}, {{z}} · blocks {{bx}}, {{bz}}",
+      "inhabited": "players spent {{minutes}} min here",
+      "status": {
+        "absent": "none",
+        "ok": "fine",
+        "damaged": "damaged",
+        "unreadable": "unreadable",
+        "proto": "not fully generated"
+      },
+      "stats": "Chunks loaded: {{total}} · never visited: {{unvisited}} · outdated: {{outdated}}",
+      "worldVersion": "World version: {{version}}",
+      "controls": "Wheel: zoom · drag: pan · click: select · Shift+drag: select an area"
+    }
   }
 }
