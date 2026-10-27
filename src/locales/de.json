@@ -2332,6 +2332,56 @@
       "close": "Esc schließen"
     }
   },
+  "configEditor": {
+    "nav": "Configs",
+    "title": "Configs",
+    "hint": "Dateien aus config, defaultconfigs und options.txt. Vor jedem Speichern kommt die vorherige Version in den Verlauf.",
+    "searchFiles": "Dateinamen durchsuchen",
+    "searchContent": "Dateiinhalte durchsuchen",
+    "mode": {
+      "names": "Dateien",
+      "content": "Inhalt"
+    },
+    "loading": "Wird geladen…",
+    "noFiles": "Noch keine Configs. Sie erscheinen nach dem ersten Start mit Mods.",
+    "noHits": "Keine Treffer",
+    "pickFile": "Wählen Sie links eine Datei",
+    "find": "In Datei suchen",
+    "findNothing": "In dieser Datei nicht gefunden",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Config gespeichert",
+    "revert": "Änderungen verwerfen",
+    "lossy": "Diese Datei ist nicht UTF-8. Einige Zeichen werden evtl. falsch angezeigt und beim Speichern verändert.",
+    "problemAt": "Zeile {{line}}: {{message}}",
+    "unsaved": {
+      "title": "Ungespeicherte Änderungen",
+      "message": "Die geöffnete Datei hat ungespeicherte Änderungen. Verwerfen?",
+      "discard": "Verwerfen"
+    },
+    "invalid": {
+      "title": "Die Datei enthält einen Fehler",
+      "message": "Das Spiel kann diese Datei eventuell nicht lesen: {{message}}. Trotzdem speichern?",
+      "saveAnyway": "Speichern"
+    },
+    "conflict": {
+      "title": "Die Datei wurde geändert",
+      "message": "Während die Datei offen war, hat das Spiel oder ein anderes Programm sie überschrieben. Mit Ihrer Version überschreiben? Die aktuelle kommt in den Verlauf.",
+      "overwrite": "Überschreiben"
+    },
+    "history": {
+      "open": "Verlauf",
+      "title": "Gespeicherte Versionen",
+      "back": "Zurück zum Editor",
+      "empty": "Noch keine Versionen. Sie entstehen beim Speichern im Launcher.",
+      "diffHint": "Unterschied zwischen der gewählten Version und dem aktuellen Editorinhalt",
+      "restore": "Diese Version zurückholen",
+      "restored": "Version in den Editor geladen, speichern zum Übernehmen",
+      "identical": "Identisch mit dem aktuellen Inhalt",
+      "tooDifferent": "Die Versionen unterscheiden sich zu stark für eine Anzeige",
+      "hidden": "… {{count}} unverändert"
+    }
+  },
   "worldTools": {
     "open": "Backups und Karte",
     "back": "Zurück zu den Welten",

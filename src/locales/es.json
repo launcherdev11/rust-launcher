@@ -2329,6 +2329,56 @@
       "close": "Esc cerrar"
     }
   },
+  "configEditor": {
+    "nav": "Configs",
+    "title": "Configs",
+    "hint": "Archivos de config, defaultconfigs y options.txt. Antes de cada guardado la versión anterior va al historial.",
+    "searchFiles": "Buscar por nombre",
+    "searchContent": "Buscar en el contenido",
+    "mode": {
+      "names": "Archivos",
+      "content": "Contenido"
+    },
+    "loading": "Cargando…",
+    "noFiles": "Aún no hay configs. Aparecen tras el primer inicio con mods.",
+    "noHits": "Sin coincidencias",
+    "pickFile": "Elija un archivo a la izquierda",
+    "find": "Buscar en el archivo",
+    "findNothing": "No está en este archivo",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Config guardada",
+    "revert": "Descartar cambios",
+    "lossy": "Este archivo no es UTF-8. Algunos caracteres pueden verse mal y cambiarán al guardar.",
+    "problemAt": "Línea {{line}}: {{message}}",
+    "unsaved": {
+      "title": "Cambios sin guardar",
+      "message": "El archivo abierto tiene cambios sin guardar. ¿Descartarlos?",
+      "discard": "Descartar"
+    },
+    "invalid": {
+      "title": "El archivo tiene un error",
+      "message": "Puede que el juego no lea este archivo: {{message}}. ¿Guardar de todos modos?",
+      "saveAnyway": "Guardar"
+    },
+    "conflict": {
+      "title": "El archivo cambió",
+      "message": "Mientras estaba abierto, el juego u otro programa lo reescribió. ¿Sobrescribir con su versión? La actual irá al historial.",
+      "overwrite": "Sobrescribir"
+    },
+    "history": {
+      "open": "Historial",
+      "title": "Versiones guardadas",
+      "back": "Volver al editor",
+      "empty": "Aún no hay versiones. Aparecen al guardar desde el launcher.",
+      "diffHint": "Diferencia entre la versión elegida y lo que hay ahora en el editor",
+      "restore": "Recuperar esta versión",
+      "restored": "Versión cargada en el editor, guarde para aplicarla",
+      "identical": "Igual que el contenido actual",
+      "tooDifferent": "Las versiones difieren demasiado para mostrar la diferencia",
+      "hidden": "… {{count}} sin cambios"
+    }
+  },
   "worldTools": {
     "open": "Copias y mapa",
     "back": "Volver a los mundos",

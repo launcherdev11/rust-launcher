@@ -15,6 +15,7 @@ export type EditorSection =
   | "launch"
   | "version"
   | "worlds"
+  | "configs"
   | "conflicts"
   | "cleanup"
   | "backups";
@@ -52,6 +53,7 @@ const NAV_ITEMS: { id: EditorSection; key: string }[] = [
   { id: "launch", key: "modpacks.editor.nav.launch" },
   { id: "version", key: "modpacks.editor.nav.version" },
   { id: "worlds", key: "modpacks.editor.nav.worlds" },
+  { id: "configs", key: "configEditor.nav" },
   { id: "conflicts", key: "modpacks.editor.nav.conflicts" },
   { id: "cleanup", key: "modpacks.editor.nav.cleanup" },
   { id: "backups", key: "modpacks.editor.nav.backups" },

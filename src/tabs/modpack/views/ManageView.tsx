@@ -44,6 +44,7 @@ import { DeleteIcon } from "../../../components/delete_icon";
 import { ConsoleFilterBar, ConsoleLines } from "../../../components/ConsoleLogView";
 import { LogAnalyzerPanel } from "../../../components/LogAnalyzerPanel";
 import { ListView } from "./ListView";
+import { ConfigEditorPanel } from "../../../features/config-editor/ConfigEditorPanel";
 import { WorldToolsView } from "../../../features/worlds/WorldToolsView";
 import type { ModpackController } from "../useModpackController";
 
@@ -540,6 +541,13 @@ export function ManageView({ ctx }: Props) {
           onDeleteSelected={() => void handleDeleteSelectedWorlds()}
           deleteBusy={worldsDeleteBusy}
           tt={tt}
+        />
+      ) : editorSection === "configs" ? (
+        <ConfigEditorPanel
+          profileId={selectedProfile.id}
+          language={language}
+          tt={tt}
+          showNotification={showNotification}
         />
       ) : editorSection === "conflicts" ? (
         <ConflictsPanel

@@ -2422,6 +2422,56 @@
       "close": "Esc close"
     }
   },
+  "configEditor": {
+    "nav": "Configs",
+    "title": "Configs",
+    "hint": "Files from config, defaultconfigs and options.txt. Before every save the previous version goes into history.",
+    "searchFiles": "Search file names",
+    "searchContent": "Search file contents",
+    "mode": {
+      "names": "Files",
+      "content": "Contents"
+    },
+    "loading": "Loading…",
+    "noFiles": "No configs yet. They appear after the first launch with mods.",
+    "noHits": "No matches",
+    "pickFile": "Pick a file on the left",
+    "find": "Find in file",
+    "findNothing": "Not found in this file",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Config saved",
+    "revert": "Discard edits",
+    "lossy": "This file is not UTF-8. Some characters may show incorrectly and will change on save.",
+    "problemAt": "Line {{line}}: {{message}}",
+    "unsaved": {
+      "title": "Unsaved edits",
+      "message": "The open file has unsaved changes. Discard them?",
+      "discard": "Discard"
+    },
+    "invalid": {
+      "title": "The file has an error",
+      "message": "The game may fail to read this file: {{message}}. Save anyway?",
+      "saveAnyway": "Save"
+    },
+    "conflict": {
+      "title": "The file changed",
+      "message": "While the file was open, the game or another program rewrote it. Overwrite with your version? The current one goes into history.",
+      "overwrite": "Overwrite"
+    },
+    "history": {
+      "open": "History",
+      "title": "Saved versions",
+      "back": "Back to editor",
+      "empty": "No versions yet. They appear when you save from the launcher.",
+      "diffHint": "Difference between the selected version and what is in the editor now",
+      "restore": "Bring this version back",
+      "restored": "Version loaded into the editor, save to apply it",
+      "identical": "Same as the current content",
+      "tooDifferent": "The versions differ too much to show a diff",
+      "hidden": "… {{count}} unchanged"
+    }
+  },
   "worldTools": {
     "open": "Backups and map",
     "back": "Back to worlds",

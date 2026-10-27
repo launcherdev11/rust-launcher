@@ -8,6 +8,7 @@ pub mod console_filter;
 pub mod content_snapshots;
 pub mod core;
 pub mod worlds;
+pub mod config_files;
 pub mod download;
 pub mod files;
 pub mod install;
@@ -82,6 +83,9 @@ pub use profile_tools::{
 pub use analysis_logs::read_instance_analysis_logs;
 pub use worlds::{
     create_world_backup, delete_world_backup, list_world_backups, open_world_backups_folder, restore_world_backup, delete_world_chunks, get_world_overview, get_world_region, list_world_dimensions,
+};
+pub use config_files::{
+    list_config_files, read_config_file, save_config_file, list_config_versions, read_config_version, search_config_files, validate_config_toml,
 };
 pub use screenshots::{
     delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail, list_screenshots,

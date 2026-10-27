@@ -49,6 +49,7 @@ use services::game::{
     cleanup_profile, delete_profile_worlds, duplicate_profile, get_profile_disk_usage,
     list_profile_worlds,
     create_world_backup, delete_world_backup, list_world_backups, open_world_backups_folder, restore_world_backup, delete_world_chunks, get_world_overview, get_world_region, list_world_dimensions,
+    list_config_files, read_config_file, save_config_file, list_config_versions, read_config_version, search_config_files, validate_config_toml,
 };
 use services::auth::{
     ely_login_with_password, ely_logout, ms_logout,     start_ely_oauth, start_ms_oauth,
@@ -233,6 +234,13 @@ pub fn run() {
             get_world_overview,
             get_world_region,
             list_world_dimensions,
+            list_config_files,
+            read_config_file,
+            save_config_file,
+            list_config_versions,
+            read_config_version,
+            search_config_files,
+            validate_config_toml,
             get_system_memory_gb,
             get_graphics_adapters,
             start_ely_oauth,
