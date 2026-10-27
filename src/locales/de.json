@@ -2302,6 +2302,35 @@
       }
     }
   },
+  "runHistory": {
+    "nav": "Starts",
+    "title": "Startverlauf",
+    "hint": "Das vollständige Log jedes Starts mit Exit-Code und Dauer. Die letzten 40 Starts werden behalten.",
+    "searchPlaceholder": "In allen Logs suchen",
+    "loading": "Verlauf wird geladen…",
+    "loadingLog": "Log wird geladen…",
+    "empty": "Noch keine Starts. Starten Sie das Spiel, dann erscheint hier sein Log.",
+    "emptyLog": "Das Spiel hat bei diesem Start nichts ausgegeben.",
+    "noHits": "Nichts gefunden",
+    "exitCode": "Code {{code}}",
+    "errors": "Fehler: {{count}}",
+    "summary": "Zeilen: {{lines}} · Speicher: {{memory}}",
+    "truncated": "Log gekürzt, es war zu groß",
+    "showEarlier": "{{count}} frühere Zeilen anzeigen",
+    "copyReport": "Bericht kopieren",
+    "reportHint": "System, Instanz und das Ende des Logs. Benutzerpfade, Tokens und IP-Adressen werden ausgeblendet.",
+    "reportCopied": "Bericht kopiert, fügen Sie ihn in den Support-Chat ein",
+    "reportFailed": "Bericht konnte nicht erstellt werden",
+    "delete": "Start löschen",
+    "deleteFailed": "Start konnte nicht gelöscht werden",
+    "outcome": {
+      "running": "Läuft",
+      "ok": "Beendet",
+      "crashed": "Absturz",
+      "stopped": "Gestoppt",
+      "interrupted": "Unbekannt"
+    }
+  },
   "commandPalette": {
     "title": "Befehlspalette",
     "hotkey": "Befehlspalette",

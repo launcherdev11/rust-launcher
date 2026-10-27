@@ -44,6 +44,7 @@ import { DeleteIcon } from "../../../components/delete_icon";
 import { ConsoleFilterBar, ConsoleLines } from "../../../components/ConsoleLogView";
 import { LogAnalyzerPanel } from "../../../components/LogAnalyzerPanel";
 import { ListView } from "./ListView";
+import { RunHistoryPanel } from "../../../features/run-history/RunHistoryPanel";
 import { ConfigEditorPanel } from "../../../features/config-editor/ConfigEditorPanel";
 import { WorldToolsView } from "../../../features/worlds/WorldToolsView";
 import type { ModpackController } from "../useModpackController";
@@ -544,6 +545,13 @@ export function ManageView({ ctx }: Props) {
         />
       ) : editorSection === "configs" ? (
         <ConfigEditorPanel
+          profileId={selectedProfile.id}
+          language={language}
+          tt={tt}
+          showNotification={showNotification}
+        />
+      ) : editorSection === "runs" ? (
+        <RunHistoryPanel
           profileId={selectedProfile.id}
           language={language}
           tt={tt}

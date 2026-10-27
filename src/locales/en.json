@@ -2392,6 +2392,35 @@
       }
     }
   },
+  "runHistory": {
+    "nav": "Runs",
+    "title": "Run history",
+    "hint": "The full log of every launch with its exit code and duration. The last 40 runs are kept.",
+    "searchPlaceholder": "Search all logs",
+    "loading": "Loading history…",
+    "loadingLog": "Loading log…",
+    "empty": "No runs yet. Launch the game and its log will show up here.",
+    "emptyLog": "The game printed nothing during this run.",
+    "noHits": "Nothing found",
+    "exitCode": "code {{code}}",
+    "errors": "errors: {{count}}",
+    "summary": "Lines: {{lines}} · memory: {{memory}}",
+    "truncated": "log cut short, it was too large",
+    "showEarlier": "Show {{count}} earlier lines",
+    "copyReport": "Copy report",
+    "reportHint": "System, instance summary and the end of the log. User paths, tokens and IP addresses are hidden.",
+    "reportCopied": "Report copied, paste it into the support chat",
+    "reportFailed": "Could not build the report",
+    "delete": "Delete run",
+    "deleteFailed": "Could not delete the run",
+    "outcome": {
+      "running": "Running",
+      "ok": "Finished",
+      "crashed": "Crashed",
+      "stopped": "Stopped",
+      "interrupted": "Unknown"
+    }
+  },
   "commandPalette": {
     "title": "Command palette",
     "hotkey": "Command palette",

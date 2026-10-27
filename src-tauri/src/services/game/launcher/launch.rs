@@ -45,6 +45,7 @@ use crate::services::game::runtime::{
 };
 use crate::services::game::launcher::process::is_our_game_process_alive;
 use crate::services::game::launcher::session::{forget_game_session, remember_game_session};
+use crate::services::game::run_history::RunRecorder;
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{
     BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID, REOPEN_LAUNCHER_ON_GAME_EXIT,
@@ -1315,6 +1316,12 @@ pub async fn launch_game(
     GAME_PROCESS_PID.store(spawned_pid as u64, Ordering::SeqCst);
     eprintln!("[Launch] PID: {spawned_pid}");
     remember_game_session(spawned_pid, playtime_profile_id.clone());
+    let run_recorder = RunRecorder::start(
+        playtime_profile_id.clone(),
+        &version_id,
+        Some(java_path.display().to_string()),
+        Some(settings.ram_mb),
+    );
 
     if let Some(ref profile_id) = playtime_profile_id {
         if let Ok(last_played_at) = record_profile_last_played(profile_id) {
@@ -1330,11 +1337,15 @@ pub async fn launch_game(
 
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
+        let recorder = run_recorder.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 match line {
                     Ok(text) => {
+                        if let Some(r) = recorder.as_ref() {
+                            r.push(&text, false);
+                        }
                         if !is_game_console_line_important(&text, "stdout") {
                             continue;
                         }
@@ -1352,11 +1363,15 @@ pub async fn launch_game(
 
     if let Some(stderr) = child.stderr.take() {
         let app_clone = app.clone();
+        let recorder = run_recorder.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 match line {
                     Ok(text) => {
+                        if let Some(r) = recorder.as_ref() {
+                            r.push(&text, true);
+                        }
                         if !is_game_console_line_important(&text, "stderr") {
                             continue;
                         }
@@ -1413,6 +1428,10 @@ pub async fn launch_game(
 
         forget_game_session();
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+        if let Some(r) = run_recorder.as_ref() {
+            std::thread::sleep(Duration::from_millis(300));
+            r.finish(exit_code);
+        }
         if let Some(profile_id) = world_backup_profile.as_deref() {
             crate::services::game::worlds::backups::auto_backup_touched_worlds(profile_id, session_started_ms);
         }

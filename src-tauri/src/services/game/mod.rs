@@ -16,6 +16,7 @@ pub mod integrity;
 pub mod launcher;
 pub mod lazy_mods;
 pub mod nickname;
+pub mod run_history;
 pub mod runtime;
 pub mod options_txt;
 pub mod profiles;
@@ -86,6 +87,9 @@ pub use worlds::{
 };
 pub use config_files::{
     list_config_files, read_config_file, save_config_file, list_config_versions, read_config_version, search_config_files, validate_config_toml,
+};
+pub use run_history::{
+    build_game_run_report, delete_game_run, list_game_runs, read_game_run_log, search_game_runs,
 };
 pub use screenshots::{
     delete_screenshot, get_screenshot_data_uri, get_screenshot_thumbnail, list_screenshots,

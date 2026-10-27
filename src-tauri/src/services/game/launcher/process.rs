@@ -22,6 +22,7 @@ pub fn stop_game() -> Result<(), String> {
     if pid == 0 {
         return Ok(());
     }
+    crate::services::game::run_history::STOP_REQUESTED.store(true, Ordering::SeqCst);
 
     let pid_u32 = pid as u32;
     let pid_obj = Pid::from_u32(pid_u32);

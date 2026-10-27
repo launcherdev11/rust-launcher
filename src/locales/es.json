@@ -2299,6 +2299,35 @@
       }
     }
   },
+  "runHistory": {
+    "nav": "Sesiones",
+    "title": "Historial de sesiones",
+    "hint": "El registro completo de cada inicio con su código de salida y duración. Se guardan las últimas 40 sesiones.",
+    "searchPlaceholder": "Buscar en todos los registros",
+    "loading": "Cargando historial…",
+    "loadingLog": "Cargando registro…",
+    "empty": "Aún no hay sesiones. Inicie el juego y su registro aparecerá aquí.",
+    "emptyLog": "El juego no imprimió nada en esta sesión.",
+    "noHits": "No se encontró nada",
+    "exitCode": "código {{code}}",
+    "errors": "errores: {{count}}",
+    "summary": "Líneas: {{lines}} · memoria: {{memory}}",
+    "truncated": "registro recortado, era demasiado grande",
+    "showEarlier": "Mostrar {{count}} líneas anteriores",
+    "copyReport": "Copiar informe",
+    "reportHint": "Sistema, instancia y el final del registro. Se ocultan rutas de usuario, tokens y direcciones IP.",
+    "reportCopied": "Informe copiado, péguelo en el chat de soporte",
+    "reportFailed": "No se pudo crear el informe",
+    "delete": "Eliminar sesión",
+    "deleteFailed": "No se pudo eliminar la sesión",
+    "outcome": {
+      "running": "En curso",
+      "ok": "Terminada",
+      "crashed": "Fallo",
+      "stopped": "Detenida",
+      "interrupted": "Desconocido"
+    }
+  },
   "commandPalette": {
     "title": "Paleta de comandos",
     "hotkey": "Paleta de comandos",
