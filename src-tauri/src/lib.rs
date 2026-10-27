@@ -49,6 +49,7 @@ use services::game::{
     cleanup_profile, delete_profile_worlds, duplicate_profile, get_profile_disk_usage,
     list_profile_worlds,
     build_game_run_report, delete_game_run, list_game_runs, read_game_run_log, search_game_runs,
+    export_server_pack, get_server_pack, list_server_pack_mods, save_server_pack_config,
     create_world_backup, delete_world_backup, list_world_backups, open_world_backups_folder, restore_world_backup, delete_world_chunks, get_world_overview, get_world_region, list_world_dimensions,
     list_config_files, read_config_file, save_config_file, list_config_versions, read_config_version, search_config_files, validate_config_toml,
 };
@@ -231,6 +232,10 @@ pub fn run() {
             delete_game_run,
             search_game_runs,
             build_game_run_report,
+            get_server_pack,
+            save_server_pack_config,
+            list_server_pack_mods,
+            export_server_pack,
             create_world_backup,
             delete_world_backup,
             list_world_backups,

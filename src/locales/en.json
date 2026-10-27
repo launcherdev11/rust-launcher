@@ -2616,5 +2616,94 @@
       "worldVersion": "World version: {{version}}",
       "controls": "Wheel: zoom · drag: pan · click: select · Shift+drag: select an area"
     }
+  },
+  "serverPack": {
+    "nav": "Server",
+    "title": "Server pack",
+    "hint": "Set up a server for this instance and build an archive for a host or your own computer. Settings are saved per instance.",
+    "loading": "Loading…",
+    "unsupported": "Server packs are not available for the {{loader}} loader yet.",
+    "core": "Server software",
+    "kind": {
+      "vanilla": "Vanilla",
+      "paper": "Paper",
+      "purpur": "Purpur",
+      "fabric": "Fabric",
+      "forge": "Forge",
+      "neoforge": "NeoForge"
+    },
+    "kindHint": {
+      "vanilla": "The official Mojang server, unchanged.",
+      "paper": "Faster than vanilla and runs Bukkit and Spigot plugins.",
+      "purpur": "Paper with extra gameplay settings.",
+      "fabric": "A server with the same Fabric Loader version as the instance.",
+      "forge": "The archive contains the Forge installer; the start script installs the server on first launch.",
+      "neoforge": "The archive contains the NeoForge installer; the start script installs the server on first launch."
+    },
+    "java": "Requires Java {{version}}.",
+    "memory": "Memory",
+    "memoryValue": "{{gb}} GB",
+    "auth": {
+      "label": "Player login",
+      "microsoft": "Microsoft",
+      "ely": "Ely.by",
+      "offline": "Any name"
+    },
+    "authHint": {
+      "microsoft": "Only licensed Microsoft accounts can join.",
+      "ely": "For Ely.by accounts: authlib-injector is added to the archive and the scripts start the server with it.",
+      "offline": "Any name can join without verification. If the server is reachable from the internet, turn on the whitelist."
+    },
+    "props": {
+      "title": "Server settings",
+      "motd": "Server list description",
+      "port": "Port",
+      "maxPlayers": "Max players",
+      "difficulty": "Difficulty",
+      "gamemode": "Game mode",
+      "viewDistance": "View distance",
+      "simulationDistance": "Simulation distance",
+      "spawnProtection": "Spawn protection (blocks)",
+      "seed": "World seed",
+      "whitelist": "Whitelist",
+      "pvp": "PvP",
+      "allowFlight": "Allow flight",
+      "hardcore": "Hardcore",
+      "commandBlocks": "Command blocks"
+    },
+    "difficulty": {
+      "peaceful": "Peaceful",
+      "easy": "Easy",
+      "normal": "Normal",
+      "hard": "Hard"
+    },
+    "gamemode": {
+      "survival": "Survival",
+      "creative": "Creative",
+      "adventure": "Adventure",
+      "spectator": "Spectator"
+    },
+    "mods": {
+      "title": "Mods",
+      "hint": "Client-only mods are detected automatically and left out of the server. Tick them by hand if detection got it wrong.",
+      "count": "{{included}} of {{total}}",
+      "clientOnly": "Client-only",
+      "loading": "Reading mods…",
+      "empty": "This instance has no mods.",
+      "configs": "Include configs (config, defaultconfigs, kubejs, scripts)"
+    },
+    "eula": {
+      "accept": "I accept the Minecraft End User License Agreement (EULA)",
+      "read": "Read it",
+      "hint": "Without it the server will not start: on first launch it asks you to accept the EULA in eula.txt."
+    },
+    "unsaved": "You have unsaved changes",
+    "buildHint": "The archive holds the core, mods, configs, server.properties and start.bat / start.sh scripts.",
+    "reset": "Discard",
+    "save": "Save",
+    "saved": "Server settings saved",
+    "build": "Build archive",
+    "building": "Building archive…",
+    "built": "Server archive saved. Mods: {{mods}}, skipped: {{skipped}}"
   }
 }

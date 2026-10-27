@@ -7,6 +7,7 @@ pub mod console;
 pub mod console_filter;
 pub mod content_snapshots;
 pub mod core;
+pub mod server_pack;
 pub mod worlds;
 pub mod config_files;
 pub mod download;
@@ -83,6 +84,7 @@ pub use profile_tools::{
     list_profile_worlds,
 };
 pub use analysis_logs::read_instance_analysis_logs;
+pub use server_pack::{export_server_pack, get_server_pack, list_server_pack_mods, save_server_pack_config};
 pub use worlds::{
     create_world_backup, delete_world_backup, list_world_backups, open_world_backups_folder, restore_world_backup, delete_world_chunks, get_world_overview, get_world_region, list_world_dimensions,
 };

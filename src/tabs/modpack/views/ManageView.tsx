@@ -47,6 +47,7 @@ import { ListView } from "./ListView";
 import { RunHistoryPanel } from "../../../features/run-history/RunHistoryPanel";
 import { ConfigEditorPanel } from "../../../features/config-editor/ConfigEditorPanel";
 import { WorldToolsView } from "../../../features/worlds/WorldToolsView";
+import { ServerPackPanel } from "../../../features/server-pack/ServerPackPanel";
 import type { ModpackController } from "../useModpackController";
 
 type Props = { ctx: ModpackController };
@@ -547,6 +548,13 @@ export function ManageView({ ctx }: Props) {
         <ConfigEditorPanel
           profileId={selectedProfile.id}
           language={language}
+          tt={tt}
+          showNotification={showNotification}
+        />
+      ) : editorSection === "server" ? (
+        <ServerPackPanel
+          profileId={selectedProfile.id}
+          systemMemoryGb={systemMemoryGb}
           tt={tt}
           showNotification={showNotification}
         />

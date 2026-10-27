@@ -2523,5 +2523,94 @@
       "worldVersion": "Versión del mundo: {{version}}",
       "controls": "Rueda: zoom · arrastrar: mover · clic: seleccionar · Mayús+arrastrar: seleccionar un área"
     }
+  },
+  "serverPack": {
+    "nav": "Servidor",
+    "title": "Paquete de servidor",
+    "hint": "Configura un servidor para esta instancia y crea un archivo para un hosting o tu propio equipo. Los ajustes se guardan por instancia.",
+    "loading": "Cargando…",
+    "unsupported": "Todavía no se pueden crear paquetes de servidor para el cargador {{loader}}.",
+    "core": "Software del servidor",
+    "kind": {
+      "vanilla": "Vanilla",
+      "paper": "Paper",
+      "purpur": "Purpur",
+      "fabric": "Fabric",
+      "forge": "Forge",
+      "neoforge": "NeoForge"
+    },
+    "kindHint": {
+      "vanilla": "El servidor oficial de Mojang, sin cambios.",
+      "paper": "Más rápido que vanilla y admite plugins de Bukkit y Spigot.",
+      "purpur": "Paper con ajustes de juego adicionales.",
+      "fabric": "Un servidor con la misma versión de Fabric Loader que la instancia.",
+      "forge": "El archivo incluye el instalador de Forge; el script de inicio instala el servidor en el primer arranque.",
+      "neoforge": "El archivo incluye el instalador de NeoForge; el script de inicio instala el servidor en el primer arranque."
+    },
+    "java": "Requiere Java {{version}}.",
+    "memory": "Memoria",
+    "memoryValue": "{{gb}} GB",
+    "auth": {
+      "label": "Acceso de jugadores",
+      "microsoft": "Microsoft",
+      "ely": "Ely.by",
+      "offline": "Cualquier nombre"
+    },
+    "authHint": {
+      "microsoft": "Solo pueden entrar cuentas de Microsoft con licencia.",
+      "ely": "Para cuentas de Ely.by: se añade authlib-injector al archivo y los scripts inician el servidor con él.",
+      "offline": "Puede entrar cualquier nombre sin verificación. Si el servidor es accesible desde internet, activa la lista blanca."
+    },
+    "props": {
+      "title": "Ajustes del servidor",
+      "motd": "Descripción en la lista de servidores",
+      "port": "Puerto",
+      "maxPlayers": "Máximo de jugadores",
+      "difficulty": "Dificultad",
+      "gamemode": "Modo de juego",
+      "viewDistance": "Distancia de renderizado",
+      "simulationDistance": "Distancia de simulación",
+      "spawnProtection": "Protección del spawn (bloques)",
+      "seed": "Semilla del mundo",
+      "whitelist": "Lista blanca",
+      "pvp": "PvP",
+      "allowFlight": "Permitir vuelo",
+      "hardcore": "Extremo",
+      "commandBlocks": "Bloques de comandos"
+    },
+    "difficulty": {
+      "peaceful": "Pacífico",
+      "easy": "Fácil",
+      "normal": "Normal",
+      "hard": "Difícil"
+    },
+    "gamemode": {
+      "survival": "Supervivencia",
+      "creative": "Creativo",
+      "adventure": "Aventura",
+      "spectator": "Espectador"
+    },
+    "mods": {
+      "title": "Mods",
+      "hint": "Los mods solo de cliente se detectan automáticamente y no van al servidor. Márcalos a mano si la detección se equivoca.",
+      "count": "{{included}} de {{total}}",
+      "clientOnly": "Solo cliente",
+      "loading": "Leyendo mods…",
+      "empty": "Esta instancia no tiene mods.",
+      "configs": "Incluir configuraciones (config, defaultconfigs, kubejs, scripts)"
+    },
+    "eula": {
+      "accept": "Acepto el Acuerdo de licencia de usuario final de Minecraft (EULA)",
+      "read": "Leer",
+      "hint": "Sin esto el servidor no arrancará: en el primer inicio te pedirá aceptar el EULA en eula.txt."
+    },
+    "unsaved": "Hay cambios sin guardar",
+    "buildHint": "El archivo contiene el núcleo, los mods, las configuraciones, server.properties y los scripts start.bat / start.sh.",
+    "reset": "Descartar",
+    "save": "Guardar",
+    "saved": "Ajustes del servidor guardados",
+    "build": "Crear archivo",
+    "building": "Creando archivo…",
+    "built": "Archivo del servidor guardado. Mods: {{mods}}, omitidos: {{skipped}}"
   }
 }

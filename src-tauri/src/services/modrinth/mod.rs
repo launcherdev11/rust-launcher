@@ -3,7 +3,7 @@ mod conflicts;
 mod content_metadata;
 mod dependencies;
 mod installed;
-mod jar_compat;
+pub(crate) mod jar_compat;
 pub(crate) mod types;
 mod updates;
 
