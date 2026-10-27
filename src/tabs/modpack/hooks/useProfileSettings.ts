@@ -72,7 +72,6 @@ export function useProfileSettings(deps: ProfileSettingsDeps) {
     try {
       void invoke("set_selected_profile", { id: profileId });
     } catch {
-      //ignore
     }
     await loadProfileLaunchSettings(profileId);
   }

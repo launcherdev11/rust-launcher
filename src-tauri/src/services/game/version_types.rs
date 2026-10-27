@@ -174,10 +174,8 @@ pub(crate) struct AssetIndexRef {
 pub(crate) struct AssetIndexJson {
     #[serde(default)]
     pub(crate) objects: HashMap<String, AssetObject>,
-    /// Старые версии (MC ≤ 1.7.2) читают ассеты из `assets/virtual/legacy/<имя>`.
     #[serde(default, rename = "virtual")]
     pub(crate) is_virtual: bool,
-    /// Самые старые версии читают ассеты из `<gameDir>/resources/<имя>`.
     #[serde(default)]
     pub(crate) map_to_resources: bool,
 }

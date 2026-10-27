@@ -1,7 +1,3 @@
-/** @type {import('tailwindcss').Config} */
-
-// Accent shades follow the user's accent setting (--accent-color), so they are CSS colour mixes
-// rather than fixed hex. `<alpha-value>` keeps opacity modifiers like `bg-accent/20` working.
 const mixed = (cssColor) =>
   `color-mix(in srgb, ${cssColor} calc(<alpha-value> * 100%), transparent)`;
 
@@ -37,8 +33,6 @@ module.exports = {
         meta: ["0.8125rem", { lineHeight: "1.4" }],
         caption: ["0.75rem", { lineHeight: "1.35" }],
       },
-      // One radius per level of hierarchy: badges 6, controls 10, cards 14, panels/modals 18.
-      // lg and xl are deliberately equal so buttons look the same whichever one a file used.
       borderRadius: {
         sm: "0.25rem",
         DEFAULT: "0.375rem",

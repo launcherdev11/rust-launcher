@@ -4,15 +4,10 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct JavaSettings {
     pub use_custom_jvm_args: bool,
-    //явный путь к java/javaw. по дефолту офиц runtime Mojang
     pub java_path: Option<String>,
-    //мин. объем памяти xms (1G\1024M)
     pub xms: Option<String>,
-    //макс объем памяти xmx (4G\4096M)
     pub xmx: Option<String>,
-    //доп JVM аргументы
     pub jvm_args: Option<String>,
-    //имя пресета ("balanced", "performance", "low_memory")
     pub preset: Option<String>,
     #[serde(default)]
     pub prefer_ipv6_network: bool,
@@ -34,11 +29,8 @@ impl Default for JavaSettings {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JavaRuntimeInfo {
-    //полный путь к java/javaw
     pub path: String,
-    //строка с версией из java -version
     pub version: String,
-    //краткое описание источника (PATH, JAVA_HOME, system, runtime и тд)
     pub source: String,
 }
 

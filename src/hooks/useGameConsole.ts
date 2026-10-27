@@ -312,7 +312,6 @@ export function useGameConsole({
             window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY);
             window.localStorage.removeItem(GAME_CONSOLE_STORAGE_KEY_V1);
           } catch {
-            //ignore
           }
         }
       }

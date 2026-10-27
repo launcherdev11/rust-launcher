@@ -107,7 +107,6 @@ export function useLauncherUpdater({ settings, showNotification, tt }: UseLaunch
     try {
       localStorage.setItem("mc16launcher:lastShownUpdateVersion", version);
     } catch {
-      // ignore
     }
   }, []);
 

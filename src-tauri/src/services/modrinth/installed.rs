@@ -49,8 +49,6 @@ pub async fn index_content_dir_sha1(content_dir: &Path) -> Result<HashMap<String
     Ok(by_filename)
 }
 
-/// Как `index_content_dir_sha1`, но хэширует только файлы с нужными именами. Перед скачиванием
-/// достаточно проверить цели загрузки, а не считать SHA1 всей папки `mods/` (сотни МБ).
 pub async fn index_content_dir_sha1_for(
     content_dir: &Path,
     filenames: &[&str],

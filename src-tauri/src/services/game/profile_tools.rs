@@ -369,7 +369,6 @@ pub fn cleanup_profile(
                     freed = freed.saturating_add(bytes);
                     removed.push(rel);
                 } else if !path.exists() {
-                    //already gone
                 }
             }
             Ok(_) => {}

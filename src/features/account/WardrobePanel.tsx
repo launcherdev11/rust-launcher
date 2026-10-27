@@ -592,7 +592,6 @@ function TextureThumb({
     return () => {
       cancelled = true;
     };
-    // `render` is recreated every render; `deps` carries what it actually depends on.
   }, deps);
 
   if (!src) {

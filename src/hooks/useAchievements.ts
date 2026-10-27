@@ -43,7 +43,6 @@ export function useAchievements(
     void reload();
   }, [reload]);
 
-  // A freshly unlocked achievement arrives as a platform notification.
   useEffect(() => {
     if (!enabled || !signedIn || userId) return;
     const onWs = (ev: Event) => {

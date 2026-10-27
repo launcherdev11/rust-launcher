@@ -13,9 +13,6 @@ pub fn hide_console(cmd: &mut Command) {
     }
 }
 
-/// Запускает процесс и ждёт его завершения, но не дольше `timeout`.
-/// `should_abort` опрашивается раз в ~200 мс (например, флаг отмены пользователем):
-/// при `true` процесс убивается. Возвращает `Err` с понятным текстом при таймауте/отмене.
 pub fn run_with_timeout(
     mut cmd: Command,
     timeout: Duration,

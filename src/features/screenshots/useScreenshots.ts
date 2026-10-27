@@ -132,7 +132,6 @@ export function useScreenshots(enabled: boolean, profileId: string | null) {
           setThumbnails({ ...thumbCacheRef.current });
         })
         .catch(() => {
-          //skip broken thumbnails
         })
         .finally(() => {
           thumbPendingRef.current.delete(name);

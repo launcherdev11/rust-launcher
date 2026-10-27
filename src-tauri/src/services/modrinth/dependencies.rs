@@ -136,7 +136,6 @@ impl<'a> DependencyResolver<'a> {
             stack.push((version_id.clone(), 1));
 
             let version = self.fetch_version_cached(&version_id).await?.clone();
-            // Зависимости одной версии резолвим параллельно: каждая может требовать запрос к API.
             let dep_version_ids = futures_util::future::try_join_all(
                 version
                     .dependencies

@@ -141,7 +141,6 @@ export function useLauncherAccounts({
       audio.volume = Math.min(1, Math.max(0, NECO_ARC_SECRET_SOUND_VOLUME));
       void audio.play().catch(() => {});
     } catch {
-      //ignore
     }
   }, []);
 

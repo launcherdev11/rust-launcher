@@ -129,6 +129,5 @@ export function saveConsoleFilters(filters: ConsoleFilters): void {
   try {
     localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
   } catch {
-    //ignore
   }
 }

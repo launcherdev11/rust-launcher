@@ -119,7 +119,6 @@ export function useSettingsMaintenance(deps: SettingsMaintenanceDeps) {
         window.localStorage.removeItem("mc16launcher:onboarding_legacy_migrated");
         window.localStorage.removeItem("mc16launcher:product_tour_completed");
       } catch {
-        //ignore
       }
       showNotification(
         "success",

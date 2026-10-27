@@ -228,8 +228,6 @@ fn extract_overrides(zip_path: &Path, overrides_dir_name: &str, dest_root: &Path
 }
 
 
-/// Папка внутри экземпляра по `classId` проекта CurseForge. В манифесте сборки лежат не только
-/// моды: ресурспаки, шейдеры и датапаки нельзя складывать в `mods/`.
 fn subdir_for_class_id(class_id: Option<u32>) -> &'static str {
     match class_id {
         Some(12) => "resourcepacks",
@@ -333,8 +331,6 @@ where
         message: "Получение информации о файлах".into(),
     });
 
-    // Метаданные всех файлов и проектов — двумя пакетными запросами вместо 2×N одиночных:
-    // так не упираемся в лимит запросов прокси и не теряем моды на «Метаданные файла: 429».
     let file_ids: Vec<u32> = files.iter().map(|f| f.file_id).collect();
     let mut project_ids: Vec<u32> = files.iter().map(|f| f.project_id).collect();
     project_ids.sort_unstable();
@@ -725,8 +721,6 @@ pub async fn download_curseforge_modpack_and_import(
     }
     urls.extend(curseforge_cdn_fallback_urls(file_id, base_name));
 
-    // Потоково, с повторами и проверкой длины: раньше архив целиком читался в память
-    // и обрыв соединения давал обрезанный zip.
     let client = http_client_for_binary_download(false);
     fetch_verified(&client, &urls, &dest, None, None)
         .await

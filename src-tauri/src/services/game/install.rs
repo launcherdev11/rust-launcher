@@ -1098,7 +1098,6 @@ async fn install_version_from_json(
         ),
     );
 
-    //jar
     let client_jar = root.join(format!("{version_id}.jar"));
     log_to_console(
         &app,
@@ -1301,7 +1300,6 @@ async fn install_version_from_json(
         "[Vanilla] Сохранение json-описания версии и финализация установки",
     );
 
-    //сохранение json версий
     let version_json_path = vers_root.join(&version_id).join(format!("{version_id}.json"));
     if let Some(parent) = version_json_path.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;

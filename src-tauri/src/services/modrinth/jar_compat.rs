@@ -5,7 +5,6 @@ use std::path::Path;
 use serde_json::Value;
 use zip::read::ZipArchive;
 
-/// Fabric API → its modules is one level; modules rarely nest further.
 const MAX_NESTED_DEPTH: u8 = 2;
 const MAX_NESTED_JARS: usize = 128;
 const MAX_NESTED_JAR_BYTES: u64 = 48 * 1024 * 1024;
@@ -23,7 +22,6 @@ fn leading_number(s: &str) -> Option<u32> {
     digits.parse().ok()
 }
 
-/// `1.20.1`, `1.21`, `1.21-pre1`, `1.20.5-rc.1` → numeric core. Snapshots (`24w14a`) → None.
 fn parse_mc_version(raw: &str) -> Option<McVersion> {
     let s = raw.trim().trim_start_matches('v');
     let core = s.split(['-', '+']).next()?;
@@ -83,8 +81,6 @@ fn fabric_predicate_matches(token: &str, game: McVersion) -> Option<bool> {
     };
     let explicit_parts = ver.split(['-', '+']).next().unwrap_or("").split('.').count();
     Some(match op {
-        // A bare `1.20` is read leniently as "any 1.20.x": strict loaders reject it,
-        // but flagging it here produced more noise than real hits.
         "" | "=" if explicit_parts <= 2 => game.major == v.major && game.minor == v.minor,
         "" | "=" => game == v,
         ">=" => game >= v,
@@ -97,7 +93,6 @@ fn fabric_predicate_matches(token: &str, game: McVersion) -> Option<bool> {
     })
 }
 
-/// Fabric/Quilt version predicate (`>=1.20.1 <1.21`, `~1.20`, `1.20.x`, `a || b`).
 pub fn fabric_minecraft_range_matches(range: &str, game_version: &str) -> Option<bool> {
     let game = parse_mc_version(game_version)?;
     let range = range.trim();
@@ -149,7 +144,6 @@ fn maven_single_range(inner: &str, start_incl: bool, end_incl: bool, game: McVer
     Some(true)
 }
 
-/// Maven range as used by Forge/NeoForge, including unions: `[1.20,1.20.1],[1.20.4,)`.
 pub fn maven_minecraft_range_matches(range: &str, game_version: &str) -> Option<bool> {
     let game = parse_mc_version(game_version)?;
     let range = range.trim();
@@ -157,7 +151,6 @@ pub fn maven_minecraft_range_matches(range: &str, game_version: &str) -> Option<
         return Some(true);
     }
     if !range.starts_with(['[', '(']) {
-        // A bare Maven version is only a recommendation: Forge accepts any version.
         return parse_mc_version(range).map(|_| true);
     }
 
@@ -191,8 +184,6 @@ pub fn maven_minecraft_range_matches(range: &str, game_version: &str) -> Option<
 pub struct JarModRelation {
     pub mod_id: String,
     pub optional: bool,
-    /// Version predicates as written in the metadata (any of them may match).
-    /// Empty means "any version".
     pub versions: Vec<String>,
 }
 
@@ -211,14 +202,10 @@ pub struct JarModInfo {
     pub mod_id: Option<String>,
     pub title: Option<String>,
     pub version: Option<String>,
-    /// Metadata picked for the profile's loader.
     pub loader: Option<String>,
-    /// Every loader this jar ships metadata for (multi-loader jars have several).
     pub loaders: Vec<String>,
-    /// `client` / `server` / `*` from fabric.mod.json; None when not declared.
     pub environment: Option<String>,
     pub provides: Vec<String>,
-    /// Mods bundled inside the jar (Fabric `jars`, Forge Jar-in-Jar).
     pub nested: Vec<JarNestedMod>,
     pub depends: Vec<JarModRelation>,
     pub breaks: Vec<JarModRelation>,
@@ -234,7 +221,6 @@ struct ParsedMetadata {
     provides: Vec<String>,
     depends: Vec<JarModRelation>,
     breaks: Vec<JarModRelation>,
-    /// Minecraft version predicates, any of them may match.
     minecraft: Vec<String>,
     nested_paths: Vec<String>,
 }
@@ -303,13 +289,10 @@ fn json_str(value: Option<&Value>) -> Option<String> {
         .map(str::to_string)
 }
 
-/// Placeholders like `${version}` mean the build did not expand them.
 fn real_version(raw: Option<String>) -> Option<String> {
     raw.filter(|v| !v.contains("${"))
 }
 
-/// String → one predicate, array → alternatives, anything else is kept verbatim so
-/// the frontend treats it as "unknown" instead of "any version".
 fn version_predicates(value: &Value) -> Vec<String> {
     match value {
         Value::String(s) => {
@@ -427,7 +410,6 @@ fn quilt_relations(arr: Option<&Value>, breaks: bool) -> (Vec<JarModRelation>, V
             }
             _ => continue,
         };
-        // Quilt ids may carry a maven group: `org.quiltmc:quilt_loader`.
         let id = id.rsplit(':').next().unwrap_or(&id).to_string();
         if id.is_empty() {
             continue;
@@ -457,7 +439,6 @@ fn quilt_relations(arr: Option<&Value>, breaks: bool) -> (Vec<JarModRelation>, V
 fn parse_quilt_mod_json(bytes: &[u8]) -> Option<ParsedMetadata> {
     let json: Value = serde_json::from_slice(strip_bom(bytes)).ok()?;
     let Some(loader) = json.get("quilt_loader") else {
-        // Some jars ship a fabric-style schema under the quilt name.
         return parse_fabric_mod_json(bytes).map(|mut m| {
             m.loader = "quilt";
             m
@@ -526,7 +507,6 @@ fn parse_mods_toml(text: &str, neoforge_file: bool, jar_version: Option<&str>) -
             meta.title = toml_str(m, "displayName");
             meta.version = resolve_version(toml_str(m, "version"));
         } else {
-            // Extra [[mods]] in the same jar are loaded alongside the first one.
             push_unique(&mut meta.provides, id);
         }
     }
@@ -553,7 +533,6 @@ fn parse_mods_toml(text: &str, neoforge_file: bool, jar_version: Option<&str>) -
                 Some("required") => (false, false),
                 _ => (false, !mandatory),
             };
-            // Dependencies declared for the dedicated server are not checked on the client.
             let optional = optional || server_only;
 
             if id.eq_ignore_ascii_case("minecraft") {
@@ -578,7 +557,6 @@ fn parse_mods_toml(text: &str, neoforge_file: bool, jar_version: Option<&str>) -
         }
     }
 
-    // NeoForge 1.20.2–1.20.4 still used META-INF/mods.toml.
     meta.loader = if neoforge_file || mentions_neoforge {
         "neoforge"
     } else {
@@ -587,7 +565,6 @@ fn parse_mods_toml(text: &str, neoforge_file: bool, jar_version: Option<&str>) -
     Some(meta)
 }
 
-/// Last-resort reader for mods.toml files the TOML parser rejects.
 fn parse_mods_toml_lenient(text: &str, neoforge_file: bool) -> Option<ParsedMetadata> {
     let mut meta = ParsedMetadata::default();
     let mut in_mods = false;
@@ -622,7 +599,6 @@ fn parse_mods_toml_lenient(text: &str, neoforge_file: bool) -> Option<ParsedMeta
     Some(meta)
 }
 
-/// Legacy Forge (≤1.12) `mcmod.info`.
 fn parse_mcmod_info(bytes: &[u8]) -> Option<ParsedMetadata> {
     let json: Value = serde_json::from_slice(strip_bom(bytes)).ok()?;
     let list = json
@@ -703,7 +679,6 @@ impl Jar {
         out
     }
 
-    /// Every loader's metadata found in this jar, Fabric first.
     fn metadata(&mut self) -> Vec<ParsedMetadata> {
         let mut out = Vec::new();
         if let Some(bytes) = self.read("fabric.mod.json", MAX_METADATA_BYTES) {
@@ -726,7 +701,6 @@ impl Jar {
             let parsed = parse_mods_toml(&text, neoforge_file, version.as_deref())
                 .or_else(|| parse_mods_toml_lenient(&text, neoforge_file));
             if let Some(meta) = parsed {
-                // neoforge.mods.toml and mods.toml in one jar describe the same mod.
                 if !out.iter().any(|m: &ParsedMetadata| m.loader == meta.loader) {
                     out.push(meta);
                 }
@@ -773,8 +747,6 @@ fn normalize_loader(loader: &str) -> String {
     loader.trim().to_ascii_lowercase()
 }
 
-/// Loaders whose mods run on `loader`: Quilt loads Fabric mods, and NeoForge for
-/// 1.20.1 is still binary-compatible with Forge. Empty for vanilla/unknown loaders.
 pub fn compatible_loaders(loader: &str, game_version: &str) -> Vec<&'static str> {
     match normalize_loader(loader).as_str() {
         "forge" => vec!["forge"],
@@ -786,7 +758,6 @@ pub fn compatible_loaders(loader: &str, game_version: &str) -> Vec<&'static str>
     }
 }
 
-/// Picks the metadata the given loader would actually read.
 fn pick_metadata(metas: &[ParsedMetadata], preferred_loader: Option<&str>) -> Option<usize> {
     if metas.is_empty() {
         return None;
@@ -824,7 +795,6 @@ pub fn jar_supports_game_version(
     let meta = &metas[idx];
     let wanted = compatible_loaders(loader, game_version);
     if !wanted.is_empty() && !wanted.contains(&meta.loader) {
-        // Wrong-loader jars are reported separately; their Minecraft range says nothing here.
         return (None, meta.title.clone());
     }
     (meta.supports_game_version(game_version), meta.title.clone())

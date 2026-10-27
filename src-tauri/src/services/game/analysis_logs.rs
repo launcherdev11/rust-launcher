@@ -7,16 +7,10 @@ use serde::Serialize;
 
 use crate::app::paths::instance_dir;
 
-/// Soft cap per file so we don't ship multi‑MB logs to the UI.
 const MAX_FILE_CHARS: usize = 512_000;
-/// JVM fatal error logs keep the useful part (problematic frame, cause) at the top.
 const MAX_JVM_CRASH_HEAD_BYTES: usize = 64 * 1024;
-/// How many newest crash reports to include.
 const MAX_CRASH_REPORTS: usize = 3;
-/// Slack around the session window: the crash report and the last log line are
-/// written a few seconds apart.
 const SESSION_SLACK_SECS: u64 = 120;
-/// Used when latest.log has no readable timestamps.
 const FALLBACK_SESSION_SECS: u64 = 10 * 60;
 
 #[derive(Debug, Serialize, Clone)]
@@ -34,7 +28,6 @@ pub struct AnalysisLogSource {
 #[serde(rename_all = "camelCase")]
 pub struct InstanceAnalysisLogs {
     pub sources: Vec<AnalysisLogSource>,
-    /// Crash reports left over from earlier launches that were not included.
     pub skipped_stale: usize,
 }
 
@@ -49,17 +42,14 @@ fn modified_secs(path: &Path) -> u64 {
 
 fn read_text_tail(path: &Path, max_chars: usize) -> Result<(String, bool), String> {
     let raw = fs::read(path).map_err(|e| format!("Не удалось прочитать {}: {e}", path.display()))?;
-    // Minecraft logs are typically UTF-8; fall back to lossy.
     let full = String::from_utf8_lossy(&raw);
     if full.len() <= max_chars {
         return Ok((full.into_owned(), false));
     }
-    // Prefer a char-boundary tail so we don't split UTF-8.
     let mut start = full.len().saturating_sub(max_chars);
     while start > 0 && !full.is_char_boundary(start) {
         start -= 1;
     }
-    // Drop partial first line after truncation.
     let tail = &full[start..];
     let trimmed = match tail.find('\n') {
         Some(i) if i + 1 < tail.len() => &tail[i + 1..],
@@ -80,7 +70,6 @@ fn read_text_head(path: &Path, max_bytes: usize) -> Result<(String, bool), Strin
     if !truncated {
         return Ok((text, false));
     }
-    // Drop the partial last line.
     let cut = text.rfind('\n').unwrap_or(text.len());
     Ok((text[..cut].to_string(), true))
 }
@@ -114,7 +103,6 @@ fn push_file_source(out: &mut Vec<AnalysisLogSource>, kind: &str, path: &Path, m
     }
 }
 
-/// Seconds since midnight from a log line prefix: `[12:34:56]`, `[26Oct2026 12:34:56.789]`.
 fn line_time_of_day(line: &str) -> Option<u64> {
     let head = line.trim_start();
     if !head.starts_with('[') {
@@ -133,9 +121,6 @@ fn line_time_of_day(line: &str) -> Option<u64> {
     })
 }
 
-/// Unix time when the session in latest.log started. The log has only wall-clock
-/// times, so the session length is measured between its first and last stamps and
-/// subtracted from the file's mtime.
 fn latest_log_session_start(path: &Path, tail: &str) -> Option<u64> {
     let mtime = modified_secs(path);
     if mtime == 0 {
@@ -196,9 +181,6 @@ fn collect_jvm_crash_logs(root: &Path) -> Vec<(u64, PathBuf)> {
     files
 }
 
-/// Read `logs/latest.log` plus crash reports and JVM fatal error logs that belong to
-/// the same launch. Reports from earlier launches are skipped: they describe problems
-/// that may already be fixed.
 #[tauri::command]
 pub fn read_instance_analysis_logs(profile_id: String) -> Result<InstanceAnalysisLogs, String> {
     let id = profile_id.trim();
@@ -221,7 +203,6 @@ pub fn read_instance_analysis_logs(profile_id: String) -> Result<InstanceAnalysi
     let is_current = |mtime: u64| session_start.map_or(true, |start| mtime >= start);
 
     let mut crash_files: Vec<(u64, PathBuf)> = Vec::new();
-    // Some packs / tools write a flat crash-report.log next to latest.log
     for flat in [root.join("logs").join("crash-report.log"), root.join("crash-report.log")] {
         if flat.is_file() {
             crash_files.push((modified_secs(&flat), flat));
@@ -233,7 +214,6 @@ pub fn read_instance_analysis_logs(profile_id: String) -> Result<InstanceAnalysi
     let mut skipped_stale = 0usize;
     let mut taken = 0usize;
     for (mtime, path) in crash_files {
-        // Without latest.log there is no session to compare with: keep only the newest.
         let keep = if session_start.is_some() { is_current(mtime) } else { taken == 0 };
         if !keep || taken >= MAX_CRASH_REPORTS {
             skipped_stale += usize::from(!keep);
@@ -251,7 +231,6 @@ pub fn read_instance_analysis_logs(profile_id: String) -> Result<InstanceAnalysi
         }
     }
 
-    // Prefer richer crash reports first when the UI lists sources.
     sources.sort_by(|a, b| {
         let rank = |k: &str| match k {
             "jvm_crash" => 0,

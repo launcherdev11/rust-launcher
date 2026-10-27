@@ -186,8 +186,6 @@ fn cf_file_supports_loader(
         return true;
     }
 
-    // CurseForge lists loaders next to game versions; when any loader tag is present it is
-    // authoritative and the file name is not consulted.
     let tags: Vec<String> = versions
         .iter()
         .map(|gv| gv.trim().to_ascii_lowercase())
@@ -505,8 +503,6 @@ fn build_incompatible_for_batch(
         if latest_map.contains_key(sha1) {
             continue;
         }
-        // No update for this exact loader does not mean the installed file is wrong:
-        // Quilt runs Fabric builds, NeoForge 1.20.1 runs Forge builds.
         if modrinth_version_fits(current, game_version, loader) {
             continue;
         }
@@ -791,9 +787,6 @@ pub async fn check_profile_incompatible_content(
     }
 
     if category == "mods" {
-        // The jar's own metadata is what the loader enforces, so it settles disagreements:
-        // a file the platform marks as incompatible still loads if its metadata accepts
-        // this version, and unknown files are flagged only when the metadata rejects it.
         let mut jar_verdicts: HashMap<String, (Option<bool>, Option<String>)> = HashMap::new();
         for filename in sha_by_filename.keys() {
             if updatable.contains(filename) {

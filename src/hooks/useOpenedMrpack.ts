@@ -17,7 +17,6 @@ export function useOpenedMrpack(activateSidebarTab: (tab: SplittableTabId) => vo
           setOpenedMrpackPath(p);
         }
       } catch {
-        //ignore
       }
 
       try {
@@ -28,7 +27,6 @@ export function useOpenedMrpack(activateSidebarTab: (tab: SplittableTabId) => vo
           setOpenedMrpackPath(p);
         });
       } catch {
-        //ignore
       }
     })();
 

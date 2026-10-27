@@ -10,7 +10,6 @@ export type ConflictAction = {
   label: string;
   kind: ConflictActionKind;
   keep?: string;
-  /** Files to switch on for `enable`. */
   targets?: string[];
 };
 
@@ -28,7 +27,6 @@ export type ProfileConflict = {
 export type JarModRelation = {
   modId: string;
   optional: boolean;
-  /** Version predicates, any may match; empty means any version. */
   versions?: string[];
 };
 
@@ -68,10 +66,8 @@ const PLATFORM_IDS = new Set([
   "quilt",
 ]);
 
-/** Libraries the loaders ship themselves (Fabric Loader 0.15+, NeoForge bundle MixinExtras). */
 const LOADER_BUNDLED_IDS = new Set(["mixinextras", "quilt_base", "javafml", "lowcodefml"]);
 
-/** Sinytra Connector runs Fabric mods on Forge/NeoForge. */
 const FABRIC_ON_FORGE_BRIDGE_IDS = new Set(["connector"]);
 
 const MAX_AFFECTED = 12;
@@ -133,7 +129,6 @@ export function pickLatestFilename(files: string[]): string | null {
   return best?.file ?? null;
 }
 
-/** Newest file by the version declared in its metadata, falling back to the file name. */
 function pickLatestByMetadata(files: string[], infoByFile: Map<string, JarModInfo>): string | null {
   let best: { file: string; ver: SemVer } | null = null;
   for (const f of files) {
@@ -172,12 +167,8 @@ function normalizeId(id: string) {
   return id.trim().toLowerCase();
 }
 
-// ---------------------------------------------------------------------------
-// Version predicates
-
 type SemVer = { core: number[]; pre: string[] };
 
-/** `0.92.2+1.20.1` → core [0,92,2]; `1.0.0-beta.2` → pre ["beta","2"]. Non-numeric cores → null. */
 function parseSemVer(raw: string): SemVer | null {
   const s = raw.trim().replace(/^v/i, "").split("+")[0];
   if (!s) return null;
@@ -219,11 +210,9 @@ function bumpCore(v: SemVer, index: number): SemVer {
   const core = v.core.slice(0, index + 1);
   while (core.length <= index) core.push(0);
   core[index] += 1;
-  // `-` makes the bound exclusive of pre-releases of the next version too.
   return { core, pre: [""] };
 }
 
-/** One Fabric/Quilt predicate term: `>=1.2`, `~1.2.3`, `^1.0`, `1.2.x`, `*`. */
 function matchFabricTerm(term: string, version: SemVer): boolean | null {
   const m = term.trim().match(/^(>=|<=|>|<|=|~|\^)?\s*(.+)$/);
   if (!m) return null;
@@ -282,13 +271,11 @@ function matchFabricPredicate(predicate: string, version: SemVer): boolean | nul
   return unknown ? null : false;
 }
 
-/** Plain dotted numbers only: Forge mod versions often embed the game version and are not comparable. */
 function parseNumericVersion(raw: string): number[] | null {
   const s = raw.trim();
   return /^\d+(?:\.\d+)*$/.test(s) ? s.split(".").map((p) => Number.parseInt(p, 10)) : null;
 }
 
-/** Maven range as used by Forge/NeoForge: `[1.2,)`, `[1.0,2.0)`, unions, bare `1.2` (= any). */
 function matchMavenRange(range: string, rawVersion: string): boolean | null {
   const r = range.trim();
   if (!r || r === "*") return true;
@@ -312,7 +299,6 @@ function matchMavenRange(range: string, rawVersion: string): boolean | null {
   return unknown ? null : false;
 }
 
-/** Whether `version` satisfies any of the relation's predicates; null when it can't be told. */
 function versionSatisfies(
   predicates: string[] | undefined,
   version: string | null | undefined,
@@ -335,15 +321,11 @@ function versionSatisfies(
   return unknown ? null : false;
 }
 
-// ---------------------------------------------------------------------------
-// Loader compatibility
-
 function compatibleLoaders(loader: string, gameVersion: string): string[] {
   switch (loader) {
     case "forge":
       return ["forge"];
     case "neoforge":
-      // NeoForge for 1.20.1 is a fork that still loads Forge mods.
       return gameVersion.trim() === "1.20.1" ? ["neoforge", "forge"] : ["neoforge"];
     case "fabric":
       return ["fabric"];
@@ -354,7 +336,6 @@ function compatibleLoaders(loader: string, gameVersion: string): string[] {
   }
 }
 
-/** Fabric API is split into modules; mods often depend on those directly. */
 function isFabricApiModule(id: string): boolean {
   return (
     id === "fabric-api" ||
@@ -366,7 +347,6 @@ function isFabricApiModule(id: string): boolean {
 
 type Provider = { file: string; version?: string | null; enabled: boolean };
 
-/** Sinytra Connector and Forgified Fabric API expose `fabric-api` as `fabric_api`. */
 function providerKey(id: string): string {
   return normalizeId(id).replace(/_/g, "-");
 }
@@ -412,7 +392,6 @@ export function detectProfileConflicts(opts: {
       return !!id && FABRIC_ON_FORGE_BRIDGE_IDS.has(normalizeId(id));
     });
 
-  /** null: unknown (no metadata or no loader selected). */
   const runsOnProfileLoader = (info: JarModInfo | undefined): boolean | null => {
     if (!accepted.length) return null;
     const loaders = (info?.loaders?.length ? info.loaders : info?.loader ? [info.loader] : []).map(
@@ -424,7 +403,6 @@ export function detectProfileConflicts(opts: {
     return false;
   };
 
-  // --- Same mod id in several enabled files -------------------------------------------
   const byModId = new Map<string, string[]>();
   for (const e of enabled) {
     const info = infoByFile.get(e.name);
@@ -473,7 +451,6 @@ export function detectProfileConflicts(opts: {
     });
   }
 
-  // --- File-name guesses, only for jars whose metadata could not be read ----------------
   const byKey = new Map<string, string[]>();
   for (const e of enabled) {
     if (claimedFilenames.has(e.name) || hasMetadata(e.name)) continue;
@@ -543,7 +520,6 @@ export function detectProfileConflicts(opts: {
     });
   }
 
-  // --- Wrong loader --------------------------------------------------------------------
   const wrongLoader = new Set<string>();
   if (accepted.length) {
     const mismatch = new Map<string, { files: string[]; fromMetadata: boolean }>();
@@ -600,7 +576,6 @@ export function detectProfileConflicts(opts: {
     }
   }
 
-  // --- Providers: mod ids, `provides`, bundled (Jar-in-Jar) mods ------------------------
   const providers = new Map<string, Provider[]>();
   for (const e of all) {
     const info = infoByFile.get(e.name);
@@ -614,7 +589,6 @@ export function detectProfileConflicts(opts: {
   const enabledProviders = (id: string) => allProviders(id).filter((p) => p.enabled);
   const isFabricApiPresent = enabledProviders("fabric-api").length > 0;
 
-  // Mods the game will actually load: enabled, for this loader, not server-only.
   const activeInfos: JarModInfo[] = [];
   for (const e of enabled) {
     const info = infoByFile.get(e.name);
@@ -623,7 +597,6 @@ export function detectProfileConflicts(opts: {
     activeInfos.push(info);
   }
 
-  // --- Dependencies --------------------------------------------------------------------
   const missingByDep = new Map<string, string[]>();
   const disabledByDep = new Map<string, { dependents: string[]; targets: string[] }>();
   const wrongVersionByDep = new Map<
@@ -640,7 +613,6 @@ export function detectProfileConflicts(opts: {
 
       const present = enabledProviders(id);
       if (present.length === 0) {
-        // Fabric API modules come together with Fabric API, report them as one.
         const fabricModule = isFabricApiModule(providerKey(id));
         if (fabricModule && isFabricApiPresent) continue;
         const reportId = fabricModule ? "fabric-api" : id;
@@ -752,7 +724,6 @@ export function detectProfileConflicts(opts: {
     });
   }
 
-  // --- Declared incompatibilities (breaks / incompatible) ------------------------------
   const breakPairs = new Map<string, { a: string; b: string; soft: boolean }>();
   for (const info of activeInfos) {
     const maven = info.loader === "forge" || info.loader === "neoforge";
@@ -762,7 +733,6 @@ export function detectProfileConflicts(opts: {
       if (!id || PLATFORM_IDS.has(id)) continue;
       for (const other of enabledProviders(id)) {
         if (other.file === info.filename || wrongLoader.has(other.file)) continue;
-        // `breaks: { sodium: "<0.5" }` only targets old versions; unknown versions are skipped.
         if (versionSatisfies(br.versions, other.version, maven) !== true) continue;
         const pairKey = [info.filename, other.file].sort().join("||");
         if (breakPairs.has(pairKey)) continue;

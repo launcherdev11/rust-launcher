@@ -410,7 +410,6 @@ export function ListView({ ctx }: Props) {
                     window.localStorage.setItem("modpacks_profiles_layout", "list");
                   }
                 } catch {
-                  //ignore
                 }
               }}
               className={`interactive-press rounded-xl p-1.5 ${
@@ -438,7 +437,6 @@ export function ListView({ ctx }: Props) {
                     window.localStorage.setItem("modpacks_profiles_layout", "grid");
                   }
                 } catch {
-                  //ignore
                 }
               }}
               className={`interactive-press rounded-xl p-1.5 ${

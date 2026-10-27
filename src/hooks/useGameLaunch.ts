@@ -242,7 +242,6 @@ export function useGameLaunch({
         });
         setGameStatus("running");
       } catch {
-        //ignore
       }
     })();
     return () => {
@@ -259,7 +258,6 @@ export function useGameLaunch({
           pendingProfileLaunchIdRef.current = pending.trim();
         }
       } catch {
-        //ignore
       }
       try {
         unlisten = await listen<{ profile_id: string }>("profile-launch-request", (event) => {
@@ -267,7 +265,6 @@ export function useGameLaunch({
           if (id) pendingProfileLaunchIdRef.current = id;
         });
       } catch {
-        //ignore
       }
     })();
     return () => {

@@ -41,7 +41,6 @@ function expandTurnTransports(urls: string[]): string[] {
     out.push(u);
   };
   for (const raw of urls) {
-    // `turn:` без transport — это тот же UDP; дубль тратил бы лишний relay-порт coturn на каждое соединение.
     if (!raw.startsWith("turn:") || /[?&]transport=/i.test(raw)) {
       add(raw);
       continue;
@@ -229,7 +228,6 @@ export class RoomPeerSession {
     const pc = new RTCPeerConnection({
       iceServers,
       iceTransportPolicy: policy,
-      // С BUNDLE используется один набор кандидатов; лишние в пуле — пустые TURN-allocation.
       iceCandidatePoolSize: turnOk ? 1 : 0,
     });
     this.pc = pc;
@@ -486,7 +484,6 @@ export class RoomPeerSession {
       this.pendingRemoteOffer = sdp;
       return;
     }
-    // При открытом канале новый offer — это ICE restart от хоста; применяем его, не трогая DataChannel.
     const restart = this.channel?.readyState === "open";
     if (restart && this.pc.signalingState !== "stable") return;
     try {
@@ -497,7 +494,6 @@ export class RoomPeerSession {
       if (answer.sdp) this.callbacks.onLocalAnswer(answer.sdp);
       if (!restart) this.callbacks.onStatus("connecting");
     } catch {
-      // Offer от пересозданного соединения хоста к старому не подходит — пересоздаёмся и мы.
       if (restart) this.abort();
       else this.callbacks.onStatus("failed");
     }

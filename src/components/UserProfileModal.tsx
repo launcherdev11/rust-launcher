@@ -135,7 +135,6 @@ export function UserProfileModal({
       })
       .catch((e) => {
         if (cancelled) return;
-        // The backend only shows full profiles to yourself and to friends.
         if (e instanceof ApiError && (e.status === 401 || e.status === 403)) setRestricted(true);
         else setError(e instanceof ApiError ? e.message : String(e));
       })

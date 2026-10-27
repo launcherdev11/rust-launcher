@@ -481,7 +481,6 @@ export function useVersionsManager(deps: VersionsManagerDeps) {
       });
       selectedLoaderVersion = details.loaderVersions[0] ?? "";
     } catch {
-      //ignore
     }
     setReinstallDialog({ version, gameVersion, selectedLoaderVersion });
     void loadReinstallLoaderOptions(version, gameVersion);
@@ -606,7 +605,6 @@ export function useVersionsManager(deps: VersionsManagerDeps) {
     try {
       window.localStorage.setItem("skip_version_repair_prompt", value ? "1" : "0");
     } catch {
-      //ignore
     }
   };
 

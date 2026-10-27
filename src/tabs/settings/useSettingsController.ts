@@ -254,7 +254,6 @@ export function useSettingsController(props: SettingsTabProps) {
     try {
       window.localStorage.setItem("sidebar_order", JSON.stringify(next));
     } catch {
-      //ignore
     }
   };
 

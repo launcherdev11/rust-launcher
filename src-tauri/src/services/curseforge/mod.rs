@@ -206,7 +206,6 @@ struct CfFileHash {
 }
 
 impl CfFile {
-    /// SHA1 из метаданных CurseForge (`algo == 1`), если API его вернул.
     pub(crate) fn sha1(&self) -> Option<String> {
         self.hashes
             .iter()
@@ -364,7 +363,6 @@ fn parse_retry_after(resp: &reqwest::Response) -> Option<std::time::Duration> {
         .map(|s| std::time::Duration::from_secs(s.min(15)))
 }
 
-/// Экспоненциальная пауза (1с, 2с, 4с…), но не меньше `Retry-After` от сервера.
 fn retry_delay(attempt: usize, retry_after: Option<std::time::Duration>) -> std::time::Duration {
     let backoff = std::time::Duration::from_millis(500 * (1u64 << attempt.min(5)));
     retry_after.map_or(backoff, |ra| ra.max(backoff))
@@ -416,7 +414,6 @@ async fn cf_post_json<T: for<'de> Deserialize<'de>>(
     Err(last_err)
 }
 
-/// Метаданные многих файлов одним запросом (`POST /mods/files`).
 pub(crate) async fn curseforge_get_files_bulk(
     file_ids: &[u32],
 ) -> Result<std::collections::HashMap<u32, CfFile>, String> {
@@ -432,7 +429,6 @@ pub(crate) async fn curseforge_get_files_bulk(
     Ok(out)
 }
 
-/// `classId` проектов одним запросом (`POST /mods`): по нему отличаем моды от ресурспаков и шейдеров.
 pub(crate) async fn curseforge_get_mod_class_ids(
     mod_ids: &[u32],
 ) -> Result<std::collections::HashMap<u32, u32>, String> {
@@ -450,8 +446,6 @@ pub(crate) async fn curseforge_get_mod_class_ids(
     Ok(out)
 }
 
-/// Прямые ссылки CDN на случай, когда API не отдаёт `downloadUrl` (автор запретил
-/// распространение через сторонние лаунчеры) — другие лаунчеры качают именно так.
 pub(crate) fn curseforge_cdn_fallback_urls(file_id: u32, file_name: &str) -> Vec<String> {
     let name = urlencoding::encode(file_name);
     let (a, b) = (file_id / 1000, file_id % 1000);

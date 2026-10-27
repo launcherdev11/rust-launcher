@@ -164,7 +164,6 @@ export function useInstanceProfiles({
           setActiveInstanceProfile(toInstanceProfileSummary(current));
         }
       } catch {
-        //ignore
       }
     })();
   }, []);

@@ -1944,8 +1944,6 @@ async fn merge_local_and_remote_skins(
         return Ok(remote);
     };
 
-    // Keep the currently active Mojang skin in the local library so it is not
-    // lost when Mojang replaces the cloud wardrobe on the next upload.
     let mut active_sha1: Option<String> = None;
     if let Some(active) = remote.iter().find(|s| s.state == "ACTIVE") {
         if !active.url.trim().is_empty() {
@@ -2106,7 +2104,6 @@ async fn apply_mc_skin_from_library(skin_id: &str) -> Result<Vec<u8>, String> {
         return Err("Skin id is empty".to_string());
     }
 
-    // Local library skin: upload PNG bytes directly to Mojang.
     if is_local_skin_id(trimmed_id) {
         let mc_uuid = current_mc_uuid().ok_or_else(|| {
             "Нет UUID Minecraft. Войдите через Microsoft на вкладке «Аккаунты».".to_string()
@@ -2195,7 +2192,6 @@ async fn upload_mc_skin_from_file(file_path: &str, variant: &str) -> Result<Vec<
         _ => "classic",
     };
 
-    // Always keep a local copy so previous skins stay in the library.
     if let Some(mc_uuid) = current_mc_uuid() {
         let alias = path
             .file_stem()

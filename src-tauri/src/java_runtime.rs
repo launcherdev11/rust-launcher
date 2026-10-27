@@ -26,8 +26,6 @@ fn http_client() -> Client {
     crate::infra::http::http_client(false)
 }
 
-/// GET + JSON с ретраями: индекс и манифест Java раньше запрашивались ровно один раз,
-/// и любой сетевой сбой ронял всю установку.
 async fn get_json_with_retries<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T, String> {
     let mut last_err = String::new();
     for attempt in 0..JAVA_DOWNLOAD_RETRIES {
@@ -81,8 +79,6 @@ fn java_bin_path(root: &Path) -> PathBuf {
 
 const INDEX_URL: &str = "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
-/// Платформы индекса Mojang по убыванию предпочтения. Для ARM берём нативную сборку,
-/// а если Mojang её для компонента не публикует — x64 под эмуляцией (Windows 11 / Rosetta).
 fn platform_candidates() -> Result<Vec<&'static str>, String> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("windows", "x86_64") => Ok(vec!["windows-x64"]),
@@ -122,7 +118,6 @@ struct FileEntry {
     downloads: Option<Downloads>,
     #[serde(rename = "type", default)]
     entry_type: Option<String>,
-    /// Для `type: "link"` — путь, на который указывает символическая ссылка.
     #[serde(default)]
     #[cfg_attr(not(unix), allow(dead_code))]
     target: Option<String>,
@@ -546,8 +541,6 @@ async fn ensure_java_runtime_inner(
         }
     });
 
-    // Планирование (создание папок, проверка уже скачанных файлов по SHA1) — блокирующая
-    // работа с диском, поэтому уходит с async-потока.
     struct PlannedFile {
         rel_path: String,
         dest: PathBuf,
@@ -603,7 +596,6 @@ async fn ensure_java_runtime_inner(
     .await
     .map_err(|e| format!("Ошибка подготовки установки Java: {e}"))??;
 
-    // ~400 мелких файлов по одному — это минуты на пустом месте; качаем параллельно.
     let mut downloads = stream::iter(to_download.into_iter())
         .map(|file| {
             let client = client.clone();
@@ -630,7 +622,6 @@ async fn ensure_java_runtime_inner(
     }
     drop(downloads);
 
-    // Символические ссылки (macOS/Linux): манифест Mojang описывает их отдельными записями.
     #[cfg(unix)]
     for (link_path, target) in &links {
         if let Some(parent) = link_path.parent() {

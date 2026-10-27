@@ -9,7 +9,6 @@ use super::jar_compat::{read_jar_mod_info, JarModInfo};
 #[tauri::command]
 pub async fn scan_profile_mod_jars(profile_id: String) -> Result<Vec<JarModInfo>, String> {
     let profile_dir = instance_dir(&profile_id)?;
-    // Multi-loader jars carry several metadata files; read the one this profile's loader uses.
     let loader = instance_config_path(&profile_id)
         .and_then(|p| read_instance_config(&p))
         .map(|cfg| cfg.loader.trim().to_ascii_lowercase())

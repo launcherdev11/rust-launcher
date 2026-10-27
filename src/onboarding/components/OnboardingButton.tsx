@@ -15,7 +15,6 @@ const providerClasses: Record<"microsoft" | "ely", string> = {
   ely: "bg-[#2d7d46] text-white hover:bg-[#248338]",
 };
 
-// Same size and radius as every other launcher button; only the brand colour differs.
 const baseClasses = [
   "btn",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 focus-visible:ring-white/35",

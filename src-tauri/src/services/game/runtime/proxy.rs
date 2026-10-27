@@ -28,8 +28,8 @@ pub(crate) fn build_java_http_proxy_args_with_preferred_host(prefer_ipv6: bool) 
 
     args.push("-Djava.net.useSystemProxies=true".to_string());
 
-    args.push("-Dsun.net.client.defaultConnectTimeout=120000".to_string()); //2 мин
-    args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());   //10 мин
+    args.push("-Dsun.net.client.defaultConnectTimeout=120000".to_string());
+    args.push("-Dsun.net.client.defaultReadTimeout=600000".to_string());
 
     args
 }

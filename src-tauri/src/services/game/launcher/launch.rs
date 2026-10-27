@@ -1223,8 +1223,6 @@ pub async fn launch_game(
         if let Err(e) = crate::java_runtime::ensure_executable(&java_path) {
             eprintln!("[Launch] Warning: Failed to set execute permission for {}: {}", java_path.display(), e);
         } else {
-            //Opt()
-            //eprintln!("[Launch] Verified/Fixed execute permission for {}", java_path.display());
         }
     }
     if let Some(path) = &authlib_injector_path {
