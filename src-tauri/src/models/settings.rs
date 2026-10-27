@@ -21,6 +21,8 @@ pub struct Settings {
     pub forge_ipv6_download: bool,
     #[serde(default = "default_forge_proxy_fallback_enabled")]
     pub forge_proxy_fallback: bool,
+    #[serde(default = "default_download_source")]
+    pub download_source: String,
     #[serde(default = "default_world_auto_backup")]
     pub world_auto_backup: bool,
 
@@ -98,6 +100,10 @@ pub fn default_forge_proxy_fallback_enabled() -> bool {
     true
 }
 
+pub fn default_download_source() -> String {
+    "auto".to_string()
+}
+
 pub fn default_world_auto_backup() -> bool {
     true
 }
@@ -125,6 +131,7 @@ impl Default for Settings {
             show_alpha_versions: false,
             forge_ipv6_download: false,
             forge_proxy_fallback: true,
+            download_source: default_download_source(),
             world_auto_backup: default_world_auto_backup(),
             notify_new_update: true,
             notify_new_message: true,

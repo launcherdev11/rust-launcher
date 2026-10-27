@@ -13,6 +13,7 @@ export type SettingSearchId =
   | "versions.showSnapshots"
   | "versions.showAlpha"
   | "versions.forgeProxy"
+  | "versions.downloadSource"
   | "versions.loaderFilter"
   | "versions.versionFilter"
   | "versions.available"
@@ -128,6 +129,11 @@ export const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     id: "versions.forgeProxy",
     tab: "versions",
     keys: ["settings.section.versionList", "settings.versions.forgeProxyFallback.label"],
+  },
+  {
+    id: "versions.downloadSource",
+    tab: "versions",
+    keys: ["settings.section.versionList", "downloads.source.label", "downloads.source.hint"],
   },
   {
     id: "versions.loaderFilter",

@@ -2299,6 +2299,17 @@
       }
     }
   },
+  "downloads": {
+    "source": {
+      "label": "Origen de descargas",
+      "hint": "De dónde se descargan los archivos del juego, las bibliotecas y los loaders. En modo automático el launcher cambia solo a un espejo si los servidores oficiales no responden.",
+      "option": {
+        "auto": "Automático",
+        "official": "Solo oficiales",
+        "mirror": "Primero el espejo"
+      }
+    }
+  },
   "runHistory": {
     "nav": "Sesiones",
     "title": "Historial de sesiones",

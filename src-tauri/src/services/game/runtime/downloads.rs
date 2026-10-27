@@ -17,6 +17,7 @@ use crate::services::game::core::{
     download_text_with_retries, file_len_matches, is_retryable_status, retry_delay, sha1_hex_of_file,
 };
 use crate::services::game::console::log_to_console;
+use crate::services::game::mirrors::LOCAL_ERROR;
 use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_CONCURRENCY, DEFAULT_DOWNLOAD_RETRIES, FORGE_INSTALLER_MIN_BYTES,
     FORGE_MAVEN_MIRROR_BASE, FORGE_MAVEN_OFFICIAL_BASE,
@@ -159,6 +160,7 @@ impl Drop for TmpFileGuard {
 
 enum AttemptError {
     Fatal(String),
+    FatalStatus(u16, String),
     Retry(String),
 }
 
@@ -176,7 +178,7 @@ pub(crate) async fn download_forge_installer_once(
     loop {
         match download_forge_installer_attempt(client, url, path, app, version_id, &total_done, &mut buf).await {
             Ok(n) => return Ok(n),
-            Err(AttemptError::Fatal(e)) => return Err(e),
+            Err(AttemptError::Fatal(e)) | Err(AttemptError::FatalStatus(_, e)) => return Err(e),
             Err(AttemptError::Retry(e)) => {
                 attempt += 1;
                 if attempt >= ATTEMPTS {
@@ -337,11 +339,62 @@ pub(crate) async fn download_file_checked(
             .map_err(|e| format!("Не удалось создать папку: {e}"))?;
     }
 
+    let urls = crate::services::game::mirrors::candidates(url);
+    let has_fallback = urls.len() > 1;
+    let mut errors: Vec<String> = Vec::new();
+    for (idx, candidate) in urls.iter().enumerate() {
+        let is_last = idx + 1 == urls.len();
+        let attempts = if has_fallback && !is_last { retries.min(2) } else { retries };
+        match download_file_from(
+            client,
+            candidate,
+            path,
+            expected_sha1.clone(),
+            app,
+            version_id,
+            total_size,
+            total_done.clone(),
+            attempts,
+        )
+        .await
+        {
+            Ok(n) => {
+                crate::services::game::mirrors::note_success(candidate);
+                return Ok(n);
+            }
+            Err((msg, status)) => {
+                errors.push(msg);
+                if CANCEL_DOWNLOAD.load(Ordering::SeqCst)
+                    || !crate::services::game::mirrors::worth_trying_next(status)
+                {
+                    break;
+                }
+                crate::services::game::mirrors::note_failure(candidate);
+                if !is_last {
+                    eprintln!("[Download] {candidate} недоступен, пробуем другой источник");
+                }
+            }
+        }
+    }
+    Err(errors.join("; "))
+}
+
+async fn download_file_from(
+    client: &Client,
+    url: &str,
+    path: &Path,
+    expected_sha1: Option<String>,
+    app: &AppHandle,
+    version_id: &str,
+    total_size: u64,
+    total_done: Arc<AtomicU64>,
+    retries: usize,
+) -> Result<u64, (String, Option<u16>)> {
     let retries = retries.max(1);
     let mut attempt: usize = 0;
     loop {
         if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
-            return Err(CANCELLED_MSG.to_string());
+            return Err((CANCELLED_MSG.to_string(), Some(LOCAL_ERROR)));
         }
 
         if path.exists() {
@@ -352,7 +405,7 @@ pub(crate) async fn download_file_checked(
             if meta_len == 0 {
                 let _ = tokio::fs::remove_file(path).await;
             } else if let Some(expected) = expected_sha1.as_ref() {
-                let actual = sha1_hex_of_file(path).await?;
+                let actual = sha1_hex_of_file(path).await.map_err(|e| (e, Some(LOCAL_ERROR)))?;
                 if actual.eq_ignore_ascii_case(expected) {
                     return Ok(0);
                 }
@@ -376,11 +429,12 @@ pub(crate) async fn download_file_checked(
         .await
         {
             Ok(n) => return Ok(n),
-            Err(AttemptError::Fatal(e)) => return Err(e),
+            Err(AttemptError::Fatal(e)) => return Err((e, Some(LOCAL_ERROR))),
+            Err(AttemptError::FatalStatus(status, e)) => return Err((e, Some(status))),
             Err(AttemptError::Retry(e)) => {
                 attempt += 1;
                 if attempt >= retries {
-                    return Err(e);
+                    return Err((e, None));
                 }
                 eprintln!("[Download] {e} — повтор {attempt}/{}", retries - 1);
                 tokio::time::sleep(retry_delay(attempt - 1)).await;
@@ -426,7 +480,7 @@ async fn download_attempt(
         return Err(if is_retryable_status(status.as_u16(), attempt) {
             AttemptError::Retry(msg)
         } else {
-            AttemptError::Fatal(msg)
+            AttemptError::FatalStatus(status.as_u16(), msg)
         });
     }
 

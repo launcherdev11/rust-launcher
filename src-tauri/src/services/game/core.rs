@@ -74,26 +74,61 @@ pub(crate) fn os_info() -> OsInfo {
 }
 
 pub(crate) async fn download_text_with_retries(client: &Client, url: &str, retries: usize) -> Result<String, String> {
+    let urls = crate::services::game::mirrors::candidates(url);
+    let has_fallback = urls.len() > 1;
+    let mut errors: Vec<String> = Vec::new();
+    for (idx, candidate) in urls.iter().enumerate() {
+        let is_last = idx + 1 == urls.len();
+        let attempts = if has_fallback && !is_last { retries.min(2) } else { retries };
+        match fetch_text_once_with_retries(client, candidate, attempts).await {
+            Ok(text) => {
+                crate::services::game::mirrors::note_success(candidate);
+                return Ok(text);
+            }
+            Err((msg, status)) => {
+                errors.push(msg);
+                if CANCEL_DOWNLOAD.load(Ordering::SeqCst)
+                    || !crate::services::game::mirrors::worth_trying_next(status)
+                {
+                    break;
+                }
+                crate::services::game::mirrors::note_failure(candidate);
+            }
+        }
+    }
+    Err(errors.join("; "))
+}
+
+async fn fetch_text_once_with_retries(
+    client: &Client,
+    url: &str,
+    retries: usize,
+) -> Result<String, (String, Option<u16>)> {
+    let retries = retries.max(1);
     let mut attempt: usize = 0;
     loop {
         if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
-            return Err("Загрузка отменена пользователем".to_string());
+            return Err(("Загрузка отменена пользователем".to_string(), None));
         }
         let resp = client.get(url).send().await;
         match resp {
             Ok(r) => {
                 let status = r.status();
                 if status.is_success() {
-                    return r.text().await.map_err(|e| format!("Ошибка чтения ответа: {e}"));
+                    return r
+                        .text()
+                        .await
+                        .map_err(|e| (format!("Ошибка чтения ответа: {e}"), None));
                 }
                 if !is_retryable_status(status.as_u16(), attempt) || attempt + 1 >= retries {
                     let body = r.text().await.unwrap_or_else(|_| "<тело ответа недоступно>".to_string());
-                    return Err(format!("HTTP {} для {}: {}", status, url, body));
+                    let body: String = body.chars().take(300).collect();
+                    return Err((format!("HTTP {} для {}: {}", status, url, body), Some(status.as_u16())));
                 }
             }
             Err(e) => {
                 if attempt + 1 >= retries {
-                    return Err(format!("Ошибка запроса {url}: {e}"));
+                    return Err((format!("Ошибка запроса {url}: {e}"), None));
                 }
             }
         }
@@ -102,25 +137,8 @@ pub(crate) async fn download_text_with_retries(client: &Client, url: &str, retri
     }
 }
 
-const FABRIC_META_OFFICIAL: &str = "https://meta.fabricmc.net/";
-const FABRIC_META_MIRROR: &str = "https://bmclapi2.bangbang93.com/fabric-meta/";
-
-fn meta_mirror_url(url: &str) -> Option<String> {
-    url.strip_prefix(FABRIC_META_OFFICIAL)
-        .map(|rest| format!("{FABRIC_META_MIRROR}{rest}"))
-}
-
 pub(crate) async fn download_meta_text(client: &Client, url: &str, retries: usize) -> Result<String, String> {
-    let Some(mirror) = meta_mirror_url(url) else {
-        return download_text_with_retries(client, url, retries).await;
-    };
-    match download_text_with_retries(client, url, retries.min(2)).await {
-        Ok(text) => Ok(text),
-        Err(primary) if CANCEL_DOWNLOAD.load(Ordering::SeqCst) => Err(primary),
-        Err(primary) => download_text_with_retries(client, &mirror, retries)
-            .await
-            .map_err(|fallback| format!("{primary}; зеркало: {fallback}")),
-    }
+    download_text_with_retries(client, url, retries).await
 }
 
 pub(crate) fn is_retryable_status(status: u16, attempt: usize) -> bool {

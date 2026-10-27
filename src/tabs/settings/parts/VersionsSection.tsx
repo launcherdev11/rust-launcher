@@ -1,6 +1,11 @@
-import { SettingsSection, SettingsSelect, SettingsSwitchRow } from "../../../settings-ui/SettingsComponents";
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSelect,
+  SettingsSwitchRow,
+} from "../../../settings-ui/SettingsComponents";
 import { AssetIcon } from "../../../components/asset_icon";
-import { type LoaderId } from "../../../app/types";
+import { type DownloadSource, type LoaderId } from "../../../app/types";
 import { AnimatePresence, motion } from "framer-motion";
 import { InputClearButton } from "../../../components/ui";
 import { localeTag } from "../../../i18n";
@@ -58,6 +63,7 @@ export function VersionsSection({ ctx }: Props) {
             "versions.showSnapshots",
             "versions.showAlpha",
             "versions.forgeProxy",
+            "versions.downloadSource",
           ) && (
             <SettingsSection
               title={tt("settings.section.versionList")}
@@ -83,6 +89,21 @@ export function VersionsSection({ ctx }: Props) {
                   value={settings?.forge_proxy_fallback ?? false}
                   onChange={(v) => updateSettings({ forge_proxy_fallback: v })}
                 />
+              )}
+              {showSetting("versions.downloadSource") && (
+                <SettingsRow
+                  label={tt("downloads.source.label")}
+                  hint={tt("downloads.source.hint")}
+                >
+                  <SettingsSelect<DownloadSource>
+                    value={settings?.download_source ?? "auto"}
+                    options={(["auto", "official", "mirror"] as DownloadSource[]).map((id) => ({
+                      value: id,
+                      label: tt(`downloads.source.option.${id}`),
+                    }))}
+                    onChange={(v) => updateSettings({ download_source: v })}
+                  />
+                </SettingsRow>
               )}
             </SettingsSection>
           )}

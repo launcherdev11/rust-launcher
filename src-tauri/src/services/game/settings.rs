@@ -163,6 +163,7 @@ pub fn save_settings_to_disk(settings: &Settings) -> Result<(), String> {
     let text = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Ошибка сериализации настроек: {e}"))?;
     write_atomic(&path, text)?;
+    crate::services::game::mirrors::set_download_source(&settings.download_source);
     let _ = save_game_directory_sidecar(settings.game_directory.as_deref());
     Ok(())
 }

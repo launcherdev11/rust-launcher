@@ -19,6 +19,8 @@ export type LauncherAccountSummary = {
 export type SidebarItemId = "play" | "settings" | "friends" | "rooms" | "mods" | "modpacks" | "accounts";
 export type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
+export type DownloadSource = "auto" | "official" | "mirror";
+
 export type SettingsTabId = "game" | "versions" | "launcher";
 
 export type Settings = {
@@ -34,6 +36,7 @@ export type Settings = {
   show_alpha_versions: boolean;
   forge_ipv6_download: boolean;
   forge_proxy_fallback: boolean;
+  download_source?: DownloadSource;
   world_auto_backup?: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;

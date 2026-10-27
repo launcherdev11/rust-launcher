@@ -15,6 +15,7 @@ pub mod install;
 pub mod integrity;
 pub mod launcher;
 pub mod lazy_mods;
+pub mod mirrors;
 pub mod nickname;
 pub mod run_history;
 pub mod runtime;

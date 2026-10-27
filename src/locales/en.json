@@ -2392,6 +2392,17 @@
       }
     }
   },
+  "downloads": {
+    "source": {
+      "label": "Download source",
+      "hint": "Where game files, libraries and loaders come from. In automatic mode the launcher switches to a mirror on its own when the official servers stop responding.",
+      "option": {
+        "auto": "Automatic",
+        "official": "Official only",
+        "mirror": "Mirror first"
+      }
+    }
+  },
   "runHistory": {
     "nav": "Runs",
     "title": "Run history",

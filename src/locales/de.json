@@ -2302,6 +2302,17 @@
       }
     }
   },
+  "downloads": {
+    "source": {
+      "label": "Downloadquelle",
+      "hint": "Woher Spieldateien, Bibliotheken und Loader geladen werden. Im automatischen Modus wechselt der Launcher selbst zu einem Spiegel, wenn die offiziellen Server nicht antworten.",
+      "option": {
+        "auto": "Automatisch",
+        "official": "Nur offiziell",
+        "mirror": "Zuerst Spiegel"
+      }
+    }
+  },
   "runHistory": {
     "nav": "Starts",
     "title": "Startverlauf",
