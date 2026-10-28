@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { AccountSkinPreview } from "../../components/account_skin_preview";
+import { AccountSkinPreview } from "../../components/LazyAccountSkinPreview";
 import { InputClearButton, Spinner } from "../../components/ui";
 import { useT, type Language } from "../../i18n";
 import type { ProfileAvatarInput } from "../../lib/avatar";

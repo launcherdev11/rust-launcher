@@ -6,6 +6,7 @@ import {
   type ContentTab,
   type InstanceProfile,
   type NotificationKind,
+  type ProfileBackupSettings,
   type ProfileContentUpdate,
   type ProfileIncompatibleContent,
   type ProfileItemEntry,
@@ -134,6 +135,38 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
     return { updated: total, incompatible };
   }
 
+  async function backupBeforeUpdate(profileId: string): Promise<boolean> {
+    let mode: ProfileBackupSettings["backup_before_update"] = "off";
+    try {
+      const settings = await invoke<ProfileBackupSettings>("get_profile_backup_settings", {
+        profileId,
+      });
+      mode = settings.backup_before_update;
+    } catch (e) {
+      console.warn("Failed to read backup settings:", e);
+    }
+    if (mode === "off") return true;
+    if (mode === "ask") {
+      const wantsBackup = await confirmDialog({
+        title: tt("modpacks.backups.beforeUpdate.askTitle"),
+        message: tt("modpacks.backups.beforeUpdate.askMessage"),
+        confirmLabel: tt("modpacks.backups.beforeUpdate.askConfirm"),
+        cancelLabel: tt("modpacks.backups.beforeUpdate.askSkip"),
+      });
+      if (!wantsBackup) return true;
+    }
+    showNotification("info", tt("modpacks.editor.backingUp"), { sound: false });
+    try {
+      await invoke("create_profile_backup", { profileId, kind: "pre_update" });
+      return true;
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
+      showNotification("error", tt("modpacks.backups.beforeUpdate.failed", { msg }));
+      return false;
+    }
+  }
+
   async function handleCheckContentUpdates() {
     if (!selectedProfile) return;
     const category =
@@ -188,6 +221,7 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
     }
     setContentUpdatesApplying(true);
     try {
+      if (!(await backupBeforeUpdate(selectedProfile.id))) return;
       const payload = selected.map((u) => ({
         filename: u.filename,
         enabled: u.enabled,
@@ -241,6 +275,8 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
         showNotification("info", tt("modpacks.contentUpdates.noneFoundForItem"));
         return;
       }
+
+      if (!(await backupBeforeUpdate(selectedProfile.id))) return;
 
       const applied = await invoke<number>("apply_profile_content_updates", {
         profileId: selectedProfile.id,

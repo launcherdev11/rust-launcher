@@ -38,8 +38,9 @@ import { type ContentTab, type ProfileItemEntry, type Settings } from "../types"
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { type ConflictActionKind, type ProfileConflict } from "../../../lib/profileConflicts";
 import { invoke } from "@tauri-apps/api/core";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { ProfileItemDetails, ProfileItemIcon } from "../ProfileItemParts";
+import { ContentSelectionBar } from "../ContentSelectionBar";
 import { DeleteIcon } from "../../../components/delete_icon";
 import { ConsoleFilterBar, ConsoleLines } from "../../../components/ConsoleLogView";
 import { LogAnalyzerPanel } from "../../../components/LogAnalyzerPanel";
@@ -49,6 +50,8 @@ import { ConfigEditorPanel } from "../../../features/config-editor/ConfigEditorP
 import { WorldToolsView } from "../../../features/worlds/WorldToolsView";
 import { ServerPackPanel } from "../../../features/server-pack/ServerPackPanel";
 import type { ModpackController } from "../useModpackController";
+import { useContinueTarget } from "../hooks/useContinueTarget";
+import { AssetIcon } from "../../../components/asset_icon";
 
 type Props = { ctx: ModpackController };
 
@@ -75,6 +78,7 @@ export function ManageView({ ctx }: Props) {
     setProfileInfoProfile,
     language,
     onPlaySelectedProfile,
+    onContinueProfile,
     isLaunching,
     isStopping,
     primaryColorClasses,
@@ -121,6 +125,8 @@ export function ManageView({ ctx }: Props) {
     backupsLoading,
     backupCreating,
     backupRestoringId,
+    backupSettings,
+    updateBackupSettings,
     backupsList,
     handleCreateBackup,
     handleRestoreBackup,
@@ -197,7 +203,16 @@ export function ManageView({ ctx }: Props) {
   } = ctx;
 
   const [openWorldName, setOpenWorldName] = useState<string | null>(null);
+  // A fresh array on every render would make the log analyzer re-run on each keystroke.
+  const analyzerLines = useMemo(
+    () => displayedConsoleLines.map((e) => e.line),
+    [displayedConsoleLines],
+  );
   const selectedProfileKey = selectedProfile?.id ?? null;
+  const continueTarget = useContinueTarget(
+    onContinueProfile ? selectedProfileKey : null,
+    gameStatus,
+  );
   useEffect(() => {
     setOpenWorldName(null);
   }, [selectedProfileKey, editorSection]);
@@ -369,6 +384,25 @@ export function ManageView({ ctx }: Props) {
           >
             {primaryLabel ?? tt("modpacks.actions.play")}
           </button>
+          {continueTarget && onContinueProfile && gameStatus !== "running" ? (
+            <button
+              type="button"
+              onClick={() => onContinueProfile(selectedProfile, continueTarget)}
+              disabled={isLaunching || isStopping}
+              className={`${MANAGE_ACTION_BTN_CLASS} max-w-[15rem] bg-accent-from/20 hover:bg-accent-from/30 disabled:cursor-not-allowed disabled:opacity-60`}
+              title={
+                continueTarget.kind === "world"
+                  ? tt("modpacks.continue.worldTitle", { name: continueTarget.name })
+                  : tt("modpacks.continue.serverTitle", { name: continueTarget.name })
+              }
+            >
+              <AssetIcon name="play" className="h-3.5 w-3.5" />
+              <span className="shrink-0">{tt("modpacks.continue.label")}</span>
+              <span className="min-w-0 truncate font-normal text-white/65">
+                {continueTarget.name}
+              </span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setActiveView("list")}
@@ -398,7 +432,7 @@ export function ManageView({ ctx }: Props) {
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
             {isManageMoreOpen && (
-              <div className="absolute right-0 z-30 mt-1 w-52 glass-popover p-1 text-xs text-white">
+              <div className="menu-pop-in origin-top-right absolute right-0 z-30 mt-1 w-52 glass-popover p-1 text-xs text-white">
                 <button
                   type="button"
                   onClick={() => {
@@ -611,7 +645,10 @@ export function ManageView({ ctx }: Props) {
             id: b.id,
             createdAt: b.created_at,
             sizeBytes: b.size_bytes,
+            kind: b.kind ?? null,
           }))}
+          settings={backupSettings}
+          onSettingsChange={(patch) => void updateBackupSettings(patch)}
           onCreate={() => void handleCreateBackup(selectedProfile.id)}
           onRestore={(backupId) =>
             void handleRestoreBackup(selectedProfile.id, backupId)
@@ -748,7 +785,7 @@ export function ManageView({ ctx }: Props) {
                 <ChevronDown className={`h-3 w-3 transition-transform ${isAddMenuOpen ? "rotate-180" : ""}`} />
               </button>
               {isAddMenuOpen && (
-                <div className="absolute right-0 z-30 mt-1 w-48 glass-popover p-1 text-xs text-white">
+                <div className="menu-pop-in origin-top-right absolute right-0 z-30 mt-1 w-48 glass-popover p-1 text-xs text-white">
                 <button
                   type="button"
                   onClick={() => {
@@ -893,69 +930,11 @@ export function ManageView({ ctx }: Props) {
             ) : null}
           </div>
         </div>
-        {selectedContentNames.size > 0 && (
-          <div className="mb-2.5 flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-ink-2 py-1 pl-3 pr-1 text-xs">
-            <span className="mr-auto text-white/70">
-              {tt("modpacks.editor.selectedCount", { count: selectedContentNames.size })}
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                setSelectedContentNames(new Set(visibleItems.map((i) => i.name)))
-              }
-              className="btn btn-sm btn-ghost"
-            >
-              {tt("modpacks.editor.selectAll")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedContentNames(new Set())}
-              className="btn btn-sm btn-ghost"
-            >
-              {tt("modpacks.editor.clearSelection")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const { items: lazyItems, skipped } = lazyItemsFromFiles(
-                  selectedContentNames,
-                  itemMetadataByFilename,
-                  contentTab,
-                );
-                lazy.openAddModal(lazyItems, skipped);
-              }}
-              className="btn btn-sm btn-soft"
-            >
-              {tt("modpacks.lazy.addToSet")}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkSetEnabled(true)}
-              className="btn btn-sm btn-soft"
-            >
-              {tt("modpacks.editor.bulkEnable")}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkSetEnabled(false)}
-              className="btn btn-sm btn-soft"
-            >
-              {tt("modpacks.editor.bulkDisable")}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkDelete()}
-              className="btn btn-sm btn-danger"
-            >
-              {tt("modpacks.editor.bulkDelete")}
-            </button>
-          </div>
-        )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div
             ref={manageDropZoneRef}
             onPointerDown={handleContentMarqueePointerDown}
-            className={`custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl bg-black/35 p-2.5 shadow-inner transition-colors ${
+            className={`custom-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl bg-black/35 p-2.5 shadow-inner transition-colors ${
               isManageDropTarget
                 ? "bg-accent-from/15 ring-2 ring-accent-to/70 ring-inset"
                 : ""
@@ -1008,7 +987,7 @@ export function ManageView({ ctx }: Props) {
                     }}
                     data-marquee-key={item.name}
                     onClick={(e) => handleContentRowClick(item.name, e)}
-                    className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-opacity ${
+                    className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-[opacity,background-color,box-shadow] duration-150 ${
                       selectedContentNames.has(item.name)
                         ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
                         : "bg-black/45"
@@ -1127,7 +1106,7 @@ export function ManageView({ ctx }: Props) {
                   key={item.name}
                   data-marquee-key={item.name}
                   onClick={(e) => handleContentRowClick(item.name, e)}
-                  className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-opacity ${
+                  className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-[opacity,background-color,box-shadow] duration-150 ${
                     selectedContentNames.has(item.name)
                       ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
                       : hasConflict
@@ -1222,6 +1201,62 @@ export function ManageView({ ctx }: Props) {
               })}
             </div>
           )}
+          <ContentSelectionBar
+            count={selectedContentNames.size}
+            label={(count) => tt("modpacks.editor.selectedCount", { count })}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedContentNames(new Set(visibleItems.map((i) => i.name)))
+              }
+              className="btn btn-sm btn-ghost"
+            >
+              {tt("modpacks.editor.selectAll")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedContentNames(new Set())}
+              className="btn btn-sm btn-ghost"
+            >
+              {tt("modpacks.editor.clearSelection")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { items: lazyItems, skipped } = lazyItemsFromFiles(
+                  selectedContentNames,
+                  itemMetadataByFilename,
+                  contentTab,
+                );
+                lazy.openAddModal(lazyItems, skipped);
+              }}
+              className="btn btn-sm btn-soft"
+            >
+              {tt("modpacks.lazy.addToSet")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkSetEnabled(true)}
+              className="btn btn-sm btn-soft"
+            >
+              {tt("modpacks.editor.bulkEnable")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkSetEnabled(false)}
+              className="btn btn-sm btn-soft"
+            >
+              {tt("modpacks.editor.bulkDisable")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkDelete()}
+              className="btn btn-sm btn-danger"
+            >
+              {tt("modpacks.editor.bulkDelete")}
+            </button>
+          </ContentSelectionBar>
           </div>
         </div>
       </div>
@@ -1333,7 +1368,7 @@ export function ManageView({ ctx }: Props) {
             aria-expanded={manageConsoleExpanded}
           >
             <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${manageConsoleExpanded ? "rotate-180 lg:-rotate-90" : ""}`}
+              className={`h-3.5 w-3.5 transition-transform duration-300 ease-[cubic-bezier(0.2,0.9,0.25,1)] ${manageConsoleExpanded ? "rotate-180 lg:-rotate-90" : ""}`}
             />
           </button>
         </div>
@@ -1356,7 +1391,7 @@ export function ManageView({ ctx }: Props) {
         </select>
 
         {manageConsoleExpanded && (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="mods-detail-panel-animate flex min-h-0 flex-1 flex-col">
             <ConsoleFilterBar
               tt={tt}
               filters={consoleFilters}
@@ -1365,7 +1400,7 @@ export function ManageView({ ctx }: Props) {
               className="mb-2 shrink-0 px-0.5"
             />
             <LogAnalyzerPanel
-              lines={displayedConsoleLines.map((e) => e.line)}
+              lines={analyzerLines}
               language={language}
               profileId={selectedProfile?.id ?? selectedProfileId}
               gameStatus={gameStatus}

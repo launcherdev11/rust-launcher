@@ -29,6 +29,8 @@ pub struct Settings {
     pub notify_new_update: bool,
     pub notify_new_message: bool,
     pub notify_system_message: bool,
+    #[serde(default = "default_notifications_auto_clear")]
+    pub notifications_auto_clear: String,
 
     pub check_updates_on_start: bool,
     pub auto_install_updates: bool,
@@ -108,6 +110,10 @@ pub fn default_world_auto_backup() -> bool {
     true
 }
 
+pub fn default_notifications_auto_clear() -> String {
+    "off".to_string()
+}
+
 pub fn default_ui_sounds_enabled() -> bool {
     true
 }
@@ -136,6 +142,7 @@ impl Default for Settings {
             notify_new_update: true,
             notify_new_message: true,
             notify_system_message: true,
+            notifications_auto_clear: default_notifications_auto_clear(),
             check_updates_on_start: true,
             auto_install_updates: false,
             open_launcher_on_profiles_tab: false,

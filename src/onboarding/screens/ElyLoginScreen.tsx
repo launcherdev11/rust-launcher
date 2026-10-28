@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { TextField } from "../../components/ui";
 import type { Language } from "../../i18n";
@@ -9,9 +9,6 @@ import { OnboardingLayout } from "../components/OnboardingLayout";
 
 type Props = {
   language: Language;
-  stepIndex: number;
-  accentColor?: string;
-  backgroundImageUrl?: string;
   loading?: boolean;
   error?: string | null;
   success?: boolean;
@@ -23,9 +20,6 @@ type Props = {
 
 export function ElyLoginScreen({
   language,
-  stepIndex,
-  accentColor,
-  backgroundImageUrl,
   loading = false,
   error = null,
   success = false,
@@ -41,24 +35,7 @@ export function ElyLoginScreen({
   const canSubmit = username.trim().length > 0 && password.length > 0 && !loading && !success;
 
   return (
-    <OnboardingLayout
-      language={language}
-      stepIndex={stepIndex}
-      screenKey="account-ely"
-      accentColor={accentColor}
-      backgroundImageUrl={backgroundImageUrl}
-      hideFooter
-    >
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={loading}
-        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white disabled:opacity-45"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        {tt("onboarding.nav.back")}
-      </button>
-
+    <OnboardingLayout language={language} onBack={onBack} backDisabled={loading}>
       <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.ely.title")}</h1>
       <p className="mt-1.5 mb-5 text-sm text-white/60">{tt("onboarding.ely.subtitle")}</p>
 

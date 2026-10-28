@@ -124,7 +124,9 @@
       "success": "Installed {{count}} project(s).",
       "partial": "Installed {{ok}}, failed: {{failed}}.",
       "failed": "Failed to download the selected projects.",
-      "modpackHint": "Batch download works for mods, resource packs, and shaders — not modpacks."
+      "modpackHint": "Batch download works for mods, resource packs, and shaders — not modpacks.",
+      "showList": "Show selected",
+      "removeOne": "Remove {{title}}"
     },
     "source": {
       "catalog": "Catalog",
@@ -172,7 +174,10 @@
       "issues": "Issues",
       "source": "Source",
       "discord": "Discord"
-    }
+    },
+    "pageLabel": "Page",
+    "pageOfTotal": "of {{total}}",
+    "pageInputLabel": "Page number"
   },
   "settings": {
     "common": {
@@ -332,6 +337,17 @@
         "no": "Main"
       },
       "uiSounds": { "label": "Interface sounds:" },
+      "notificationsAutoClear": {
+        "label": "Auto-clear notifications:",
+        "hint": "Applies only to the launcher's system notifications under the bell. Platform notifications are left alone.",
+        "option": {
+          "off": "Never",
+          "read": "After viewing",
+          "10m": "After 10 minutes",
+          "30m": "After 30 minutes",
+          "60m": "After an hour"
+        }
+      },
       "discordRpc": {
         "label": "Show Discord activity:",
         "hint": "Displays your launcher status in Discord (Rich Presence)."
@@ -368,7 +384,28 @@
         "currentLabel": "Current",
         "svPadLabel": "Saturation & brightness",
         "svPadAria": "Saturation and brightness for the current hue",
-        "helpText": "Ring: hue. Square: saturation and brightness. You can also type the HEX."
+        "helpText": "Ring: hue. Square: saturation and brightness. You can also type the HEX.",
+        "custom": "Custom color",
+        "presets": {
+          "white": "White",
+          "graphite": "Graphite",
+          "amethyst": "Amethyst",
+          "violet": "Violet",
+          "lavender": "Lavender",
+          "indigo": "Indigo",
+          "cobalt": "Cobalt",
+          "sky": "Sky",
+          "cyan": "Cyan",
+          "teal": "Teal",
+          "emerald": "Emerald",
+          "lime": "Lime",
+          "amber": "Amber",
+          "orange": "Orange",
+          "scarlet": "Scarlet",
+          "raspberry": "Raspberry",
+          "pink": "Pink",
+          "orchid": "Orchid"
+        }
       },
       "backgroundImage": {
         "label": "Background image:",
@@ -1269,7 +1306,39 @@
       "deleted": "Backup deleted.",
       "deleteFailed": "Failed to delete backup: {{msg}}",
       "openFolder": "Open folder",
-      "openFolderFailed": "Failed to open backups folder."
+      "openFolderFailed": "Failed to open backups folder.",
+      "autoCreated": "Automatic backup of “{{name}}” created.",
+      "settingsSaveFailed": "Couldn't save backup settings.",
+      "auto": {
+        "label": "Automatic backups:",
+        "hint": "A backup is made after you close the game, if the chosen period has passed since the last automatic one.",
+        "option": {
+          "off": "Off",
+          "daily": "Once a day",
+          "weekly": "Once a week"
+        }
+      },
+      "keep": {
+        "label": "Automatic backups to keep:"
+      },
+      "beforeUpdate": {
+        "label": "Before updating mods:",
+        "hint": "A full backup of the modpack, configs and worlds included, not just the old mod files.",
+        "option": {
+          "off": "Do nothing",
+          "ask": "Offer a backup",
+          "auto": "Back up automatically"
+        },
+        "askTitle": "Make a backup?",
+        "askMessage": "You can save a copy of the modpack before updating, so you can go back if something breaks.",
+        "askConfirm": "Make a backup",
+        "askSkip": "Update without it",
+        "failed": "Backup failed, update cancelled: {{msg}}"
+      },
+      "kind": {
+        "auto": "Auto",
+        "pre_update": "Before update"
+      }
     },
     "deleteConfirm": {
       "bulkPrompt": "Delete the selected profiles ({{count}})? This action cannot be undone.",
@@ -1487,12 +1556,43 @@
       "nothingIncluded": "Nothing will be included.",
       "done": "Done",
       "openFolder": "Open folder"
+    },
+    "continue": {
+      "label": "Continue",
+      "worldTitle": "Jump straight into world “{{name}}”",
+      "serverTitle": "Connect straight to server {{name}}"
+    },
+    "iconPicker": {
+      "title": "Modpack icon",
+      "fromFile": "Upload file…",
+      "apply": "Apply",
+      "background": "Background",
+      "noBackground": "No background",
+      "textures": "Game textures",
+      "noTextures": "Textures unavailable",
+      "noTexturesHint": "Install any Minecraft version to pick an icon from game textures, or upload your own file."
     }
   },
   "friends": {
     "subtitleSignedIn": "Add friends, see who's online, and join their rooms.",
     "subtitleSignedOut": "Sign in on the Accounts tab to see your friends.",
     "friendNicknamePlaceholder": "Friend's nickname",
+
+    "suggest": {
+
+      "title": "Similar nicknames",
+
+      "searching": "Searching…",
+
+      "empty": "Nobody with a similar nickname",
+
+      "isFriend": "Friends",
+
+      "requestSent": "Request sent",
+
+      "add": "Add"
+
+    },
     "searchPlaceholder": "Find a friend…",
     "add": "Add",
     "refresh": "Refresh",
@@ -2257,12 +2357,13 @@
     },
     "welcome": {
       "title": "16Launcher",
-      "subtitle": "Choose a language, sign in and bring over your instances from another launcher. Every step can be skipped.",
+      "subtitle": "Choose a language and a color, sign in and bring over your instances from another launcher. Every step can be skipped.",
       "cta": "Start",
-      "languageLabel": "Interface language",
-      "colorLabel": "Color scheme",
-      "colorWhite": "White",
-      "colorViolet": "Violet"
+      "languageLabel": "Interface language"
+    },
+    "appearance": {
+      "title": "Interface color",
+      "subtitle": "It's used for buttons, selected items and download bars. You can change it any time in Settings, under Appearance."
     },
     "account": {
       "title": "Sign in",
@@ -2332,7 +2433,11 @@
       "title": "Ready to play",
       "subtitle": "Basic setup is done. You can open the interface tour later from Help.",
       "ctaPlay": "Start playing",
-      "ctaTour": "Show tour"
+      "ctaTour": "Show tour",
+      "summaryLanguage": "Language",
+      "summaryColor": "Color",
+      "summaryAccount": "Account",
+      "accountLater": "Add later"
     },
     "errors": {
       "loginFailed": "Couldn't sign in",

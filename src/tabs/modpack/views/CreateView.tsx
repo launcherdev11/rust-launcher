@@ -235,7 +235,7 @@ export function CreateView({ ctx }: Props) {
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--fg-muted)]" />
                 </button>
                 {isVersionDropdownOpen && (
-                  <div className="glass-popover absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto p-1 text-xs">
+                  <div className="glass-popover menu-pop-in origin-top absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto p-1 text-xs">
                     {versionsLoading && (
                       <div className="px-3 py-2 text-[color:var(--fg-muted)]">
                         {tt("modpacks.common.loading")}
@@ -313,7 +313,7 @@ export function CreateView({ ctx }: Props) {
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--fg-muted)]" />
                   </button>
                   {isLoaderVersionDropdownOpen && (
-                    <div className="glass-popover absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto p-1 text-xs">
+                    <div className="glass-popover menu-pop-in origin-top absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto p-1 text-xs">
                       {loaderVersionOptions.length === 0 && !loaderVersionsLoading && (
                         <div className="px-3 py-2 text-[color:var(--fg-muted)]">
                           {tt("modpacks.manage.noVersionsForGame")}

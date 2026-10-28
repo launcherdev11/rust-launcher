@@ -77,7 +77,7 @@ export function ChangeVersionModal({ ctx }: Props) {
                     <ChevronDown className="h-3 w-3 text-white/60" />
                   </button>
                   {isMigrateVersionDropdownOpen && (
-                    <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover overflow-y-auto p-1 text-xs">
+                    <div className="menu-pop-in origin-top absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover p-1 text-xs">
                       {migrateVersionsLoading && (
                         <div className="px-3 py-2 text-white/60">
                           {tt("modpacks.common.loading")}
@@ -145,7 +145,7 @@ export function ChangeVersionModal({ ctx }: Props) {
                       <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
                     </button>
                     {isMigrateLoaderVersionDropdownOpen && (
-                      <div className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover overflow-y-auto p-1 text-xs">
+                      <div className="menu-pop-in origin-top absolute left-0 top-full z-30 mt-1 max-h-64 w-full overflow-y-auto glass-popover p-1 text-xs">
                         {migrateLoaderVersionOptions.length === 0 &&
                           !migrateLoaderVersionsLoading && (
                             <div className="px-3 py-2 text-white/60">

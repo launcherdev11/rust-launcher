@@ -653,6 +653,14 @@ function App() {
                     }
                     void handlePrimaryClick();
                   }}
+                  onContinueProfile={(profile, target) =>
+                    void handlePlayPinnedProfile(
+                      toInstanceProfileCard(profile),
+                      target.kind === "server"
+                        ? { serverAddress: target.id }
+                        : { worldName: target.id },
+                    )
+                  }
                   primaryLabel={primaryLabel}
                   primaryColorClasses={primaryColorClasses}
                   isLaunching={isLaunching}
@@ -866,7 +874,6 @@ function App() {
         <OnboardingFlow
           language={language}
           accentColor={settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR}
-          backgroundImageUrl={backgroundImageUrl}
           backgroundAnimated={backgroundIsAnimated}
           onLanguagePersist={persistInterfaceLanguage}
           onAccentPersist={(color) => void updateSettings({ background_accent_color: color })}
@@ -1114,7 +1121,7 @@ function App() {
               </TabErrorBoundary>
             </div>
             {activeItem === "friends" ? (
-              <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
+              <div className="tab-animate flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
                 <TabErrorBoundary language={language} tabName="friends">
                   <FriendsTab
                     showNotification={showNotification}
@@ -1125,6 +1132,7 @@ function App() {
                 </TabErrorBoundary>
               </div>
             ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
+              <div className="tab-animate flex min-h-0 w-full flex-1 flex-col">
               <TabErrorBoundary language={language} tabName="accounts">
               <AccountsTab
                 showNotification={showNotification}
@@ -1157,6 +1165,7 @@ function App() {
                 onAddAccount={handleAddLauncherAccount}
               />
               </TabErrorBoundary>
+              </div>
             ) : effectiveTabSplit ? (
               <TabSplitPanes
                 layout={effectiveTabSplit}

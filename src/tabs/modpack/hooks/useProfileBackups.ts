@@ -1,13 +1,17 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type EditorSection,
   type InstanceProfile,
   type NotificationKind,
   type ProfileBackupInfo,
+  type ProfileBackupSettings,
   type ViewId,
 } from "../types";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
+type AutoBackupPayload = { profile_id: string; backup: ProfileBackupInfo };
 
 type ProfileBackupsDeps = {
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean; }) => void;
@@ -35,6 +39,63 @@ export function useProfileBackups(deps: ProfileBackupsDeps) {
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [backupCreating, setBackupCreating] = useState(false);
   const [backupRestoringId, setBackupRestoringId] = useState<string | null>(null);
+  const [backupSettings, setBackupSettings] = useState<ProfileBackupSettings | null>(null);
+
+  const backupsSectionProfileId = editorSection === "backups" ? selectedProfileId : null;
+
+  useEffect(() => {
+    setBackupSettings(null);
+    if (!backupsSectionProfileId) return;
+    let cancelled = false;
+    invoke<ProfileBackupSettings>("get_profile_backup_settings", {
+      profileId: backupsSectionProfileId,
+    })
+      .then((settings) => {
+        if (!cancelled) setBackupSettings(settings);
+      })
+      .catch((e) => console.warn("Failed to load backup settings:", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [backupsSectionProfileId]);
+
+  const autoBackupListenerRef = useRef<(payload: AutoBackupPayload) => void>(() => {});
+  autoBackupListenerRef.current = ({ profile_id, backup }) => {
+    if (backup.kind !== "auto") return;
+    showNotification("success", tt("modpacks.backups.autoCreated", { name: backup.profile_name }), {
+      sound: false,
+    });
+    if (profile_id === backupsModalProfileId || profile_id === backupsSectionProfileId) {
+      void loadBackupsList(profile_id);
+    }
+  };
+
+  useEffect(() => {
+    const unlisten = listen<AutoBackupPayload>("profile-backup-finished", ({ payload }) =>
+      autoBackupListenerRef.current(payload),
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  async function updateBackupSettings(patch: Partial<ProfileBackupSettings>) {
+    if (!backupsSectionProfileId || !backupSettings) return;
+    const previous = backupSettings;
+    const next = { ...backupSettings, ...patch };
+    setBackupSettings(next);
+    try {
+      const saved = await invoke<ProfileBackupSettings>("set_profile_backup_settings", {
+        profileId: backupsSectionProfileId,
+        settings: next,
+      });
+      setBackupSettings(saved);
+    } catch (e) {
+      console.error(e);
+      setBackupSettings(previous);
+      showNotification("error", tt("modpacks.backups.settingsSaveFailed"));
+    }
+  }
 
   async function loadBackupsList(profileId: string) {
     setBackupsLoading(true);
@@ -122,6 +183,8 @@ export function useProfileBackups(deps: ProfileBackupsDeps) {
     backupsLoading,
     backupCreating,
     backupRestoringId,
+    backupSettings,
+    updateBackupSettings,
     loadBackupsList,
     openBackupsModal,
     handleCreateBackup,

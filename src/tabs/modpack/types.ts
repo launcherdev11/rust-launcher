@@ -53,6 +53,15 @@ export type ProfileBackupInfo = {
   size_bytes: number;
   path: string;
   profile_name: string;
+  kind?: ProfileBackupKind | null;
+};
+
+export type ProfileBackupKind = "auto" | "pre_update";
+
+export type ProfileBackupSettings = {
+  auto_backup: "off" | "daily" | "weekly";
+  auto_backup_keep: number;
+  backup_before_update: "off" | "ask" | "auto";
 };
 
 export type ExternalLauncherType =
@@ -136,6 +145,13 @@ export type GameConsoleSession = {
 
 export type GameStatus = "idle" | "running" | "stopped" | "crashed";
 
+export type ContinueTarget = {
+  kind: "world" | "server";
+  id: string;
+  name: string;
+  last_played: number | null;
+};
+
 export type ModpackTabProps = {
   language: Language;
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
@@ -144,6 +160,7 @@ export type ModpackTabProps = {
   initialProfiles?: InstanceProfile[];
   onOpenModsTab?: () => void;
   onPlaySelectedProfile?: () => void;
+  onContinueProfile?: (profile: InstanceProfile, target: ContinueTarget) => void;
   primaryLabel?: string;
   primaryColorClasses?: string;
   isLaunching?: boolean;

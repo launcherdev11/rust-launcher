@@ -1,3 +1,5 @@
+import type { NotificationsAutoClear } from "./types";
+
 export type NotificationKind = "info" | "success" | "error" | "warning";
 
 export const MAX_VISIBLE_NOTIFICATIONS = 2;
@@ -33,6 +35,13 @@ export type NotificationIdentity = Pick<
 
 export const NOTIFICATION_DISMISS_MS = 4300;
 export const NOTIFICATION_WITH_ACTION_DISMISS_MS = 10000;
+
+export const SESSION_NOTIFICATION_TTL_MS: Partial<Record<NotificationsAutoClear, number>> = {
+  "10m": 10 * 60_000,
+  "30m": 30 * 60_000,
+  "60m": 60 * 60_000,
+};
+export const SESSION_NOTIFICATION_PRUNE_INTERVAL_MS = 30_000;
 
 export function notificationsMatch(a: NotificationIdentity, b: NotificationIdentity): boolean {
   return (

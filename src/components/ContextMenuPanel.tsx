@@ -49,12 +49,13 @@ export function ContextMenuPanel({
     >
       <div
         ref={menuRef}
-        className={`absolute glass-popover p-1 text-xs text-white ${className}`}
+        className={`absolute glass-popover p-1 text-xs text-white ${ready ? "menu-pop-in" : ""} ${className}`}
         style={{
           top: pos.top,
           left: pos.left,
           zIndex: zIndex + 10,
           visibility: ready ? "visible" : "hidden",
+          transformOrigin: pos.left < x ? "top right" : "top left",
         }}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => {

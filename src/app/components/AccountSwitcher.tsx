@@ -65,7 +65,7 @@ export function AccountSwitcher({
         />
       </button>
       {open ? (
-        <div className="glass-popover absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden py-1">
+        <div className="glass-popover menu-pop-in origin-top-right absolute right-0 top-full z-[100] mt-1.5 min-w-[240px] max-w-[min(320px,calc(100vw-2rem))] overflow-hidden py-1">
           <p className="px-3 py-2 text-[0.75rem] font-bold text-white/40">
             {tt("app.accounts.switcherHeading")}
           </p>

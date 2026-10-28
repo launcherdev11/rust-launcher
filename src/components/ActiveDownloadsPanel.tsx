@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "framer-motion";
 import type { DownloadJob, DownloadJobKind } from "../hooks/useDownloadJobs";
 import { useT, type Language } from "../i18n";
 
@@ -16,67 +17,74 @@ const KIND_ICON: Record<DownloadJobKind, string> = {
 export function ActiveDownloadsPanel({ jobs, language }: ActiveDownloadsPanelProps) {
   const tt = useT(language);
 
-  if (jobs.length === 0) return null;
-
   return (
     <div
       className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(calc(100vw-2rem),21rem)] flex-col gap-2"
       aria-live="polite"
     >
-      {jobs.map((job) => {
-        const paused = job.status === "paused";
-        const known = job.percent != null && job.percent > 0;
-        const percent = Math.max(0, Math.min(100, Math.round(job.percent ?? 0)));
-        const kindLabel = tt(`app.downloads.kind.${job.kind}`);
-        const statusLabel = paused
-          ? tt("app.downloads.paused")
-          : known
-            ? kindLabel
-            : `${kindLabel} · ${tt("app.downloads.preparing")}`;
+      <AnimatePresence initial={false}>
+        {jobs.map((job) => {
+          const paused = job.status === "paused";
+          const known = job.percent != null && job.percent > 0;
+          const percent = Math.max(0, Math.min(100, Math.round(job.percent ?? 0)));
+          const kindLabel = tt(`app.downloads.kind.${job.kind}`);
+          const statusLabel = paused
+            ? tt("app.downloads.paused")
+            : known
+              ? kindLabel
+              : `${kindLabel} · ${tt("app.downloads.preparing")}`;
 
-        return (
-          <div
-            key={job.id}
-            className="pointer-events-auto glass-panel flex flex-col gap-2.5 rounded-2xl px-3.5 py-3"
-          >
-            <div className="flex items-center gap-3">
-              <div className="glass-control flex h-9 w-9 shrink-0 items-center justify-center">
-                <img
-                  src={`/launcher-assets/${KIND_ICON[job.kind]}`}
-                  alt=""
-                  className="h-5 w-5 object-contain opacity-80"
+          return (
+            <motion.div
+              key={job.id}
+              layout="position"
+              initial={{ opacity: 0, x: 28, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 24, scale: 0.97, transition: { duration: 0.18, ease: "easeIn" } }}
+              transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.8 }}
+              className="pointer-events-auto glass-panel flex flex-col gap-2.5 rounded-2xl px-3.5 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <div className="glass-control flex h-9 w-9 shrink-0 items-center justify-center">
+                  <img
+                    src={`/launcher-assets/${KIND_ICON[job.kind]}`}
+                    alt=""
+                    className="h-5 w-5 object-contain opacity-80"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.8125rem] font-semibold text-white/90" title={job.label}>
+                    {job.label}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-white/50">{statusLabel}</p>
+                </div>
+                {known ? (
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-white/85">
+                    {percent}%
+                  </span>
+                ) : null}
+              </div>
+              <div
+                className="h-1.5 w-full overflow-hidden rounded-md bg-white/10"
+                role="progressbar"
+                aria-label={job.label}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={known ? percent : undefined}
+              >
+                <div
+                  className={`progress-fill h-full rounded-md ${
+                    known
+                      ? "w-full transition-transform duration-300 ease-out"
+                      : "download-bar-indeterminate"
+                  } ${paused ? "opacity-40" : ""}`}
+                  style={known ? { transform: `translateX(${percent - 100}%)` } : undefined}
                 />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[0.8125rem] font-semibold text-white/90" title={job.label}>
-                  {job.label}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-white/50">{statusLabel}</p>
-              </div>
-              {known ? (
-                <span className="shrink-0 text-sm font-semibold tabular-nums text-white/85">
-                  {percent}%
-                </span>
-              ) : null}
-            </div>
-            <div
-              className="h-1.5 w-full overflow-hidden rounded-md bg-white/10"
-              role="progressbar"
-              aria-label={job.label}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={known ? percent : undefined}
-            >
-              <div
-                className={`progress-fill h-full rounded-md transition-[width] duration-200 ${
-                  known ? "" : "download-bar-indeterminate"
-                } ${paused ? "opacity-40" : ""}`}
-                style={known ? { width: `${percent}%` } : undefined}
-              />
-            </div>
-          </div>
-        );
-      })}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }

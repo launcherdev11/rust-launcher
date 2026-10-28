@@ -10,6 +10,10 @@ export type DownloadJob = {
   status: "running" | "paused";
 };
 
+function roundPercent(percent: number | null): number | null {
+  return percent == null ? null : Math.round(percent);
+}
+
 export function useDownloadJobs() {
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
   const counterRef = useRef(0);
@@ -39,9 +43,11 @@ export function useDownloadJobs() {
   );
 
   const updateJobProgress = useCallback((id: string, percent: number | null) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === id ? { ...j, percent } : j)),
-    );
+    setJobs((prev) => {
+      const current = prev.find((j) => j.id === id);
+      if (!current || roundPercent(current.percent) === roundPercent(percent)) return prev;
+      return prev.map((j) => (j.id === id ? { ...j, percent } : j));
+    });
   }, []);
 
   const setJobPaused = useCallback((id: string, paused: boolean) => {

@@ -1,4 +1,6 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AssetIcon } from "../../components/asset_icon";
 import { CatalogCardSkeleton, EmptyState, ErrorState, Spinner } from "../../components/ui";
 import { useMarqueeSelection } from "../../hooks/useMarqueeSelection";
 import type { CatalogProject, ContentProvider } from "./types";
@@ -24,6 +26,160 @@ function HeartStatIcon() {
       className="h-4 w-4 shrink-0 object-contain"
       aria-hidden="true"
     />
+  );
+}
+
+type PageJumpInputProps = {
+  tt: Tt;
+  currentPage: number;
+  totalPages: number;
+  disabled: boolean;
+  onJump: (page: number) => void;
+};
+
+function PageJumpInput({ tt, currentPage, totalPages, disabled, onJump }: PageJumpInputProps) {
+  const [draft, setDraft] = useState(String(currentPage));
+
+  useEffect(() => {
+    setDraft(String(currentPage));
+  }, [currentPage]);
+
+  const commit = () => {
+    const parsed = Number.parseInt(draft, 10);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(currentPage));
+      return;
+    }
+    const next = Math.min(totalPages, Math.max(1, parsed));
+    setDraft(String(next));
+    if (next !== currentPage) onJump(next - 1);
+  };
+
+  return (
+    <label className="flex items-center gap-1.5">
+      <span>{tt("mods.pageLabel")}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        disabled={disabled}
+        aria-label={tt("mods.pageInputLabel")}
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            setDraft(String(currentPage));
+            e.currentTarget.blur();
+          }
+        }}
+        className="glass-control h-7 rounded-lg px-2 text-center text-[0.8125rem] tabular-nums text-white focus:outline-none disabled:opacity-60"
+        style={{ width: `${Math.max(3.5, String(totalPages).length * 0.6 + 1.6)}rem` }}
+      />
+      <span>{tt("mods.pageOfTotal", { total: totalPages })}</span>
+    </label>
+  );
+}
+
+type BatchSelectionToggleProps = {
+  tt: Tt;
+  count: number;
+  projects: CatalogProject[];
+  disabled: boolean;
+  onRemove: (key: string) => void;
+};
+
+function BatchSelectionToggle({ tt, count, projects, disabled, onRemove }: BatchSelectionToggleProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (count === 0) setOpen(false);
+  }, [count]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={tt("mods.batch.showList")}
+        className="interactive-press inline-flex items-center gap-1.5 rounded-xl px-2 py-1 font-semibold hover:bg-white/10"
+      >
+        <span>{tt("mods.batch.selected", { count })}</span>
+        <AssetIcon
+          name="arrow_down"
+          className={`h-3 w-3 transition-transform duration-200 ${open ? "" : "rotate-180"}`}
+        />
+      </button>
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            key="batch-selection-list"
+            initial={{ opacity: 0, y: 8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98, transition: { duration: 0.12, ease: "easeIn" } }}
+            transition={{ type: "spring", stiffness: 520, damping: 34, mass: 0.7 }}
+            className="glass-popover absolute bottom-full left-0 z-30 mb-2 w-[min(22rem,80vw)] origin-bottom-left p-1"
+          >
+            <ul className="custom-scrollbar max-h-64 overflow-y-auto">
+              <AnimatePresence initial={false}>
+                {projects.map((p, index) => (
+                  <motion.li
+                    key={p.key}
+                    layout
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0, transition: { delay: Math.min(index, 8) * 0.025 } }}
+                    exit={{ opacity: 0, x: 6, transition: { duration: 0.12 } }}
+                    className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-white/[0.06]"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5">
+                      {p.icon_url ? (
+                        <img src={p.icon_url} alt="" className="h-full w-full object-cover" />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[0.8125rem] font-semibold text-white">{p.title}</div>
+                      <div className="truncate text-[0.75rem] text-white/50">{p.author}</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => onRemove(p.key)}
+                      title={tt("mods.batch.removeOne", { title: p.title })}
+                      aria-label={tt("mods.batch.removeOne", { title: p.title })}
+                      className="icon-btn h-7 w-7 shrink-0 text-white/60 hover:text-white disabled:opacity-40"
+                    >
+                      <AssetIcon name="delete" className="h-3.5 w-3.5" />
+                    </button>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -93,6 +249,7 @@ export function CatalogGrid({
   const skeletonCount = layout === "grid" ? 8 : 5;
   const batchCount = batchSelectedKeys.size;
   const showBatchBar = allowBatchSelect && batchCount > 0;
+  const batchSelectedProjects = projects.filter((p) => batchSelectedKeys.has(p.key));
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const handleMarqueePointerDown = useMarqueeSelection({
     containerRef: scrollRef,
@@ -294,9 +451,13 @@ export function CatalogGrid({
       </div>
       {showBatchBar ? (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-accent-to/30 bg-accent-from/10 px-3 py-2 text-[0.8125rem] text-white/85">
-          <span className="font-semibold">
-            {tt("mods.batch.selected", { count: batchCount })}
-          </span>
+          <BatchSelectionToggle
+            tt={tt}
+            count={batchCount}
+            projects={batchSelectedProjects}
+            disabled={batchInstalling}
+            onRemove={(key) => onToggleBatchSelect?.(key)}
+          />
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -322,9 +483,13 @@ export function CatalogGrid({
       ) : null}
       {totalHits > pageSize && (
         <div className="mt-2 flex items-center justify-between rounded-2xl bg-black/40 px-3 py-2 text-[0.8125rem] text-white/70">
-          <span>
-            {tt("mods.pageOf", { current: currentPage, total: totalPages })}
-          </span>
+          <PageJumpInput
+            tt={tt}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            disabled={loading}
+            onJump={onPageChange}
+          />
           <div className="flex items-center gap-2">
             <button
               type="button"

@@ -837,7 +837,79 @@ export type ProfileBackupView = {
   id: string;
   createdAt: number;
   sizeBytes: number;
+  kind: "auto" | "pre_update" | null;
 };
+
+export type ProfileBackupSettingsView = {
+  auto_backup: "off" | "daily" | "weekly";
+  auto_backup_keep: number;
+  backup_before_update: "off" | "ask" | "auto";
+};
+
+const AUTO_BACKUP_OPTIONS = ["off", "daily", "weekly"] as const;
+const AUTO_BACKUP_KEEP_OPTIONS = ["1", "3", "5", "10"] as const;
+const BACKUP_BEFORE_UPDATE_OPTIONS = ["off", "ask", "auto"] as const;
+
+function BackupAutomationCard({
+  settings,
+  onChange,
+  tt,
+}: {
+  settings: ProfileBackupSettingsView | null;
+  onChange: (patch: Partial<ProfileBackupSettingsView>) => void;
+  tt: Tt;
+}) {
+  const disabled = !settings;
+  const keep = String(settings?.auto_backup_keep ?? 3);
+  const keepOptions = (AUTO_BACKUP_KEEP_OPTIONS as readonly string[]).includes(keep)
+    ? AUTO_BACKUP_KEEP_OPTIONS
+    : [...AUTO_BACKUP_KEEP_OPTIONS, keep];
+
+  return (
+    <div className="divide-y divide-white/[0.06] rounded-2xl bg-black/30 px-4">
+      <SettingsRow
+        label={tt("modpacks.backups.auto.label")}
+        hint={tt("modpacks.backups.auto.hint")}
+      >
+        <SettingsSelect
+          value={settings?.auto_backup ?? "off"}
+          disabled={disabled}
+          className="w-full sm:w-52"
+          options={AUTO_BACKUP_OPTIONS.map((id) => ({
+            value: id,
+            label: tt(`modpacks.backups.auto.option.${id}`),
+          }))}
+          onChange={(auto_backup) => onChange({ auto_backup })}
+        />
+      </SettingsRow>
+      {settings && settings.auto_backup !== "off" ? (
+        <SettingsRow label={tt("modpacks.backups.keep.label")}>
+          <SettingsSelect
+            value={keep}
+            className="w-full sm:w-52"
+            options={keepOptions.map((n) => ({ value: n, label: n }))}
+            onChange={(v) => onChange({ auto_backup_keep: Number(v) })}
+          />
+        </SettingsRow>
+      ) : null}
+      <SettingsRow
+        label={tt("modpacks.backups.beforeUpdate.label")}
+        hint={tt("modpacks.backups.beforeUpdate.hint")}
+      >
+        <SettingsSelect
+          value={settings?.backup_before_update ?? "off"}
+          disabled={disabled}
+          className="w-full sm:w-52"
+          options={BACKUP_BEFORE_UPDATE_OPTIONS.map((id) => ({
+            value: id,
+            label: tt(`modpacks.backups.beforeUpdate.option.${id}`),
+          }))}
+          onChange={(backup_before_update) => onChange({ backup_before_update })}
+        />
+      </SettingsRow>
+    </div>
+  );
+}
 
 function BackupPanelIcon({ className }: { className?: string }) {
   return (
@@ -878,6 +950,8 @@ export function BackupsSectionPanel({
   creating,
   restoringId,
   backups,
+  settings,
+  onSettingsChange,
   onCreate,
   onRestore,
   onDelete,
@@ -890,6 +964,8 @@ export function BackupsSectionPanel({
   creating: boolean;
   restoringId: string | null;
   backups: ProfileBackupView[];
+  settings: ProfileBackupSettingsView | null;
+  onSettingsChange: (patch: Partial<ProfileBackupSettingsView>) => void;
   onCreate: () => void;
   onRestore: (backupId: string) => void;
   onDelete: (backupId: string) => void;
@@ -943,6 +1019,8 @@ export function BackupsSectionPanel({
         </button>
       </div>
 
+      <BackupAutomationCard settings={settings} onChange={onSettingsChange} tt={tt} />
+
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/60">
           {tt("modpacks.backups.loading")}
@@ -985,7 +1063,14 @@ export function BackupsSectionPanel({
                     <BackupPanelIcon className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate font-semibold">{stamp}</div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-semibold">{stamp}</span>
+                      {b.kind ? (
+                        <span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[0.6875rem] font-medium text-white/60">
+                          {tt(`modpacks.backups.kind.${b.kind}`)}
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="mt-0.5 text-xs text-white/50">
                       {formatByteSize(language, b.sizeBytes)}
                     </div>

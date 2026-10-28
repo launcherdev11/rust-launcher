@@ -18,6 +18,22 @@
   --glass-tint: transparent;
 }
 
+@property --accent-tween {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+
+.accent-tween {
+  transition: --accent-tween 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accent-tween {
+    transition: none;
+  }
+}
+
 :root[data-accent-neutral],
 :root[data-accent-neutral] [style*="--accent-color"] {
   --accent-from: var(--accent-color);

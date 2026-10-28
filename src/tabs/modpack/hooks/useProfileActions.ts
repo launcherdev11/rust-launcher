@@ -99,9 +99,48 @@ export function useProfileActions(deps: ProfileActionsDeps) {
 
   const [duplicateBusy, setDuplicateBusy] = useState(false);
 
-  async function handleChooseProfileIcon(profileOverride?: InstanceProfile) {
+  const [iconPickerProfile, setIconPickerProfile] = useState<InstanceProfile | null>(null);
+
+  function handleChooseProfileIcon(profileOverride?: InstanceProfile) {
     const profile = profileOverride ?? selectedProfile;
-    if (!profile) return;
+    if (profile) setIconPickerProfile(profile);
+  }
+
+  function applyProfileIconChange(profile: InstanceProfile, iconPath: string | null) {
+    setProfiles((prev) => {
+      const next = prev.map((p) =>
+        p.id === profile.id ? { ...p, icon_path: iconPath ?? p.icon_path } : p,
+      );
+      onProfilesChange?.(next);
+      return next;
+    });
+    setProfileIconRevisions((prev) => ({
+      ...prev,
+      [profile.id]: (prev[profile.id] ?? 0) + 1,
+    }));
+    showNotification("success", tt("modpacks.profile.iconChanged"));
+  }
+
+  async function handleApplyTextureIcon(
+    profile: InstanceProfile,
+    textureId: string,
+    background: string | null,
+  ) {
+    try {
+      const iconPath = await invoke<string | null>("set_profile_icon_from_texture", {
+        profileId: profile.id,
+        textureId,
+        background,
+      });
+      applyProfileIconChange(profile, iconPath);
+      setIconPickerProfile(null);
+    } catch (e) {
+      console.error(e);
+      showNotification("error", tt("modpacks.profile.iconChangeFailed"));
+    }
+  }
+
+  async function handleChooseProfileIconFile(profile: InstanceProfile) {
     try {
       const path = await openFileDialog({
         multiple: false,
@@ -120,18 +159,8 @@ export function useProfileActions(deps: ProfileActionsDeps) {
         iconSourcePath: path,
       });
 
-      setProfiles((prev) => {
-        const next = prev.map((p) =>
-          p.id === profile.id ? { ...p, icon_path: iconPath ?? p.icon_path } : p,
-        );
-        onProfilesChange?.(next);
-        return next;
-      });
-      setProfileIconRevisions((prev) => ({
-        ...prev,
-        [profile.id]: (prev[profile.id] ?? 0) + 1,
-      }));
-      showNotification("success", tt("modpacks.profile.iconChanged"));
+      applyProfileIconChange(profile, iconPath);
+      setIconPickerProfile(null);
     } catch (e) {
       console.error(e);
       showNotification("error", tt("modpacks.profile.iconChangeFailed"));
@@ -456,6 +485,10 @@ export function useProfileActions(deps: ProfileActionsDeps) {
     setPendingBulkDeleteProfileIds,
     duplicateBusy,
     handleChooseProfileIcon,
+    iconPickerProfile,
+    setIconPickerProfile,
+    handleApplyTextureIcon,
+    handleChooseProfileIconFile,
     handleCreateProfile,
     handleCreateDesktopShortcut,
     handleSelectProfile,

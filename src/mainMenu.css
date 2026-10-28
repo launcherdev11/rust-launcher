@@ -521,7 +521,11 @@ html.launcher-linux .dock-backdrop img {
   height: 100%;
   border-radius: 3px;
   background: var(--accent-gradient, linear-gradient(90deg, #ffffff, #d4d4d8));
-  transition: width 0.2s ease;
+}
+
+.dock-progress > .dock-progress-fill {
+  width: 100%;
+  transition: transform 0.3s ease-out;
 }
 
 .dock-progress > .dock-progress-indeterminate {

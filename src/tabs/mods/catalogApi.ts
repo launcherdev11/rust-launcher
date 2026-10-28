@@ -118,6 +118,8 @@ export async function searchModrinthCatalog(
   return { hits: data.hits, total: data.total_hits ?? data.hits.length };
 }
 
+const CURSEFORGE_MAX_RESULTS = 10_000;
+
 export async function searchCurseforgeCatalog(
   params: SearchCatalogParams,
 ): Promise<SearchCatalogResult> {
@@ -141,7 +143,7 @@ export async function searchCurseforgeCatalog(
   });
   return {
     hits: data.hits,
-    total: data.totalCount ?? data.hits.length,
+    total: Math.min(data.totalCount ?? data.hits.length, CURSEFORGE_MAX_RESULTS),
   };
 }
 

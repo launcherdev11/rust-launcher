@@ -38,6 +38,11 @@ type VersionStateApi = {
   runVersionInstall: (options?: { resume?: boolean }) => Promise<void>;
 };
 
+export type ProfileJoinTarget = {
+  serverAddress?: string | null;
+  worldName?: string | null;
+};
+
 type UseGameLaunchOptions = {
   settings: Settings | null;
   profile: Profile;
@@ -99,11 +104,11 @@ export function useGameLaunch({
   } = versionState;
 
   const pendingProfileLaunchIdRef = useRef<string | null>(null);
-  const handlePlayPinnedProfileRef = useRef<(profile: InstanceProfileCard) => Promise<void>>(
-    async () => {},
-  );
+  const handlePlayPinnedProfileRef = useRef<
+    (profile: InstanceProfileCard, join?: ProfileJoinTarget) => Promise<void>
+  >(async () => {});
 
-  const handlePlayPinnedProfile = async (profile: InstanceProfileCard) => {
+  const handlePlayPinnedProfile = async (profile: InstanceProfileCard, join?: ProfileJoinTarget) => {
     try {
       await invoke("set_selected_profile", { id: profile.id });
       setActiveInstanceProfile({
@@ -146,16 +151,20 @@ export function useGameLaunch({
       }
       setIsLaunching(true);
       try {
+        const serverAddress = join?.serverAddress?.trim() || null;
         await invoke("launch_game", {
           versionId: launchVersionId,
           versionUrl: null,
+          serverAddress,
+          worldName: serverAddress ? null : join?.worldName?.trim() || null,
         });
         lastRunningRef.current = true;
         gameLaunchStartedAtRef.current = Date.now();
-        setLaunchPresenceContext({
-          kind: "modpack",
-          startedAt: new Date().toISOString(),
-        });
+        setLaunchPresenceContext(
+          serverAddress
+            ? { kind: "server", serverAddress, startedAt: new Date().toISOString() }
+            : { kind: "modpack", startedAt: new Date().toISOString() },
+        );
         setGameStatus("running");
         void reportStats({ launched: true }).catch(() => {});
       } finally {
@@ -167,7 +176,7 @@ export function useGameLaunch({
       showNotification("error", tt("app.errors.launchError", { msg }), {
         action: {
           label: tt("app.launchActions.retry"),
-          onClick: () => void handlePlayPinnedProfileRef.current(profile),
+          onClick: () => void handlePlayPinnedProfileRef.current(profile, join),
         },
       });
     }

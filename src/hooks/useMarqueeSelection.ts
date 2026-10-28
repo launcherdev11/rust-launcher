@@ -28,6 +28,10 @@ function preventDefault(ev: Event) {
   ev.preventDefault();
 }
 
+function visualScale(el: HTMLElement, rect: DOMRect): number {
+  return el.offsetWidth > 0 && rect.width > 0 ? rect.width / el.offsetWidth : 1;
+}
+
 export function useMarqueeSelection({
   containerRef,
   selected,
@@ -49,13 +53,14 @@ export function useMarqueeSelection({
       if (!container) return;
       if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
       const bounds = container.getBoundingClientRect();
-      if (e.clientX >= bounds.left + container.clientLeft + container.clientWidth) return;
+      const scale = visualScale(container, bounds);
+      if (e.clientX >= bounds.left + (container.clientLeft + container.clientWidth) * scale) return;
       cleanupRef.current?.();
 
       const base = new Set(selectedRef.current);
       const start = {
-        x: e.clientX - bounds.left + container.scrollLeft,
-        y: e.clientY - bounds.top + container.scrollTop,
+        x: e.clientX - bounds.left + container.scrollLeft * scale,
+        y: e.clientY - bounds.top + container.scrollTop * scale,
       };
       const downAt = { x: e.clientX, y: e.clientY };
       const pointer = { x: e.clientX, y: e.clientY };
@@ -67,8 +72,9 @@ export function useMarqueeSelection({
 
       const update = () => {
         const b = container.getBoundingClientRect();
-        const offsetX = b.left - container.scrollLeft;
-        const offsetY = b.top - container.scrollTop;
+        const scale = visualScale(container, b);
+        const offsetX = b.left - container.scrollLeft * scale;
+        const offsetY = b.top - container.scrollTop * scale;
         const curX = pointer.x - offsetX;
         const curY = pointer.y - offsetY;
         const left = Math.min(start.x, curX) + offsetX;

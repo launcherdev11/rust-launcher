@@ -5,14 +5,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Language } from "../i18n";
 import { useT } from "../i18n";
 import { AccountSelectionScreen } from "./screens/AccountSelectionScreen";
+import { AppearanceScreen } from "./screens/AppearanceScreen";
 import { ElyLoginScreen } from "./screens/ElyLoginScreen";
 import { FinishScreen } from "./screens/FinishScreen";
 import { ImportMigrationScreen } from "./screens/ImportMigrationScreen";
 import { MicrosoftLoginScreen } from "./screens/MicrosoftLoginScreen";
 import { WelcomeScreen } from "./screens/WelcomeScreen";
 import { OnboardingBackgroundAnimatedProvider } from "./backgroundAnimatedContext";
+import { OnboardingShell } from "./components/OnboardingShell";
 import type { AccountProvider, OnboardingStep } from "./types";
-import { stepProgressIndex } from "./types";
+import { stepOrder, stepProgressIndex } from "./types";
 
 type Profile = {
   nickname: string;
@@ -25,7 +27,6 @@ type Profile = {
 export type OnboardingFlowProps = {
   language: Language;
   accentColor?: string;
-  backgroundImageUrl?: string;
   backgroundAnimated?: boolean;
   onLanguagePersist: (lang: Language) => void;
   onAccentPersist: (color: string) => void;
@@ -36,7 +37,6 @@ export type OnboardingFlowProps = {
 export function OnboardingFlow({
   language,
   accentColor,
-  backgroundImageUrl,
   backgroundAnimated = false,
   onLanguagePersist,
   onAccentPersist,
@@ -45,6 +45,8 @@ export function OnboardingFlow({
 }: OnboardingFlowProps) {
   const tt = useT(language);
   const [step, setStep] = useState<OnboardingStep>("welcome");
+  const [direction, setDirection] = useState(1);
+  const [linkedAccount, setLinkedAccount] = useState<AccountProvider | null>(null);
 
   const [elyLoading, setElyLoading] = useState(false);
   const [elyError, setElyError] = useState<string | null>(null);
@@ -62,13 +64,17 @@ export function OnboardingFlow({
 
   const stepIndex = stepProgressIndex(step);
 
-  const goImport = useCallback(() => {
-    setStep("import-migration");
+  const stepRef = useRef(step);
+  stepRef.current = step;
+
+  const go = useCallback((next: OnboardingStep) => {
+    setDirection(stepOrder(next) >= stepOrder(stepRef.current) ? 1 : -1);
+    setStep(next);
   }, []);
 
-  const goFinish = useCallback(() => {
-    setStep("finish");
-  }, []);
+  const goImport = useCallback(() => go("import-migration"), [go]);
+
+  const goFinish = useCallback(() => go("finish"), [go]);
 
   const cleanupElyListeners = useCallback(() => {
     elyListenersRef.current.ok?.();
@@ -99,6 +105,7 @@ export function OnboardingFlow({
         totpToken: null,
       });
       setElySuccess(true);
+      setLinkedAccount("ely");
       await onProfileUpdated?.();
       window.setTimeout(() => goImport(), 600);
     } catch (e) {
@@ -120,6 +127,7 @@ export function OnboardingFlow({
         cleanupElyListeners();
         setElyLoading(false);
         setElySuccess(true);
+        setLinkedAccount("ely");
         await onProfileUpdated?.();
         window.setTimeout(() => goImport(), 600);
       });
@@ -154,6 +162,7 @@ export function OnboardingFlow({
         setMsLoading(false);
         setMsAuthUrl(null);
         setMsSuccess(true);
+        setLinkedAccount("microsoft");
         await onProfileUpdated?.();
         window.setTimeout(() => goImport(), 600);
       });
@@ -185,43 +194,43 @@ export function OnboardingFlow({
         return (
           <WelcomeScreen
             language={language}
-            stepIndex={stepIndex}
-            accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
             onSelectLanguage={onLanguagePersist}
+            onStart={() => go("appearance")}
+          />
+        );
+      case "appearance":
+        return (
+          <AppearanceScreen
+            language={language}
+            accentColor={accentColor}
             onSelectAccent={onAccentPersist}
-            onStart={() => setStep("account-select")}
+            onBack={() => go("welcome")}
+            onNext={() => go("account-select")}
           />
         );
       case "account-select":
         return (
           <AccountSelectionScreen
             language={language}
-            stepIndex={stepIndex}
-            accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
             onSelectProvider={(provider: AccountProvider) => {
               setElyError(null);
               setMsError(null);
               setElySuccess(false);
               setMsSuccess(false);
-              setStep(provider === "ely" ? "account-ely" : "account-microsoft");
+              go(provider === "ely" ? "account-ely" : "account-microsoft");
             }}
             onSkip={goImport}
-            onBack={() => setStep("welcome")}
+            onBack={() => go("appearance")}
           />
         );
       case "account-ely":
         return (
           <ElyLoginScreen
             language={language}
-            stepIndex={stepIndex}
-            accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
             loading={elyLoading}
             error={elyError}
             success={elySuccess}
-            onBack={() => setStep("account-select")}
+            onBack={() => go("account-select")}
             onLogin={(u, p) => void handleElyPasswordLogin(u, p)}
             onOAuth={() => void handleElyOAuth()}
             onSkip={goImport}
@@ -231,9 +240,6 @@ export function OnboardingFlow({
         return (
           <MicrosoftLoginScreen
             language={language}
-            stepIndex={stepIndex}
-            accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
             loading={msLoading}
             error={msError}
             success={msSuccess}
@@ -242,7 +248,7 @@ export function OnboardingFlow({
               cleanupMsListener();
               setMsLoading(false);
               setMsAuthUrl(null);
-              setStep("account-select");
+              go("account-select");
             }}
             onLogin={() => void handleMicrosoftLogin()}
             onSkip={() => {
@@ -257,10 +263,7 @@ export function OnboardingFlow({
         return (
           <ImportMigrationScreen
             language={language}
-            stepIndex={stepIndex}
-            accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
-            onBack={() => setStep("account-select")}
+            onBack={() => go("account-select")}
             onSkip={goFinish}
             onContinue={goFinish}
           />
@@ -269,9 +272,8 @@ export function OnboardingFlow({
         return (
           <FinishScreen
             language={language}
-            stepIndex={stepIndex}
             accentColor={accentColor}
-            backgroundImageUrl={backgroundImageUrl}
+            account={linkedAccount}
             finishing={finishing}
             onFinish={(options) => void handleFinish(options)}
           />
@@ -283,7 +285,15 @@ export function OnboardingFlow({
 
   return (
     <OnboardingBackgroundAnimatedProvider value={backgroundAnimated}>
-      {stepView}
+      <OnboardingShell
+        language={language}
+        accentColor={accentColor}
+        stepIndex={stepIndex}
+        stepKey={step}
+        direction={direction}
+      >
+        {stepView}
+      </OnboardingShell>
     </OnboardingBackgroundAnimatedProvider>
   );
 }

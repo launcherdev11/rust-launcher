@@ -6,6 +6,7 @@ pub mod cache;
 pub mod console;
 pub mod console_filter;
 pub mod content_snapshots;
+pub mod continue_target;
 pub mod core;
 pub mod server_pack;
 pub mod worlds;
@@ -28,6 +29,7 @@ pub mod profile_tools;
 pub mod screenshots;
 pub mod settings;
 pub mod state;
+pub mod texture_icons;
 pub mod version_types;
 pub mod version_remove;
 pub mod versions;
@@ -37,6 +39,8 @@ pub use accounts::{
     set_profile, switch_launcher_account,
 };
 pub use cache::{clear_launcher_cache, get_launcher_cache_size};
+pub use continue_target::get_profile_continue_target;
+pub use texture_icons::{list_profile_texture_icons, set_profile_icon_from_texture};
 pub use content_snapshots::{
     delete_content_snapshot, list_content_snapshots, restore_content_snapshot,
 };
@@ -76,7 +80,8 @@ pub use external_import::{
     list_importable_instances,
 };
 pub use profile_backups::{
-    create_profile_backup, delete_profile_backup, list_profile_backups,
+    create_profile_backup, delete_profile_backup, get_profile_backup_settings,
+    list_profile_backups, set_profile_backup_settings,
     open_profile_backups_folder, restore_profile_backup_as_new,
 };
 pub use profile_tools::{

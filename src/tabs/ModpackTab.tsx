@@ -15,6 +15,7 @@ import { ContentUpdatesModal } from "./modpack/modals/ContentUpdatesModal";
 import { ProfileSettingsModal } from "./modpack/modals/ProfileSettingsModal";
 import { ChangeVersionModal } from "./modpack/modals/ChangeVersionModal";
 import { ExportModal } from "./modpack/modals/ExportModal";
+import { ProfileIconModal } from "./modpack/modals/ProfileIconModal";
 import { useModpackController } from "./modpack/useModpackController";
 import type { ModpackTabProps } from "./modpack/types";
 
@@ -95,6 +96,8 @@ export function ModpackTab(props: ModpackTabProps) {
       <ChangeVersionModal ctx={ctx} />
 
       <ExportModal ctx={ctx} />
+
+      <ProfileIconModal ctx={ctx} />
 
       <ScreenshotsModal
         language={language}

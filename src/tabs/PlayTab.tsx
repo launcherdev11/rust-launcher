@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { CursorHint, useCursorHint } from "../components/CursorHint";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
@@ -190,14 +191,12 @@ export function PlayTab({
   const dockIconSrc = useProfileIconSrc(selectedProfile?.id ?? "");
   const lockedHint = useCursorHint();
 
-  const consoleText = useMemo(
-    () => playConsoleLines.map((e) => e.line).join("\n"),
-    [playConsoleLines],
-  );
+  const consoleLinesRef = useRef(playConsoleLines);
+  consoleLinesRef.current = playConsoleLines;
 
   const handleCopyConsole = useCallback(async () => {
-    await copyTextToClipboard(consoleText);
-  }, [consoleText]);
+    await copyTextToClipboard(consoleLinesRef.current.map((e) => e.line).join("\n"));
+  }, []);
 
   const handleToggleConsoleDetached = useCallback(() => {
     void onToggleConsoleDetached?.();
@@ -501,7 +500,7 @@ export function PlayTab({
                   </button>
 
                   {isLoaderDropdownOpen && (
-                    <div className="absolute left-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] min-w-[9rem] overflow-y-auto glass-popover p-1 text-xs">
+                    <div className="menu-pop-in origin-bottom-left absolute left-0 bottom-full mb-2 z-30 max-h-[min(50vh,240px)] min-w-[9rem] overflow-y-auto glass-popover p-1 text-xs">
                       {(["vanilla", "fabric", "forge", "quilt", "neoforge"] as LoaderId[]).map((id) => {
                         const isActive = loader === id;
                         return (
@@ -551,7 +550,7 @@ export function PlayTab({
                   </button>
 
                   {isVersionDropdownOpen && versions.length > 0 && (
-                    <div className="absolute left-0 bottom-full mb-2 z-30 w-64 glass-popover p-1 text-xs">
+                    <div className="menu-pop-in origin-bottom-left absolute left-0 bottom-full mb-2 z-30 w-64 glass-popover p-1 text-xs">
                       <div className="px-2 pt-2 pb-1">
                         <div className="relative">
                           <input
@@ -741,8 +740,9 @@ export function PlayTab({
               }
             >
               <span
+                className="dock-progress-fill"
                 style={{
-                  width: `${Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)))}%`,
+                  transform: `translateX(${Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0))) - 100}%)`,
                 }}
               />
             </div>
@@ -750,23 +750,32 @@ export function PlayTab({
         </div>
       </div>
 
-      {(showConsoleOnLaunch || isInstalling || installPaused) && !isConsoleDetached && (
-        <div className="mt-3 w-full shrink-0">
-          <GameConsolePanel
-            embedded
-            className="pointer-events-auto"
-            consoleLines={playConsoleLines}
-            isConsoleVisible={isConsoleVisible || isInstalling || installPaused}
-            gameStatus={gameStatus}
-            language={language}
-            profileId={selectedProfileId}
-            isDetached={false}
-            onClearConsole={onClearConsole}
-            onToggleConsole={onToggleConsole}
-            onToggleDetached={handleToggleConsoleDetached}
-          />
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {(showConsoleOnLaunch || isInstalling || installPaused) && !isConsoleDetached && (
+          <motion.div
+            key="play-console"
+            className="mt-3 w-full shrink-0"
+            initial={{ opacity: 0, y: 14, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.99, transition: { duration: 0.16, ease: "easeIn" } }}
+            transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.8 }}
+          >
+            <GameConsolePanel
+              embedded
+              className="pointer-events-auto"
+              consoleLines={playConsoleLines}
+              isConsoleVisible={isConsoleVisible || isInstalling || installPaused}
+              gameStatus={gameStatus}
+              language={language}
+              profileId={selectedProfileId}
+              isDetached={false}
+              onClearConsole={onClearConsole}
+              onToggleConsole={onToggleConsole}
+              onToggleDetached={handleToggleConsoleDetached}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <CursorHint
         hint={selectedProfile ? lockedHint.hint : null}
         onClose={lockedHint.hide}

@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notify_new_update: true,
   notify_new_message: true,
   notify_system_message: true,
+  notifications_auto_clear: "off",
   check_updates_on_start: true,
   auto_install_updates: false,
   open_launcher_on_profiles_tab: false,

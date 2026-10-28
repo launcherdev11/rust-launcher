@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useConsoleFilters, useVisibleConsoleLines } from "../../../components/ConsoleLogView";
@@ -86,10 +87,8 @@ export function useManageConsole(deps: ManageConsoleDeps) {
     consoleFilters,
   );
 
-  const consoleTextForCopy = useMemo(
-    () => visibleConsoleLines.map((v) => v.entry.line).join("\n"),
-    [visibleConsoleLines],
-  );
+  const visibleConsoleLinesRef = useRef(visibleConsoleLines);
+  visibleConsoleLinesRef.current = visibleConsoleLines;
 
   const manageConsoleStatusDotClass = useMemo(() => {
     if (selectedLogSessionId !== "live") return "bg-gray-500";
@@ -103,6 +102,7 @@ export function useManageConsole(deps: ManageConsoleDeps) {
     if (isCopyingConsole) return;
     setIsCopyingConsole(true);
     let ok = false;
+    const consoleTextForCopy = visibleConsoleLinesRef.current.map((v) => v.entry.line).join("\n");
     try {
       await navigator.clipboard.writeText(consoleTextForCopy);
       ok = true;
@@ -128,7 +128,7 @@ export function useManageConsole(deps: ManageConsoleDeps) {
       setIsConsoleCopied(true);
       window.setTimeout(() => setIsConsoleCopied(false), 1200);
     }
-  }, [consoleTextForCopy, isCopyingConsole]);
+  }, [isCopyingConsole]);
 
   function formatLogSessionOptionLabel(session: GameConsoleSession): string {
     const d = new Date(session.endedAt ?? session.startedAt);

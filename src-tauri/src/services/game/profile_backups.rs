@@ -10,8 +10,10 @@ use zip::CompressionMethod;
 
 use rand::{distributions::Alphanumeric, Rng};
 
-use crate::app::paths::{game_root_dir, instance_dir};
+use crate::app::paths::{game_root_dir, instance_dir, instance_settings_path};
+use crate::infra::fs_atomic::{backup_path_for, read_to_string_with_backup, write_atomic};
 use crate::models::profile::{InstanceConfig, InstanceProfileSummary};
+use crate::models::InstanceSettings;
 use crate::services::game::profiles::{
     create_profile_impl, instance_profile_summary_for_dir, write_instance_config,
 };
@@ -25,6 +27,11 @@ const BACKUP_SKIP_DIRS: &[&str] = &[
 ];
 const MANIFEST_NAME: &str = "16launcher-backup.json";
 
+pub const BACKUP_KIND_AUTO: &str = "auto";
+pub const BACKUP_KIND_PRE_UPDATE: &str = "pre_update";
+const DEFAULT_AUTO_BACKUP_KEEP: u32 = 3;
+const MAX_AUTO_BACKUP_KEEP: u32 = 30;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileBackupInfo {
     pub id: String,
@@ -33,6 +40,14 @@ pub struct ProfileBackupInfo {
     pub size_bytes: u64,
     pub path: String,
     pub profile_name: String,
+    pub kind: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileBackupSettings {
+    pub auto_backup: String,
+    pub auto_backup_keep: u32,
+    pub backup_before_update: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +59,8 @@ struct BackupManifest {
     game_version: String,
     loader: String,
     loader_version: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
 }
 
 fn backups_root() -> Result<PathBuf, String> {
@@ -143,6 +160,7 @@ fn backup_info_from_path(profile_id: &str, path: &Path) -> Option<ProfileBackupI
         .unwrap_or(0);
 
     let mut profile_name = String::new();
+    let mut kind = None;
     if let Ok(file) = File::open(path) {
         if let Ok(mut archive) = zip::ZipArchive::new(file) {
             if let Ok(mut entry) = archive.by_name(MANIFEST_NAME) {
@@ -150,6 +168,7 @@ fn backup_info_from_path(profile_id: &str, path: &Path) -> Option<ProfileBackupI
                 if entry.read_to_string(&mut buf).is_ok() {
                     if let Ok(m) = serde_json::from_str::<BackupManifest>(&buf) {
                         profile_name = m.profile_name;
+                        kind = m.kind;
                     }
                 }
             }
@@ -163,6 +182,7 @@ fn backup_info_from_path(profile_id: &str, path: &Path) -> Option<ProfileBackupI
         size_bytes: meta.len(),
         path: path.to_string_lossy().to_string(),
         profile_name,
+        kind,
     })
 }
 
@@ -191,15 +211,36 @@ pub fn list_profile_backups(profile_id: String) -> Result<Vec<ProfileBackupInfo>
 pub async fn create_profile_backup(
     app: AppHandle,
     profile_id: String,
+    kind: Option<String>,
 ) -> Result<ProfileBackupInfo, String> {
-    let root = instance_dir(&profile_id)?;
+    let kind = match kind.as_deref() {
+        None => None,
+        Some(k @ (BACKUP_KIND_AUTO | BACKUP_KIND_PRE_UPDATE)) => Some(k),
+        Some(_) => return Err("Некорректный тип бэкапа".into()),
+    };
+    let info = write_profile_backup(&app, &profile_id, kind)?;
+    if let Some(kind) = kind {
+        let keep = read_instance_settings(&profile_id)
+            .map(|inst| backup_settings_from(&inst).auto_backup_keep)
+            .unwrap_or(DEFAULT_AUTO_BACKUP_KEEP);
+        prune_backups_of_kind(&profile_id, kind, keep as usize);
+    }
+    Ok(info)
+}
+
+fn write_profile_backup(
+    app: &AppHandle,
+    profile_id: &str,
+    kind: Option<&str>,
+) -> Result<ProfileBackupInfo, String> {
+    let root = instance_dir(profile_id)?;
     if !root.is_dir() {
         return Err("Папка сборки не найдена".into());
     }
     let cfg = load_instance_config(&root)?;
     let created_at = now_secs();
     let backup_id = format_backup_id(created_at);
-    let out_dir = profile_backups_dir(&profile_id)?;
+    let out_dir = profile_backups_dir(profile_id)?;
     std::fs::create_dir_all(&out_dir)
         .map_err(|e| format!("Не удалось создать папку бэкапов: {e}"))?;
 
@@ -226,6 +267,7 @@ pub async fn create_profile_backup(
         game_version: cfg.game_version.clone(),
         loader: cfg.loader.clone(),
         loader_version: cfg.loader_version.clone(),
+        kind: kind.map(str::to_string),
     };
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|e| format!("Ошибка сериализации манифеста: {e}"))?;
@@ -291,7 +333,7 @@ pub async fn create_profile_backup(
 
     writer.finish().map_err(|e| e.to_string())?;
 
-    let info = backup_info_from_path(&profile_id, &out_path).ok_or_else(|| {
+    let info = backup_info_from_path(profile_id, &out_path).ok_or_else(|| {
         "Бэкап создан, но не удалось прочитать метаданные".to_string()
     })?;
 
@@ -304,6 +346,106 @@ pub async fn create_profile_backup(
     );
 
     Ok(info)
+}
+
+fn read_instance_settings(profile_id: &str) -> Result<InstanceSettings, String> {
+    let path = instance_settings_path(profile_id)?;
+    if !path.exists() && !backup_path_for(&path).exists() {
+        return Ok(InstanceSettings::default());
+    }
+    let text = read_to_string_with_backup(&path)
+        .ok_or_else(|| format!("Ошибка чтения settings.json: {}", path.display()))?;
+    serde_json::from_str(&text).map_err(|e| format!("Ошибка разбора settings.json: {e}"))
+}
+
+fn backup_settings_from(inst: &InstanceSettings) -> ProfileBackupSettings {
+    ProfileBackupSettings {
+        auto_backup: match inst.auto_backup.as_deref() {
+            Some(v @ ("daily" | "weekly")) => v.to_string(),
+            _ => "off".to_string(),
+        },
+        auto_backup_keep: inst
+            .auto_backup_keep
+            .unwrap_or(DEFAULT_AUTO_BACKUP_KEEP)
+            .clamp(1, MAX_AUTO_BACKUP_KEEP),
+        backup_before_update: match inst.backup_before_update.as_deref() {
+            Some(v @ ("ask" | "auto")) => v.to_string(),
+            _ => "off".to_string(),
+        },
+    }
+}
+
+#[command]
+pub fn get_profile_backup_settings(profile_id: String) -> Result<ProfileBackupSettings, String> {
+    Ok(backup_settings_from(&read_instance_settings(&profile_id)?))
+}
+
+#[command]
+pub fn set_profile_backup_settings(
+    profile_id: String,
+    settings: ProfileBackupSettings,
+) -> Result<ProfileBackupSettings, String> {
+    let path = instance_settings_path(&profile_id)?;
+    let mut current = read_instance_settings(&profile_id)?;
+    current.auto_backup = Some(settings.auto_backup);
+    current.auto_backup_keep = Some(settings.auto_backup_keep);
+    current.backup_before_update = Some(settings.backup_before_update);
+    let normalized = backup_settings_from(&current);
+    current.auto_backup = Some(normalized.auto_backup.clone());
+    current.auto_backup_keep = Some(normalized.auto_backup_keep);
+    current.backup_before_update = Some(normalized.backup_before_update.clone());
+
+    let text = serde_json::to_string_pretty(&current)
+        .map_err(|e| format!("Ошибка сериализации settings.json сборки: {e}"))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Не удалось создать папку для settings.json: {e}"))?;
+    }
+    write_atomic(&path, text)?;
+    Ok(normalized)
+}
+
+fn prune_backups_of_kind(profile_id: &str, kind: &str, keep: usize) {
+    let Ok(list) = list_profile_backups(profile_id.to_string()) else {
+        return;
+    };
+    for stale in list
+        .into_iter()
+        .filter(|b| b.kind.as_deref() == Some(kind))
+        .skip(keep)
+    {
+        let _ = std::fs::remove_file(&stale.path);
+    }
+}
+
+pub fn run_scheduled_profile_backup(app: &AppHandle, profile_id: &str) {
+    let Ok(inst) = read_instance_settings(profile_id) else {
+        return;
+    };
+    let settings = backup_settings_from(&inst);
+    let interval_secs: u64 = match settings.auto_backup.as_str() {
+        "daily" => 24 * 60 * 60,
+        "weekly" => 7 * 24 * 60 * 60,
+        _ => return,
+    };
+    let last_auto = list_profile_backups(profile_id.to_string())
+        .ok()
+        .and_then(|list| {
+            list.into_iter()
+                .find(|b| b.kind.as_deref() == Some(BACKUP_KIND_AUTO))
+        })
+        .map(|b| b.created_at);
+    if last_auto.is_some_and(|at| now_secs().saturating_sub(at) < interval_secs) {
+        return;
+    }
+    match write_profile_backup(app, profile_id, Some(BACKUP_KIND_AUTO)) {
+        Ok(_) => prune_backups_of_kind(
+            profile_id,
+            BACKUP_KIND_AUTO,
+            settings.auto_backup_keep as usize,
+        ),
+        Err(e) => eprintln!("[profile-backup] scheduled backup for {profile_id} failed: {e}"),
+    }
 }
 
 #[command]

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   CONSOLE_LEVEL_TEXT_CLASS,
   classifyConsoleLines,
@@ -13,7 +13,7 @@ import {
 
 type Tt = (key: string, vars?: Record<string, string | number>) => string;
 
-type ConsoleEntry = { line: string; source?: "stdout" | "stderr" };
+type ConsoleEntry = { id?: number; line: string; source?: "stdout" | "stderr" };
 
 export type VisibleConsoleLine<T extends ConsoleEntry> = {
   entry: T;
@@ -100,6 +100,14 @@ export function ConsoleFilterBar({
   );
 }
 
+const ConsoleRow = memo(function ConsoleRow({ line, level }: { line: string; level: ConsoleLineLevel }) {
+  return (
+    <div className={`console-row whitespace-pre-wrap break-all ${CONSOLE_LEVEL_TEXT_CLASS[level]}`}>
+      {line}
+    </div>
+  );
+});
+
 export function ConsoleLines<T extends ConsoleEntry>({
   tt,
   visible,
@@ -143,12 +151,7 @@ export function ConsoleLines<T extends ConsoleEntry>({
         <div className="py-2 font-sans text-white/45">{tt("play.console.filters.nothing")}</div>
       ) : (
         visible.map(({ entry, index, level }) => (
-          <div
-            key={`${keyPrefix}${index}`}
-            className={`whitespace-pre-wrap break-all ${CONSOLE_LEVEL_TEXT_CLASS[level]}`}
-          >
-            {entry.line}
-          </div>
+          <ConsoleRow key={`${keyPrefix}${entry.id ?? `i${index}`}`} line={entry.line} level={level} />
         ))
       )}
     </div>

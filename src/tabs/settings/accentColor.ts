@@ -108,18 +108,37 @@ export function accentTraits(hex: string): { neutral: boolean; light: boolean } 
   return { neutral: s < 12, light: luminance > 0.55 };
 }
 
-export const ACCENT_PRESETS = [
-  "#ffffff",
-  "#4a22a8",
-  "#7c3aed",
-  "#c026d3",
-  "#e11d48",
-  "#ea580c",
-  "#ca8a04",
-  "#16a34a",
-  "#0891b2",
-  "#2563eb",
+export type AccentPreset = { id: string; hex: string };
+
+export const ACCENT_PRESETS: AccentPreset[] = [
+  { id: "white", hex: "#ffffff" },
+  { id: "graphite", hex: "#9ca3af" },
+  { id: "amethyst", hex: "#4a22a8" },
+  { id: "violet", hex: "#7c3aed" },
+  { id: "lavender", hex: "#a78bfa" },
+  { id: "indigo", hex: "#4f46e5" },
+  { id: "cobalt", hex: "#2563eb" },
+  { id: "sky", hex: "#0ea5e9" },
+  { id: "cyan", hex: "#0891b2" },
+  { id: "teal", hex: "#0d9488" },
+  { id: "emerald", hex: "#16a34a" },
+  { id: "lime", hex: "#65a30d" },
+  { id: "amber", hex: "#ca8a04" },
+  { id: "orange", hex: "#ea580c" },
+  { id: "scarlet", hex: "#dc2626" },
+  { id: "raspberry", hex: "#e11d48" },
+  { id: "pink", hex: "#db2777" },
+  { id: "orchid", hex: "#c026d3" },
 ];
+
+export function findAccentPreset(hex: string): AccentPreset | undefined {
+  const needle = hex.trim().toLowerCase();
+  return ACCENT_PRESETS.find((preset) => preset.hex === needle);
+}
+
+export function accentTweenStyle(hex: string): CSSProperties {
+  return { "--accent-tween": hex, "--accent-color": "var(--accent-tween)" } as CSSProperties;
+}
 
 export const ACCENT_HUE_RING_STYLE: CSSProperties = {
   backgroundImage: `conic-gradient(from 0deg, ${Array.from({ length: 72 }, (_, i) => {

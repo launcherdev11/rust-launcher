@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import type { Language } from "../../i18n";
 import { formatByteSize, useT } from "../../i18n";
 import { EmptyState, ErrorState, Skeleton, Spinner } from "../../components/ui";
@@ -74,9 +74,6 @@ function errorText(e: unknown): string {
 
 type Props = {
   language: Language;
-  stepIndex: number;
-  accentColor?: string;
-  backgroundImageUrl?: string;
   onBack: () => void;
   onSkip: () => void;
   onContinue: () => void;
@@ -84,9 +81,6 @@ type Props = {
 
 export function ImportMigrationScreen({
   language,
-  stepIndex,
-  accentColor,
-  backgroundImageUrl,
   onBack,
   onSkip,
   onContinue,
@@ -314,24 +308,7 @@ export function ImportMigrationScreen({
   const percent = progress ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
-    <OnboardingLayout
-      language={language}
-      stepIndex={stepIndex}
-      screenKey="import-migration"
-      accentColor={accentColor}
-      backgroundImageUrl={backgroundImageUrl}
-      hideFooter
-    >
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={importing}
-        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white disabled:opacity-45"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        {tt("onboarding.nav.back")}
-      </button>
-
+    <OnboardingLayout language={language} onBack={onBack} backDisabled={importing}>
       <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.import.title")}</h1>
 
       <div className="mt-1.5 mb-4 min-h-[2.5rem] text-sm text-white/60" aria-live="polite">

@@ -1,5 +1,6 @@
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { AssetIcon } from "../../components/asset_icon";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import type { Language } from "../../i18n";
 import { useT } from "../../i18n";
@@ -9,9 +10,6 @@ import { OnboardingLayout } from "../components/OnboardingLayout";
 
 type Props = {
   language: Language;
-  stepIndex: number;
-  accentColor?: string;
-  backgroundImageUrl?: string;
   loading?: boolean;
   error?: string | null;
   success?: boolean;
@@ -21,22 +19,8 @@ type Props = {
   onSkip: () => void;
 };
 
-function MicrosoftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
-      <rect x="1" y="1" width="10" height="10" fill="#f25022" />
-      <rect x="13" y="1" width="10" height="10" fill="#7fba00" />
-      <rect x="1" y="13" width="10" height="10" fill="#00a4ef" />
-      <rect x="13" y="13" width="10" height="10" fill="#ffb900" />
-    </svg>
-  );
-}
-
 export function MicrosoftLoginScreen({
   language,
-  stepIndex,
-  accentColor,
-  backgroundImageUrl,
   loading = false,
   error = null,
   success = false,
@@ -54,23 +38,7 @@ export function MicrosoftLoginScreen({
   };
 
   return (
-    <OnboardingLayout
-      language={language}
-      stepIndex={stepIndex}
-      screenKey="account-microsoft"
-      accentColor={accentColor}
-      backgroundImageUrl={backgroundImageUrl}
-      hideFooter
-    >
-      <button
-        type="button"
-        onClick={onBack}
-        className="interactive-press mb-3 inline-flex items-center gap-1.5 self-start text-xs font-semibold text-white/60 hover:text-white"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        {tt("onboarding.nav.back")}
-      </button>
-
+    <OnboardingLayout language={language} onBack={onBack}>
       <h1 className="text-xl font-semibold text-white sm:text-2xl">{tt("onboarding.microsoft.title")}</h1>
       <p className="mt-1.5 mb-4 text-sm text-white/60">{tt("onboarding.microsoft.subtitle")}</p>
 
@@ -111,7 +79,7 @@ export function MicrosoftLoginScreen({
             </span>
           ) : (
             <span className="inline-flex items-center gap-2">
-              <MicrosoftIcon />
+              <AssetIcon name="brand/microsoft" className="h-4 w-4" />
               {tt("onboarding.microsoft.cta")}
             </span>
           )}

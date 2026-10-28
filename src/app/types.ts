@@ -21,6 +21,8 @@ export type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 
 export type DownloadSource = "auto" | "official" | "mirror";
 
+export type NotificationsAutoClear = "off" | "read" | "10m" | "30m" | "60m";
+
 export type SettingsTabId = "game" | "versions" | "launcher";
 
 export type Settings = {
@@ -41,6 +43,7 @@ export type Settings = {
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;
+  notifications_auto_clear?: NotificationsAutoClear;
   check_updates_on_start: boolean;
   auto_install_updates: boolean;
   open_launcher_on_profiles_tab: boolean;

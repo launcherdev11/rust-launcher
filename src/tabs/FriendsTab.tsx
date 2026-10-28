@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import {
   acceptFriendRequest,
   listFriends,
@@ -23,6 +23,8 @@ import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey
 import { confirmDialog } from "../lib/confirmDialog";
 import { formatDurationShort, formatPresenceStatus, getElapsedSeconds } from "../lib/socialActivity";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
+import { NicknameSuggestions, useNicknameSuggestions } from "../features/friends/NicknameSuggestions";
+import type { UserSearchRow } from "../api/users";
 import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 import {
   ActionButton,
@@ -187,6 +189,16 @@ export function FriendsTab({
   const [presenceByUserId, setPresenceByUserId] = useState<Record<string, PresenceInfo>>({});
   const [viewingProfile, setViewingProfile] = useState<UserProfileSeed | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nickInputFocused, setNickInputFocused] = useState(false);
+  const [suggestIndex, setSuggestIndex] = useState(-1);
+  const [suggestBusyUserId, setSuggestBusyUserId] = useState<string | null>(null);
+
+  const suggestions = useNicknameSuggestions(friendNickToAdd, Boolean(accessToken));
+  const suggestOpen = nickInputFocused && suggestions.active;
+
+  useEffect(() => {
+    setSuggestIndex(-1);
+  }, [suggestions.results]);
 
   const syncAuth = useCallback(() => {
     const token = getStoredAccessToken() ?? "";
@@ -210,10 +222,30 @@ export function FriendsTab({
     };
   }, [syncAuth]);
 
+  const hasLiveRoomTimer = friendsRooms.some((room) => Boolean(room.session_started_at));
+
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    return () => window.clearInterval(id);
-  }, []);
+    const intervalMs = hasLiveRoomTimer ? 1_000 : 30_000;
+    let id: number | null = null;
+    const tick = () => setNowMs(Date.now());
+    const start = () => {
+      if (id != null) return;
+      tick();
+      id = window.setInterval(tick, intervalMs);
+    };
+    const stop = () => {
+      if (id == null) return;
+      window.clearInterval(id);
+      id = null;
+    };
+    const onVisibility = () => (document.visibilityState === "visible" ? start() : stop());
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [hasLiveRoomTimer]);
 
   const reloadAll = useCallback(async () => {
     const [friendsRes, requestsRes, presenceRes, roomsRes] = await Promise.all([
@@ -263,19 +295,20 @@ export function FriendsTab({
     }
   };
 
-  const handleSendRequest = async () => {
+  const handleSendRequest = async (target?: UserSearchRow) => {
     if (!accessToken) {
       showNotification("warning", tt("friends.toast.signInFirst"));
       return;
     }
-    const toNick = friendNickToAdd.trim();
+    const toNick = (target?.nickname ?? friendNickToAdd).trim();
     if (!toNick) return;
-    if (toNick === profileNickname.trim()) {
+    if (toNick.toLowerCase() === profileNickname.trim().toLowerCase()) {
       showNotification("warning", tt("friends.toast.cannotAddSelf"));
       return;
     }
 
     setBusyAction("add");
+    setSuggestBusyUserId(target?.user_id ?? null);
     setLoading(true);
     try {
       const result = await sendFriendRequest(toNick);
@@ -284,13 +317,52 @@ export function FriendsTab({
       } else {
         showNotification("success", tt("friends.toast.requestSent"));
       }
-      setFriendNickToAdd("");
+      if (target) {
+        suggestions.markRequestSent(target.user_id);
+      } else {
+        setFriendNickToAdd("");
+      }
     } catch (e) {
       showNotification("error", e instanceof ApiError ? e.message : String(e));
     } finally {
       setLoading(false);
       setBusyAction(null);
+      setSuggestBusyUserId(null);
     }
+  };
+
+  const pickSuggestion = (row: UserSearchRow) => {
+    setFriendNickToAdd(row.nickname);
+    friendNickInputRef.current?.focus();
+  };
+
+  const handleNickKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const rows = suggestions.results;
+    if (suggestOpen && rows.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSuggestIndex((i) => (i + 1) % rows.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSuggestIndex((i) => (i <= 0 ? rows.length - 1 : i - 1));
+        return;
+      }
+      if (e.key === "Enter" && suggestIndex >= 0 && rows[suggestIndex]) {
+        e.preventDefault();
+        const row = rows[suggestIndex];
+        if (!row.is_friend && !row.request_sent) void handleSendRequest(row);
+        else pickSuggestion(row);
+        return;
+      }
+    }
+    if (e.key === "Escape" && suggestOpen) {
+      e.preventDefault();
+      setNickInputFocused(false);
+      return;
+    }
+    if (e.key === "Enter" && friendNickToAdd.trim()) void handleSendRequest();
   };
 
   const handleRemoveFriend = async (friend: FriendRow) => {
@@ -577,7 +649,7 @@ export function FriendsTab({
     return "bg-white/10 text-white/60 ring-white/15";
   };
 
-  const renderFriendCard = (f: FriendRow) => {
+  const renderFriendCard = (f: FriendRow, index: number) => {
     const presence = presenceByUserId[f.user_id];
     const online = Boolean(presence?.online);
     const room = roomByFriendId.get(f.user_id);
@@ -585,7 +657,8 @@ export function FriendsTab({
     return (
       <li
         key={f.user_id}
-        className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-3.5 py-3 transition hover:border-white/20 hover:bg-black/40"
+        style={{ "--i": index } as CSSProperties}
+        className="list-item-in flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-3.5 py-3 transition-colors hover:border-white/20 hover:bg-black/40"
       >
         <button
           type="button"
@@ -690,17 +763,40 @@ export function FriendsTab({
     <>
       <div className="flex w-full max-w-6xl flex-col gap-4 py-4">
         <ConnectionNotice language={language} />
-        <Panel className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <TextField
-            ref={friendNickInputRef}
-            type="text"
-            value={friendNickToAdd}
-            onChange={(e) => setFriendNickToAdd(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && friendNickToAdd.trim()) void handleSendRequest();
-            }}
-            placeholder={tt("friends.friendNicknamePlaceholder")}
-          />
+        <Panel className="relative z-20 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative w-full">
+            <TextField
+              ref={friendNickInputRef}
+              type="text"
+              value={friendNickToAdd}
+              onChange={(e) => {
+                setFriendNickToAdd(e.target.value);
+                setNickInputFocused(true);
+              }}
+              onFocus={() => setNickInputFocused(true)}
+              onBlur={() => setNickInputFocused(false)}
+              onKeyDown={handleNickKeyDown}
+              placeholder={tt("friends.friendNicknamePlaceholder")}
+              autoComplete="off"
+              spellCheck={false}
+              role="combobox"
+              aria-expanded={suggestOpen}
+              aria-autocomplete="list"
+            />
+            <NicknameSuggestions
+              open={suggestOpen}
+              tt={tt}
+              query={friendNickToAdd}
+              results={suggestions.results}
+              loading={suggestions.loading}
+              settledQuery={suggestions.settledQuery}
+              highlighted={suggestIndex}
+              busyUserId={suggestBusyUserId}
+              onHover={setSuggestIndex}
+              onPick={pickSuggestion}
+              onAdd={(row) => void handleSendRequest(row)}
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             <ActionButton
               variant="emerald"
@@ -872,7 +968,8 @@ export function FriendsTab({
                 {howToSteps.map((step, index) => (
                   <li
                     key={step}
-                    className="flex items-start gap-3 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5 text-sm text-white/70"
+                    style={{ "--i": index } as CSSProperties}
+                    className="list-item-in flex items-start gap-3 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5 text-sm text-white/70"
                   >
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent-from/20 text-[0.8125rem] font-bold text-accent-hi">
                       {index + 1}
@@ -902,10 +999,11 @@ export function FriendsTab({
                 <EmptyState compact title={tt("friends.noIncoming")} />
               ) : (
                 <ul className="flex flex-col gap-2">
-                  {incomingRequests.map((r) => (
+                  {incomingRequests.map((r, index) => (
                     <li
                       key={r.request_id}
-                      className="flex flex-col gap-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2.5"
+                      style={{ "--i": index } as CSSProperties}
+                      className="list-item-in flex flex-col gap-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2.5"
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
                         <img
@@ -982,7 +1080,7 @@ export function FriendsTab({
                 <EmptyState compact title={tt("rooms.noFriendsRooms")} />
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {visibleFriendsRooms.map((room) => {
+                  {visibleFriendsRooms.map((room, index) => {
                     const members = room.members ?? [];
                     const owner = members.find((m) => m.user_id === room.owner_user_id);
                     const ownerNick = owner?.nickname ?? room.owner_user_id.slice(0, 8);
@@ -992,7 +1090,8 @@ export function FriendsTab({
                     return (
                       <div
                         key={room.id}
-                        className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/30 p-3.5"
+                        style={{ "--i": index } as CSSProperties}
+                        className="list-item-in flex flex-col gap-3 rounded-xl border border-white/10 bg-black/30 p-3.5"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-2.5">

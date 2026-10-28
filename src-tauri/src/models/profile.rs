@@ -31,6 +31,9 @@ pub struct InstanceSettings {
     pub close_launcher_on_game_start: Option<bool>,
     pub check_game_processes: Option<bool>,
     pub account_id: Option<String>,
+    pub auto_backup: Option<String>,
+    pub auto_backup_keep: Option<u32>,
+    pub backup_before_update: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]

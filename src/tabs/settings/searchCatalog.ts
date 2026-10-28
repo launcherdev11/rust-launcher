@@ -20,6 +20,7 @@ export type SettingSearchId =
   | "launcher.updates"
   | "launcher.openOnProfiles"
   | "launcher.uiSounds"
+  | "launcher.notificationsAutoClear"
   | "launcher.discordRpc"
   | "launcher.minimizeToTray"
   | "launcher.autostart"
@@ -173,6 +174,15 @@ export const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     id: "launcher.uiSounds",
     tab: "launcher",
     keys: ["settings.section.behavior", "settings.launcher.uiSounds.label"],
+  },
+  {
+    id: "launcher.notificationsAutoClear",
+    tab: "launcher",
+    keys: [
+      "settings.section.behavior",
+      "settings.launcher.notificationsAutoClear.label",
+      "settings.launcher.notificationsAutoClear.hint",
+    ],
   },
   {
     id: "launcher.discordRpc",

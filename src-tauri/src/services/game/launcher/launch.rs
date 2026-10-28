@@ -26,6 +26,7 @@ use crate::services::game::core::{
     resolve_native_artifact,
 };
 use crate::services::game::console::log_to_console;
+use crate::services::game::continue_target::{quick_play_log_path, record_server_join, QUICK_PLAY_DIR};
 use crate::services::game::nickname::launch_nickname;
 use crate::services::game::profiles::{
     finish_playtime_session, flush_active_playtime, load_selected_instance_settings,
@@ -165,7 +166,7 @@ fn split_server_address(addr: &str) -> (String, String) {
     (addr.to_string(), "25565".to_string())
 }
 
-fn version_supports_quick_play_multiplayer(version_id: &str, jar_version: &str) -> bool {
+pub(crate) fn version_supports_quick_play(version_id: &str, jar_version: &str) -> bool {
     fn major_minor(v: &str) -> Option<(u32, u32)> {
         let mut parts = v.trim().split('.');
         let major = parts.next()?.parse().ok()?;
@@ -209,6 +210,7 @@ pub async fn launch_game(
     version_id: String,
     version_url: Option<String>,
     server_address: Option<String>,
+    world_name: Option<String>,
 ) -> Result<(), String> {
     let root = game_root_dir()?;
     let libs_root = libraries_dir()?;
@@ -375,15 +377,21 @@ pub async fn launch_game(
         .as_ref()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
+    let supports_quick_play = version_supports_quick_play(&version_id, &effective_jar_version);
+    let join_world = world_name
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && join_address.is_none());
+    if join_world.is_some() && !supports_quick_play {
+        return Err("Сразу открыть мир можно только в Minecraft 1.20 и новее.".to_string());
+    }
 
     eprintln!(
         "[Launch] server_address(raw)={:?} join_address={:?}",
         server_address, join_address
     );
 
-    let features = if join_address.is_some()
-        && version_supports_quick_play_multiplayer(&version_id, &effective_jar_version)
-    {
+    let features = if join_address.is_some() && supports_quick_play {
         GameFeatures::for_multiplayer_join()
     } else {
         GameFeatures::full()
@@ -909,13 +917,14 @@ pub async fn launch_game(
             .flatten()
             .map(|(_, s)| s);
 
-    let quick_play_log = game_dir
-        .join("quickPlay")
-        .join("mc16-log.json")
+    let quick_play_log = quick_play_log_path(&game_dir)
         .to_string_lossy()
         .replace('\\', "/");
-    if join_address.is_some() {
-        let _ = std::fs::create_dir_all(game_dir.join("quickPlay"));
+    if supports_quick_play {
+        let _ = std::fs::create_dir_all(game_dir.join(QUICK_PLAY_DIR));
+    }
+    if let Some(addr) = &join_address {
+        record_server_join(&game_dir, addr);
     }
 
     let replace = |s: &str| -> String {
@@ -1065,11 +1074,16 @@ pub async fn launch_game(
     game_args = strip_quick_play_game_args(game_args);
     game_args = strip_legacy_server_args(game_args);
 
+    if supports_quick_play {
+        game_args.push("--quickPlayPath".to_string());
+        game_args.push(quick_play_log.clone());
+    }
+    if let Some(world) = &join_world {
+        game_args.push("--quickPlaySingleplayer".to_string());
+        game_args.push(world.clone());
+    }
     if let Some(addr) = &join_address {
-        let use_quick_play = version_supports_quick_play_multiplayer(&version_id, &effective_jar_version);
-        if use_quick_play {
-            game_args.push("--quickPlayPath".to_string());
-            game_args.push(quick_play_log.clone());
+        if supports_quick_play {
             game_args.push("--quickPlayMultiplayer".to_string());
             game_args.push(addr.clone());
         }
@@ -1393,6 +1407,7 @@ pub async fn launch_game(
     let world_backup_profile = playtime_profile_id
         .clone()
         .filter(|_| settings.world_auto_backup);
+    let scheduled_backup_profile = playtime_profile_id.clone();
     let session_started_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -1453,6 +1468,13 @@ pub async fn launch_game(
                 let _ = window.show();
                 let _ = window.set_focus();
             }
+        }
+
+        if let Some(profile_id) = scheduled_backup_profile.as_deref() {
+            crate::services::game::profile_backups::run_scheduled_profile_backup(
+                &app_clone_for_playtime,
+                profile_id,
+            );
         }
     });
 

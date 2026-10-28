@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AccountAvatar } from "../components/account_avatar";
-import { AccountSkinPreview } from "../components/account_skin_preview";
+import { AccountSkinPreview } from "../components/LazyAccountSkinPreview";
 import { AchievementsPanel } from "../components/AchievementsPanel";
 import { PlatformNotificationsPanel } from "../components/PlatformNotificationsPanel";
 import { NicknameWithSponsor } from "../components/SponsorBadge";

@@ -124,7 +124,9 @@
       "success": "{{count}} Projekt(e) installiert.",
       "partial": "{{ok}} installiert, fehlgeschlagen: {{failed}}.",
       "failed": "Ausgewählte Projekte konnten nicht heruntergeladen werden.",
-      "modpackHint": "Stapel-Download gilt für Mods, Ressourcenpakete und Shader — nicht für Modpacks."
+      "modpackHint": "Stapel-Download gilt für Mods, Ressourcenpakete und Shader — nicht für Modpacks.",
+      "showList": "Auswahl anzeigen",
+      "removeOne": "{{title}} entfernen"
     },
     "source": {
       "catalog": "Katalog",
@@ -172,7 +174,10 @@
       "issues": "Issues",
       "source": "Quellcode",
       "discord": "Discord"
-    }
+    },
+    "pageLabel": "Seite",
+    "pageOfTotal": "von {{total}}",
+    "pageInputLabel": "Seitennummer"
   },
   "settings": {
     "common": {
@@ -344,6 +349,17 @@
       "uiSounds": {
         "label": "Interface-Sounds:"
       },
+      "notificationsAutoClear": {
+        "label": "Benachrichtigungen automatisch löschen:",
+        "hint": "Gilt nur für die Systembenachrichtigungen des Launchers unter der Glocke. Plattform-Benachrichtigungen bleiben erhalten.",
+        "option": {
+          "off": "Nie",
+          "read": "Nach dem Ansehen",
+          "10m": "Nach 10 Minuten",
+          "30m": "Nach 30 Minuten",
+          "60m": "Nach einer Stunde"
+        }
+      },
       "discordRpc": {
         "label": "Discord-Aktivität anzeigen:",
         "hint": "Zeigt deinen Launcher-Status in Discord an (Rich Presence)."
@@ -392,7 +408,28 @@
         "currentLabel": "Aktuell",
         "svPadLabel": "Sättigung und Helligkeit",
         "svPadAria": "Sättigung und Helligkeit für den aktuellen Farbton",
-        "helpText": "Ring: Farbton. Quadrat: Sättigung und Helligkeit. Sie können auch HEX eingeben."
+        "helpText": "Ring: Farbton. Quadrat: Sättigung und Helligkeit. Sie können auch HEX eingeben.",
+        "custom": "Eigene Farbe",
+        "presets": {
+          "white": "Weiß",
+          "graphite": "Graphit",
+          "amethyst": "Amethyst",
+          "violet": "Violett",
+          "lavender": "Lavendel",
+          "indigo": "Indigo",
+          "cobalt": "Kobalt",
+          "sky": "Himmelblau",
+          "cyan": "Cyan",
+          "teal": "Petrol",
+          "emerald": "Smaragd",
+          "lime": "Limette",
+          "amber": "Bernstein",
+          "orange": "Orange",
+          "scarlet": "Scharlachrot",
+          "raspberry": "Himbeere",
+          "pink": "Pink",
+          "orchid": "Orchidee"
+        }
       },
       "backgroundImage": {
         "label": "Hintergrundbild:",
@@ -1297,7 +1334,39 @@
       "deleted": "Backup gelöscht.",
       "deleteFailed": "Löschen fehlgeschlagen: {{msg}}",
       "openFolder": "Ordner öffnen",
-      "openFolderFailed": "Backup-Ordner konnte nicht geöffnet werden."
+      "openFolderFailed": "Backup-Ordner konnte nicht geöffnet werden.",
+      "autoCreated": "Automatisches Backup von „{{name}}“ erstellt.",
+      "settingsSaveFailed": "Backup-Einstellungen konnten nicht gespeichert werden.",
+      "auto": {
+        "label": "Automatische Backups:",
+        "hint": "Das Backup entsteht nach dem Schließen des Spiels, wenn seit dem letzten automatischen Backup der gewählte Zeitraum vergangen ist.",
+        "option": {
+          "off": "Aus",
+          "daily": "Einmal am Tag",
+          "weekly": "Einmal pro Woche"
+        }
+      },
+      "keep": {
+        "label": "Aufzubewahrende automatische Backups:"
+      },
+      "beforeUpdate": {
+        "label": "Vor dem Mod-Update:",
+        "hint": "Ein vollständiges Backup des Modpacks samt Configs und Welten, nicht nur der alten Mod-Dateien.",
+        "option": {
+          "off": "Nichts tun",
+          "ask": "Backup anbieten",
+          "auto": "Automatisch sichern"
+        },
+        "askTitle": "Backup erstellen?",
+        "askMessage": "Vor dem Update lässt sich eine Kopie des Modpacks sichern, um bei Problemen zurückzukehren.",
+        "askConfirm": "Backup erstellen",
+        "askSkip": "Ohne Backup aktualisieren",
+        "failed": "Backup fehlgeschlagen, Update abgebrochen: {{msg}}"
+      },
+      "kind": {
+        "auto": "Auto",
+        "pre_update": "Vor Update"
+      }
     },
     "deleteConfirm": {
       "bulkPrompt": "Ausgewählte Profile ({{count}}) löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
@@ -1428,12 +1497,43 @@
       "nothingIncluded": "Es wird nichts enthalten sein.",
       "done": "Erledigt",
       "openFolder": "Ordner öffnen"
+    },
+    "continue": {
+      "label": "Fortsetzen",
+      "worldTitle": "Direkt in die Welt „{{name}}“",
+      "serverTitle": "Direkt mit Server {{name}} verbinden"
+    },
+    "iconPicker": {
+      "title": "Modpack-Symbol",
+      "fromFile": "Eigene Datei…",
+      "apply": "Übernehmen",
+      "background": "Hintergrund",
+      "noBackground": "Kein Hintergrund",
+      "textures": "Spieltexturen",
+      "noTextures": "Texturen nicht verfügbar",
+      "noTexturesHint": "Installiere eine beliebige Minecraft-Version, um ein Symbol aus Spieltexturen zu wählen, oder lade eine eigene Datei hoch."
     }
   },
   "friends": {
     "subtitleSignedIn": "Füge Freunde hinzu, sieh wer online ist und tritt ihren Räumen bei.",
     "subtitleSignedOut": "Melde dich auf der Registerkarte „Konten“ an, um Freunde zu sehen.",
     "friendNicknamePlaceholder": "Spitzname eines Freundes",
+
+    "suggest": {
+
+      "title": "Ähnliche Spitznamen",
+
+      "searching": "Suche…",
+
+      "empty": "Niemand mit ähnlichem Spitznamen",
+
+      "isFriend": "Befreundet",
+
+      "requestSent": "Anfrage gesendet",
+
+      "add": "Hinzufügen"
+
+    },
     "searchPlaceholder": "Freund suchen…",
     "add": "Hinzufügen",
     "refresh": "Aktualisieren",
@@ -2167,12 +2267,13 @@
     },
     "welcome": {
       "title": "Willkommen bei 16Launcher!",
-      "subtitle": "Wähle eine Sprache, melde dich an und übernimm deine Instanzen aus einem anderen Launcher. Jeder Schritt lässt sich überspringen.",
+      "subtitle": "Wähle eine Sprache und eine Farbe, melde dich an und übernimm deine Instanzen aus einem anderen Launcher. Jeder Schritt lässt sich überspringen.",
       "cta": "Lass uns gehen!",
-      "languageLabel": "Sprache der Oberfläche",
-      "colorLabel": "Farbschema",
-      "colorWhite": "Weiß",
-      "colorViolet": "Violett"
+      "languageLabel": "Sprache der Oberfläche"
+    },
+    "appearance": {
+      "title": "Farbe der Oberfläche",
+      "subtitle": "Sie färbt Schaltflächen, ausgewählte Elemente und Ladebalken. Du kannst sie jederzeit in den Einstellungen unter „Darstellung“ ändern."
     },
     "account": {
       "title": "anmelden",
@@ -2242,7 +2343,11 @@
       "title": "Alles klar!",
       "subtitle": "Die Grundeinrichtung ist abgeschlossen. Die Tour lässt sich später über die Hilfe starten.",
       "ctaPlay": "Spielen",
-      "ctaTour": "Tour ansehen"
+      "ctaTour": "Tour ansehen",
+      "summaryLanguage": "Sprache",
+      "summaryColor": "Farbe",
+      "summaryAccount": "Konto",
+      "accountLater": "Später hinzufügen"
     },
     "errors": {
       "loginFailed": "Anmeldung fehlgeschlagen",

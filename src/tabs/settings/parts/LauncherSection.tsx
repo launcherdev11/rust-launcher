@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   SettingsRow,
   SettingsSection,
@@ -5,12 +7,14 @@ import {
   SettingsSelect,
   SettingsSwitchRow,
 } from "../../../settings-ui/SettingsComponents";
+import { AccentPreview } from "../../../components/AccentPreview";
+import { AccentSwatchGrid } from "../../../components/AccentSwatchGrid";
 import { AssetIcon } from "../../../components/asset_icon";
 import { SUPPORTED_LANGUAGES } from "../../../i18n";
 import { parseSidebarPosition, SIDEBAR_POSITIONS } from "../../../app/sidebar";
 import {
   ACCENT_HUE_RING_STYLE,
-  ACCENT_PRESETS,
+  findAccentPreset,
   hexToRgb,
   hsvToRgb,
   rgbToHex,
@@ -20,8 +24,11 @@ import { InputClearButton } from "../../../components/ui";
 import { ThemeCard } from "../../../features/theme-editor/ThemeCard";
 import { ThemeEditorPanel } from "../../../features/theme-editor/ThemeEditorPanel";
 import type { SettingsController } from "../useSettingsController";
+import type { NotificationsAutoClear } from "../../../app/types";
 
 type Props = { ctx: SettingsController };
+
+const NOTIFICATIONS_AUTO_CLEAR_OPTIONS: NotificationsAutoClear[] = ["off", "read", "10m", "30m", "60m"];
 
 export function LauncherSection({ ctx }: Props) {
   const {
@@ -88,6 +95,16 @@ export function LauncherSection({ ctx }: Props) {
     handleResetSettings,
     isResettingSettings,
   } = ctx;
+
+  const accentPreset = findAccentPreset(accentColor);
+  const accentPresetName = accentPreset
+    ? tt(`settings.launcher.accentColor.presets.${accentPreset.id}`)
+    : tt("settings.launcher.accentColor.custom");
+
+  const [isCustomAccentOpen, setIsCustomAccentOpen] = useState(false);
+  useEffect(() => {
+    if (isAccentPickerOpen) setIsCustomAccentOpen(!findAccentPreset(accentColor));
+  }, [isAccentPickerOpen]);
 
   return (
     <>
@@ -165,6 +182,7 @@ export function LauncherSection({ ctx }: Props) {
           {anyVisible(
             "launcher.openOnProfiles",
             "launcher.uiSounds",
+            "launcher.notificationsAutoClear",
             "launcher.discordRpc",
             "launcher.minimizeToTray",
             "launcher.autostart",
@@ -200,6 +218,21 @@ export function LauncherSection({ ctx }: Props) {
                   value={settings?.ui_sounds_enabled ?? true}
                   onChange={(v) => updateSettings({ ui_sounds_enabled: v })}
                 />
+              )}
+              {showSetting("launcher.notificationsAutoClear") && (
+                <SettingsRow
+                  label={tt("settings.launcher.notificationsAutoClear.label")}
+                  hint={tt("settings.launcher.notificationsAutoClear.hint")}
+                >
+                  <SettingsSelect<NotificationsAutoClear>
+                    value={settings?.notifications_auto_clear ?? "off"}
+                    options={NOTIFICATIONS_AUTO_CLEAR_OPTIONS.map((id) => ({
+                      value: id,
+                      label: tt(`settings.launcher.notificationsAutoClear.option.${id}`),
+                    }))}
+                    onChange={(v) => updateSettings({ notifications_auto_clear: v })}
+                  />
+                </SettingsRow>
               )}
               {showSetting("launcher.discordRpc") && (
                 <SettingsSwitchRow
@@ -339,152 +372,178 @@ export function LauncherSection({ ctx }: Props) {
                       className="interactive-press glass-control flex h-9 items-center gap-2.5 pl-1.5 pr-3"
                     >
                       <span
-                        className="h-6 w-6 rounded-md ring-1 ring-inset ring-white/15"
+                        className="h-6 w-6 rounded-md ring-1 ring-inset ring-white/15 transition-colors duration-300"
                         style={{ background: accentColor }}
                       />
-                      <span className="font-mono text-[0.8125rem] text-white/80">
+                      <span className="text-[0.8125rem] font-semibold text-white/85">
+                        {accentPresetName}
+                      </span>
+                      <span className="font-mono text-[0.75rem] text-white/40">
                         {accentColor}
                       </span>
                     </button>
                     {isAccentPickerOpen && (
-                      <div className="glass-popover absolute right-0 top-full z-40 mt-2 w-80 p-3 text-xs text-white">
-                        <div className="mb-3 text-[0.8125rem] font-semibold text-white/80">
+                      <div className="glass-popover menu-pop-in origin-top-right absolute right-0 top-full z-40 mt-2 w-[22rem] p-3 text-xs text-white">
+                        <div className="mb-2.5 text-[0.8125rem] font-semibold text-white/80">
                           {tt("settings.launcher.accentColor.popupTitle")}
-                          </div>
-                        <div className="mb-3 flex flex-wrap gap-1.5">
-                          {ACCENT_PRESETS.map((preset) => (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => applyAccentColor(preset)}
-                              aria-label={preset}
-                              title={preset}
-                              className={`interactive-press h-7 w-7 rounded-md ring-inset ${
-                                accentColor.toLowerCase() === preset
-                                  ? "ring-2 ring-white"
-                                  : "ring-1 ring-white/15 hover:ring-white/40"
-                              }`}
-                              style={{ background: preset }}
-                            />
-                          ))}
                         </div>
-                        <div className="mb-3 flex items-center gap-3">
-                          <div
-                            ref={accentHueWheelRef}
-                            role="slider"
-                            tabIndex={0}
-                            aria-label={tt("settings.launcher.accentColor.pickColorAria")}
-                            aria-valuemin={0}
-                            aria-valuemax={360}
-                            aria-valuenow={Math.round(accentColorHsv.h)}
-                            className="relative h-14 w-14 shrink-0 cursor-crosshair touch-none select-none rounded-full"
-                            style={{
-                              boxShadow:
-                                "0 0 0 1px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.45) inset, 0 8px 28px rgba(0,0,0,0.55)",
-                            }}
-                            onPointerDown={handleAccentWheelPointerDown}
-                            onPointerMove={handleAccentWheelPointerMove}
-                            onPointerUp={handleAccentWheelPointerEnd}
-                            onPointerCancel={handleAccentWheelPointerEnd}
-                            onKeyDown={(e) => {
-                              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-                              e.preventDefault();
-                              const rgb = hexToRgb(accentColor);
-                              if (!rgb) return;
-                              const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-                              const delta = e.key === "ArrowRight" ? 3 : -3;
-                              const next = hsvToRgb((hsv.h + delta + 360) % 360, hsv.s, hsv.v);
-                              applyAccentColor(rgbToHex(next.r, next.g, next.b));
-                            }}
-                          >
-                            <div
-                              className="pointer-events-none absolute inset-0 overflow-hidden rounded-full [backface-visibility:hidden] [transform:translateZ(0)]"
-                              style={ACCENT_HUE_RING_STYLE}
-                            />
-                            <div className="pointer-events-none absolute inset-[10px] rounded-full ring-1 ring-black/50">
-                              <div
-                                className="h-full w-full rounded-full"
-                                style={{ backgroundColor: accentColor }}
-                              />
-                            </div>
-                            <div
-                              className="pointer-events-none absolute left-1/2 top-1/2 z-10"
-                              style={{ width: 0, height: 0 }}
-                            >
-                              <div
-                                style={{
-                                  transform: `rotate(${accentColorHsv.h}deg) translateY(-23px)`,
-                                }}
-                              >
-                                <div
-                                  className="h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white shadow-[0_2px_8px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
-                                  aria-hidden
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="ui-caption">
-                              {tt("settings.launcher.accentColor.currentLabel")}
-                            </span>
-                            <div className="relative">
-                              <input
-                                type="text"
-                                maxLength={7}
-                                value={accentInput}
-                                onChange={(e) => setAccentInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") e.currentTarget.blur();
-                                }}
-                                onBlur={(e) => {
-                                  const raw = e.target.value.trim();
-                                  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-                                  if (!raw || !/^#[0-9a-fA-F]{6}$/.test(withHash)) {
-                                    setAccentInput(accentColor);
-                                    return;
-                                  }
-                                  applyAccentColor(withHash.toLowerCase());
-                                }}
-                                className={`glass-control h-8 w-full px-2.5 font-mono text-[0.8125rem] text-white/85 outline-none ${
-                                  accentInput ? "pr-8" : ""
-                                }`}
-                              />
-                              <InputClearButton
-                                value={accentInput}
-                                onClear={() => setAccentInput("")}
-                                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
-                                aria-label={tt("common.clear")}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="ui-caption mb-1.5">
-                          {tt("settings.launcher.accentColor.svPadLabel")}
-                        </div>
-                        <div
-                          ref={accentSvPadRef}
-                          className="relative h-24 w-full cursor-crosshair touch-none select-none overflow-hidden rounded-xl ring-1 ring-white/10"
-                          style={{
-                            backgroundImage: `linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, hsl(${accentColorHsv.h} 100% 50%))`,
-                          }}
-                          aria-label={tt("settings.launcher.accentColor.svPadAria")}
-                          onPointerDown={handleAccentSvPointerDown}
-                          onPointerMove={handleAccentSvPointerMove}
-                          onPointerUp={handleAccentSvPointerEnd}
-                          onPointerCancel={handleAccentSvPointerEnd}
+                        <AccentPreview
+                          color={accentColor}
+                          playLabel={tt("modpacks.actions.play")}
+                          className="mb-3 h-[7.5rem]"
+                        />
+                        <AccentSwatchGrid
+                          value={accentColor}
+                          onChange={applyAccentColor}
+                          presetLabel={(id) => tt(`settings.launcher.accentColor.presets.${id}`)}
+                          ariaLabel={label("settings.launcher.accentColor.popupTitle")}
+                        />
+                        <button
+                          type="button"
+                          aria-expanded={isCustomAccentOpen}
+                          onClick={() => setIsCustomAccentOpen((v) => !v)}
+                          className="interactive-press mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-white/60 hover:text-white"
                         >
-                          <div
-                            className="pointer-events-none absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/95 shadow-[0_2px_8px_rgba(0,0,0,0.45)] ring-1 ring-black/35"
-                            style={{
-                              left: `${accentColorHsv.s}%`,
-                              top: `${100 - accentColorHsv.v}%`,
-                            }}
-                            aria-hidden
+                          <AssetIcon
+                            name="arrow_down"
+                            className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                              isCustomAccentOpen ? "rotate-180" : ""
+                            }`}
                           />
-                        </div>
-                        <p className="ui-caption mt-2">
-                          {tt("settings.launcher.accentColor.helpText")}
-                        </p>
+                          {tt("settings.launcher.accentColor.custom")}
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {isCustomAccentOpen && (
+                            <motion.div
+                              key="custom-accent"
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                              className="overflow-hidden"
+                            >
+                              <div className="pt-3">
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div
+                                    ref={accentHueWheelRef}
+                                    role="slider"
+                                    tabIndex={0}
+                                    aria-label={tt("settings.launcher.accentColor.pickColorAria")}
+                                    aria-valuemin={0}
+                                    aria-valuemax={360}
+                                    aria-valuenow={Math.round(accentColorHsv.h)}
+                                    className="relative h-14 w-14 shrink-0 cursor-crosshair touch-none select-none rounded-full"
+                                    style={{
+                                      boxShadow:
+                                        "0 0 0 1px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.45) inset, 0 8px 28px rgba(0,0,0,0.55)",
+                                    }}
+                                    onPointerDown={handleAccentWheelPointerDown}
+                                    onPointerMove={handleAccentWheelPointerMove}
+                                    onPointerUp={handleAccentWheelPointerEnd}
+                                    onPointerCancel={handleAccentWheelPointerEnd}
+                                    onKeyDown={(e) => {
+                                      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                                      e.preventDefault();
+                                      const rgb = hexToRgb(accentColor);
+                                      if (!rgb) return;
+                                      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                                      const delta = e.key === "ArrowRight" ? 3 : -3;
+                                      const next = hsvToRgb((hsv.h + delta + 360) % 360, hsv.s, hsv.v);
+                                      applyAccentColor(rgbToHex(next.r, next.g, next.b));
+                                    }}
+                                  >
+                                    <div
+                                      className="pointer-events-none absolute inset-0 overflow-hidden rounded-full [backface-visibility:hidden] [transform:translateZ(0)]"
+                                      style={ACCENT_HUE_RING_STYLE}
+                                    />
+                                    <div className="pointer-events-none absolute inset-[10px] rounded-full ring-1 ring-black/50">
+                                      <div
+                                        className="h-full w-full rounded-full"
+                                        style={{ backgroundColor: accentColor }}
+                                      />
+                                    </div>
+                                    <div
+                                      className="pointer-events-none absolute left-1/2 top-1/2 z-10"
+                                      style={{ width: 0, height: 0 }}
+                                    >
+                                      <div
+                                        style={{
+                                          transform: `rotate(${accentColorHsv.h}deg) translateY(-23px)`,
+                                        }}
+                                      >
+                                        <div
+                                          className="h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white shadow-[0_2px_8px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
+                                          aria-hidden
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                                    <span className="ui-caption">
+                                      {tt("settings.launcher.accentColor.currentLabel")}
+                                    </span>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        maxLength={7}
+                                        value={accentInput}
+                                        onChange={(e) => setAccentInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") e.currentTarget.blur();
+                                        }}
+                                        onBlur={(e) => {
+                                          const raw = e.target.value.trim();
+                                          const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+                                          if (!raw || !/^#[0-9a-fA-F]{6}$/.test(withHash)) {
+                                            setAccentInput(accentColor);
+                                            return;
+                                          }
+                                          applyAccentColor(withHash.toLowerCase());
+                                        }}
+                                        className={`glass-control h-8 w-full px-2.5 font-mono text-[0.8125rem] text-white/85 outline-none ${
+                                          accentInput ? "pr-8" : ""
+                                        }`}
+                                      />
+                                      <InputClearButton
+                                        value={accentInput}
+                                        onClear={() => setAccentInput("")}
+                                        className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+                                        aria-label={tt("common.clear")}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="ui-caption mb-1.5">
+                                  {tt("settings.launcher.accentColor.svPadLabel")}
+                                </div>
+                                <div
+                                  ref={accentSvPadRef}
+                                  className="relative h-24 w-full cursor-crosshair touch-none select-none overflow-hidden rounded-xl ring-1 ring-white/10"
+                                  style={{
+                                    backgroundImage: `linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, hsl(${accentColorHsv.h} 100% 50%))`,
+                                  }}
+                                  aria-label={tt("settings.launcher.accentColor.svPadAria")}
+                                  onPointerDown={handleAccentSvPointerDown}
+                                  onPointerMove={handleAccentSvPointerMove}
+                                  onPointerUp={handleAccentSvPointerEnd}
+                                  onPointerCancel={handleAccentSvPointerEnd}
+                                >
+                                  <div
+                                    className="pointer-events-none absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/95 shadow-[0_2px_8px_rgba(0,0,0,0.45)] ring-1 ring-black/35"
+                                    style={{
+                                      left: `${accentColorHsv.s}%`,
+                                      top: `${100 - accentColorHsv.v}%`,
+                                    }}
+                                    aria-hidden
+                                  />
+                                </div>
+                                <p className="ui-caption mt-2">
+                                  {tt("settings.launcher.accentColor.helpText")}
+                                </p>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     )}
                   </div>

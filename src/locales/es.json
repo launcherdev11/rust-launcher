@@ -124,7 +124,9 @@
       "success": "Se instalaron {{count}} proyecto(s).",
       "partial": "Instalados {{ok}}, fallidos: {{failed}}.",
       "failed": "No se pudieron descargar los proyectos seleccionados.",
-      "modpackHint": "La descarga en lote sirve para mods, paquetes de recursos y shaders — no para modpacks."
+      "modpackHint": "La descarga en lote sirve para mods, paquetes de recursos y shaders — no para modpacks.",
+      "showList": "Mostrar seleccionados",
+      "removeOne": "Quitar {{title}}"
     },
     "source": {
       "catalog": "Catálogo",
@@ -172,7 +174,10 @@
       "issues": "Issues",
       "source": "Código",
       "discord": "Discord"
-    }
+    },
+    "pageLabel": "Página",
+    "pageOfTotal": "de {{total}}",
+    "pageInputLabel": "Número de página"
   },
   "settings": {
     "common": {
@@ -344,6 +349,17 @@
       "uiSounds": {
         "label": "Sonidos de la interfaz:"
       },
+      "notificationsAutoClear": {
+        "label": "Borrar notificaciones automáticamente:",
+        "hint": "Solo afecta a las notificaciones del sistema del launcher en la campana. Las notificaciones de la plataforma no se tocan.",
+        "option": {
+          "off": "Nunca",
+          "read": "Después de verlas",
+          "10m": "A los 10 minutos",
+          "30m": "A los 30 minutos",
+          "60m": "Al cabo de una hora"
+        }
+      },
       "discordRpc": {
         "label": "Mostrar actividad de Discord:",
         "hint": "Muestra el estado del launcher en Discord (Rich Presence)."
@@ -392,7 +408,28 @@
         "currentLabel": "Actual",
         "svPadLabel": "Saturación y brillo",
         "svPadAria": "Saturación y brillo para el tono actual.",
-        "helpText": "Anillo: tono. Cuadrado: saturación y brillo. También puedes escribir el HEX."
+        "helpText": "Anillo: tono. Cuadrado: saturación y brillo. También puedes escribir el HEX.",
+        "custom": "Color propio",
+        "presets": {
+          "white": "Blanco",
+          "graphite": "Grafito",
+          "amethyst": "Amatista",
+          "violet": "Violeta",
+          "lavender": "Lavanda",
+          "indigo": "Índigo",
+          "cobalt": "Cobalto",
+          "sky": "Celeste",
+          "cyan": "Cian",
+          "teal": "Verde azulado",
+          "emerald": "Esmeralda",
+          "lime": "Lima",
+          "amber": "Ámbar",
+          "orange": "Naranja",
+          "scarlet": "Escarlata",
+          "raspberry": "Frambuesa",
+          "pink": "Rosa",
+          "orchid": "Orquídea"
+        }
       },
       "backgroundImage": {
         "label": "Imagen de fondo:",
@@ -1297,7 +1334,39 @@
       "deleted": "Copia eliminada.",
       "deleteFailed": "No se pudo eliminar: {{msg}}",
       "openFolder": "Abrir carpeta",
-      "openFolderFailed": "No se pudo abrir la carpeta de copias."
+      "openFolderFailed": "No se pudo abrir la carpeta de copias.",
+      "autoCreated": "Copia automática de «{{name}}» creada.",
+      "settingsSaveFailed": "No se pudieron guardar los ajustes de copias.",
+      "auto": {
+        "label": "Copias automáticas:",
+        "hint": "La copia se hace al cerrar el juego si desde la última copia automática ha pasado el plazo elegido.",
+        "option": {
+          "off": "Desactivadas",
+          "daily": "Una vez al día",
+          "weekly": "Una vez a la semana"
+        }
+      },
+      "keep": {
+        "label": "Copias automáticas a conservar:"
+      },
+      "beforeUpdate": {
+        "label": "Antes de actualizar mods:",
+        "hint": "Una copia completa del modpack, con configs y mundos, no solo los archivos antiguos de los mods.",
+        "option": {
+          "off": "No hacer nada",
+          "ask": "Proponer copia",
+          "auto": "Copiar automáticamente"
+        },
+        "askTitle": "¿Hacer una copia?",
+        "askMessage": "Antes de actualizar puedes guardar una copia del modpack para volver a ella si algo falla.",
+        "askConfirm": "Hacer copia",
+        "askSkip": "Actualizar sin copia",
+        "failed": "No se pudo crear la copia, actualización cancelada: {{msg}}"
+      },
+      "kind": {
+        "auto": "Auto",
+        "pre_update": "Antes de actualizar"
+      }
     },
     "deleteConfirm": {
       "bulkPrompt": "¿Eliminar los perfiles seleccionados ({{count}})? Esta acción no se puede deshacer.",
@@ -1428,12 +1497,43 @@
       "nothingIncluded": "No se incluirá nada.",
       "done": "Hecho",
       "openFolder": "Abrir carpeta"
+    },
+    "continue": {
+      "label": "Continuar",
+      "worldTitle": "Entrar directamente al mundo «{{name}}»",
+      "serverTitle": "Conectarse directamente al servidor {{name}}"
+    },
+    "iconPicker": {
+      "title": "Icono del modpack",
+      "fromFile": "Subir archivo…",
+      "apply": "Aplicar",
+      "background": "Fondo",
+      "noBackground": "Sin fondo",
+      "textures": "Texturas del juego",
+      "noTextures": "Texturas no disponibles",
+      "noTexturesHint": "Instala cualquier versión de Minecraft para elegir un icono de las texturas del juego o sube tu propio archivo."
     }
   },
   "friends": {
     "subtitleSignedIn": "Añade amigos, mira quién está en línea y únete a sus salas.",
     "subtitleSignedOut": "Inicia sesión en la pestaña Cuentas para ver a tus amigos.",
     "friendNicknamePlaceholder": "Apodo del amigo",
+
+    "suggest": {
+
+      "title": "Apodos parecidos",
+
+      "searching": "Buscando…",
+
+      "empty": "Nadie con un apodo parecido",
+
+      "isFriend": "Amigos",
+
+      "requestSent": "Solicitud enviada",
+
+      "add": "Añadir"
+
+    },
     "searchPlaceholder": "Buscar amigo…",
     "add": "Añadir",
     "refresh": "Actualizar",
@@ -2164,12 +2264,13 @@
     },
     "welcome": {
       "title": "¡Bienvenido a 16Launcher!",
-      "subtitle": "Elige un idioma, inicia sesión y trae tus instancias de otro launcher. Puedes omitir cualquier paso.",
+      "subtitle": "Elige un idioma y un color, inicia sesión y trae tus instancias de otro launcher. Puedes omitir cualquier paso.",
       "cta": "¡Vamos!",
-      "languageLabel": "Idioma de la interfaz",
-      "colorLabel": "Esquema de color",
-      "colorWhite": "Blanco",
-      "colorViolet": "Violeta"
+      "languageLabel": "Idioma de la interfaz"
+    },
+    "appearance": {
+      "title": "Color de la interfaz",
+      "subtitle": "Se usa en botones, elementos seleccionados y barras de descarga. Puedes cambiarlo cuando quieras en Ajustes, sección Apariencia."
     },
     "account": {
       "title": "Iniciar sesión",
@@ -2239,7 +2340,11 @@
       "title": "¡Listo!",
       "subtitle": "La configuración básica está lista. Puedes abrir el recorrido más tarde desde la Ayuda.",
       "ctaPlay": "Empezar a jugar",
-      "ctaTour": "Ver recorrido"
+      "ctaTour": "Ver recorrido",
+      "summaryLanguage": "Idioma",
+      "summaryColor": "Color",
+      "summaryAccount": "Cuenta",
+      "accountLater": "Añadir más tarde"
     },
     "errors": {
       "loginFailed": "No se pudo iniciar sesión",

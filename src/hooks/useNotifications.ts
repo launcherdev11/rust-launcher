@@ -9,6 +9,8 @@ import {
   NOTIFICATION_DISMISS_MS,
   NOTIFICATION_EXIT_MS,
   NOTIFICATION_WITH_ACTION_DISMISS_MS,
+  SESSION_NOTIFICATION_PRUNE_INTERVAL_MS,
+  SESSION_NOTIFICATION_TTL_MS,
   notificationsMatch,
   splitTitleAndSubtitle,
   type Notification,
@@ -202,6 +204,32 @@ export function useNotifications(settings: Settings | null) {
       return prev.map((n) => (n.seen ? n : { ...n, seen: true }));
     });
   }, [sessionNotificationsOpen]);
+
+  const autoClear = settings?.notifications_auto_clear ?? "off";
+
+  useEffect(() => {
+    if (autoClear !== "read" || sessionNotificationsOpen) return;
+    setSessionNotifications((prev) => {
+      const next = prev.filter((n) => !n.seen);
+      return next.length === prev.length ? prev : next;
+    });
+  }, [autoClear, sessionNotificationsOpen]);
+
+  useEffect(() => {
+    const ttl = SESSION_NOTIFICATION_TTL_MS[autoClear];
+    if (!ttl) return;
+    const prune = () => {
+      if (sessionNotificationsOpenRef.current) return;
+      const cutoff = Date.now() - ttl;
+      setSessionNotifications((prev) => {
+        const next = prev.filter((n) => n.at >= cutoff);
+        return next.length === prev.length ? prev : next;
+      });
+    };
+    prune();
+    const timer = window.setInterval(prune, SESSION_NOTIFICATION_PRUNE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [autoClear]);
 
   return {
     notifications,

@@ -72,12 +72,12 @@ export function AccountAvatar({
   const ring = kind ? accountKindAvatarRingClass(kind) : "";
 
   return (
-    <span className={`relative ${ring} ${className}`}>
+    <span className={`relative overflow-hidden ${ring} ${className}`}>
       <img
         src={src}
         alt=""
         draggable={false}
-        className="aspect-square h-full w-full object-cover object-center [image-rendering:pixelated]"
+        className="aspect-square h-full w-full rounded-[inherit] object-cover object-center [image-rendering:pixelated]"
         onError={() => setSrc(fallback)}
       />
     </span>

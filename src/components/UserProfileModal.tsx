@@ -4,7 +4,7 @@ import { sendFriendRequest } from "../api/friends";
 import { ApiError } from "../api/client";
 import type { PresenceInfo } from "../api/presence";
 import { AchievementsPanel } from "./AchievementsPanel";
-import { AccountSkinPreview } from "./account_skin_preview";
+import { AccountSkinPreview } from "./LazyAccountSkinPreview";
 import { NicknameWithSponsor } from "./SponsorBadge";
 import { buildInitialAvatarDataUrl, getUserListAvatarSrc } from "../lib/avatar";
 import { formatPresenceStatus } from "../lib/socialActivity";

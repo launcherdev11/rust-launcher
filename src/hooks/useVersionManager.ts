@@ -202,7 +202,15 @@ export function useVersionManager({
         unlisten = await listen<DownloadProgressPayload>(
           "download-progress",
           (event) => {
-            setProgress(event.payload);
+            const next = event.payload;
+            setProgress((prev) =>
+              prev &&
+              prev.version_id === next.version_id &&
+              prev.total > 0 === next.total > 0 &&
+              Math.round(prev.percent) === Math.round(next.percent)
+                ? prev
+                : next,
+            );
             updateDownloadJobProgress(
               versionInstallJobId(event.payload.version_id),
               event.payload.percent,
