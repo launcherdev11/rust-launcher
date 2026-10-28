@@ -42,7 +42,7 @@ pub use cache::{clear_launcher_cache, get_launcher_cache_size};
 pub use continue_target::get_profile_continue_target;
 pub use texture_icons::{list_profile_texture_icons, set_profile_icon_from_texture};
 pub use content_snapshots::{
-    delete_content_snapshot, list_content_snapshots, restore_content_snapshot,
+    list_content_snapshots, restore_content_snapshot,
 };
 pub use download::{
     download_modrinth_file, download_modrinth_modpack_and_import,     import_mrpack_as_new_profile,

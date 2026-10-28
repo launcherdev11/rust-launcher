@@ -421,16 +421,6 @@ pub fn import_theme_zip(source_path: String) -> Result<ThemeInfo, String> {
 }
 
 #[command]
-pub fn get_theme_css(theme_id: String) -> Result<String, String> {
-    let style_path = theme_path(&theme_id)?.join("style.css");
-    if !style_path.is_file() {
-        return Err(format!("Файл стилей темы «{theme_id}» не найден."));
-    }
-    std::fs::read_to_string(&style_path)
-        .map_err(|e| format!("Не удалось прочитать style.css: {e}"))
-}
-
-#[command]
 pub fn get_theme(theme_id: String) -> Result<ThemeDetails, String> {
     let dir = existing_theme_path(&theme_id)?;
     let info = read_theme_info(&dir)
@@ -698,12 +688,6 @@ pub fn open_theme_css_file(theme_id: String) -> Result<(), String> {
         return Err(format!("Файл стилей темы «{theme_id}» не найден."));
     }
     open::that(&style_path).map_err(|e| format!("Не удалось открыть файл: {e}"))
-}
-
-#[command]
-pub fn get_theme_dir(theme_id: String) -> Result<String, String> {
-    let theme_dir = existing_theme_path(&theme_id)?;
-    Ok(theme_dir.to_string_lossy().to_string())
 }
 
 static WATCH_GENERATION: AtomicU64 = AtomicU64::new(0);

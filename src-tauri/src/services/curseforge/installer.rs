@@ -42,12 +42,6 @@ pub struct Manifest {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
-    pub version: Option<String>,
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub author: Option<String>,
-    #[serde(default)]
     pub files: Vec<ManifestFile>,
     #[serde(default = "default_overrides")]
     pub overrides: String,
@@ -81,16 +75,6 @@ pub struct ManifestFile {
     pub file_id: u32,
 }
 
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CurseForgeFileResponse {
-    pub id: u32,
-    pub display_name: String,
-    pub file_name: String,
-    pub download_url: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

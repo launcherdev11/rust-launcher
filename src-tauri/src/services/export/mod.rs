@@ -912,40 +912,6 @@ async fn fetch_ely_skin(username: &str) -> Result<Vec<u8>, String> {
     fetch_ely_texture("skins", username).await
 }
 
-async fn fetch_ely_cape(username: &str) -> Result<Vec<u8>, String> {
-    fetch_ely_texture("cloaks", username).await
-}
-
-async fn fetch_optifine_cape(username: &str) -> Result<Vec<u8>, String> {
-    let url = format!(
-        "http://s.optifine.net/capes/{}.png",
-        urlencoding::encode(username)
-    );
-    let client = reqwest::Client::builder()
-        .user_agent("mc16launcher/2.0")
-        .build()
-        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
-
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("OptiFine cape request failed: {e}"))?;
-
-    let status = resp.status();
-    if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::NO_CONTENT {
-        return Err(format!("OptiFine cape unavailable: HTTP {status}"));
-    }
-    if !status.is_success() {
-        return Err(format!("OptiFine cape bad response: HTTP {status}"));
-    }
-
-    resp.bytes()
-        .await
-        .map(|b| b.to_vec())
-        .map_err(|e| format!("Failed to read OptiFine cape body: {e}"))
-}
-
 fn png_data_url(png_bytes: &[u8]) -> String {
     format!(
         "data:image/png;base64,{}",
@@ -969,45 +935,6 @@ pub async fn get_ely_skin(username: String) -> Result<Option<String>, String> {
     };
 
     Ok(Some(png_data_url(&skin_png)))
-}
-
-#[tauri::command]
-pub async fn get_ely_cape(username: String) -> Result<Option<String>, String> {
-    let trimmed = username.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-
-    let cape_png = match fetch_ely_cape(trimmed).await {
-        Ok(v) => v,
-        Err(error) => {
-            eprintln!("[cape] failed to fetch Ely cape for '{}': {}", trimmed, error);
-            return Ok(None);
-        }
-    };
-
-    Ok(Some(png_data_url(&cape_png)))
-}
-
-#[tauri::command]
-pub async fn get_optifine_cape(username: String) -> Result<Option<String>, String> {
-    let trimmed = username.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-
-    let cape_png = match fetch_optifine_cape(trimmed).await {
-        Ok(v) => v,
-        Err(error) => {
-            eprintln!(
-                "[cape] failed to fetch OptiFine cape for '{}': {}",
-                trimmed, error
-            );
-            return Ok(None);
-        }
-    };
-
-    Ok(Some(png_data_url(&cape_png)))
 }
 
 #[tauri::command]
@@ -1075,8 +1002,6 @@ struct McTexturesPayload {
 struct McTexturesMap {
     #[serde(default, rename = "SKIN")]
     skin: Option<McTextureUrl>,
-    #[serde(default, rename = "CAPE")]
-    cape: Option<McTextureUrl>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1254,15 +1179,6 @@ async fn fetch_mc_skin_png(uuid: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-async fn fetch_mc_cape_png(uuid: &str) -> Result<Vec<u8>, String> {
-    let textures = fetch_mc_textures_map(uuid).await?;
-    let cape_url = textures
-        .cape
-        .ok_or_else(|| "Mojang profile has no cape texture".to_string())?
-        .url;
-    download_texture_png(&cape_url, "cape").await
-}
-
 #[tauri::command]
 pub async fn get_mc_skin(uuid: String) -> Result<Option<String>, String> {
     let trimmed = uuid.trim();
@@ -1274,34 +1190,6 @@ pub async fn get_mc_skin(uuid: String) -> Result<Option<String>, String> {
         Ok(v) => v,
         Err(error) => {
             eprintln!("[skin] failed to fetch Mojang skin for '{trimmed}': {error}");
-            return Ok(None);
-        }
-    };
-
-    Ok(Some(png_data_url(&skin_png)))
-}
-
-#[tauri::command]
-pub async fn get_mc_skin_by_username(username: String) -> Result<Option<String>, String> {
-    let trimmed = username.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-
-    let uuid = match resolve_mc_uuid_by_username(trimmed).await {
-        Ok(v) => v,
-        Err(error) => {
-            eprintln!("[skin] failed to resolve Mojang username '{trimmed}': {error}");
-            return Ok(None);
-        }
-    };
-
-    let skin_png = match fetch_mc_skin_png(&uuid).await {
-        Ok(v) => v,
-        Err(error) => {
-            eprintln!(
-                "[skin] failed to fetch Mojang skin for username '{trimmed}' ({uuid}): {error}"
-            );
             return Ok(None);
         }
     };
@@ -1452,24 +1340,6 @@ pub async fn apply_mc_skin_by_username(username: String) -> Result<Option<String
     };
 
     Ok(Some(png_data_url(&skin_png)))
-}
-
-#[tauri::command]
-pub async fn get_mc_cape(uuid: String) -> Result<Option<String>, String> {
-    let trimmed = uuid.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-
-    let cape_png = match fetch_mc_cape_png(trimmed).await {
-        Ok(v) => v,
-        Err(error) => {
-            eprintln!("[cape] failed to fetch Mojang cape for '{trimmed}': {error}");
-            return Ok(None);
-        }
-    };
-
-    Ok(Some(png_data_url(&cape_png)))
 }
 
 #[tauri::command]

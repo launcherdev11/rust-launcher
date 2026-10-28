@@ -48,7 +48,7 @@ export function useRemoteNotices(
         if (Array.isArray(raw)) {
           items = raw as RemoteNotificationsJsonItem[];
         } else if (raw && typeof raw === "object") {
-          const obj = raw as any;
+          const obj = raw as Record<string, unknown>;
           if (Array.isArray(obj.notifications)) {
             items = obj.notifications as RemoteNotificationsJsonItem[];
           } else if (Array.isArray(obj.items)) {

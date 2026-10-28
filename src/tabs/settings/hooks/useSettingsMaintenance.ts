@@ -7,6 +7,8 @@ import { confirmDialog } from "../../../lib/confirmDialog";
 import { type Settings, type SettingsTabId } from "../../../app/types";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { type LauncherSettingsBackupV1, type SidebarItemId } from "../types";
+import { ONBOARDING_COMPLETED_STORAGE_KEY, ONBOARDING_LEGACY_MIGRATED_KEY } from "../../../onboarding/constants";
+import { PRODUCT_TOUR_COMPLETED_STORAGE_KEY } from "../../../product-tour/constants";
 
 type SettingsMaintenanceDeps = {
   settingsTab: SettingsTabId;
@@ -115,9 +117,9 @@ export function useSettingsMaintenance(deps: SettingsMaintenanceDeps) {
       setSidebarOrder(["play", "settings", "mods", "modpacks"]);
       try {
         window.localStorage.removeItem("sidebar_order");
-        window.localStorage.removeItem("mc16launcher:onboarding_completed");
-        window.localStorage.removeItem("mc16launcher:onboarding_legacy_migrated");
-        window.localStorage.removeItem("mc16launcher:product_tour_completed");
+        window.localStorage.removeItem(ONBOARDING_COMPLETED_STORAGE_KEY);
+        window.localStorage.removeItem(ONBOARDING_LEGACY_MIGRATED_KEY);
+        window.localStorage.removeItem(PRODUCT_TOUR_COMPLETED_STORAGE_KEY);
       } catch {
       }
       showNotification(

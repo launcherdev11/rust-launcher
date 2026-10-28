@@ -46,7 +46,7 @@ use services::game::{
     create_profile_backup, delete_profile_backup, list_profile_backups,
     get_profile_backup_settings, set_profile_backup_settings,
     open_profile_backups_folder, restore_profile_backup_as_new,
-    delete_content_snapshot, list_content_snapshots, restore_content_snapshot,
+    list_content_snapshots, restore_content_snapshot,
     cleanup_profile, delete_profile_worlds, duplicate_profile, get_profile_disk_usage,
     list_profile_worlds, get_profile_continue_target,
     build_game_run_report, delete_game_run, list_game_runs, read_game_run_log, search_game_runs,
@@ -71,9 +71,9 @@ use services::rpc::{
     discord_presence_clear, discord_presence_update, shutdown as discord_presence_shutdown,
 };
 use commands::{
-    export_build, get_ely_avatar, get_ely_cape, get_ely_skin, get_mc_avatar, get_mc_cape,
-    apply_mc_skin_by_username, get_mc_skin, get_mc_skin_by_username, get_mc_texture_data_url,
-    get_optifine_cape, list_build_files, list_mc_capes, list_mc_skins, preview_export,
+    export_build, get_ely_avatar, get_ely_skin, get_mc_avatar,
+    apply_mc_skin_by_username, get_mc_skin, get_mc_texture_data_url,
+    list_build_files, list_mc_capes, list_mc_skins, preview_export,
     set_mc_active_cape, set_mc_active_skin, upload_mc_skin,
 };
 use infra::notify::os_notify;
@@ -86,7 +86,7 @@ use profile_launch::{
 use services::shortcuts::create_profile_desktop_shortcut;
 use services::themes::{
     add_theme_asset, create_empty_theme, delete_theme, duplicate_theme, export_theme_zip,
-    get_theme, get_theme_css, get_theme_dir, import_theme_zip, list_themes, open_theme_css_file,
+    get_theme, import_theme_zip, list_themes, open_theme_css_file,
     open_theme_folder, open_themes_folder, save_theme, watch_theme,
 };
 
@@ -313,7 +313,6 @@ pub fn run() {
             restore_profile_backup_as_new,
             list_content_snapshots,
             restore_content_snapshot,
-            delete_content_snapshot,
             open_profile_backups_folder,
             duplicate_profile,
             list_profile_worlds,
@@ -334,19 +333,15 @@ pub fn run() {
             add_launcher_account,
             get_ely_avatar,
             get_ely_skin,
-            get_ely_cape,
             get_mc_avatar,
             get_mc_skin,
-            get_mc_skin_by_username,
             apply_mc_skin_by_username,
-            get_mc_cape,
             get_mc_texture_data_url,
             list_mc_capes,
             list_mc_skins,
             set_mc_active_cape,
             set_mc_active_skin,
             upload_mc_skin,
-            get_optifine_cape,
             take_pending_mrpack_open,
             take_pending_profile_launch,
             create_profile_desktop_shortcut,
@@ -359,12 +354,10 @@ pub fn run() {
             read_instance_analysis_logs,
                         list_themes,
             import_theme_zip,
-            get_theme_css,
                         create_empty_theme,
             delete_theme,
             open_themes_folder,
             open_theme_css_file,
-            get_theme_dir,
             get_theme,
             save_theme,
             duplicate_theme,

@@ -287,15 +287,6 @@ pub fn restore_content_snapshot(profile_id: String, snapshot_id: String) -> Resu
     Ok(restored)
 }
 
-#[command]
-pub fn delete_content_snapshot(profile_id: String, snapshot_id: String) -> Result<(), String> {
-    let dir = snapshot_dir(&profile_id, &snapshot_id)?;
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    std::fs::remove_dir_all(&dir).map_err(|e| format!("Не удалось удалить снимок: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
