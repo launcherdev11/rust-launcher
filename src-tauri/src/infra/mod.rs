@@ -8,3 +8,4 @@ pub mod platform;
 pub mod process;
 pub mod tray;
 pub mod window_icon;
+pub mod window_idle;

@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 import { primeUiSounds } from "../uiSounds";
+import { startWindowIdleTracking } from "../lib/windowIdle";
 
 export function useGlobalUiListeners() {
+  useEffect(() => {
+    startWindowIdleTracking();
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onContextMenu = (e: MouseEvent) => {

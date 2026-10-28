@@ -1467,6 +1467,7 @@ pub async fn launch_game(
             if let Some(window) = app_clone_for_playtime.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
+                crate::infra::window_idle::sync(&app_clone_for_playtime);
             }
         }
 
@@ -1482,6 +1483,7 @@ pub async fn launch_game(
         REOPEN_LAUNCHER_ON_GAME_EXIT.store(true, Ordering::SeqCst);
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.hide();
+            crate::infra::window_idle::sync(&app);
         }
     }
 

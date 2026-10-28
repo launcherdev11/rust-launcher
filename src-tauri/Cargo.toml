@@ -52,3 +52,8 @@ tauri-plugin-http = { version = "2", features = ["native-tls"] }
 [target.'cfg(not(windows))'.dependencies]
 tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
 
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

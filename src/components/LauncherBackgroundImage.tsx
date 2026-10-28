@@ -1,4 +1,5 @@
 import { isAnimatedBackgroundPath } from "../lib/launcherBackground";
+import { useWindowIdle } from "../lib/windowIdle";
 
 type Props = {
   imageUrl: string;
@@ -22,6 +23,7 @@ export function LauncherBackgroundImage({
 }: Props) {
   const isAnimated = animated ?? isAnimatedBackgroundPath(imageUrl);
   const blurPx = backgroundBlurPx();
+  const windowIdle = useWindowIdle();
 
   if (isAnimated) {
     return (
@@ -29,13 +31,15 @@ export function LauncherBackgroundImage({
         className={`absolute inset-0 overflow-hidden ${className}`.trim()}
         style={blurEnabled ? { transform: "scale(1.08)" } : undefined}
       >
-        <img
-          src={imageUrl}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        {blurEnabled ? (
+        {windowIdle ? null : (
+          <img
+            src={imageUrl}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+        {blurEnabled && !windowIdle ? (
           <div
             className="absolute inset-0"
             style={{

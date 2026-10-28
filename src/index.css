@@ -157,6 +157,56 @@ body {
 }
 
 @layer components {
+  .settings-shell {
+    container: settings / inline-size;
+  }
+
+  .settings-frame {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 64rem;
+  }
+
+  .settings-frame-fill {
+    max-width: none;
+  }
+
+  .settings-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .settings-col {
+    display: contents;
+  }
+
+  @container settings (min-width: 1400px) {
+    .settings-frame:not(.settings-frame-fill) {
+      max-width: 112rem;
+    }
+
+    .settings-flow {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+
+    .settings-flow[data-tab="versions"] {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    }
+
+    .settings-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .settings-col:empty {
+      display: none;
+    }
+  }
+
   .glass-panel {
     background: var(--glass-bg) !important;
     border-radius: var(--r-panel);
@@ -638,7 +688,6 @@ html.launcher-linux .tab-animate {
   }
 }
 
-/* Hand-rolled dialogs get an entrance for free; framer-driven ones opt out with .motion-managed. */
 .glass-overlay:not(.motion-managed) {
   animation: overlay-fade-in 180ms ease-out both;
 }
@@ -647,7 +696,6 @@ html.launcher-linux .tab-animate {
   animation: modal-pop-in 260ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 
-/* Long logs: let the engine skip layout and paint for rows outside the viewport. */
 .console-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 1.15rem;
@@ -688,6 +736,12 @@ html.launcher-no-animations .animate-notification-slide-in {
 
 html.launcher-no-animations .animate-notification-slide-out {
   display: none;
+}
+
+html[data-window-idle] *,
+html[data-window-idle] *::before,
+html[data-window-idle] *::after {
+  animation-play-state: paused !important;
 }
 
 html.launcher-no-animations .interactive-press:hover,

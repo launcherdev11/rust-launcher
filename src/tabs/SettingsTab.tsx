@@ -25,11 +25,11 @@ export function SettingsTab(props: SettingsTabProps) {
       <DeleteDialogs ctx={ctx} />
       <RepairPromptDialog ctx={ctx} />
       <div
-        className={`flex min-h-0 w-full flex-1 flex-col ${fillPane ? "px-1 py-1" : "px-4 py-4"}`}
+        className={`settings-shell flex min-h-0 w-full flex-1 flex-col ${fillPane ? "px-1 py-1" : "px-4 py-4"}`}
       >
         <div
-          className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-3 ${
-            fillPane ? "" : "max-w-5xl"
+          className={`settings-frame flex min-h-0 flex-1 flex-col gap-3 ${
+            fillPane ? "settings-frame-fill" : ""
           }`}
         >
           <SettingsHeader ctx={ctx} />
@@ -41,7 +41,7 @@ export function SettingsTab(props: SettingsTabProps) {
                 <p className="ui-meta">{tt("settings.search.noResults")}</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-3 pb-1">
+              <div className="settings-flow pb-1" data-tab={ctx.settingsTab}>
                 <GameSection ctx={ctx} />
 
                 <VersionsSection ctx={ctx} />

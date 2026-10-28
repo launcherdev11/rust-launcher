@@ -140,6 +140,7 @@ pub fn run() {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
                             let _ = w.set_focus();
+                            infra::window_idle::sync(app);
                         }
                     })
                     .build(),
@@ -390,6 +391,12 @@ pub fn run() {
             match event {
                 tauri::RunEvent::WindowEvent { label, event, .. } => {
                     if label == "main" {
+                        if matches!(
+                            event,
+                            tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_)
+                        ) {
+                            infra::window_idle::sync(app_handle);
+                        }
                         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                             let hide_to_tray =
                                 services::game::settings::load_settings_from_disk()
@@ -398,6 +405,7 @@ pub fn run() {
                                 api.prevent_close();
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     let _ = window.hide();
+                                    infra::window_idle::sync(app_handle);
                                 }
                             } else {
                                 discord_presence_shutdown();
