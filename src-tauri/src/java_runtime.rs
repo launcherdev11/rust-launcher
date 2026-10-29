@@ -27,6 +27,9 @@ fn http_client() -> Client {
 }
 
 async fn get_json_with_retries<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T, String> {
+    if !crate::infra::network::is_online().await {
+        return Err(format!("{}: {url}", crate::infra::network::OFFLINE_ERR));
+    }
     let mut last_err = String::new();
     for attempt in 0..JAVA_DOWNLOAD_RETRIES {
         if attempt > 0 {

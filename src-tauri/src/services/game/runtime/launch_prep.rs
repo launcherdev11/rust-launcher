@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicU64;
 use tauri::AppHandle;
 
 use crate::infra::http::http_client_for_binary_download;
+use crate::infra::network::is_online;
 use crate::services::game::core::{library_applies, sha1_hex_of_file};
 use crate::services::game::console::log_to_console;
 use crate::services::game::runtime::downloads::download_file_checked;
@@ -113,6 +114,13 @@ pub(crate) async fn ensure_library_artifacts_present_for_launch(
             } else if let Some(ref expected) = a.sha1 {
                 match sha1_hex_of_file(&path).await {
                     Ok(actual) if actual.eq_ignore_ascii_case(expected) => continue,
+                    Ok(_) | Err(_) if !is_online().await => {
+                        eprintln!(
+                            "[Launch] Хэш библиотеки не совпал, без интернета оставляем как есть: {}",
+                            path.display()
+                        );
+                        continue;
+                    }
                     Ok(_) | Err(_) => {
                         let _ = tokio::fs::remove_file(&path).await;
                     }
@@ -128,6 +136,12 @@ pub(crate) async fn ensure_library_artifacts_present_for_launch(
             format!("{}/{}", BMCL_MAVEN_BASE, a.path)
         };
 
+        if !is_online().await {
+            return Err(format!(
+                "Без интернета не хватает библиотеки {}. Подключитесь к сети, чтобы докачать файлы версии.",
+                lib.name
+            ));
+        }
         eprintln!(
             "[Launch] Missing/corrupt library artifact, downloading: {}",
             path.display()

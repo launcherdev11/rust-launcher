@@ -339,6 +339,10 @@ pub(crate) async fn download_file_checked(
             .map_err(|e| format!("Не удалось создать папку: {e}"))?;
     }
 
+    if !crate::infra::network::is_online().await {
+        return Err(format!("{}: {url}", crate::infra::network::OFFLINE_ERR));
+    }
+
     let urls = crate::services::game::mirrors::candidates(url);
     let has_fallback = urls.len() > 1;
     let mut errors: Vec<String> = Vec::new();
@@ -821,7 +825,12 @@ pub(crate) async fn ensure_assets_for_launch(
         })
         .count();
 
-    if missing > 0 {
+    if missing > 0 && !crate::infra::network::is_online().await {
+        log_to_console(
+            app,
+            &format!("[Launch] Не хватает {missing} файлов ассетов, без интернета запускаем как есть"),
+        );
+    } else if missing > 0 {
         log_to_console(
             app,
             &format!("[Launch] Не хватает {missing} файлов ассетов — докачиваем"),

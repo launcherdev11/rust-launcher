@@ -5,6 +5,7 @@ use std::time::Duration;
 use reqwest::Client;
 use sha1::{Digest, Sha1};
 
+use crate::infra::network::{is_online, OFFLINE_ERR};
 use crate::services::game::state::CANCEL_DOWNLOAD;
 use crate::services::game::version_types::{Library, LibraryArtifact, LibraryDownloads, OsInfo};
 
@@ -74,6 +75,9 @@ pub(crate) fn os_info() -> OsInfo {
 }
 
 pub(crate) async fn download_text_with_retries(client: &Client, url: &str, retries: usize) -> Result<String, String> {
+    if !is_online().await {
+        return Err(format!("{OFFLINE_ERR}: {url}"));
+    }
     let urls = crate::services::game::mirrors::candidates(url);
     let has_fallback = urls.len() > 1;
     let mut errors: Vec<String> = Vec::new();
@@ -130,6 +134,9 @@ async fn fetch_text_once_with_retries(
                 if attempt + 1 >= retries {
                     return Err((format!("Ошибка запроса {url}: {e}"), None));
                 }
+                if e.is_connect() && !is_online().await {
+                    return Err((format!("{OFFLINE_ERR}: {url}"), None));
+                }
             }
         }
         tokio::time::sleep(retry_delay(attempt)).await;
@@ -137,8 +144,38 @@ async fn fetch_text_once_with_retries(
     }
 }
 
+fn meta_cache_path(url: &str) -> Option<std::path::PathBuf> {
+    let dir = crate::services::game::settings::launcher_cache_dir().ok()?.join("meta");
+    Some(dir.join(format!("{}.txt", sha1_hex_of_bytes(url.as_bytes()))))
+}
+
+pub(crate) fn store_meta_cache(url: &str, text: &str) {
+    if let Some(path) = meta_cache_path(url) {
+        if let Err(e) = crate::infra::fs_atomic::write_atomic(&path, text.as_bytes()) {
+            eprintln!("[Meta] Не удалось сохранить кэш {url}: {e}");
+        }
+    }
+}
+
+pub(crate) fn read_meta_cache(url: &str) -> Option<String> {
+    let text = std::fs::read_to_string(meta_cache_path(url)?).ok()?;
+    (!text.trim().is_empty()).then_some(text)
+}
+
 pub(crate) async fn download_meta_text(client: &Client, url: &str, retries: usize) -> Result<String, String> {
-    download_text_with_retries(client, url, retries).await
+    match download_text_with_retries(client, url, retries).await {
+        Ok(text) => {
+            store_meta_cache(url, &text);
+            Ok(text)
+        }
+        Err(e) => match read_meta_cache(url) {
+            Some(text) => {
+                eprintln!("[Meta] {url} недоступен ({e}), берём из кэша");
+                Ok(text)
+            }
+            None => Err(e),
+        },
+    }
 }
 
 pub(crate) fn is_retryable_status(status: u16, attempt: usize) -> bool {

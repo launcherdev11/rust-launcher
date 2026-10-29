@@ -4,7 +4,11 @@ use std::sync::atomic::Ordering;
 
 use crate::app::paths::{game_root_dir, versions_dir};
 use crate::infra::http::http_client;
-use crate::services::game::core::{compare_version_like, download_meta_text, download_text_with_retries};
+use crate::infra::network::is_online;
+use crate::services::game::core::{
+    compare_version_like, download_meta_text, download_text_with_retries, read_meta_cache,
+    store_meta_cache,
+};
 use crate::services::game::settings::load_settings_from_disk;
 use crate::services::game::state::{
     CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_RETRIES, FABRIC_META_GAME, FABRIC_META_LOADERS, FORGE_MAVEN_BASE,
@@ -173,15 +177,15 @@ async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
     use crate::infra::api_base::platform_proxy_fetch_url;
 
     let direct_client = http_client(false);
-    match download_text_with_retries(
+    let fetched = match download_text_with_retries(
         &direct_client,
         NEOFORGE_MAVEN_METADATA_URL,
         DEFAULT_DOWNLOAD_RETRIES,
     )
     .await
     {
-        Ok(text) => return Ok(text),
-        Err(direct_err) => {
+        Ok(text) => Ok(text),
+        Err(direct_err) if is_online().await => {
             let proxy_url = platform_proxy_fetch_url(NEOFORGE_MAVEN_METADATA_URL);
             download_text_with_retries(&direct_client, &proxy_url, DEFAULT_DOWNLOAD_RETRIES)
             .await
@@ -191,6 +195,14 @@ async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
                 )
             })
         }
+        Err(direct_err) => Err(format!("Ошибка загрузки NeoForge metadata: {direct_err}")),
+    };
+    match fetched {
+        Ok(text) => {
+            store_meta_cache(NEOFORGE_MAVEN_METADATA_URL, &text);
+            Ok(text)
+        }
+        Err(e) => read_meta_cache(NEOFORGE_MAVEN_METADATA_URL).ok_or(e),
     }
 }
 
@@ -229,7 +241,7 @@ fn quilt_loader_channel(version: &str) -> Option<LoaderVersionChannel> {
 
 async fn forge_promo_builds_for_mc(mc_version: &str) -> Result<(Option<String>, Option<String>), String> {
     let direct_client = http_client(false);
-    let text = download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
+    let text = download_meta_text(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
 
@@ -270,10 +282,22 @@ fn forge_build_channel(
 pub(crate) async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
+    if !is_online().await {
+        return installed_version_summaries();
+    }
+
     let client = http_client(false);
-    let text = download_text_with_retries(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
-        .await
-        .map_err(|e| format!("Ошибка загрузки манифеста версий: {e}"))?;
+    let text = match download_meta_text(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES).await {
+        Ok(text) => text,
+        Err(e) => {
+            let local = installed_version_summaries()?;
+            if local.is_empty() {
+                return Err(format!("Ошибка загрузки манифеста версий: {e}"));
+            }
+            eprintln!("[Versions] Манифест недоступен ({e}), показываем установленные версии");
+            return Ok(local);
+        }
+    };
     let manifest: VersionManifest = serde_json::from_str(&text).map_err(|e| {
         let head = text.chars().take(200).collect::<String>();
         format!("Ошибка разбора манифеста версий: {e}. Первые символы ответа: {head}")
@@ -287,11 +311,113 @@ pub(crate) async fn load_all_versions() -> Result<Vec<VersionSummary>, String> {
     Ok(summaries)
 }
 
+fn installed_version_summaries() -> Result<Vec<VersionSummary>, String> {
+    let vers_root = versions_dir()?;
+    if !vers_root.exists() {
+        return Ok(vec![]);
+    }
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(&vers_root).map_err(|e| format!("Ошибка чтения versions: {e}"))? {
+        let e = e.map_err(|e| format!("Ошибка чтения: {e}"))?;
+        let path = e.path();
+        let id = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+        if id.is_empty() || !path.is_dir() || is_mod_loader_profile_id(&id) {
+            continue;
+        }
+        if path.join("profile.json").exists() {
+            continue;
+        }
+        let Some(json) = std::fs::read_to_string(path.join(format!("{id}.json")))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        else {
+            continue;
+        };
+        if json.get("inheritsFrom").is_some() {
+            continue;
+        }
+        let field = |key: &str| json.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let version_type = if path.join(CUSTOM_VERSION_MARKER).exists() {
+            "custom".to_string()
+        } else {
+            Some(field("type"))
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "release".to_string())
+        };
+        out.push(VersionSummary {
+            id,
+            version_type,
+            url: String::new(),
+            release_time: field("releaseTime"),
+        });
+    }
+    out.sort_by(|a, b| b.release_time.cmp(&a.release_time));
+    Ok(out)
+}
+
+fn installed_loader_dirs(marker: &str) -> Vec<(String, String, String)> {
+    let Ok(vers_root) = versions_dir() else {
+        return vec![];
+    };
+    let Ok(entries) = std::fs::read_dir(&vers_root) else {
+        return vec![];
+    };
+    entries
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let id = e.file_name().to_str()?.to_string();
+            let (mc_version, build) = id.split_once(marker)?;
+            if mc_version.is_empty() || build.is_empty() || !e.path().join(format!("{id}.json")).exists() {
+                return None;
+            }
+            let (mc_version, build) = (mc_version.to_string(), build.to_string());
+            Some((id, mc_version, build))
+        })
+        .collect()
+}
+
+fn installed_forge_versions() -> Vec<ForgeVersionSummary> {
+    let mut out: Vec<ForgeVersionSummary> = installed_loader_dirs("-forge-")
+        .into_iter()
+        .map(|(id, mc_version, forge_build)| ForgeVersionSummary {
+            installer_url: format!(
+                "{FORGE_MAVEN_BASE}/{mc_version}-{forge_build}/forge-{mc_version}-{forge_build}-installer.jar"
+            ),
+            id,
+            mc_version,
+            forge_build,
+        })
+        .collect();
+    out.sort_by(|a, b| b.mc_version.cmp(&a.mc_version));
+    out
+}
+
+fn installed_neoforge_versions() -> Vec<NeoForgeVersionSummary> {
+    let mut out: Vec<NeoForgeVersionSummary> = installed_loader_dirs("-neoforge-")
+        .into_iter()
+        .map(|(id, mc_version, neoforge_build)| NeoForgeVersionSummary {
+            installer_url: format!(
+                "{NEOFORGE_MAVEN_BASE}/{neoforge_build}/neoforge-{neoforge_build}-installer.jar"
+            ),
+            id,
+            mc_version,
+            neoforge_build,
+        })
+        .collect();
+    out.sort_by(|a, b| b.neoforge_build.cmp(&a.neoforge_build));
+    out
+}
+
 pub(crate) async fn resolve_mojang_version(
     version_id: &str,
 ) -> Result<(String, String), String> {
     let client = http_client(false);
-    let text = download_text_with_retries(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
+    let text = download_meta_text(&client, VERSION_MANIFEST_URL, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса манифеста: {e}"))?;
     let manifest: VersionManifest = serde_json::from_str(&text)
@@ -430,8 +556,34 @@ pub async fn fetch_versions_for_loader(
     let mut versions = apply_version_visibility_filter(all, show_snapshots, show_alpha);
 
     if loader_norm == "fabric" || loader_norm == "quilt" {
-        let supported = load_loader_supported_game_ids(&loader_norm).await?;
+        let installed = if loader_norm == "fabric" {
+            list_installed_fabric_game_versions()?
+        } else {
+            list_installed_quilt_game_versions()?
+        };
+        let supported = if is_online().await {
+            match load_loader_supported_game_ids(&loader_norm).await {
+                Ok(ids) => ids,
+                Err(e) if !installed.is_empty() => {
+                    eprintln!("[Versions] {e}, показываем установленные версии");
+                    installed.iter().cloned().collect()
+                }
+                Err(e) => return Err(e),
+            }
+        } else {
+            installed.iter().cloned().collect()
+        };
         versions.retain(|v| supported.contains(&v.id));
+        for id in installed {
+            if !versions.iter().any(|v| v.id == id) {
+                versions.push(VersionSummary {
+                    id,
+                    version_type: "release".to_string(),
+                    url: String::new(),
+                    release_time: String::new(),
+                });
+            }
+        }
     } else if loader_norm == "vanilla" {
         let mut custom = read_custom_version_summaries(&manifest_ids)?;
         let existing: HashSet<String> = versions.iter().map(|v| v.id.clone()).collect();
@@ -498,10 +650,21 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
 
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
+    if !is_online().await {
+        return Ok(installed_forge_versions());
+    }
+
     let direct_client = http_client(false);
-    let text = download_text_with_retries(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
-        .await
-        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
+    let text = match download_meta_text(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES).await {
+        Ok(text) => text,
+        Err(e) => {
+            let local = installed_forge_versions();
+            if local.is_empty() {
+                return Err(format!("Ошибка загрузки Forge promotions: {e}"));
+            }
+            return Ok(local);
+        }
+    };
 
     let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
@@ -555,7 +718,20 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
 pub async fn fetch_neoforge_versions() -> Result<Vec<NeoForgeVersionSummary>, String> {
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
-    let metadata = fetch_neoforge_maven_metadata().await?;
+    if !is_online().await {
+        return Ok(installed_neoforge_versions());
+    }
+
+    let metadata = match fetch_neoforge_maven_metadata().await {
+        Ok(text) => text,
+        Err(e) => {
+            let local = installed_neoforge_versions();
+            if local.is_empty() {
+                return Err(e);
+            }
+            return Ok(local);
+        }
+    };
 
     let mut out: Vec<NeoForgeVersionSummary> = Vec::new();
     for build in parse_maven_metadata_versions(&metadata) {
@@ -632,7 +808,7 @@ pub async fn fetch_fabric_loaders(game_version: String) -> Result<Vec<LoaderVers
 pub async fn fetch_quilt_loaders(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let url = format!("https://meta.quiltmc.org/v3/versions/loader/{game_version}");
     let client = http_client(false);
-    let text = download_text_with_retries(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
+    let text = download_meta_text(&client, &url, DEFAULT_DOWNLOAD_RETRIES)
         .await
         .map_err(|e| format!("Ошибка запроса списка Quilt: {e}"))?;
     let list: Vec<QuiltLoaderEntry> = serde_json::from_str(&text).map_err(|e| {

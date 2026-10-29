@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::app::paths::{game_root_dir, launcher_data_dir, libraries_dir, versions_dir};
 use crate::infra::http::http_client;
+use crate::infra::network::is_online;
 use crate::infra::process::hide_console;
 use crate::models::events::{
     GameConsoleLinePayload, GameProcessExitedPayload, LastPlayedUpdatedPayload, LaunchStagePayload,
@@ -66,6 +67,7 @@ fn emit_launch_stage(app: &AppHandle, stage: &str) {
 }
 
 const FRIEND_WORLD_OFFLINE_ERR: &str = "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.";
+const FRIEND_WORLD_NO_NETWORK_ERR: &str = "Войти в мир друга без интернета нельзя. Проверьте подключение к сети.";
 
 fn format_game_args_for_dump(args: &[String]) -> String {
     let mut lines = Vec::with_capacity(args.len());
@@ -218,6 +220,7 @@ pub async fn launch_game(
     let vers_root = versions_dir()?;
     let playtime_profile_id = read_selected_profile_id();
     let game_dir = selected_instance_dir().unwrap_or_else(|| root.clone());
+    let online = is_online().await;
 
     if let Ok(Some((_, inst))) = load_selected_instance_settings() {
         if let Some(account_id) = inst.account_id.as_deref() {
@@ -329,7 +332,12 @@ pub async fn launch_game(
         .unwrap_or_else(|| root.join(format!("{effective_jar_version}.jar")));
     if let Some(client_dl) = detail.downloads.as_ref().map(|d| &d.client) {
         let size_ok = client_dl.size == 0 || file_len_matches(&jar_path, client_dl.size);
-        if !size_ok {
+        if !size_ok && !online && jar_path.is_file() {
+            log_to_console(
+                &app,
+                &format!("[Launch] Размер client.jar не совпал, без интернета запускаем как есть: {}", jar_path.display()),
+            );
+        } else if !size_ok {
             log_to_console(
                 &app,
                 &format!("[Launch] client.jar отсутствует или повреждён, восстанавливаем: {}", jar_path.display()),
@@ -623,7 +631,9 @@ pub async fn launch_game(
     }
     let assets_str = assets_str_owned.as_str();
 
-    if let Err(e) = refresh_ely_session_internal().await {
+    if !online {
+        log_to_console(&app, "[Launch] Нет подключения к интернету, запуск в офлайн-режиме");
+    } else if let Err(e) = refresh_ely_session_internal().await {
         let ely_session_left = get_profile()
             .map(|p| p.ely_access_token.as_deref().is_some_and(|t| !t.is_empty()))
             .unwrap_or(false);
@@ -692,7 +702,24 @@ pub async fn launch_game(
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false);
 
-    if !has_valid_ely_session {
+    if !online {
+        let has_ms_account = [&profile.ms_access_token, &profile.ms_refresh_token]
+            .iter()
+            .any(|t| t.as_deref().is_some_and(|s| !s.is_empty()));
+        if !has_valid_ely_session && has_ms_account {
+            if let (Some(mc_name), Some(mc_uuid)) = (
+                profile.mc_username.as_deref().filter(|s| !s.is_empty()),
+                profile.mc_uuid.as_deref().filter(|s| !s.is_empty()),
+            ) {
+                auth_name = mc_name.to_string();
+                auth_uuid = dashed_uuid(mc_uuid);
+            }
+        }
+        auth_uuid_nodash = auth_uuid.replace('-', "");
+        auth_token = "offline".to_string();
+        user_type = "legacy".to_string();
+        legacy_session = "offline".to_string();
+    } else if !has_valid_ely_session {
         let has_ms_token = profile
             .ms_access_token
             .as_deref()
@@ -829,7 +856,12 @@ pub async fn launch_game(
             false,
             "blocked_friend_world_offline",
         );
-        return Err(FRIEND_WORLD_OFFLINE_ERR.to_string());
+        return Err(if online {
+            FRIEND_WORLD_OFFLINE_ERR
+        } else {
+            FRIEND_WORLD_NO_NETWORK_ERR
+        }
+        .to_string());
     }
 
     let mut authlib_injector_path: Option<std::path::PathBuf> = None;
@@ -900,7 +932,32 @@ pub async fn launch_game(
     };
     emit_launch_stage(&app, "java");
     let default_java_path =
-        crate::java_runtime::ensure_java_runtime(java_major, &java_component).await?;
+        match crate::java_runtime::ensure_java_runtime(java_major, &java_component).await {
+            Ok(path) => path,
+            Err(e) => {
+                let custom_java = load_selected_instance_settings()
+                    .ok()
+                    .flatten()
+                    .and_then(|(_, s)| s.java_settings)
+                    .unwrap_or_else(|| settings_service::load_java_settings(&app))
+                    .java_path
+                    .map(|p| std::path::PathBuf::from(p.trim()))
+                    .filter(|p| p.is_file());
+                match custom_java {
+                    Some(path) => {
+                        eprintln!("[Launch] Java {java_major} недоступна ({e}), берём путь из настроек");
+                        path
+                    }
+                    None if !online => {
+                        return Err(format!(
+                            "Java {java_major} ещё не скачана, а без интернета её не загрузить. \
+                             Подключитесь к сети один раз или укажите путь к Java в настройках."
+                        ));
+                    }
+                    None => return Err(e),
+                }
+            }
+        };
     eprintln!(
         "[Launch] Java: {} (runtime {} {})",
         default_java_path.display(),
