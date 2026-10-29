@@ -5,6 +5,7 @@ export { ConnectionNotice } from "./ConnectionNotice";
 export { EmptyState } from "./EmptyState";
 export { Modal } from "./Modal";
 export { Panel } from "./Panel";
+export { PromptHost } from "./PromptHost";
 export {
   CatalogCardSkeleton,
   FriendRowSkeleton,
@@ -12,6 +13,7 @@ export {
   Skeleton,
 } from "./Skeleton";
 export { Spinner } from "./Spinner";
+export { Switch } from "./Switch";
 export { ErrorState, LoadingState, StateFrame } from "./StateView";
 export { TabErrorBoundary } from "./TabErrorBoundary";
 export { InputClearButton, clearInputValue } from "./InputClearButton";

@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { confirmDialog } from "../../../lib/confirmDialog";
+import { promptDialog } from "../../../lib/promptDialog";
 import { BUILD_PRESETS_UI_ENABLED } from "../helpers";
 
 type BuildPresetsDeps = {
@@ -117,8 +118,12 @@ export function useBuildPresets(deps: BuildPresetsDeps) {
   }
 
   async function handleSaveBuildPresetFromForm() {
-    const presetName = window.prompt(tt("modpacks.presets.namePrompt"), createName.trim() || "");
-    if (!presetName?.trim()) return;
+    const presetName = await promptDialog({
+      title: tt("modpacks.presets.saveFromProfile"),
+      label: tt("modpacks.presets.namePrompt"),
+      defaultValue: createName.trim(),
+    });
+    if (!presetName) return;
     const loaderVersion =
       createLoader === "vanilla" ? null : createLoaderVersion.trim() || null;
     if (createLoader !== "vanilla" && !loaderVersion) {
@@ -128,7 +133,7 @@ export function useBuildPresets(deps: BuildPresetsDeps) {
     try {
       const preset = await invoke<BuildPreset>("save_build_preset", {
         id: null,
-        name: presetName.trim(),
+        name: presetName,
         gameVersion: createGameVersion,
         loader: createLoader,
         loaderVersion,
@@ -145,12 +150,16 @@ export function useBuildPresets(deps: BuildPresetsDeps) {
   }
 
   async function handleSaveBuildPresetFromProfile(profile: InstanceProfile) {
-    const presetName = window.prompt(tt("modpacks.presets.namePrompt"), profile.name);
-    if (!presetName?.trim()) return;
+    const presetName = await promptDialog({
+      title: tt("modpacks.presets.saveFromProfile"),
+      label: tt("modpacks.presets.namePrompt"),
+      defaultValue: profile.name,
+    });
+    if (!presetName) return;
     try {
       await invoke<BuildPreset>("create_build_preset_from_profile", {
         profileId: profile.id,
-        name: presetName.trim(),
+        name: presetName,
       });
       await refreshBuildPresets();
       showNotification("success", tt("modpacks.presets.saved"));

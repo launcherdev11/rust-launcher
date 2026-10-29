@@ -480,7 +480,7 @@ export function ImportMigrationScreen({
 
       {showResult && failures ? (
         <div className="glass-inset w-full px-4 py-3">
-          <p className="mb-2 text-xs font-semibold text-amber-200/90">
+          <p className="mb-2 text-xs font-semibold text-warn-fg/90">
             {tt("onboarding.import.resultFailed")}
           </p>
           <ul className="custom-scrollbar flex max-h-36 flex-col gap-2 overflow-y-auto pr-1">

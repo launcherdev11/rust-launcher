@@ -119,7 +119,7 @@ export function ProjectDetailPage({
         >
           {tt("mods.backToList")}
         </button>
-        <div className="text-sm text-rose-300">
+        <div className="text-sm text-danger-hi">
           {error || tt("mods.detail.loadFailed")}
         </div>
       </div>

@@ -37,7 +37,7 @@ use crate::services::game::runtime::{
     build_java_command, ensure_forge_ignore_list_includes_vanilla_client_jar,
     ensure_forge_safe_opens, ensure_lwjgl_fallback_for_modern_versions, ensure_library_artifacts_present_for_launch,
     ensure_ms_minecraft_session, extract_natives_jar, filter_forge_problematic_jvm_args,
-    validate_mc_access_token,
+    validate_mc_access_token, MS_NO_JAVA_PROFILE_ERR,
     filter_launcher_owned_jvm_args, natives_dir_has_files,
     offline_uuid_from_username, remove_add_opens_for_java_under_9, resolve_client_jar_path,
     resolve_natives_dir_for_launch, fallback_java_runtime_for_mc_version, resolve_natives_extract_dir,
@@ -136,25 +136,26 @@ fn apply_ms_session(
     mc_access_token: String,
 ) {
     *auth_name = mc_name;
-    *auth_uuid = if mc_uuid.contains('-') {
-        mc_uuid
-    } else if mc_uuid.len() == 32 {
-        format!(
-            "{}-{}-{}-{}-{}",
-            &mc_uuid[0..8],
-            &mc_uuid[8..12],
-            &mc_uuid[12..16],
-            &mc_uuid[16..20],
-            &mc_uuid[20..32]
-        )
-    } else {
-        mc_uuid
-    };
+    *auth_uuid = dashed_uuid(&mc_uuid);
     *auth_token = mc_access_token;
     *user_type = "msa".to_string();
     *auth_is_mojang = true;
     *auth_uuid_nodash = auth_uuid.replace('-', "");
     *legacy_session = format!("token:{}:{}", auth_token, auth_uuid_nodash);
+}
+
+fn dashed_uuid(uuid: &str) -> String {
+    if uuid.len() != 32 || !uuid.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return uuid.to_string();
+    }
+    format!(
+        "{}-{}-{}-{}-{}",
+        &uuid[0..8],
+        &uuid[8..12],
+        &uuid[12..16],
+        &uuid[16..20],
+        &uuid[20..32]
+    )
 }
 
 fn split_server_address(addr: &str) -> (String, String) {
@@ -652,13 +653,7 @@ pub async fn launch_game(
     let mut auth_uuid: String = profile
         .ely_uuid
         .as_deref()
-        .map(|u| {
-            if u.contains('-') {
-                u.to_string()
-            } else {
-                format!("{}-{}-{}-{}-{}", &u[0..8], &u[8..12], &u[12..16], &u[16..20], &u[20..32])
-            }
-        })
+        .map(dashed_uuid)
         .unwrap_or_else(|| {
             if is_offline {
                 offline_uuid_from_username(&auth_name)
@@ -801,6 +796,9 @@ pub async fn launch_game(
                     "blocked_ms_session_unavailable"
                 },
             );
+            if ms_refresh_error.as_deref() == Some(MS_NO_JAVA_PROFILE_ERR) {
+                return Err(MS_NO_JAVA_PROFILE_ERR.to_string());
+            }
             let detail = ms_refresh_error
                 .as_deref()
                 .unwrap_or("сессия Microsoft недоступна");
@@ -1326,6 +1324,7 @@ pub async fn launch_game(
     })?;
     let spawned_pid = child.id();
     GAME_PROCESS_PID.store(spawned_pid as u64, Ordering::SeqCst);
+    crate::infra::window_idle::sync(&app);
     eprintln!("[Launch] PID: {spawned_pid}");
     remember_game_session(spawned_pid, playtime_profile_id.clone());
     let run_recorder = RunRecorder::start(
@@ -1441,6 +1440,7 @@ pub async fn launch_game(
 
         forget_game_session();
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+        crate::infra::window_idle::sync(&app_clone_for_playtime);
         if let Some(r) = run_recorder.as_ref() {
             std::thread::sleep(Duration::from_millis(300));
             r.finish(exit_code);

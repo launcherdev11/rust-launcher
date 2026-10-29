@@ -154,7 +154,7 @@ function shortRoomId(id: string): string {
 
 function statusTone(status: string): string {
   if (status === "open") return "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30";
-  if (status === "full") return "bg-amber-500/15 text-amber-100 ring-amber-500/30";
+  if (status === "full") return "bg-warn/15 text-warn-fg ring-warn/30";
   return "bg-white/10 text-white/60 ring-white/15";
 }
 
@@ -645,7 +645,7 @@ export function RoomsTab({
   const handleHostShareWorld = async () => {
     const port = Number.parseInt(lanPortInput.trim(), 10);
     if (!Number.isFinite(port) || port < 1 || port > 65535) {
-      showNotification("warning", "Укажите порт Open to LAN (1–65535)");
+      showNotification("warning", tt("rooms.lanPortInvalid"));
       return;
     }
     setTunnelBusy(true);
@@ -654,10 +654,7 @@ export function RoomsTab({
       setHostReady(true);
       const reachable = await probeLanPort(port).catch(() => false);
       if (reachable) {
-        showNotification(
-          "success",
-          "Мир готов к подключению. Гости могут нажать «Войти в мир».",
-        );
+        showNotification("success", tt("rooms.worldReady"));
       } else {
         showNotification("warning", tt("rooms.lanPortUnreachable", { port }));
       }
@@ -675,21 +672,18 @@ export function RoomsTab({
     }
     const hostPeerId = selectedRoom?.owner_user_id;
     if (!hostPeerId) {
-      showNotification("error", "Не найден хост комнаты");
+      showNotification("error", tt("rooms.hostNotFound"));
       return;
     }
     if (!mcAuthOnline) {
-      showNotification(
-        "error",
-        "Войти в мир друга нельзя в офлайн-режиме. Войдите через Microsoft или Ely на вкладке Аккаунты.",
-      );
+      showNotification("error", tt("rooms.joinOfflineBlocked"));
       return;
     }
     setTunnelBusy(true);
     try {
       const hostSession = sessions[hostPeerId];
       if (!hostSession?.channelOpen) {
-        throw new Error("P2P канал закрылся — дождитесь channel open и попробуйте снова");
+        throw new Error(tt("rooms.p2pChannelClosed"));
       }
       if (!hostSession.supportsLanTunnel) {
         throw new Error(tt("rooms.peerLauncherOutdated"));
@@ -1444,7 +1438,7 @@ export function RoomsTab({
                     <span className="ui-caption">{tt("rooms.mcAccount")}</span>
                     <span
                       className={`text-xs font-semibold ${
-                        mcAuthOnline ? "text-emerald-300/90" : "text-amber-300/90"
+                        mcAuthOnline ? "text-emerald-300/90" : "text-warn-hi/90"
                       }`}
                     >
                       {mcAuthLabel}
@@ -1458,7 +1452,7 @@ export function RoomsTab({
                           p2pReady
                             ? "text-emerald-300/90"
                             : p2pFailed || offlinePeerIds.length > 0
-                              ? "text-amber-300/90"
+                              ? "text-warn-hi/90"
                               : "text-white/70"
                         }`}
                       >
@@ -1482,7 +1476,7 @@ export function RoomsTab({
                   </div>
                 </div>
                 {!mcAuthOnline ? (
-                  <p className="ui-meta mt-2 text-amber-200/70">{tt("rooms.mcOfflineHint")}</p>
+                  <p className="ui-meta mt-2 text-warn-fg/70">{tt("rooms.mcOfflineHint")}</p>
                 ) : null}
               </Panel>
 

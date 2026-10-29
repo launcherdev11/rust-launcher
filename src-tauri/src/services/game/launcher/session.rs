@@ -135,6 +135,7 @@ fn spawn_session_watcher(app: AppHandle, pid: u32) {
 
         forget_game_session();
         let _ = GAME_PROCESS_PID.compare_exchange(pid as u64, 0, Ordering::SeqCst, Ordering::SeqCst);
+        crate::infra::window_idle::sync(&app);
         let _ = app.emit(
             EVENT_GAME_PROCESS_EXITED,
             GameProcessExitedPayload { exit_code: None },
@@ -161,6 +162,7 @@ pub fn get_running_game_session(app: AppHandle) -> Option<RunningGameSession> {
     let current = GAME_PROCESS_PID.load(Ordering::SeqCst);
     if current == 0 {
         GAME_PROCESS_PID.store(pid, Ordering::SeqCst);
+        crate::infra::window_idle::sync(&app);
         if let Some(profile_id) = session.profile_id.as_deref() {
             start_playtime_session(profile_id);
         }

@@ -382,7 +382,7 @@ function VersionLoaderControls({
           aria-disabled={versionLoaderLocked}
           className={`interactive-press glass-control inline-flex min-w-[88px] items-center gap-2 rounded-xl px-3 py-1 text-xs font-semibold text-white ${
             versionLoaderLocked
-              ? "cursor-not-allowed border-amber-300/30 text-white/75"
+              ? "cursor-not-allowed border-warn-hi/30 text-white/75"
               : "hover:border-white/20"
           }`}
         >
@@ -390,7 +390,7 @@ function VersionLoaderControls({
             {gameVersion || tt("mods.loaderAny")}
           </span>
           {versionLoaderLocked ? (
-            <span className="text-amber-200/90"><svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
+            <span className="text-warn-fg/90"><svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
           ) : (
             <span className="text-[0.75rem] text-gray-400">▾</span>
           )}
@@ -445,7 +445,7 @@ function VersionLoaderControls({
           aria-disabled={versionLoaderLocked}
           className={`interactive-press glass-control inline-flex min-w-[96px] items-center gap-2 rounded-xl px-3 py-1 text-xs font-semibold text-white ${
             versionLoaderLocked
-              ? "cursor-not-allowed border-amber-300/30 text-white/75"
+              ? "cursor-not-allowed border-warn-hi/30 text-white/75"
               : "hover:border-white/20"
           }`}
         >
@@ -461,7 +461,7 @@ function VersionLoaderControls({
                     : "NeoForge"}
           </span>
           {versionLoaderLocked ? (
-            <span className="text-amber-200/90"><svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
+            <span className="text-warn-fg/90"><svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
           ) : (
             <span className="text-[0.75rem] text-gray-400">▾</span>
           )}
@@ -470,7 +470,7 @@ function VersionLoaderControls({
           <button
             type="button"
             onClick={onRequestUnlock}
-            className="interactive-press ml-1 rounded-xl bg-amber-400/20 px-3 py-1 text-[0.8125rem] font-semibold text-amber-100 hover:bg-amber-400/30"
+            className="interactive-press ml-1 rounded-xl bg-warn-line/20 px-3 py-1 text-[0.8125rem] font-semibold text-warn-fg hover:bg-warn-line/30"
           >
             {tt("common.change")}
           </button>

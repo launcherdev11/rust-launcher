@@ -147,7 +147,7 @@ export function ProfileSettingsModal({ ctx }: Props) {
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs font-medium text-white/70">
                       <span>{tt("modpacks.conflicts.title")}</span>
-                      <span className="rounded-md border border-amber-300/40 bg-amber-500/15 px-2 py-0.5 text-[0.6875rem] font-semibold tracking-[0.14em] text-amber-100">
+                      <span className="rounded-md border border-warn-hi/40 bg-warn/15 px-2 py-0.5 text-[0.6875rem] font-semibold tracking-[0.14em] text-warn-fg">
                         BETA
                       </span>
                     </div>
@@ -171,8 +171,8 @@ export function ProfileSettingsModal({ ctx }: Props) {
                           key={c.id}
                           className={`rounded-2xl border px-3 py-2 text-xs ${
                             c.severity === "error"
-                              ? "border-rose-400/30 bg-rose-500/10"
-                              : "border-amber-400/25 bg-amber-500/10"
+                              ? "border-danger-line/30 bg-danger/10"
+                              : "border-warn-line/25 bg-warn/10"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -183,8 +183,8 @@ export function ProfileSettingsModal({ ctx }: Props) {
                             <div
                               className={`shrink-0 rounded-md px-2 py-0.5 text-[0.75rem] font-semibold ${
                                 c.severity === "error"
-                                  ? "bg-rose-500/30 text-rose-100"
-                                  : "bg-amber-500/30 text-amber-100"
+                                  ? "bg-danger/30 text-danger-fg"
+                                  : "bg-warn/30 text-warn-fg"
                               }`}
                             >
                               {c.severity === "error"

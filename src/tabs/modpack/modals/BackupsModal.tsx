@@ -133,7 +133,7 @@ export function BackupsModal({ ctx }: Props) {
                             void handleDeleteBackup(backupsModalProfileId, b.id)
                           }
                           disabled={backupCreating || Boolean(backupRestoringId)}
-                          className="interactive-press rounded-lg bg-red-600/20 px-2 py-1 text-[0.8125rem] font-semibold text-red-200 hover:bg-red-600/30 disabled:opacity-50"
+                          className="interactive-press rounded-lg bg-danger-strong/20 px-2 py-1 text-[0.8125rem] font-semibold text-danger-fg hover:bg-danger-strong/30 disabled:opacity-50"
                         >
                           {tt("modpacks.backups.delete")}
                         </button>

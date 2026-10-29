@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://16-launcher.ru"><img src="public/launcher-assets/readme.png" alt="16Launcher"></a>
+  <a href="https://16-launcher.ru"><img src=".github/readme/readme.png" alt="16Launcher"></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
   <em>Reliable cross-platform Minecraft launcher. Built-in mod management, advanced optimization, and clean UI. Lightweight, stable, with flexible settings for full control over the game.</em>
@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-<img src="public/launcher-assets/about.png" alt="about">
+<img src=".github/readme/about.png" alt="about">
 </p>
 
 ---
@@ -31,7 +31,7 @@
 **Languages**: [Русский](README.ru.md)
 
 <p align="center">
-<img src="public/launcher-assets/installation.png" alt="installation">
+<img src=".github/readme/installation.png" alt="installation">
 </p>
 
 ## Installation
@@ -58,16 +58,16 @@
 4. **Click Play** and enjoy!
 
 <p align="center">
-<img src="public/launcher-assets/screenshots.png" alt="screenshots">
+<img src=".github/readme/screenshots.png" alt="screenshots">
 </p>
 
 # Screenshots
 
-![readme_screen.png](public/launcher-assets/readme_screen.png)
-![readme_screen2.png](public/launcher-assets/readme_screen2.png)
-![readme_screen3.png](public/launcher-assets/readme_screen3.png)
-![readme_screen4.png](public/launcher-assets/readme_screen4.png)
-![readme_screen5.png](public/launcher-assets/readme_screen5.png)
+![readme_screen.png](.github/readme/readme_screen.png)
+![readme_screen2.png](.github/readme/readme_screen2.png)
+![readme_screen3.png](.github/readme/readme_screen3.png)
+![readme_screen4.png](.github/readme/readme_screen4.png)
+![readme_screen5.png](.github/readme/readme_screen5.png)
 
 ## Building from source
 
@@ -84,7 +84,7 @@ npm run tauri build    # produce installers in src-tauri/target/release/bundle/
 Full instructions, including platform dependencies, environment variables, updater signing and the release process, are in [BUILD.md](BUILD.md).
 
 <p align="center">
-<img src="public/launcher-assets/support.png" alt="support">
+<img src=".github/readme/support.png" alt="support">
 </p>
 
 ## Support
@@ -94,7 +94,7 @@ Full instructions, including platform dependencies, environment variables, updat
 - Issues: [GitHub Issues](https://github.com/launcherdev11/rust-launcher/issues)
 
 <p align="center">
-<img src="public/launcher-assets/license.png" alt="license">
+<img src=".github/readme/license.png" alt="license">
 </p>
 
 ## License

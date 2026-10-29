@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://16-launcher.ru"><img src="public/launcher-assets/readme.png" alt="16Launcher"></a>
+  <a href="https://16-launcher.ru"><img src=".github/readme/readme.png" alt="16Launcher"></a>
   <h1 align="center">16Launcher</h1>
 <p align="center">
   <em>Надежный кроссплатформенный лаунчер для Minecraft. Встроенная установка модов, продвинутая оптимизация и продуманный интерфейс. Легкий, стабильный, с гибкими настройками для полного контроля над игрой.</em>
@@ -20,7 +20,7 @@
 
 ---
 <p align="center">
-<img src="public/launcher-assets/about.png" alt="about">
+<img src=".github/readme/about.png" alt="about">
 </p>
 ---
     
@@ -51,11 +51,11 @@
 
 # Скриншоты
 
-![readme_screen.png](public/launcher-assets/readme_screen.png)
-![readme_screen2.png](public/launcher-assets/readme_screen2.png)
-![readme_screen3.png](public/launcher-assets/readme_screen3.png)
-![readme_screen4.png](public/launcher-assets/readme_screen4.png)
-![readme_screen5.png](public/launcher-assets/readme_screen5.png)
+![readme_screen.png](.github/readme/readme_screen.png)
+![readme_screen2.png](.github/readme/readme_screen2.png)
+![readme_screen3.png](.github/readme/readme_screen3.png)
+![readme_screen4.png](.github/readme/readme_screen4.png)
+![readme_screen5.png](.github/readme/readme_screen5.png)
 
 ## Сборка из исходников
 

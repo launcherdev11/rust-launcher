@@ -104,7 +104,7 @@ export const CodeEditor = forwardRef<
       <div className="relative w-12 shrink-0 overflow-hidden border-r border-white/[0.06] bg-black/20 py-2 text-right">
         <div ref={gutterRef} className={`${textClass} pr-2 text-white/25`}>
           {lines.map((_, i) => (
-            <div key={i} className={errorLine === i + 1 ? "bg-red-500/25 text-red-200" : undefined}>
+            <div key={i} className={errorLine === i + 1 ? "bg-danger/25 text-danger-fg" : undefined}>
               {i + 1}
             </div>
           ))}
@@ -118,7 +118,7 @@ export const CodeEditor = forwardRef<
             className={`pointer-events-none absolute left-0 top-0 px-3 py-2 ${textClass}`}
           >
             {lines.map((line, i) => (
-              <div key={i} className={errorLine === i + 1 ? "bg-red-500/15" : undefined}>
+              <div key={i} className={errorLine === i + 1 ? "bg-danger/15" : undefined}>
                 <HighlightedLine text={line} format={format} />
               </div>
             ))}

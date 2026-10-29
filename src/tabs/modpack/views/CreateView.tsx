@@ -1,3 +1,4 @@
+import { LoaderIcon } from "../../../components/loader_icon";
 import { resolveIconSrc } from "../../../lib/profile-icon";
 import { BUILD_PRESETS_UI_ENABLED, loaderLabels } from "../helpers";
 import { InputClearButton } from "../../../components/ui";
@@ -13,7 +14,7 @@ const LOADER_IDS: LoaderId[] = ["vanilla", "forge", "fabric", "quilt", "neoforge
 const CHANNEL_BADGE = {
   stable: "bg-emerald-500/20 text-emerald-200",
   alpha: "bg-zinc-400/20 text-zinc-200",
-  other: "bg-amber-500/20 text-amber-200",
+  other: "bg-warn/20 text-warn-fg",
 } as const;
 
 const CHANNEL_BADGE_SELECTED = {
@@ -203,13 +204,14 @@ export function CreateView({ ctx }: Props) {
                     setCreateLoader(id);
                     setIsLoaderVersionDropdownOpen(false);
                   }}
-                  className={`interactive-press h-8 min-w-0 flex-1 truncate rounded-lg px-2 text-xs font-semibold ${
+                  className={`interactive-press flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold ${
                     createLoader === id
                       ? "seg-on"
                       : "text-[color:var(--fg-muted)] hover:bg-white/[0.05] hover:text-[color:var(--fg)]"
                   }`}
                 >
-                  {loaderLabels[id]}
+                  <LoaderIcon loader={id} />
+                  <span className="truncate">{loaderLabels[id]}</span>
                 </button>
               ))}
             </div>

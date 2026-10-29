@@ -99,7 +99,7 @@ export function PinnedProfileMenu({
           if (!profile) return;
           onDeleteProfile(profile.id);
         }}
-        className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-red-300 hover:bg-red-600/20"
+        className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-danger-hi hover:bg-danger-strong/20"
       >
         <DeleteIcon className="h-3.5 w-3.5" />
         <span>{tt("modpacks.contextMenu.deleteProfile")}</span>

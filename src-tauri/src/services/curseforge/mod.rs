@@ -338,7 +338,7 @@ pub(crate) async fn cf_get_json<T: for<'de> Deserialize<'de>>(
                 .await
                 .map_err(|e| format!("Ошибка разбора ответа CurseForge API: {e}"));
         }
-        last_retry_after = parse_retry_after(&resp);
+        last_retry_after = parse_retry_after(&resp).or_else(|| rate_limit_pause(status));
         let body = resp.text().await.unwrap_or_default();
         let detail = if body.is_empty() {
             String::new()
@@ -363,13 +363,19 @@ fn parse_retry_after(resp: &reqwest::Response) -> Option<std::time::Duration> {
         .map(|s| std::time::Duration::from_secs(s.min(15)))
 }
 
+// Прокси лаунчера отвечает 429 без Retry-After, а окно лимита у него минутное:
+// короткий экспоненциальный бэкофф успевает исчерпать попытки до сброса окна.
+fn rate_limit_pause(status: reqwest::StatusCode) -> Option<std::time::Duration> {
+    (status == reqwest::StatusCode::TOO_MANY_REQUESTS).then(|| std::time::Duration::from_secs(12))
+}
+
 fn retry_delay(attempt: usize, retry_after: Option<std::time::Duration>) -> std::time::Duration {
     let backoff = std::time::Duration::from_millis(500 * (1u64 << attempt.min(5)));
     retry_after.map_or(backoff, |ra| ra.max(backoff))
 }
 
 const CF_POST_ATTEMPTS: usize = 5;
-const CF_BULK_CHUNK: usize = 300;
+const CF_BULK_CHUNK: usize = 100;
 
 async fn cf_post_json<T: for<'de> Deserialize<'de>>(
     client: &reqwest::Client,
@@ -404,7 +410,7 @@ async fn cf_post_json<T: for<'de> Deserialize<'de>>(
                 .await
                 .map_err(|e| format!("Ошибка разбора ответа CurseForge API: {e}"));
         }
-        last_retry_after = parse_retry_after(&resp);
+        last_retry_after = parse_retry_after(&resp).or_else(|| rate_limit_pause(status));
         let text = resp.text().await.unwrap_or_default();
         last_err = format!("CurseForge API вернул ошибку {status}: {text}");
         if status.as_u16() != 429 && !status.is_server_error() {
@@ -419,14 +425,27 @@ pub(crate) async fn curseforge_get_files_bulk(
 ) -> Result<std::collections::HashMap<u32, CfFile>, String> {
     let client = cf_client()?;
     let mut out = std::collections::HashMap::new();
+    let mut last_err = None;
     for chunk in file_ids.chunks(CF_BULK_CHUNK) {
-        let body: CfApiResponse<Vec<CfFile>> =
-            cf_post_json(&client, "/mods/files", &serde_json::json!({ "fileIds": chunk })).await?;
-        for f in body.data {
-            out.insert(f.id, f);
+        match cf_post_json::<CfApiResponse<Vec<CfFile>>>(
+            &client,
+            "/mods/files",
+            &serde_json::json!({ "fileIds": chunk }),
+        )
+        .await
+        {
+            Ok(body) => {
+                for f in body.data {
+                    out.insert(f.id, f);
+                }
+            }
+            Err(e) => last_err = Some(e),
         }
     }
-    Ok(out)
+    match last_err {
+        Some(e) if out.is_empty() => Err(e),
+        _ => Ok(out),
+    }
 }
 
 pub(crate) async fn curseforge_get_mod_class_ids(
@@ -434,16 +453,29 @@ pub(crate) async fn curseforge_get_mod_class_ids(
 ) -> Result<std::collections::HashMap<u32, u32>, String> {
     let client = cf_client()?;
     let mut out = std::collections::HashMap::new();
+    let mut last_err = None;
     for chunk in mod_ids.chunks(CF_BULK_CHUNK) {
-        let body: CfApiResponse<Vec<CfModClass>> =
-            cf_post_json(&client, "/mods", &serde_json::json!({ "modIds": chunk })).await?;
-        for m in body.data {
-            if let Some(class_id) = m.class_id {
-                out.insert(m.id, class_id);
+        match cf_post_json::<CfApiResponse<Vec<CfModClass>>>(
+            &client,
+            "/mods",
+            &serde_json::json!({ "modIds": chunk }),
+        )
+        .await
+        {
+            Ok(body) => {
+                for m in body.data {
+                    if let Some(class_id) = m.class_id {
+                        out.insert(m.id, class_id);
+                    }
+                }
             }
+            Err(e) => last_err = Some(e),
         }
     }
-    Ok(out)
+    match last_err {
+        Some(e) if out.is_empty() => Err(e),
+        _ => Ok(out),
+    }
 }
 
 pub(crate) fn curseforge_cdn_fallback_urls(file_id: u32, file_name: &str) -> Vec<String> {

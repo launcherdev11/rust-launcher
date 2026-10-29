@@ -101,7 +101,7 @@ export function CursorHint({
       }}
     >
       <div className="flex items-start gap-2">
-        <AssetIcon name="info" className="mt-0.5 h-3.5 w-3.5 text-amber-200" />
+        <AssetIcon name="info" className="mt-0.5 h-3.5 w-3.5 text-warn-fg" />
         <div className="min-w-0">
           <p className="text-[0.8125rem] font-semibold leading-snug text-white">{title}</p>
           {children ? (

@@ -29,10 +29,10 @@ export function NotificationToasts({ notifications, setNotifications, onDismiss 
           bgClasses = "bg-ink-850 border border-white/15 border-l-[3px] border-l-emerald-400 text-white";
           iconSrc = "/launcher-assets/success.png";
         } else if (n.kind === "error") {
-          bgClasses = "bg-ink-850 border border-red-400/30 border-l-[3px] border-l-red-400 text-white";
+          bgClasses = "bg-ink-850 border border-danger-line/30 border-l-[3px] border-l-danger-line text-white";
           iconSrc = "/launcher-assets/errorIcon.png";
         } else if (n.kind === "warning") {
-          bgClasses = "bg-ink-850 border border-amber-400/30 border-l-[3px] border-l-amber-400 text-white";
+          bgClasses = "bg-ink-850 border border-warn-line/30 border-l-[3px] border-l-warn-line text-white";
           iconSrc = "/launcher-assets/warn.png";
         } else {
           const resolvedIcon = resolveRemoteNotificationIconSrc(n.iconMsg);

@@ -34,6 +34,16 @@
   --glass-radius: var(--r-panel);
   --glass-radius-sm: var(--r-control);
 
+  --warn: #f59e0b;
+  --warn-line: #fbbf24;
+  --warn-hi: #fcd34d;
+  --warn-fg: #fde68a;
+  --danger: #ef4444;
+  --danger-strong: #dc2626;
+  --danger-line: #f87171;
+  --danger-hi: #fca5a5;
+  --danger-fg: #fecaca;
+
   --font-sans: "Onest Variable", "Onest", "Segoe UI", system-ui, sans-serif;
   --launcher-bg-image: none;
 }
@@ -413,13 +423,13 @@ body {
   }
 
   .btn-danger {
-    background: rgba(239, 68, 68, 0.12);
-    border-color: rgba(248, 113, 113, 0.28);
-    color: #fecaca;
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border-color: color-mix(in srgb, var(--danger-line) 28%, transparent);
+    color: var(--danger-fg);
   }
 
   .btn-danger:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.22);
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
   }
 
   .icon-btn {
@@ -525,9 +535,13 @@ button:disabled,
   gap: 0.4rem;
   padding: 0.3rem 0.65rem;
   border-radius: 0.65rem;
-  border: 1px solid rgba(251, 191, 36, 0.28);
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(251, 191, 36, 0.04));
-  color: rgba(253, 230, 138, 0.95);
+  border: 1px solid color-mix(in srgb, var(--warn-line) 28%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--warn-line) 14%, transparent),
+    color-mix(in srgb, var(--warn-line) 4%, transparent)
+  );
+  color: color-mix(in srgb, var(--warn-fg) 95%, transparent);
   font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.3;

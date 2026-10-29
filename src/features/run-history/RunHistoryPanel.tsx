@@ -25,10 +25,10 @@ const LOG_WINDOW = 4000;
 
 const OUTCOME_CLASS: Record<RunOutcome, string> = {
   ok: "bg-emerald-500/15 text-emerald-200",
-  crashed: "bg-red-500/20 text-red-200",
+  crashed: "bg-danger/20 text-danger-fg",
   stopped: "bg-white/10 text-white/70",
   running: "bg-accent-from/20 text-white",
-  interrupted: "bg-amber-500/15 text-amber-100",
+  interrupted: "bg-warn/15 text-warn-fg",
 };
 
 function formatDuration(ms: number): string {
@@ -83,7 +83,7 @@ function RunRow({
           <span>· {tt("runHistory.exitCode", { code: run.exitCode })}</span>
         ) : null}
         {run.errorLines > 0 ? (
-          <span className="text-red-200/70">· {tt("runHistory.errors", { count: run.errorLines })}</span>
+          <span className="text-danger-fg/70">· {tt("runHistory.errors", { count: run.errorLines })}</span>
         ) : null}
       </div>
     </button>
@@ -398,7 +398,7 @@ export function RunHistoryPanel({
                     type="button"
                     onClick={() => void handleDelete()}
                     disabled={selected.outcome === "running"}
-                    className="icon-btn hover:!bg-red-500/15 hover:!text-red-200 disabled:opacity-40"
+                    className="icon-btn hover:!bg-danger/15 hover:!text-danger-fg disabled:opacity-40"
                     title={tt("runHistory.delete")}
                     aria-label={tt("runHistory.delete")}
                   >

@@ -209,5 +209,55 @@ pub(crate) fn build_java_command(
         jvm_args.push("-Djava.net.preferIPv6Addresses=true".to_string());
     }
 
+    apply_default_gc_flags(&mut jvm_args);
+
     Ok((java_path, jvm_args))
+}
+
+const DEFAULT_GC_FLAGS: &[&str] = &[
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+UseG1GC",
+    "-XX:G1NewSizePercent=20",
+    "-XX:G1ReservePercent=20",
+    "-XX:MaxGCPauseMillis=50",
+    "-XX:G1HeapRegionSize=32M",
+];
+
+fn apply_default_gc_flags(jvm_args: &mut Vec<String>) {
+    let has_custom_gc = jvm_args
+        .iter()
+        .any(|a| a.starts_with("-XX:+Use") && a.ends_with("GC"));
+    if has_custom_gc {
+        return;
+    }
+    let at = jvm_args
+        .iter()
+        .position(|a| !a.starts_with("-Xms") && !a.starts_with("-Xmx"))
+        .unwrap_or(jvm_args.len());
+    jvm_args.splice(at..at, DEFAULT_GC_FLAGS.iter().map(|s| s.to_string()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn default_gc_flags_follow_heap_size() {
+        let mut a = args(&["-Xms2G", "-Xmx4G", "-cp", "x.jar"]);
+        apply_default_gc_flags(&mut a);
+        assert_eq!(a[2], "-XX:+UnlockExperimentalVMOptions");
+        assert_eq!(a[3], "-XX:+UseG1GC");
+        assert_eq!(a[a.len() - 2], "-cp");
+    }
+
+    #[test]
+    fn custom_gc_is_kept() {
+        let mut a = args(&["-Xmx4G", "-XX:+UseZGC"]);
+        apply_default_gc_flags(&mut a);
+        assert_eq!(a, args(&["-Xmx4G", "-XX:+UseZGC"]));
+    }
 }

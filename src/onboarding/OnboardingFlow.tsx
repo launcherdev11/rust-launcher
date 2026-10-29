@@ -60,7 +60,7 @@ export function OnboardingFlow({
   const [finishing, setFinishing] = useState(false);
 
   const elyListenersRef = useRef<{ ok?: () => void; fail?: () => void }>({});
-  const msListenerRef = useRef<(() => void) | null>(null);
+  const msListenersRef = useRef<{ ok?: () => void; fail?: () => void }>({});
 
   const stepIndex = stepProgressIndex(step);
 
@@ -83,8 +83,9 @@ export function OnboardingFlow({
   }, []);
 
   const cleanupMsListener = useCallback(() => {
-    msListenerRef.current?.();
-    msListenerRef.current = null;
+    msListenersRef.current.ok?.();
+    msListenersRef.current.fail?.();
+    msListenersRef.current = {};
   }, []);
 
   useEffect(() => {
@@ -157,7 +158,7 @@ export function OnboardingFlow({
     cleanupMsListener();
 
     try {
-      msListenerRef.current = await listen("ms-login-complete", async () => {
+      msListenersRef.current.ok = await listen("ms-login-complete", async () => {
         cleanupMsListener();
         setMsLoading(false);
         setMsAuthUrl(null);
@@ -165,6 +166,16 @@ export function OnboardingFlow({
         setLinkedAccount("microsoft");
         await onProfileUpdated?.();
         window.setTimeout(() => goImport(), 600);
+      });
+      msListenersRef.current.fail = await listen<string>("ms-login-failed", (e) => {
+        cleanupMsListener();
+        setMsLoading(false);
+        setMsAuthUrl(null);
+        setMsError(
+          e.payload === "no_java_profile"
+            ? tt("app.accounts.toast.msNoJavaProfile")
+            : tt("onboarding.microsoft.errorGeneric"),
+        );
       });
 
       const url = await invoke<string>("start_ms_oauth", { language });

@@ -34,7 +34,6 @@ export function settleConfirm(confirmed: boolean) {
 }
 
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
-  if (!listener) return Promise.resolve(window.confirm(options.message));
   return new Promise<boolean>((resolve) => {
     queue.push({ ...options, resolve });
     if (queue.length === 1) publish();

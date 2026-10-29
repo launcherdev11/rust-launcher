@@ -262,7 +262,7 @@ export function CatalogGrid({
     <div className="glass-panel relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
         <div className="flex items-center gap-2">
-          {error && projects.length > 0 ? <span className="text-rose-300">{error}</span> : null}
+          {error && projects.length > 0 ? <span className="text-danger-hi">{error}</span> : null}
           {allowBatchSelect && !error ? (
             <span className="text-white/45">{tt("mods.batch.hint")}</span>
           ) : null}

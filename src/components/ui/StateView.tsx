@@ -56,7 +56,7 @@ export function ErrorState({
   compact = false,
 }: ErrorStateProps) {
   return (
-    <StateFrame compact={compact} className={`border border-red-400/20 ${className}`}>
+    <StateFrame compact={compact} className={`border border-danger-line/20 ${className}`}>
       <div role="alert" className="flex flex-col items-center gap-3">
         <div className="glass-control flex h-12 w-12 items-center justify-center">
           <img src="/launcher-assets/errorIcon.png" alt="" className="h-6 w-6 object-contain" />

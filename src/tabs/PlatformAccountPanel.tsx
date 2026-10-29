@@ -1119,7 +1119,7 @@ export function PlatformAccountPanel({
                     : "pointer-events-none absolute inset-0 opacity-0"
                 } ${
                   privacyHighlight
-                    ? "bg-amber-500/15 text-amber-50 ring-2 ring-amber-400/70"
+                    ? "bg-warn/15 text-warn-fg ring-2 ring-warn-line/70"
                     : "text-white/65"
                 }`}
               >
@@ -1133,7 +1133,7 @@ export function PlatformAccountPanel({
                   }}
                   tabIndex={mode === "signup" ? 0 : -1}
                   className={`accent-checkbox mt-0.5 h-4 w-4 shrink-0 transition ${
-                    privacyHighlight ? "outline outline-2 outline-offset-2 outline-amber-400" : ""
+                    privacyHighlight ? "outline outline-2 outline-offset-2 outline-warn-line" : ""
                   }`}
                 />
                 <span>
@@ -1406,15 +1406,15 @@ export function PlatformAccountPanel({
           )}
         </div>
 
-        <div className="mt-auto rounded-xl border border-rose-500/25 bg-rose-950/25 px-3 py-3">
-          <p className="text-[0.75rem] font-bold text-rose-200/70">{tt("platform.dangerZone")}</p>
+        <div className="mt-auto rounded-xl border border-danger/25 bg-danger/[0.06] px-3 py-3">
+          <p className="text-[0.75rem] font-bold text-danger-fg/70">{tt("platform.dangerZone")}</p>
           <p className="mt-1 text-xs leading-relaxed text-white/55">{tt("platform.deleteAccountHint")}</p>
           {!deleteOpen ? (
             <button
               type="button"
               disabled={busy || deletingAccount}
               onClick={() => setDeleteOpen(true)}
-              className="interactive-press mt-3 rounded-xl border border-rose-500/35 bg-rose-600/15 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-600/25 disabled:opacity-60"
+              className="interactive-press mt-3 rounded-xl border border-danger/35 bg-danger-strong/15 px-4 py-2 text-sm font-semibold text-danger-fg hover:bg-danger-strong/25 disabled:opacity-60"
             >
               {tt("platform.deleteAccount")}
             </button>
@@ -1432,7 +1432,7 @@ export function PlatformAccountPanel({
                   autoFocus
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
-                  className={`h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-rose-400/40 ${
+                  className={`h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-danger-line/40 ${
                     deletePassword ? "pr-[4.5rem]" : "pr-11"
                   }`}
                   placeholder={tt("platform.passwordPlaceholder")}
@@ -1461,7 +1461,7 @@ export function PlatformAccountPanel({
                 <button
                   type="submit"
                   disabled={deletingAccount || loading}
-                  className="interactive-press rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+                  className="interactive-press rounded-xl bg-danger-strong px-4 py-2 text-sm font-semibold text-white hover:bg-danger disabled:opacity-60"
                 >
                   {deletingAccount ? tt("common.loading") : tt("platform.deleteAccountConfirm")}
                 </button>

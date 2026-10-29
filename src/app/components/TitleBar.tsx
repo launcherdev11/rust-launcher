@@ -92,7 +92,7 @@ export function TitleBar({
         ) : null}
         {launcherVersion && launcherVersionBadgeKind === "outdated" ? (
           <span
-            className="rounded-md border border-amber-400/25 bg-amber-500/10 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-amber-100"
+            className="rounded-md border border-warn-line/25 bg-warn/10 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-warn-fg"
             title={
               updateVersion
                 ? tt("app.versionBadge.outdatedWithVersion", { version: updateVersion })
@@ -156,7 +156,7 @@ export function TitleBar({
           <button
             type="button"
             onClick={handleClose}
-            className="icon-btn h-8 w-8 hover:!bg-red-600/90 hover:!text-white"
+            className="icon-btn h-8 w-8 hover:!bg-danger-strong/90 hover:!text-white"
             aria-label={tt("app.window.close")}
             data-no-drag
           >

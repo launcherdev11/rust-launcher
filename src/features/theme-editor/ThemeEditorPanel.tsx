@@ -265,7 +265,7 @@ export function ThemeEditorPanel({ themeId, tt, onClose, onSaved, showNotificati
 
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {loadError ? (
-          <p className="ui-body text-red-300">{loadError}</p>
+          <p className="ui-body text-danger-hi">{loadError}</p>
         ) : !theme ? (
           <p className="ui-meta">{te("loading")}</p>
         ) : tab === "look" ? (
@@ -411,7 +411,7 @@ export function ThemeEditorPanel({ themeId, tt, onClose, onSaved, showNotificati
               autoCorrect="off"
               className="glass-control custom-scrollbar min-h-[18rem] w-full flex-1 resize-none whitespace-pre p-3 font-mono text-xs leading-5 text-white outline-none"
             />
-            <p className={`ui-caption ${cssProblem ? "!text-amber-300" : ""}`}>
+            <p className={`ui-caption ${cssProblem ? "!text-warn-hi" : ""}`}>
               {cssProblem
                 ? te(`cssProblem.${cssProblem.kind}`, { line: cssProblem.line })
                 : te("cssOk")}

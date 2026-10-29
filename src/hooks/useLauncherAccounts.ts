@@ -318,15 +318,32 @@ export function useLauncherAccounts({
     setMsAuthUrl(null);
 
     let unlistenComplete: (() => void) | null = null;
+    let unlistenFailed: (() => void) | null = null;
+    const stopListening = () => {
+      unlistenComplete?.();
+      unlistenComplete = null;
+      unlistenFailed?.();
+      unlistenFailed = null;
+    };
     try {
       unlistenComplete = await listen("ms-login-complete", async () => {
-        unlistenComplete?.();
-        unlistenComplete = null;
+        stopListening();
         setMsLoading(false);
         setMsAuthUrl(null);
         await loadProfile();
         void refreshLauncherAccounts();
         showNotification("success", tt("app.accounts.toast.msLoggedIn"));
+      });
+      unlistenFailed = await listen<string>("ms-login-failed", (e) => {
+        stopListening();
+        setMsLoading(false);
+        setMsAuthUrl(null);
+        showNotification(
+          "error",
+          e.payload === "no_java_profile"
+            ? tt("app.accounts.toast.msNoJavaProfile")
+            : tt("app.accounts.toast.msLoginFailed"),
+        );
       });
 
       const url = await invoke<string>("start_ms_oauth", { language });
@@ -335,16 +352,14 @@ export function useLauncherAccounts({
         await openUrl(url);
       } catch (e) {
         console.error("Не удалось открыть браузер для Microsoft OAuth:", e);
-        unlistenComplete?.();
-        unlistenComplete = null;
+        stopListening();
         setMsLoading(false);
         setMsAuthUrl(null);
         showNotification("error", tt("app.accounts.toast.msOpenBrowserFailed"));
       }
     } catch (e) {
       console.error(e);
-      unlistenComplete?.();
-      unlistenComplete = null;
+      stopListening();
       setMsLoading(false);
       setMsAuthUrl(null);
       showNotification("error", tt("app.accounts.toast.msLoginFailed"));

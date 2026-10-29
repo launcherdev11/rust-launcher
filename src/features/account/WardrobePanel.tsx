@@ -366,7 +366,7 @@ function UploadTool({
           {busy ? tt("app.accounts.skinUpload.loading") : tt("app.accounts.skinUpload.apply")}
         </button>
       </div>
-      {error ? <p className="mt-2 text-[0.8125rem] text-amber-200/80">{error}</p> : null}
+      {error ? <p className="mt-2 text-[0.8125rem] text-warn-fg/80">{error}</p> : null}
     </div>
   );
 }
@@ -442,7 +442,7 @@ function UsernameTool({
         </button>
       </form>
       <p className="mt-1.5 text-[0.75rem] text-white/40">
-        {error ? <span className="text-amber-200/80">{error}</span> : tt("app.accounts.wardrobe.byNameHint")}
+        {error ? <span className="text-warn-fg/80">{error}</span> : tt("app.accounts.wardrobe.byNameHint")}
       </p>
     </div>
   );
@@ -460,7 +460,7 @@ function LoadingRow({ label }: { label: string }) {
 function ErrorRow({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex items-center gap-3 py-4">
-      <p className="min-w-0 flex-1 text-xs text-amber-200/80">{message}</p>
+      <p className="min-w-0 flex-1 text-xs text-warn-fg/80">{message}</p>
       <button
         type="button"
         onClick={onRetry}

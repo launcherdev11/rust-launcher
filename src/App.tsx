@@ -41,7 +41,7 @@ import { RemoveAccountDialog } from "./app/components/RemoveAccountDialog";
 import { SocialPromptCards } from "./app/components/SocialPromptCards";
 import { TabDragGhost } from "./app/components/TabDragGhost";
 import { TabPaneLoading } from "./app/components/TabPaneLoading";
-import { ConfirmHost, TabErrorBoundary } from "./components/ui";
+import { ConfirmHost, PromptHost, TabErrorBoundary } from "./components/ui";
 import { TabSplitPanes } from "./app/components/TabSplitPanes";
 import { TitleBar } from "./app/components/TitleBar";
 import { toInstanceProfileCard } from "./app/profiles";
@@ -903,6 +903,7 @@ function App() {
         />
 
         <ConfirmHost language={language} />
+        <PromptHost language={language} />
 
         <NotificationToasts
           notifications={notifications}
@@ -1081,7 +1082,7 @@ function App() {
           >
             {splitViewEnabled && splitTooNarrow ? (
               <div
-                className="mb-2 shrink-0 rounded-xl border border-amber-400/30 bg-amber-500/15 px-3 py-1.5 text-center text-caption text-amber-100/90"
+                className="mb-2 shrink-0 rounded-xl border border-warn-line/30 bg-warn/15 px-3 py-1.5 text-center text-caption text-warn-fg/90"
                 role="status"
               >
                 {tt("app.splitView.tooNarrowBanner")}

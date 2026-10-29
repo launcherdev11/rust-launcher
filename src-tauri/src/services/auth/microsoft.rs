@@ -32,6 +32,8 @@ use crate::services::auth::ms_redirect::{self, RedirectLanguage};
 
 use crate::services::game::accounts::{get_profile, save_full_profile};
 
+use crate::services::game::runtime::MS_NO_JAVA_PROFILE_ERR;
+
 use crate::services::game::settings::load_settings_from_disk;
 
 
@@ -594,25 +596,25 @@ pub async fn exchange_to_minecraft_token(ms_token: &str) -> Result<(String, Stri
 
 
 
-    let mc_prof: McProfile = handle_resp(
+    let mc_prof_resp = client
 
-        client
+        .get("https://api.minecraftservices.com/minecraft/profile")
 
-            .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(&mc_login.access_token)
 
-            .bearer_auth(&mc_login.access_token)
+        .send()
 
-            .send()
+        .await
 
-            .await
+        .map_err(|e| e.to_string())?;
 
-            .map_err(|e| e.to_string())?,
+    if mc_prof_resp.status().as_u16() == 404 {
 
-        "MC profile",
+        return Err(MS_NO_JAVA_PROFILE_ERR.to_string());
 
-    )
+    }
 
-    .await?;
+    let mc_prof: McProfile = handle_resp(mc_prof_resp, "MC profile").await?;
 
 
 
@@ -630,9 +632,23 @@ async fn handle_callback_internal(
 
     let token = exchange_code(code, &code_verifier).await?;
 
+    let mc_session = match exchange_to_minecraft_token(&token.access_token).await {
+
+        Ok(session) => Some(session),
+
+        Err(e) if e == MS_NO_JAVA_PROFILE_ERR => return Err(e),
+
+        Err(e) => {
+
+            eprintln!("[MsAuth] MC token error: {e}");
+
+            None
+
+        }
+
+    };
+
     let mut profile = get_profile().unwrap_or_default();
-
-
 
     profile.ms_access_token = Some(token.access_token.clone());
 
@@ -640,21 +656,13 @@ async fn handle_callback_internal(
 
     profile.ms_id_token = token.id_token;
 
+    if let Some((name, uuid, acc)) = mc_session {
 
+        profile.mc_username = Some(name);
 
-    match exchange_to_minecraft_token(&token.access_token).await {
+        profile.mc_uuid = Some(uuid);
 
-        Ok((name, uuid, acc)) => {
-
-            profile.mc_username = Some(name);
-
-            profile.mc_uuid = Some(uuid);
-
-            profile.mc_access_token = Some(acc);
-
-        }
-
-        Err(e) => eprintln!("[MsAuth] MC token error: {e}"),
+        profile.mc_access_token = Some(acc);
 
     }
 
@@ -806,6 +814,12 @@ fn run_server(app: AppHandle) -> Result<(), String> {
                                     handle_callback_internal(&app_c, code, verifier).await
                                 {
                                     eprintln!("[MsAuth] Callback processing error: {e}");
+                                    let reason = if e == MS_NO_JAVA_PROFILE_ERR {
+                                        "no_java_profile"
+                                    } else {
+                                        "failed"
+                                    };
+                                    let _ = app_c.emit("ms-login-failed", reason);
                                 }
                             });
                         } else {

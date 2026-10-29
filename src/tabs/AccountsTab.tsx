@@ -281,7 +281,7 @@ export function AccountsTab({
               </div>
 
               {headerNicknameEditing && nicknameHintVisible ? (
-                <p className="mt-1 text-[0.75rem] text-amber-300/80">
+                <p className="mt-1 text-[0.75rem] text-warn-hi/80">
                   {tt("app.accounts.nicknameRules")}
                 </p>
               ) : null}
@@ -345,8 +345,8 @@ export function AccountsTab({
         {elyAuthUrl || msAuthUrl ? (
           <div className="shrink-0 space-y-2">
             {elyAuthUrl ? (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
-                <p className="mb-1.5 text-xs font-medium text-amber-200">{tt("app.accounts.elyDialogTitle")}</p>
+              <div className="rounded-xl border border-warn/30 bg-warn/10 px-4 py-3 text-left">
+                <p className="mb-1.5 text-xs font-medium text-warn-fg">{tt("app.accounts.elyDialogTitle")}</p>
                 <p className="break-all text-xs text-white/90">{elyAuthUrl}</p>
                 <p className="mt-1.5 text-[0.8125rem] text-white/60">{tt("app.accounts.elyDialogTip")}</p>
               </div>

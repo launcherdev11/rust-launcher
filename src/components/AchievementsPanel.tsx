@@ -137,7 +137,7 @@ export function AchievementsPanel({
         </div>
       </div>
 
-      {error ? <p className="text-sm text-red-300/90">{error}</p> : null}
+      {error ? <p className="text-sm text-danger-hi/90">{error}</p> : null}
 
       {loading && achievements.length === 0 ? (
         <div className="flex items-center gap-2 py-6 text-sm text-white/55">
@@ -224,13 +224,13 @@ export function AchievementCard({
     <div
       className={`flex h-full gap-2.5 rounded-xl border px-3 py-2.5 transition ${
         achievement.unlocked
-          ? "border-amber-400/25 bg-amber-500/10"
+          ? "border-warn-line/25 bg-warn/10"
           : "border-white/10 bg-black/25"
       }`}
     >
       <div
         className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-          achievement.unlocked ? "bg-amber-500/20" : "bg-white/5 opacity-50"
+          achievement.unlocked ? "bg-warn/20" : "bg-white/5 opacity-50"
         }`}
       >
         <AchievementIcon className="h-4 w-4 object-contain" />
@@ -253,7 +253,7 @@ export function AchievementCard({
         </p>
         <div className="mt-auto pt-2">
           {achievement.unlocked ? (
-            <p className="text-[0.75rem] text-amber-200/70">
+            <p className="text-[0.75rem] text-warn-fg/70">
               {unlockedDate
                 ? tt("achievements.unlockedAt", { date: unlockedDate })
                 : tt("achievements.unlockedNoDate")}
@@ -262,7 +262,7 @@ export function AchievementCard({
             <div className="flex items-center gap-2">
               <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-amber-300/60"
+                  className="h-full rounded-full bg-warn-hi/60"
                   style={{ width: `${Math.max(3, Math.round(progress.ratio * 100))}%` }}
                 />
               </div>

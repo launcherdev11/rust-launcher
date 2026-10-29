@@ -17,7 +17,7 @@ type Notify = (kind: "info" | "success" | "error" | "warning", message: string) 
 const KIND_CLASS: Record<WorldBackup["kind"], string> = {
   manual: "bg-accent-from/20 text-white",
   auto: "bg-white/10 text-white/70",
-  safety: "bg-amber-500/15 text-amber-100",
+  safety: "bg-warn/15 text-warn-fg",
 };
 
 export function WorldBackupsTab({
@@ -118,7 +118,7 @@ export function WorldBackupsTab({
           <AssetIcon name="folder" className="h-4 w-4" />
           {tt("worldTools.backups.openFolder")}
         </button>
-        {gameRunning ? <span className="text-[0.75rem] text-amber-100/80">{tt("worldTools.backups.runningHint")}</span> : null}
+        {gameRunning ? <span className="text-[0.75rem] text-warn-fg/80">{tt("worldTools.backups.runningHint")}</span> : null}
       </div>
       <p className="text-[0.8125rem] text-white/50">{tt("worldTools.backups.hint")}</p>
 
@@ -153,7 +153,7 @@ export function WorldBackupsTab({
                 type="button"
                 onClick={() => void remove(b)}
                 disabled={busy !== null}
-                className="icon-btn hover:!bg-red-500/15 hover:!text-red-200"
+                className="icon-btn hover:!bg-danger/15 hover:!text-danger-fg"
                 aria-label={tt("worldTools.backups.delete")}
                 title={tt("worldTools.backups.delete")}
               >

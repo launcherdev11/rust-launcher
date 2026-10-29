@@ -446,8 +446,8 @@ html.launcher-linux .dock-backdrop img {
 }
 
 .dock-chip img {
-  height: 0.875rem;
-  width: 0.875rem;
+  height: 1rem;
+  width: 1rem;
   object-fit: contain;
 }
 

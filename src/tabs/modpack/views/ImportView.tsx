@@ -273,7 +273,7 @@ export function ImportView({ ctx }: Props) {
               </button>
             </div>
             {externalImportScanError && (
-              <p className="mt-2 text-xs text-amber-200/90">{externalImportScanError}</p>
+              <p className="mt-2 text-xs text-warn-fg/90">{externalImportScanError}</p>
             )}
           </div>
         </div>

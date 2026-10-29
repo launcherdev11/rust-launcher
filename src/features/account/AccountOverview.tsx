@@ -111,7 +111,7 @@ export function SavedAccountsList({
                   <button
                     type="button"
                     onClick={() => onRemove(acc.id)}
-                    className="interactive-press shrink-0 rounded-lg p-2 opacity-40 transition hover:bg-red-500/15 hover:opacity-100 group-hover:opacity-80"
+                    className="interactive-press shrink-0 rounded-lg p-2 opacity-40 transition hover:bg-danger/15 hover:opacity-100 group-hover:opacity-80"
                     title={tt("app.accounts.removeTitle")}
                     aria-label={tt("app.accounts.removeTitle")}
                   >
@@ -225,13 +225,13 @@ export function OverviewProgressCard({
               recent.map((a) => (
                 <div
                   key={a.code}
-                  className="flex items-center gap-2.5 rounded-xl border border-amber-400/20 bg-amber-500/[0.07] px-2.5 py-2"
+                  className="flex items-center gap-2.5 rounded-xl border border-warn-line/20 bg-warn/[0.07] px-2.5 py-2"
                 >
                   <AchievementIcon className="h-4 w-4 shrink-0 object-contain" />
                   <p className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold text-white/90">
                     {localizedAchievementField(language, a.code, "title", a.title)}
                   </p>
-                  <span className="shrink-0 text-[0.75rem] text-amber-200/60">
+                  <span className="shrink-0 text-[0.75rem] text-warn-fg/60">
                     {formatAchievementDate(language, a.unlocked_at)}
                   </span>
                 </div>
@@ -251,7 +251,7 @@ export function OverviewProgressCard({
                     <div className="mt-1 flex items-center gap-2">
                       <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
                         <div
-                          className="h-full rounded-full bg-amber-300/60"
+                          className="h-full rounded-full bg-warn-hi/60"
                           style={{ width: `${Math.max(3, Math.round(progress.ratio * 100))}%` }}
                         />
                       </div>

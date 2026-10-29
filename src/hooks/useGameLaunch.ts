@@ -502,7 +502,7 @@ export function useGameLaunch({
     isLaunching
       ? "accent-bg opacity-60 cursor-not-allowed"
       : gameStatus === "running" || isStopping
-        ? "bg-red-600 hover:bg-red-500"
+        ? "bg-danger-strong hover:bg-danger"
         : "accent-bg hover:opacity-90";
 
   const primaryLabel = useMemo(() => {

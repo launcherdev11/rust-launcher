@@ -4,25 +4,39 @@ pub(crate) fn apply_windows_graphics_preference(
     java_path: &std::path::Path,
     adapter: Option<&str>,
 ) {
-    let Some(adapter) = adapter.map(str::trim).filter(|value| !value.is_empty()) else {
-        return;
+    const KEY: &str = "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences";
+    let value_name = java_path.to_string_lossy().to_string();
+
+    let reg = |args: &[&str]| -> bool {
+        let mut c = std::process::Command::new("reg");
+        c.args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        crate::infra::process::hide_console(&mut c);
+        c.status().is_ok_and(|s| s.success())
     };
-    let lower = adapter.to_lowercase();
-    let integrated = lower.contains("integrated")
-        || lower.contains("uhd")
-        || lower.contains("iris")
-        || lower.contains("vega")
-        || lower.contains("radeon graphics");
-    let preference = if integrated { "1" } else { "2" };
-    let path = java_path.to_string_lossy().replace('\\', "\\\\");
-    let key = "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences";
-    let escaped_path = path.replace('\'', "''");
-    let command = format!("New-Item -Path '{key}' -Force | Out-Null; Set-ItemProperty -Path '{key}' -Name '{escaped_path}' -Value 'GpuPreference={preference};' -Type String");
-    let mut ps = std::process::Command::new("powershell");
-    ps.args(["-NoProfile", "-NonInteractive", "-Command", &command]);
-    crate::infra::process::hide_console(&mut ps);
-    let _ = ps.status();
-    cmd.env("MC16_SELECTED_GRAPHICS_ADAPTER", adapter);
+
+    let preference = match adapter.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(adapter) => {
+            let lower = adapter.to_lowercase();
+            let integrated = lower.contains("integrated")
+                || lower.contains("uhd")
+                || lower.contains("iris")
+                || lower.contains("vega")
+                || lower.contains("radeon graphics");
+            cmd.env("MC16_SELECTED_GRAPHICS_ADAPTER", adapter);
+            if integrated { "1" } else { "2" }
+        }
+        None => {
+            if reg(&["query", KEY, "/v", &value_name]) {
+                return;
+            }
+            "2"
+        }
+    };
+
+    let data = format!("GpuPreference={preference};");
+    reg(&["add", KEY, "/v", &value_name, "/t", "REG_SZ", "/d", &data, "/f"]);
 }
 
 #[cfg(not(target_os = "windows"))]

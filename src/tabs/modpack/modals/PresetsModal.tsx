@@ -106,7 +106,7 @@ export function PresetsModal({ ctx }: Props) {
                       <button
                         type="button"
                         onClick={() => void handleDeleteBuildPreset(preset)}
-                        className="interactive-press rounded-xl bg-red-600/80 px-3 py-1 text-[0.8125rem] font-semibold text-white hover:bg-red-500"
+                        className="interactive-press rounded-xl bg-danger-strong/80 px-3 py-1 text-[0.8125rem] font-semibold text-white hover:bg-danger"
                       >
                         {tt("modpacks.presets.delete")}
                       </button>

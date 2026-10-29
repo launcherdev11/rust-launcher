@@ -221,7 +221,7 @@ function VersionsPane({
                         l.kind === "added"
                           ? "bg-emerald-500/10 text-emerald-200"
                           : l.kind === "removed"
-                            ? "bg-red-500/10 text-red-200"
+                            ? "bg-danger/10 text-danger-fg"
                             : "text-white/55"
                       }`}
                     >
@@ -533,7 +533,7 @@ export function ConfigEditorPanel({
                 </button>
               </div>
               {open.lossy ? (
-                <div className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-[0.75rem] text-amber-100/85">
+                <div className="rounded-lg bg-warn/10 px-3 py-1.5 text-[0.75rem] text-warn-fg/85">
                   {tt("configEditor.lossy")}
                 </div>
               ) : null}
@@ -541,7 +541,7 @@ export function ConfigEditorPanel({
                 <button
                   type="button"
                   onClick={() => problem.line && editorRef.current?.focusLine(problem.line)}
-                  className="rounded-lg bg-red-500/10 px-3 py-1.5 text-left text-[0.75rem] text-red-200/90"
+                  className="rounded-lg bg-danger/10 px-3 py-1.5 text-left text-[0.75rem] text-danger-fg/90"
                 >
                   {problem.line
                     ? tt("configEditor.problemAt", { line: problem.line, message: problem.message })

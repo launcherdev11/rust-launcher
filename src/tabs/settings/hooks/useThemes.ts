@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { confirmDialog } from "../../../lib/confirmDialog";
+import { promptDialog } from "../../../lib/promptDialog";
 import { errorMessage, type ThemeInfo } from "../../../lib/customTheme";
 import { invoke } from "@tauri-apps/api/core";
 import { isSeasonalThemePeriod } from "../../../lib/seasonalTheme";
@@ -85,10 +86,14 @@ export function useThemes(deps: ThemesDeps) {
   };
 
   const createTheme = async () => {
-    const name = window.prompt(tt("settings.launcher.customThemes.createPrompt"));
-    if (!name?.trim()) return;
+    const name = await promptDialog({
+      title: tt("settings.launcher.customThemes.create"),
+      label: tt("settings.launcher.customThemes.createPrompt"),
+      confirmLabel: tt("settings.launcher.customThemes.create"),
+    });
+    if (!name) return;
     try {
-      const created = await invoke<ThemeInfo>("create_empty_theme", { name: name.trim() });
+      const created = await invoke<ThemeInfo>("create_empty_theme", { name });
       await refreshThemes();
       updateSettings({ custom_theme_id: created.id });
       setEditingThemeId(created.id);
@@ -126,17 +131,19 @@ export function useThemes(deps: ThemesDeps) {
 
   const duplicateActiveTheme = async () => {
     if (!activeThemeId) return;
-    const name = window.prompt(
-      tt("settings.launcher.customThemes.duplicatePrompt"),
-      tt("settings.launcher.customThemes.duplicateDefault", {
+    const name = await promptDialog({
+      title: tt("settings.launcher.customThemes.duplicateTitle"),
+      label: tt("settings.launcher.customThemes.duplicatePrompt"),
+      defaultValue: tt("settings.launcher.customThemes.duplicateDefault", {
         name: activeTheme?.name ?? activeThemeId,
       }),
-    );
-    if (!name?.trim()) return;
+      confirmLabel: tt("settings.launcher.customThemes.duplicate"),
+    });
+    if (!name) return;
     try {
       const copy = await invoke<ThemeInfo>("duplicate_theme", {
         themeId: activeThemeId,
-        name: name.trim(),
+        name,
       });
       await refreshThemes();
       updateSettings({ custom_theme_id: copy.id });

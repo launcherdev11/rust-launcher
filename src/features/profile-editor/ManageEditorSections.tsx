@@ -117,7 +117,7 @@ export function EditorSideNav({
             {item.id === "conflicts" && (conflictCount > 0 || conflictsLoading) ? (
               <span
                 className={`rounded-md px-1.5 py-0.5 text-[0.75rem] font-bold ${
-                  active ? "bg-white/15 text-white" : "bg-amber-500/30 text-amber-100"
+                  active ? "bg-white/15 text-white" : "bg-warn/30 text-warn-fg"
                 }`}
               >
                 {conflictsLoading && conflictCount === 0 ? "…" : conflictCount}
@@ -452,7 +452,7 @@ export function WorldsPanel({
                 type="button"
                 disabled={deleteBusy}
                 onClick={onDeleteSelected}
-                className="interactive-press rounded-xl bg-red-600/85 px-3.5 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                className="interactive-press rounded-xl bg-danger-strong/85 px-3.5 py-2 text-xs font-semibold text-white hover:bg-danger-strong disabled:opacity-50"
               >
                 {deleteBusy
                   ? tt("modpacks.editor.worldsDeleting")
@@ -542,7 +542,7 @@ function ConflictCard({
   return (
     <div
       className={`rounded-2xl px-3.5 py-3 text-sm ${
-        c.severity === "error" ? "bg-rose-500/10" : "bg-amber-500/10"
+        c.severity === "error" ? "bg-danger/10" : "bg-warn/10"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -553,8 +553,8 @@ function ConflictCard({
         <div
           className={`shrink-0 rounded-xl px-2.5 py-1 text-[0.8125rem] font-semibold ${
             c.severity === "error"
-              ? "bg-rose-500/30 text-rose-100"
-              : "bg-amber-500/30 text-amber-100"
+              ? "bg-danger/30 text-danger-fg"
+              : "bg-warn/30 text-warn-fg"
           }`}
         >
           {c.severity === "error"
@@ -654,7 +654,7 @@ export function ConflictsPanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-base font-semibold text-white">
           <span>{tt("modpacks.conflicts.title")}</span>
-          <span className="rounded-md bg-amber-500/20 px-2.5 py-0.5 text-[0.75rem] font-semibold text-amber-100">
+          <span className="rounded-md bg-warn/20 px-2.5 py-0.5 text-[0.75rem] font-semibold text-warn-fg">
             {tt("modpacks.editor.beta")}
           </span>
         </div>
@@ -682,12 +682,12 @@ export function ConflictsPanel({
       {!loading && conflicts.length > 0 ? (
         <div className="flex flex-wrap gap-2 text-xs">
           {errorCount > 0 ? (
-            <span className="rounded-xl bg-rose-500/25 px-3 py-1.5 font-semibold text-rose-100">
+            <span className="rounded-xl bg-danger/25 px-3 py-1.5 font-semibold text-danger-fg">
               {tt("modpacks.conflicts.summaryErrors", { count: errorCount })}
             </span>
           ) : null}
           {warningCount > 0 ? (
-            <span className="rounded-xl bg-amber-500/25 px-3 py-1.5 font-semibold text-amber-100">
+            <span className="rounded-xl bg-warn/25 px-3 py-1.5 font-semibold text-warn-fg">
               {tt("modpacks.conflicts.summaryWarnings", { count: warningCount })}
             </span>
           ) : null}
@@ -1091,7 +1091,7 @@ export function BackupsSectionPanel({
                     type="button"
                     onClick={() => onDelete(b.id)}
                     disabled={busy}
-                    className="interactive-press rounded-xl bg-red-600/20 px-3.5 py-2 text-xs font-semibold text-red-200 hover:bg-red-600/30 disabled:opacity-50"
+                    className="interactive-press rounded-xl bg-danger-strong/20 px-3.5 py-2 text-xs font-semibold text-danger-fg hover:bg-danger-strong/30 disabled:opacity-50"
                   >
                     {tt("modpacks.backups.delete")}
                   </button>

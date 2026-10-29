@@ -7,6 +7,8 @@ import {
 } from "../helpers";
 import { invoke } from "@tauri-apps/api/core";
 import { ProfileCardIconBackdrop, ProfileInstanceIcon } from "../../../components/profile_instance_icon";
+import { LoaderIcon } from "../../../components/loader_icon";
+import { LOADER_ICONS } from "../../../lib/loaderIcons";
 import { formatByteSize, formatPlaytimeShort } from "../../../i18n";
 import {
   GridViewIcon,
@@ -156,9 +158,20 @@ export function ListView({ ctx }: Props) {
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5">
             <span className="tag shrink-0">{p.game_version}</span>
-            <span className="tag shrink-0">
-              {loaderLabels[p.loader as LoaderId] ?? p.loader}
-            </span>
+            {LOADER_ICONS[p.loader] ? (
+              <span
+                className="flex shrink-0 items-center text-[color:var(--fg-muted)]"
+                title={loaderLabels[p.loader as LoaderId] ?? p.loader}
+                aria-label={loaderLabels[p.loader as LoaderId] ?? p.loader}
+                role="img"
+              >
+                <LoaderIcon loader={p.loader} />
+              </span>
+            ) : (
+              <span className="tag shrink-0">
+                {loaderLabels[p.loader as LoaderId] ?? p.loader}
+              </span>
+            )}
             {isSelected && (
               <span className="tag tag-accent truncate">{tt("modpacks.list.activeBadge")}</span>
             )}
@@ -472,7 +485,7 @@ export function ListView({ ctx }: Props) {
                 <button
                   type="button"
                   onClick={() => setPendingBulkDeleteProfileIds([...multiSelectedProfileIds])}
-                  className="rounded p-0.5 text-red-300 hover:bg-red-600/25"
+                  className="rounded p-0.5 text-danger-hi hover:bg-danger-strong/25"
                   title={tt("modpacks.list.deleteSelected")}
                   aria-label={tt("modpacks.list.deleteSelected")}
                 >

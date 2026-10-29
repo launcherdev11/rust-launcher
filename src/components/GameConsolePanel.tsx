@@ -70,7 +70,7 @@ export function GameConsolePanel({
     gameStatus === "running"
       ? "bg-emerald-400"
       : gameStatus === "crashed"
-        ? "bg-red-500"
+        ? "bg-danger"
         : gameStatus === "stopped"
           ? "bg-sky-400"
           : "bg-gray-500";

@@ -105,7 +105,7 @@ export function AccountSwitcher({
                 <button
                   type="button"
                   onClick={() => onRemove(acc.id)}
-                  className="interactive-press shrink-0 rounded-lg p-2 text-white/35 hover:bg-red-500/15 hover:text-red-300"
+                  className="interactive-press shrink-0 rounded-lg p-2 text-white/35 hover:bg-danger/15 hover:text-danger-hi"
                   title={tt("app.accounts.removeTitle")}
                 >
                   <DeleteIcon className="h-4 w-4" />

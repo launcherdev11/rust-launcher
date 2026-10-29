@@ -15,6 +15,19 @@ module.exports = {
           to: mixed("var(--accent-to)"),
           hi: mixed("var(--accent-hi)"),
         },
+        warn: {
+          DEFAULT: mixed("var(--warn)"),
+          line: mixed("var(--warn-line)"),
+          hi: mixed("var(--warn-hi)"),
+          fg: mixed("var(--warn-fg)"),
+        },
+        danger: {
+          DEFAULT: mixed("var(--danger)"),
+          strong: mixed("var(--danger-strong)"),
+          line: mixed("var(--danger-line)"),
+          hi: mixed("var(--danger-hi)"),
+          fg: mixed("var(--danger-fg)"),
+        },
         ink: {
           950: mixed("var(--ink-0)"),
           900: mixed("var(--ink-1)"),

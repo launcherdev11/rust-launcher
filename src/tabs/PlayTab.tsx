@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CursorHint, useCursorHint } from "../components/CursorHint";
 import { GameConsolePanel } from "../components/GameConsolePanel";
+import { LoaderIcon } from "../components/loader_icon";
 import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
 import { InputClearButton, Spinner } from "../components/ui";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
@@ -19,14 +20,6 @@ export type PlayHomeProfile = {
 };
 
 type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
-
-const LOADER_ICONS: Record<LoaderId, string> = {
-  vanilla: "",
-  fabric: "",
-  forge: "",
-  quilt: "",
-  neoforge: "",
-};
 
 type VersionSummary = {
   id: string;
@@ -492,9 +485,7 @@ export function PlayTab({
                     }}
                     className="dock-chip"
                   >
-                    {LOADER_ICONS[loader] ? (
-                      <img src={LOADER_ICONS[loader]} alt="" draggable={false} />
-                    ) : null}
+                    <LoaderIcon loader={loader} />
                     {loaderLabels[loader]}
                     <span className="text-[0.75rem] text-white/50">▾</span>
                   </button>
@@ -517,9 +508,7 @@ export function PlayTab({
                                 : "text-white/80 hover:bg-white/10"
                             }`}
                           >
-                            {LOADER_ICONS[id] ? (
-                              <img src={LOADER_ICONS[id]} alt="" className="h-3.5 w-3.5 object-contain" />
-                            ) : null}
+                            <LoaderIcon loader={id} reserveSpace />
                             <span>{loaderLabels[id]}</span>
                           </button>
                         );
@@ -592,7 +581,7 @@ export function PlayTab({
                           />
                         </div>
                         {snapshotHintVisible && (
-                          <div className="mt-1 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[0.8125rem] text-amber-200">
+                          <div className="mt-1 rounded-xl border border-warn-line/25 bg-warn/10 px-3 py-2 text-[0.8125rem] text-warn-fg">
                             {tt("play.version.snapshotHint")}
                           </div>
                         )}
@@ -698,7 +687,7 @@ export function PlayTab({
                   <button
                     type="button"
                     onClick={handleCancelInstall}
-                    className="play-btn min-w-0 bg-red-600 px-5"
+                    className="play-btn min-w-0 bg-danger-strong px-5"
                   >
                     {tt("play.install.cancel")}
                   </button>

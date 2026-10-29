@@ -225,7 +225,7 @@ export function PlatformNotificationsPanel({
         </div>
       </div>
 
-      {error ? <p className="text-sm text-red-300/90">{error}</p> : null}
+      {error ? <p className="text-sm text-danger-hi/90">{error}</p> : null}
 
       {list}
     </div>

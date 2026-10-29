@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -221,11 +222,9 @@ fn subdir_for_class_id(class_id: Option<u32>) -> &'static str {
     }
 }
 
-async fn resolve_mod_urls(
-    project_id: u32,
-    file_id: u32,
-    meta: &CfFile,
-) -> Vec<String> {
+// Без downloadUrl файл всё равно лежит на CDN по предсказуемому пути, поэтому
+// лишний запрос к API (который тратит общий лимит прокси) не делаем.
+fn resolve_mod_urls(file_id: u32, meta: &CfFile) -> Vec<String> {
     let mut urls = Vec::new();
     if let Some(url) = meta
         .download_url
@@ -234,8 +233,6 @@ async fn resolve_mod_urls(
         .filter(|u| !u.is_empty())
     {
         urls.push(url.to_string());
-    } else if let Ok(url) = curseforge_resolve_download_url(project_id, file_id).await {
-        urls.push(url);
     }
     urls.extend(curseforge_cdn_fallback_urls(file_id, &meta.file_name));
     urls
@@ -280,7 +277,7 @@ async fn download_manifest_file(
         }
     }
 
-    let urls = resolve_mod_urls(file.project_id, file.file_id, &meta).await;
+    let urls = resolve_mod_urls(file.file_id, &meta);
     let client = http_client_for_binary_download(false);
     fetch_verified(&client, &urls, &dest, sha1.as_deref(), None)
         .await
@@ -345,12 +342,103 @@ where
     let instance_dir = instance_dir.to_path_buf();
     let concurrency = concurrency.clamp(1, 32);
 
+    let mut failed = run_download_pass(
+        files.to_vec(),
+        &metas,
+        &class_ids,
+        &instance_dir,
+        concurrency,
+        &completed,
+        total,
+        &mut on_progress,
+    )
+    .await;
+
+    // Сбои первого прохода чаще всего временные (лимит запросов прокси, обрыв
+    // соединения с CDN), поэтому даём им ещё попытки с паузой и меньшим параллелизмом.
+    for (pass, delay_secs) in [(2u32, 5u64), (3, 20)] {
+        if failed.is_empty() {
+            break;
+        }
+        check_download_cancelled()?;
+        eprintln!(
+            "[curseforge_installer] повторная загрузка {} файлов (проход {pass})",
+            failed.len()
+        );
+        on_progress(InstallProgress {
+            phase: "files".into(),
+            current: completed.load(Ordering::SeqCst),
+            total,
+            message: format!("Повторная загрузка файлов: {}", failed.len()),
+        });
+        tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+        check_download_cancelled()?;
+
+        let retry_files: Vec<ManifestFile> = failed
+            .iter()
+            .map(|f| ManifestFile {
+                project_id: f.project_id,
+                file_id: f.file_id,
+            })
+            .collect();
+        let mut retry_metas = metas.clone();
+        let missing: Vec<u32> = retry_files
+            .iter()
+            .map(|f| f.file_id)
+            .filter(|id| !retry_metas.contains_key(id))
+            .collect();
+        if !missing.is_empty() {
+            if let Ok(found) = curseforge_get_files_bulk(&missing).await {
+                retry_metas.extend(found);
+            }
+        }
+
+        failed = run_download_pass(
+            retry_files,
+            &retry_metas,
+            &class_ids,
+            &instance_dir,
+            4,
+            &completed,
+            total,
+            &mut on_progress,
+        )
+        .await;
+    }
+
+    if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+        return Err(DOWNLOAD_CANCELLED_MSG.to_string());
+    }
+
+    for f in &failed {
+        eprintln!(
+            "[curseforge_installer] не скачан projectID={} fileID={}: {}",
+            f.project_id, f.file_id, f.reason
+        );
+    }
+    Ok((completed.load(Ordering::SeqCst), failed))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_download_pass<F>(
+    files: Vec<ManifestFile>,
+    metas: &HashMap<u32, CfFile>,
+    class_ids: &HashMap<u32, u32>,
+    instance_dir: &Path,
+    concurrency: usize,
+    completed: &Arc<AtomicU32>,
+    total: u32,
+    on_progress: &mut F,
+) -> Vec<FailedMod>
+where
+    F: FnMut(InstallProgress) + Send,
+{
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InstallProgress>();
 
     let download_fut = async {
-        let results: Vec<Result<(), FailedMod>> = stream::iter(files.to_vec())
+        let results: Vec<Result<(), FailedMod>> = stream::iter(files)
             .map(|file| {
-                let instance_dir = instance_dir.clone();
+                let instance_dir = instance_dir.to_path_buf();
                 let completed = completed.clone();
                 let tx = tx.clone();
                 let meta = metas.get(&file.file_id).cloned();
@@ -391,26 +479,7 @@ where
     };
 
     let (results, _) = tokio::join!(download_fut, progress_fut);
-
-    if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
-        return Err(DOWNLOAD_CANCELLED_MSG.to_string());
-    }
-
-    let mut failed = Vec::new();
-    let mut ok = 0u32;
-    for r in results {
-        match r {
-            Ok(()) => ok = ok.saturating_add(1),
-            Err(f) => {
-                eprintln!(
-                    "[curseforge_installer] не скачан projectID={} fileID={}: {}",
-                    f.project_id, f.file_id, f.reason
-                );
-                failed.push(f);
-            }
-        }
-    }
-    Ok((ok, failed))
+    results.into_iter().filter_map(Result::err).collect()
 }
 
 pub async fn install_curseforge_zip<F>(
@@ -626,24 +695,9 @@ async fn save_profile_icon_from_url(profile_id: &str, icon_url: &str) -> Result<
     let dir = instance_dir(profile_id)?;
     let dest = dir.join("icon.png");
     let client = http_client(false);
-    let resp = client
-        .get(trimmed)
-        .send()
+    fetch_verified(&client, &[trimmed.to_string()], &dest, None, None)
         .await
         .map_err(|e| format!("Ошибка загрузки иконки сборки: {e}"))?;
-    if !resp.status().is_success() {
-        return Ok(());
-    }
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("Ошибка чтения иконки сборки: {e}"))?;
-    if bytes.is_empty() {
-        return Ok(());
-    }
-    tokio::fs::write(&dest, &bytes)
-        .await
-        .map_err(|e| format!("Не удалось сохранить иконку сборки: {e}"))?;
     let icon_path = dest.to_str().map(|s| s.to_string());
     set_profile_icon_path(profile_id, icon_path)?;
     Ok(())

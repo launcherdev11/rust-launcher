@@ -805,33 +805,39 @@ export function ModsTab({
   );
 
   const buildDownloadDeps = useCallback(
-    (projectKey: string | null) => ({
-      contentProvider,
-      contentType,
-      projectKey,
-      gameVersion,
-      loader,
-      activeProfileId,
-      projectTitle: detail?.title ?? null,
-      projectIconUrl: detail?.icon_url ?? null,
-      tt,
-      showNotification,
-      registerDownloadJob,
-      finishDownloadJob,
-      makeDownloadJobId,
-      onOpenModpacksTab,
-      modpackDownloadJobIdRef,
-      modpackImportStopReasonRef,
-      setModpackImportBusy,
-      setModpackImportProgress,
-      onInstalled: markInstalled,
-    }),
+    (projectKey: string | null) => {
+      const projectDetail = detail && detail.key === projectKey ? detail : null;
+      const fromCatalog = projectKey
+        ? catalogProjects.find((p) => p.key === projectKey)
+        : undefined;
+      return {
+        contentProvider,
+        contentType,
+        projectKey,
+        gameVersion,
+        loader,
+        activeProfileId,
+        projectTitle: projectDetail?.title ?? fromCatalog?.title ?? null,
+        projectIconUrl: projectDetail?.icon_url || fromCatalog?.icon_url || null,
+        tt,
+        showNotification,
+        registerDownloadJob,
+        finishDownloadJob,
+        makeDownloadJobId,
+        onOpenModpacksTab,
+        modpackDownloadJobIdRef,
+        modpackImportStopReasonRef,
+        setModpackImportBusy,
+        setModpackImportProgress,
+        onInstalled: markInstalled,
+      };
+    },
     [
       activeProfileId,
+      catalogProjects,
       contentProvider,
       contentType,
-      detail?.icon_url,
-      detail?.title,
+      detail,
       finishDownloadJob,
       gameVersion,
       loader,
@@ -1083,7 +1089,7 @@ export function ModsTab({
                   setVersionLoaderLocked(false);
                   setShowUnlockConfirm(false);
                 }}
-                className="interactive-press rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+                className="interactive-press rounded-xl bg-warn px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-warn-line"
               >
                 {tt("common.change")}
               </button>

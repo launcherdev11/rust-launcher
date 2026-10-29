@@ -49,9 +49,9 @@ type LogAnalyzerPanelProps = {
 function severityBar(severity: LogAnalyzerSeverity): string {
   switch (severity) {
     case "error":
-      return "bg-red-400/80";
+      return "bg-danger-line/80";
     case "warning":
-      return "bg-amber-400/80";
+      return "bg-warn-line/80";
     default:
       return "bg-sky-400/80";
   }
@@ -115,7 +115,7 @@ function CrashFixButtons({
         );
       })}
       {actions.some((a) => states[fixKey(a)] === "failed") ? (
-        <span className="text-[0.75rem] text-red-200/80">{tt("crashFixes.failed")}</span>
+        <span className="text-[0.75rem] text-danger-fg/80">{tt("crashFixes.failed")}</span>
       ) : null}
     </div>
   );
@@ -444,8 +444,8 @@ export function LogAnalyzerPanel({
         ? "bg-emerald-400"
         : "bg-white/30"
       : errorCount > 0
-        ? "bg-red-400"
-        : "bg-amber-400";
+        ? "bg-danger-line"
+        : "bg-warn-line";
 
   return (
     <div className={`shrink-0 ${className}`}>
@@ -469,8 +469,8 @@ export function LogAnalyzerPanel({
               <span
                 className={`shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-bold leading-none tabular-nums ${
                   errorCount > 0
-                    ? "bg-red-500/20 text-red-200/90"
-                    : "bg-amber-500/20 text-amber-100/90"
+                    ? "bg-danger/20 text-danger-fg/90"
+                    : "bg-warn/20 text-warn-fg/90"
                 }`}
               >
                 {findings.length}
@@ -540,7 +540,7 @@ export function LogAnalyzerPanel({
                   </span>
                 ) : null}
                 {diskError ? (
-                  <span className="block text-amber-200/70">
+                  <span className="block text-warn-fg/70">
                     {tt("play.console.analyzer.diskReadFailed")}
                   </span>
                 ) : null}

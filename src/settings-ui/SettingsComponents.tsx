@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Switch } from "../components/ui/Switch";
 
 export type SettingsToggleProps = {
   label: string;
@@ -260,23 +261,12 @@ export const SettingsSwitch: React.FC<SettingsSwitchProps> = ({
   label,
   disabled,
 }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    aria-label={label ? String(trimLabel(label)) : undefined}
+  <Switch
+    checked={checked}
+    onChange={onChange}
+    label={label ? String(trimLabel(label)) : undefined}
     disabled={disabled}
-    onClick={() => onChange(!checked)}
-    className={`interactive-press relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-      checked ? "accent-bg" : "bg-white/[0.12] hover:bg-white/[0.18]"
-    }`}
-  >
-    <span
-      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow transition-transform duration-200 ease-out ${
-        checked ? "translate-x-5 bg-[var(--on-accent,#fff)]" : "translate-x-0 bg-white"
-      }`}
-    />
-  </button>
+  />
 );
 
 export type SettingsSwitchRowProps = Omit<SettingsRowProps, "children" | "stacked"> & {

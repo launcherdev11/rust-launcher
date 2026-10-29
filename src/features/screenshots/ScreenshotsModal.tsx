@@ -306,7 +306,7 @@ export function ScreenshotsModal({
                     </button>
                     <button
                       type="button"
-                      className="interactive-press inline-flex items-center gap-1 rounded-xl bg-red-500/20 px-3 py-1 text-[0.8125rem] font-semibold text-red-100 hover:bg-red-500/30"
+                      className="interactive-press inline-flex items-center gap-1 rounded-xl bg-danger/20 px-3 py-1 text-[0.8125rem] font-semibold text-danger-fg hover:bg-danger/30"
                       onClick={() => void handleDelete(selected.name)}
                     >
                       <DeleteIcon className="h-3 w-3" />

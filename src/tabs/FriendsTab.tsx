@@ -149,7 +149,7 @@ function StatCard({
     accent === "emerald"
       ? "text-emerald-100"
       : accent === "amber"
-        ? "text-amber-100"
+        ? "text-warn-fg"
         : accent === "sky"
           ? "text-sky-100"
           : "text-white/90";
@@ -645,7 +645,7 @@ export function FriendsTab({
 
   const statusTone = (status: string) => {
     if (status === "open") return "bg-emerald-500/15 text-emerald-200 ring-emerald-500/30";
-    if (status === "full") return "bg-amber-500/15 text-amber-100 ring-amber-500/30";
+    if (status === "full") return "bg-warn/15 text-warn-fg ring-warn/30";
     return "bg-white/10 text-white/60 ring-white/15";
   };
 
@@ -730,7 +730,7 @@ export function FriendsTab({
             loading={busyAction === `remove:${f.user_id}`}
             disabled={loading && busyAction !== `remove:${f.user_id}`}
             onClick={() => void handleRemoveFriend(f)}
-            className="hover:border-red-400/30 hover:bg-red-600/15 hover:text-red-100"
+            className="hover:border-danger-line/30 hover:bg-danger-strong/15 hover:text-danger-fg"
           >
             {tt("friends.remove")}
           </ActionButton>
@@ -985,11 +985,11 @@ export function FriendsTab({
           <div className="flex flex-col gap-5">
             <Panel className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="ui-section text-amber-200/80">
+                <p className="ui-section text-warn-fg/80">
                   {tt("friends.incomingTitle")}
                 </p>
                 {incomingRequests.length > 0 ? (
-                  <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-[0.8125rem] font-bold text-amber-100">
+                  <span className="rounded-md bg-warn/20 px-2 py-0.5 text-[0.8125rem] font-bold text-warn-fg">
                     {incomingRequests.length}
                   </span>
                 ) : null}
@@ -1003,7 +1003,7 @@ export function FriendsTab({
                     <li
                       key={r.request_id}
                       style={{ "--i": index } as CSSProperties}
-                      className="list-item-in flex flex-col gap-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2.5"
+                      className="list-item-in flex flex-col gap-3 rounded-xl border border-warn-line/20 bg-warn/10 px-3 py-2.5"
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
                         <img
@@ -1026,7 +1026,7 @@ export function FriendsTab({
                             sponsorTitle={tt("common.sponsor")}
                           />
                           {r.created_at ? (
-                            <p className="text-[0.8125rem] text-amber-100/60">
+                            <p className="text-[0.8125rem] text-warn-fg/60">
                               {formatLastSeen(r.created_at, language, tt, nowMs)}
                             </p>
                           ) : null}

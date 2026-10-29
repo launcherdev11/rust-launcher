@@ -184,7 +184,7 @@ export function UserProfileModal({
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {error ? (
-            <p className="mb-3 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            <p className="mb-3 rounded-xl border border-danger-line/25 bg-danger/10 px-3 py-2 text-sm text-danger-fg">
               {error}
             </p>
           ) : null}

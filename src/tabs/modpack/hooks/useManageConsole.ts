@@ -93,7 +93,7 @@ export function useManageConsole(deps: ManageConsoleDeps) {
   const manageConsoleStatusDotClass = useMemo(() => {
     if (selectedLogSessionId !== "live") return "bg-gray-500";
     if (gameStatus === "running") return "bg-emerald-400";
-    if (gameStatus === "crashed") return "bg-red-500";
+    if (gameStatus === "crashed") return "bg-danger";
     if (gameStatus === "stopped") return "bg-sky-400";
     return "bg-gray-500";
   }, [selectedLogSessionId, gameStatus]);

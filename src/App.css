@@ -190,8 +190,8 @@
 }
 
 .tab-split-pane-close:hover {
-  background: rgba(220, 38, 38, 0.35);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--danger-strong) 35%, transparent);
+  color: var(--danger-fg);
 }
 
 .tab-split-sidebar-close {
@@ -219,8 +219,8 @@
 }
 
 .tab-split-sidebar-close:hover {
-  background: rgba(220, 38, 38, 0.4);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--danger-strong) 40%, transparent);
+  color: var(--danger-fg);
 }
 
 .tab-split-sidebar-close-vertical {

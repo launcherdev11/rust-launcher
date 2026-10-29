@@ -80,6 +80,15 @@ export async function downloadCatalogVersion(
       : Boolean(v.file_url && v.filename);
   if (!canDownload) return;
 
+  if (
+    contentType === "mod" &&
+    contentProvider === "modrinth" &&
+    !gameVersion.trim()
+  ) {
+    showNotification("warning", tt("mods.gameVersionRequired"));
+    return;
+  }
+
   const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
   const jobLabel = projectTitle ?? v.filename;
   const fileKind: DownloadJobKind =

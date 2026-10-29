@@ -7,7 +7,7 @@ import {
   WorldsPanel,
 } from "../../../features/profile-editor/ManageEditorSections";
 import { ProfileInstanceIcon } from "../../../components/profile_instance_icon";
-import { InputClearButton } from "../../../components/ui";
+import { InputClearButton, Switch } from "../../../components/ui";
 import { ProfileInfoIcon } from "../../../components/profile_info_modal";
 import {
   EditIcon,
@@ -203,7 +203,6 @@ export function ManageView({ ctx }: Props) {
   } = ctx;
 
   const [openWorldName, setOpenWorldName] = useState<string | null>(null);
-  // A fresh array on every render would make the log analyzer re-run on each keystroke.
   const analyzerLines = useMemo(
     () => displayedConsoleLines.map((e) => e.line),
     [displayedConsoleLines],
@@ -918,7 +917,7 @@ export function ManageView({ ctx }: Props) {
               <button
                 type="button"
                 onClick={() => setEditorSection("conflicts")}
-                className="btn gap-1.5 border-amber-400/25 bg-amber-500/10 px-2.5 text-xs text-amber-100 hover:bg-amber-500/20"
+                className="btn gap-1.5 border-warn-line/25 bg-warn/10 px-2.5 text-xs text-warn-fg hover:bg-warn/20"
                 title={tt("modpacks.conflicts.openFromContent")}
                 aria-label={`${tt("modpacks.editor.nav.conflicts")}: ${profileConflicts.length}`}
               >
@@ -1033,14 +1032,10 @@ export function ManageView({ ctx }: Props) {
                       />
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={item.enabled}
-                        onClick={() => void handleToggleItemEnabled(item)}
-                        className={`interactive-press relative h-7 w-12 rounded-full transition-colors ${
-                          item.enabled ? "accent-bg" : "bg-white/15"
-                        }`}
+                      <Switch
+                        size="lg"
+                        checked={item.enabled}
+                        onChange={() => void handleToggleItemEnabled(item)}
                         title={
                           item.enabled
                             ? isShaders
@@ -1050,17 +1045,11 @@ export function ManageView({ ctx }: Props) {
                               ? tt("modpacks.manage.enableShader")
                               : tt("modpacks.manage.enableItem")
                         }
-                      >
-                        <span
-                          className={`absolute top-0.5 h-6 w-6 rounded-full shadow transition-[left] ${
-                            item.enabled ? "left-[1.375rem] bg-[var(--on-accent,#fff)]" : "left-0.5 bg-white"
-                          }`}
-                        />
-                      </button>
+                      />
                       <button
                         type="button"
                         onClick={() => void handleDeleteItem(item)}
-                        className="interactive-press rounded-lg bg-white/10 p-2 text-white/80 hover:bg-red-600 hover:text-white"
+                        className="interactive-press rounded-lg bg-white/10 p-2 text-white/80 hover:bg-danger-strong hover:text-white"
                         title={tt("common.delete")}
                       >
                         <DeleteIcon className="h-4 w-4" />
@@ -1110,7 +1099,7 @@ export function ManageView({ ctx }: Props) {
                     selectedContentNames.has(item.name)
                       ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
                       : hasConflict
-                        ? "bg-amber-500/10"
+                        ? "bg-warn/10"
                         : "bg-black/45"
                   } ${item.enabled ? "text-white/85" : "text-white/45 opacity-75"}`}
                 >
@@ -1139,32 +1128,22 @@ export function ManageView({ ctx }: Props) {
                       <button
                         type="button"
                         onClick={() => setEditorSection("conflicts")}
-                        className="interactive-press rounded-xl bg-amber-500/25 px-3 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-500/40"
+                        className="interactive-press rounded-xl bg-warn/25 px-3 py-1.5 text-xs font-bold text-warn-fg hover:bg-warn/40"
                         title={tt("modpacks.conflicts.openFromContent")}
                       >
                         !
                       </button>
                     ) : null}
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={item.enabled}
-                      onClick={() => void handleToggleItemEnabled(item)}
-                      className={`interactive-press relative h-7 w-12 rounded-full transition-colors ${
-                        item.enabled ? "accent-bg" : "bg-white/15"
-                      }`}
+                    <Switch
+                      size="lg"
+                      checked={item.enabled}
+                      onChange={() => void handleToggleItemEnabled(item)}
                       title={
                         item.enabled
                           ? tt("modpacks.manage.disableItem")
                           : tt("modpacks.manage.enableItem")
                       }
-                    >
-                      <span
-                        className={`absolute top-0.5 h-6 w-6 rounded-full shadow transition-[left] ${
-                          item.enabled ? "left-[1.375rem] bg-[var(--on-accent,#fff)]" : "left-0.5 bg-white"
-                        }`}
-                      />
-                    </button>
+                    />
                     {contentTab === "mods" &&
                       !contentUpdatesAvailabilityLoading &&
                       contentUpdatesAvailableFilenames.has(item.name) && (
@@ -1190,7 +1169,7 @@ export function ManageView({ ctx }: Props) {
                     <button
                       type="button"
                       onClick={() => void handleDeleteItem(item)}
-                      className="interactive-press rounded-lg bg-white/10 p-2 text-white/80 hover:bg-red-600 hover:text-white"
+                      className="interactive-press rounded-lg bg-white/10 p-2 text-white/80 hover:bg-danger-strong hover:text-white"
                       title={tt("common.delete")}
                     >
                       <DeleteIcon className="h-4 w-4" />

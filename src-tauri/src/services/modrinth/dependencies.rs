@@ -169,7 +169,10 @@ pub async fn collect_modrinth_required_downloads(
         return Err("version_id не может быть пустым".to_string());
     }
     if game_version.trim().is_empty() {
-        return Err("game_version не может быть пустым".to_string());
+        return Err(
+            "Не выбрана версия Minecraft: без неё не получится подобрать совместимые зависимости мода."
+                .to_string(),
+        );
     }
 
     DependencyResolver::new(client, game_version.trim(), loader.trim())

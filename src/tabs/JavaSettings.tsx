@@ -614,7 +614,7 @@ export function JavaSettingsTab({
             {tt("javaSettings.description")}
           </div>
           {profileId && (
-            <div className="text-xs text-amber-200/80">
+            <div className="text-xs text-warn-fg/80">
               {tt("javaSettings.runtime.profileHint")}
             </div>
           )}
@@ -769,7 +769,7 @@ export function JavaSettingsTab({
                       />
                     </div>
                     {validation.xmsError && (
-                      <p className="mt-1 text-[0.8125rem] text-red-300">{validation.xmsError}</p>
+                      <p className="mt-1 text-[0.8125rem] text-danger-hi">{validation.xmsError}</p>
                     )}
                   </div>
                   <div>
@@ -794,7 +794,7 @@ export function JavaSettingsTab({
                       />
                     </div>
                     {validation.xmxError && (
-                      <p className="mt-1 text-[0.8125rem] text-red-300">{validation.xmxError}</p>
+                      <p className="mt-1 text-[0.8125rem] text-danger-hi">{validation.xmxError}</p>
                     )}
                   </div>
                 </div>
@@ -825,7 +825,7 @@ export function JavaSettingsTab({
                   )}
                 </div>
                 {validation.generalError && (
-                  <p className="mt-1 text-[0.8125rem] text-amber-300">{validation.generalError}</p>
+                  <p className="mt-1 text-[0.8125rem] text-warn-hi">{validation.generalError}</p>
                 )}
               </div>
             </div>
@@ -912,7 +912,7 @@ export function JavaSettingsTab({
                   <div className="mt-2 max-h-40 overflow-y-auto glass-inset px-3 py-2 text-[0.8125rem] text-white/80">
                     {validationOutput.errors.length > 0 && (
                       <div className="mb-2">
-                        <div className="mb-1 font-semibold text-red-300">
+                        <div className="mb-1 font-semibold text-danger-hi">
                           {tt("javaSettings.validationOutput.errors")}
                         </div>
                         <ul className="list-disc space-y-0.5 pl-4">
@@ -924,7 +924,7 @@ export function JavaSettingsTab({
                     )}
                     {validationOutput.warnings.length > 0 && (
                       <div className="mb-2">
-                        <div className="mb-1 font-semibold text-amber-300">
+                        <div className="mb-1 font-semibold text-warn-hi">
                           {tt("javaSettings.validationOutput.warnings")}
                         </div>
                         <ul className="list-disc space-y-0.5 pl-4">

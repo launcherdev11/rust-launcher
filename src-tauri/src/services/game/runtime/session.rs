@@ -6,6 +6,9 @@ use crate::infra::http::http_client;
 use crate::services::auth::microsoft::refresh_ms_oauth_tokens;
 use crate::services::game::accounts::{read_profile_from_disk, save_full_profile};
 
+pub(crate) const MS_NO_JAVA_PROFILE_ERR: &str = "На этом аккаунте Microsoft нет профиля Minecraft: Java Edition. \
+     Проверьте, что игра куплена или активна подписка Game Pass, и создайте ник на minecraft.net или в официальном лаунчере.";
+
 #[derive(Debug, Serialize)]
 pub(crate) struct XblUserAuthProperties {
     #[serde(rename = "AuthMethod")]
@@ -257,6 +260,10 @@ pub(crate) async fn ensure_ms_minecraft_session() -> Result<Option<(String, Stri
         .send()
         .await
         .map_err(|e| format!("Ошибка запроса Minecraft profile: {e}"))?;
+
+    if mc_profile_resp.status().as_u16() == 404 {
+        return Err(MS_NO_JAVA_PROFILE_ERR.to_string());
+    }
 
     if !mc_profile_resp.status().is_success() {
         let status = mc_profile_resp.status();

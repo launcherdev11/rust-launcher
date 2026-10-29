@@ -28,7 +28,7 @@ export function HelpModal({ tt, onClose, onReplayTour }: Props) {
             {tt("app.help.icons")}{" "}
             <button
               type="button"
-              className="text-amber-400 hover:text-amber-300 underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
+              className="text-warn-line hover:text-warn-hi underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
               onClick={async (e) => {
                 e.stopPropagation();
                 try {
@@ -50,7 +50,7 @@ export function HelpModal({ tt, onClose, onReplayTour }: Props) {
           <p>
             <button
               type="button"
-              className="text-amber-400 hover:text-amber-300 underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
+              className="text-warn-line hover:text-warn-hi underline bg-transparent border-none cursor-pointer p-0 font-inherit text-inherit"
               onClick={async (e) => {
                 e.stopPropagation();
                 try {

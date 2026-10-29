@@ -389,7 +389,7 @@ export function VersionsSection({ ctx }: Props) {
                                         type="button"
                                         disabled={installing || deleting}
                                         onClick={() => void openDeleteFlow(v)}
-                                        className="icon-btn hover:!bg-red-500/15 hover:!text-red-200"
+                                        className="icon-btn hover:!bg-danger/15 hover:!text-danger-fg"
                                         title={
                                           deleting
                                             ? tt("settings.versions.action.deleting")
@@ -442,7 +442,7 @@ export function VersionsSection({ ctx }: Props) {
                               <div
                                 key={`${idx}-${entry.line.slice(0, 24)}`}
                                 className={`whitespace-pre break-all ${
-                                  entry.source === "stderr" ? "text-red-300" : ""
+                                  entry.source === "stderr" ? "text-danger-hi" : ""
                                 }`}
                               >
                                 {entry.line}
