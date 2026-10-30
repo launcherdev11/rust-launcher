@@ -866,6 +866,7 @@ pub fn instance_profile_summary_for_dir(cfg: &InstanceConfig, path: &Path) -> Re
 pub fn change_profile_version(
     id: String,
     game_version: String,
+    loader: Option<String>,
     loader_version: Option<String>,
 ) -> Result<InstanceProfileSummary, String> {
     let game_version = game_version.trim().to_string();
@@ -883,7 +884,14 @@ pub fn change_profile_version(
 
     let mut cfg = read_instance_config(&cfg_path)?;
 
-    let loader = cfg.loader.trim().to_lowercase();
+    let old_loader = cfg.loader.trim().to_lowercase();
+    let loader = loader
+        .map(|l| l.trim().to_lowercase())
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| old_loader.clone());
+    if !matches!(loader.as_str(), "vanilla" | "fabric" | "quilt" | "forge" | "neoforge") {
+        return Err(format!("Неизвестный загрузчик: {loader}"));
+    }
     let normalized_loader_version = loader_version
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
@@ -893,14 +901,18 @@ pub fn change_profile_version(
     }
 
     let same_game = cfg.game_version == game_version;
-    let same_loader = cfg.loader_version == normalized_loader_version;
+    let same_loader = old_loader == loader && cfg.loader_version == normalized_loader_version;
     if same_game && same_loader {
         return Err("Сборка уже использует выбранную версию".to_string());
     }
 
-    migrate_profile_content_for_version_change(profile_dir, &cfg.game_version, &loader)?;
+    migrate_profile_content_for_version_change(profile_dir, &cfg.game_version, &old_loader)?;
+    if loader != old_loader {
+        clear_loader_version_caches(profile_dir, &loader)?;
+    }
 
     cfg.game_version = game_version;
+    cfg.loader = loader.clone();
     cfg.loader_version = if loader == "vanilla" {
         None
     } else {

@@ -1,7 +1,7 @@
 import type { Language } from "../../../i18n";
 import type { DownloadJobKind } from "../../../hooks/useDownloadJobs";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ContentTab,
   type ForgeVersionSummary,
@@ -57,6 +57,7 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
 
   const [backupBeforeVersionChange, setBackupBeforeVersionChange] = useState(true);
   const [isChangeVersionOpen, setIsChangeVersionOpen] = useState(false);
+  const [migrateLoader, setMigrateLoader] = useState<LoaderId>("vanilla");
   const [migrateGameVersion, setMigrateGameVersion] = useState("");
   const [migrateLoaderVersion, setMigrateLoaderVersion] = useState("");
   const [migrateLoaderVersionOptions, setMigrateLoaderVersionOptions] = useState<LoaderVersionOption[]>([]);
@@ -67,6 +68,7 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
   const [migrateAllVersions, setMigrateAllVersions] = useState(false);
   const [migrateVersionOptions, setMigrateVersionOptions] = useState<VersionSummary[]>([]);
   const [migrateVersionsLoading, setMigrateVersionsLoading] = useState(false);
+  const migrateLoaderRequestRef = useRef(0);
 
   async function ensureMigrateVersionsLoaded() {
     if (migrateVersionOptions.length > 0 || migrateVersionsLoading) return;
@@ -86,12 +88,13 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
 
   const loadMigrateLoaderVersions = useCallback(async () => {
     if (!selectedProfile) return;
-    const loader = selectedProfile.loader as LoaderId;
+    const loader = migrateLoader;
     if (loader === "vanilla") {
       setMigrateLoaderVersionOptions([]);
       setMigrateLoaderVersion("");
       return;
     }
+    const requestId = ++migrateLoaderRequestRef.current;
     setMigrateLoaderVersionsLoading(true);
     try {
       let options: LoaderVersionOption[] = [];
@@ -112,6 +115,7 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
           gameVersion: migrateGameVersion,
         });
       }
+      if (requestId !== migrateLoaderRequestRef.current) return;
       setMigrateLoaderVersionOptions(options);
       const versionIds = options.map((o) => o.version);
       setMigrateLoaderVersion((prev) =>
@@ -119,15 +123,18 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
       );
     } catch (e) {
       console.error(e);
+      if (requestId !== migrateLoaderRequestRef.current) return;
       setMigrateLoaderVersionOptions([]);
       setMigrateLoaderVersion("");
       const msg =
         e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
       showNotification("error", t(language, "modpacks.toast.loadLoaderVersionsFailed", { msg }));
     } finally {
-      setMigrateLoaderVersionsLoading(false);
+      if (requestId === migrateLoaderRequestRef.current) {
+        setMigrateLoaderVersionsLoading(false);
+      }
     }
-  }, [selectedProfile, migrateGameVersion, language, showNotification]);
+  }, [selectedProfile, migrateLoader, migrateGameVersion, language, showNotification]);
 
   const installGameAndLoader = useCallback(
     async (
@@ -209,6 +216,7 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
 
   function openChangeVersionModal() {
     if (!selectedProfile) return;
+    setMigrateLoader(selectedProfile.loader as LoaderId);
     setMigrateGameVersion(selectedProfile.game_version);
     setMigrateLoaderVersion(selectedProfile.loader_version ?? "");
     setMigrateLoaderVersionOptions([]);
@@ -227,9 +235,21 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
     setIsMigrateLoaderVersionDropdownOpen(false);
   }
 
+  function selectMigrateLoader(next: LoaderId) {
+    if (next === migrateLoader) return;
+    setMigrateLoader(next);
+    setMigrateLoaderVersion(
+      selectedProfile && next === selectedProfile.loader
+        ? selectedProfile.loader_version ?? ""
+        : "",
+    );
+    setMigrateLoaderVersionOptions([]);
+    setIsMigrateLoaderVersionDropdownOpen(false);
+  }
+
   async function handleChangeProfileVersion() {
     if (!selectedProfile || migrateBusy) return;
-    const loader = selectedProfile.loader as LoaderId;
+    const loader = migrateLoader;
     const loaderVersion =
       loader === "vanilla" ? null : migrateLoaderVersion.trim() || null;
     if (loader !== "vanilla" && !loaderVersion) {
@@ -238,6 +258,7 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
     }
     const sameGame = migrateGameVersion === selectedProfile.game_version;
     const sameLoader =
+      loader === selectedProfile.loader &&
       (selectedProfile.loader_version ?? null) === loaderVersion;
     if (sameGame && sameLoader) {
       showNotification("warning", tt("modpacks.changeVersion.sameVersion"));
@@ -259,6 +280,7 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
       const updated = await invoke<InstanceProfile>("change_profile_version", {
         id: selectedProfile.id,
         gameVersion: migrateGameVersion,
+        loader,
         loaderVersion,
       });
       const contentResult = await applyContentUpdatesAfterVersionChange(updated.id);
@@ -322,9 +344,13 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
 
   useEffect(() => {
     if (!isChangeVersionOpen || !selectedProfile) return;
-    if (selectedProfile.loader === "vanilla") return;
+    if (migrateLoader === "vanilla") {
+      migrateLoaderRequestRef.current += 1;
+      setMigrateLoaderVersionsLoading(false);
+      return;
+    }
     void loadMigrateLoaderVersions();
-  }, [isChangeVersionOpen, selectedProfile, migrateGameVersion, loadMigrateLoaderVersions]);
+  }, [isChangeVersionOpen, selectedProfile, migrateLoader, migrateGameVersion, loadMigrateLoaderVersions]);
 
   useEffect(() => {
     if (!isChangeVersionOpen) return;
@@ -336,6 +362,8 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
     backupBeforeVersionChange,
     setBackupBeforeVersionChange,
     isChangeVersionOpen,
+    migrateLoader,
+    selectMigrateLoader,
     migrateGameVersion,
     setMigrateGameVersion,
     migrateLoaderVersion,

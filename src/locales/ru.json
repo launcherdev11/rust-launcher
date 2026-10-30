@@ -935,6 +935,7 @@
       "description": "Моды, ресурспаки, шейдеры и миры останутся в этой сборке и будут доступны после смены версии. Установятся выбранные версии Minecraft и загрузчика. Совместимый контент с Modrinth и CurseForge обновится автоматически. Моды без версии под новую Minecraft будут отключены и показаны в предупреждении.",
       "currentVersion": "Текущая версия",
       "gameVersionLabel": "Новая версия Minecraft",
+      "loaderLabel": "Загрузчик",
       "loaderVersionLabel": "Версия загрузчика",
       "allVersions": "Показывать снапшоты и альфы",
       "confirm": "Перенести",
@@ -946,7 +947,8 @@
       "incompatibleMore": " и ещё {{count}}",
       "failed": "Не удалось изменить версию сборки: {{msg}}",
       "sameVersion": "Выберите другую версию Minecraft или загрузчика.",
-      "selectLoaderVersion": "Выберите версию загрузчика."
+      "selectLoaderVersion": "Выберите версию загрузчика.",
+      "noLoaderVersions": "Для этой версии Minecraft нет версий загрузчика"
     },
     "common": {
       "loading": "Загрузка...",

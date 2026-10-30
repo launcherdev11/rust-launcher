@@ -963,6 +963,7 @@
       "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Kompatible Inhalte von Modrinth und CurseForge werden automatisch aktualisiert. Mods ohne Version für die neue Minecraft-Version werden deaktiviert und in einer Warnung angezeigt.",
       "currentVersion": "Aktuelle Version",
       "gameVersionLabel": "Neue Minecraft-Version",
+      "loaderLabel": "Loader",
       "loaderVersionLabel": "Loader-Version",
       "allVersions": "Schnappschüsse und Alphas anzeigen",
       "confirm": "Wandern",
@@ -974,7 +975,8 @@
       "incompatibleMore": " und {{count}} weitere",
       "failed": "Profilversion konnte nicht geändert werden: {{msg}}",
       "sameVersion": "Wählen Sie eine andere Minecraft- oder Loader-Version.",
-      "selectLoaderVersion": "Wählen Sie eine Loader-Version aus."
+      "selectLoaderVersion": "Wählen Sie eine Loader-Version aus.",
+      "noLoaderVersions": "Keine Loader-Versionen für diese Minecraft-Version"
     },
     "common": {
       "loading": "Laden...",

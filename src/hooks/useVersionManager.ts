@@ -26,6 +26,32 @@ import type { useDownloadJobs } from "./useDownloadJobs";
 
 type DownloadJobs = ReturnType<typeof useDownloadJobs>;
 
+function profileVersionItem(
+  gameVersion: string,
+  loader: LoaderId,
+  loaderVersion: string | null,
+): VersionItem | null {
+  if (loader === "forge") {
+    if (!loaderVersion) return null;
+    return {
+      id: `${gameVersion}-forge-${loaderVersion}`,
+      mc_version: gameVersion,
+      forge_build: loaderVersion,
+      installer_url: `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${loaderVersion}/forge-${gameVersion}-${loaderVersion}-installer.jar`,
+    };
+  }
+  if (loader === "neoforge") {
+    if (!loaderVersion) return null;
+    return {
+      id: `${gameVersion}-neoforge-${loaderVersion}`,
+      mc_version: gameVersion,
+      neoforge_build: loaderVersion,
+      installer_url: "",
+    };
+  }
+  return { id: gameVersion, version_type: "release", url: "", release_time: "" };
+}
+
 type UseVersionManagerOptions = {
   settings: Settings | null;
   activeInstanceProfile: InstanceProfileSummary | null;
@@ -72,6 +98,7 @@ export function useVersionManager({
   });
   const pendingRoomGameRef = useRef<RoomGameSettings | null>(null);
   const [versions, setVersions] = useState<VersionItem[]>([]);
+  const [versionsLoader, setVersionsLoader] = useState<LoaderId | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<VersionItem | null>(null);
   const [versionsLoading, setVersionsLoading] = useState(true);
   const [isInstalling, setIsInstalling] = useState(false);
@@ -94,16 +121,20 @@ export function useVersionManager({
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
     (async () => {
       setVersionsLoading(true);
       try {
         const installed = await invoke<string[]>("list_installed_versions");
+        if (cancelled) return;
         setInstalledIds(new Set(installed));
 
         if (loader === "forge") {
           const result = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
+          if (cancelled) return;
           setVersions(result);
+          setVersionsLoader(loader);
           const pending = pendingRoomGameRef.current;
           const preferId =
             pending && pending.loader === "forge" ? pending.gameVersion : null;
@@ -118,7 +149,9 @@ export function useVersionManager({
           setInstalledGameVersions(new Set());
         } else if (loader === "neoforge") {
           const result = await invoke<NeoForgeVersionSummary[]>("fetch_neoforge_versions");
+          if (cancelled) return;
           setVersions(result);
+          setVersionsLoader(loader);
           const pending = pendingRoomGameRef.current;
           const preferId =
             pending && pending.loader === "neoforge" ? pending.gameVersion : null;
@@ -137,7 +170,9 @@ export function useVersionManager({
             showSnapshots: settings?.show_snapshots ?? false,
             showAlpha: settings?.show_alpha_versions ?? false,
           });
+          if (cancelled) return;
           setVersions(filtered);
+          setVersionsLoader(loader);
           const pending = pendingRoomGameRef.current;
           const preferId =
             pending && pending.loader === loader ? pending.gameVersion : null;
@@ -173,6 +208,7 @@ export function useVersionManager({
           }
         }
       } catch (error) {
+        if (cancelled) return;
         console.error("Не удалось загрузить список версий:", error);
         const msg = error instanceof Error ? error.message : String(error);
         if (loader === "forge") {
@@ -192,11 +228,13 @@ export function useVersionManager({
           );
         }
         setVersions([]);
+        setVersionsLoader(loader);
         setSelectedVersion(null);
         setInstalledGameVersions(new Set());
       } finally {
-        setVersionsLoading(false);
+        if (!cancelled) setVersionsLoading(false);
       }
+      if (cancelled) return;
 
       try {
         unlisten = await listen<DownloadProgressPayload>(
@@ -223,6 +261,7 @@ export function useVersionManager({
     })();
 
     return () => {
+      cancelled = true;
       if (unlisten) {
         unlisten();
       }
@@ -319,7 +358,7 @@ export function useVersionManager({
   }, [installedGameVersions, installedIds, loader]);
 
   useEffect(() => {
-    if (!activeInstanceProfile || versions.length === 0) return;
+    if (!activeInstanceProfile || versionsLoader === null) return;
 
     const desiredLoader = activeInstanceProfile.loader as LoaderId;
     const allowedLoaders: LoaderId[] = [
@@ -329,8 +368,11 @@ export function useVersionManager({
       "quilt",
       "neoforge",
     ];
-    if (allowedLoaders.includes(desiredLoader)) {
+    if (!allowedLoaders.includes(desiredLoader)) return;
+    if (desiredLoader !== loader || versionsLoader !== desiredLoader) {
       setLoader(desiredLoader);
+      setSelectedVersion(null);
+      return;
     }
 
     const versionId = activeInstanceProfile.game_version;
@@ -356,10 +398,8 @@ export function useVersionManager({
       }
       return (v as VersionSummary).id === versionId;
     });
-    if (match) {
-      setSelectedVersion(match);
-    }
-  }, [activeInstanceProfile, versions]);
+    setSelectedVersion(match ?? profileVersionItem(versionId, desiredLoader, loaderVer));
+  }, [activeInstanceProfile, versions, versionsLoader, loader]);
 
   const handlePauseInstall = async () => {
     if (!isInstalling) return;
@@ -431,12 +471,17 @@ export function useVersionManager({
       }
       if (loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {
         const v = selectedVersion as VersionSummary;
-        if (v.version_type === "custom" || !v.url) {
+        let versionUrl = v.version_type === "custom" ? "" : v.url;
+        if (!versionUrl && v.version_type !== "custom") {
+          const all = await invoke<VersionSummary[]>("fetch_all_versions");
+          versionUrl = all.find((item) => item.id === v.id)?.url ?? "";
+        }
+        if (!versionUrl) {
           await invoke("install_local_version", { versionId: v.id });
         } else {
           await invoke("install_version", {
             versionId: v.id,
-            versionUrl: v.url,
+            versionUrl,
           });
         }
       } else if (loader === "fabric" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)) {

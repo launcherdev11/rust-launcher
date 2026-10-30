@@ -1,9 +1,12 @@
 import { ChevronDown } from "lucide-react";
+import { LoaderIcon } from "../../../components/loader_icon";
 import { loaderLabels } from "../helpers";
 import { type LoaderId } from "../types";
 import type { ModpackController } from "../useModpackController";
 
 type Props = { ctx: ModpackController };
+
+const LOADER_IDS: LoaderId[] = ["vanilla", "forge", "fabric", "quilt", "neoforge"];
 
 export function ChangeVersionModal({ ctx }: Props) {
   const {
@@ -11,6 +14,8 @@ export function ChangeVersionModal({ ctx }: Props) {
     selectedProfile,
     closeChangeVersionModal,
     tt,
+    migrateLoader,
+    selectMigrateLoader,
     ensureMigrateVersionsLoaded,
     setIsMigrateVersionDropdownOpen,
     migrateBusy,
@@ -55,6 +60,30 @@ export function ChangeVersionModal({ ctx }: Props) {
             </div>
 
             <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-medium text-white/70">
+                  {tt("modpacks.changeVersion.loaderLabel")}
+                </span>
+                <div className="seg-track flex w-full gap-0.5 p-0.5">
+                  {LOADER_IDS.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => selectMigrateLoader(id)}
+                      disabled={migrateBusy}
+                      className={`interactive-press flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold disabled:opacity-60 ${
+                        migrateLoader === id
+                          ? "seg-on"
+                          : "text-[color:var(--fg-muted)] hover:bg-white/[0.05] hover:text-[color:var(--fg)]"
+                      }`}
+                    >
+                      <LoaderIcon loader={id} />
+                      <span className="truncate">{loaderLabels[id]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-medium text-white/70">
                   {tt("modpacks.changeVersion.gameVersionLabel")}
@@ -119,11 +148,10 @@ export function ChangeVersionModal({ ctx }: Props) {
                 </label>
               </div>
 
-              {selectedProfile.loader !== "vanilla" && (
+              {migrateLoader !== "vanilla" && (
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-medium text-white/70">
-                    {tt("modpacks.changeVersion.loaderVersionLabel")} (
-                    {loaderLabels[selectedProfile.loader as LoaderId] ?? selectedProfile.loader})
+                    {tt("modpacks.changeVersion.loaderVersionLabel")} ({loaderLabels[migrateLoader]})
                   </label>
                   <div className="relative inline-flex w-full items-center justify-between rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-xs text-white/90">
                     <button
@@ -140,7 +168,10 @@ export function ChangeVersionModal({ ctx }: Props) {
                       <span className="truncate">
                         {migrateLoaderVersionsLoading
                           ? tt("modpacks.common.loading")
-                          : migrateLoaderVersion || tt("modpacks.common.select")}
+                          : migrateLoaderVersion ||
+                            (migrateLoaderVersionOptions.length === 0
+                              ? tt("modpacks.changeVersion.noLoaderVersions")
+                              : tt("modpacks.common.select"))}
                       </span>
                       <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
                     </button>
@@ -149,7 +180,7 @@ export function ChangeVersionModal({ ctx }: Props) {
                         {migrateLoaderVersionOptions.length === 0 &&
                           !migrateLoaderVersionsLoading && (
                             <div className="px-3 py-2 text-white/60">
-                              {tt("modpacks.common.select")}
+                              {tt("modpacks.changeVersion.noLoaderVersions")}
                             </div>
                           )}
                         {migrateLoaderVersionOptions.map((o) => (
@@ -209,7 +240,12 @@ export function ChangeVersionModal({ ctx }: Props) {
               <button
                 type="button"
                 onClick={() => void handleChangeProfileVersion()}
-                disabled={migrateBusy || !migrateGameVersion}
+                disabled={
+                  migrateBusy ||
+                  !migrateGameVersion ||
+                  (migrateLoader !== "vanilla" &&
+                    (migrateLoaderVersionsLoading || !migrateLoaderVersion))
+                }
                 className="interactive-press rounded-xl accent-bg px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {migrateBusy

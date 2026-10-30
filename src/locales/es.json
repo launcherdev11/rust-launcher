@@ -963,6 +963,7 @@
       "description": "Los mods, paquetes de recursos, sombreadores y mundos permanecen en este perfil y permanecen disponibles después del cambio de versión. Se instalarán las versiones seleccionadas de Minecraft y del cargador. El contenido compatible de Modrinth y CurseForge se actualizará automáticamente. Los mods sin versión para la nueva Minecraft se desactivarán y se mostrarán en una advertencia.",
       "currentVersion": "Versión actual",
       "gameVersionLabel": "Nueva versión de Minecraft",
+      "loaderLabel": "Cargador",
       "loaderVersionLabel": "Versión del cargador",
       "allVersions": "Mostrar instantáneas y alfa",
       "confirm": "Emigrar",
@@ -974,7 +975,8 @@
       "incompatibleMore": " y {{count}} más",
       "failed": "No se pudo cambiar la versión del perfil: {{msg}}",
       "sameVersion": "Elija una versión diferente de Minecraft o del cargador.",
-      "selectLoaderVersion": "Seleccione una versión del cargador."
+      "selectLoaderVersion": "Seleccione una versión del cargador.",
+      "noLoaderVersions": "No hay versiones del cargador para esta versión de Minecraft"
     },
     "common": {
       "loading": "Cargando...",
