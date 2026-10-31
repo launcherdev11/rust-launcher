@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { reportStats } from "../api/stats";
@@ -104,6 +104,7 @@ export function useGameLaunch({
   } = versionState;
 
   const pendingProfileLaunchIdRef = useRef<string | null>(null);
+  const [profileLaunchRequestTick, setProfileLaunchRequestTick] = useState(0);
   const handlePlayPinnedProfileRef = useRef<
     (profile: InstanceProfileCard, join?: ProfileJoinTarget) => Promise<void>
   >(async () => {});
@@ -265,13 +266,17 @@ export function useGameLaunch({
         const pending = await invoke<string | null>("take_pending_profile_launch");
         if (pending?.trim()) {
           pendingProfileLaunchIdRef.current = pending.trim();
+          setProfileLaunchRequestTick((n) => n + 1);
         }
       } catch {
       }
       try {
         unlisten = await listen<{ profile_id: string }>("profile-launch-request", (event) => {
           const id = event.payload.profile_id?.trim();
-          if (id) pendingProfileLaunchIdRef.current = id;
+          if (!id) return;
+          pendingProfileLaunchIdRef.current = id;
+          // без счётчика запрос в уже открытый лаунчер ждал бы смены списка профилей
+          setProfileLaunchRequestTick((n) => n + 1);
         });
       } catch {
       }
@@ -288,7 +293,7 @@ export function useGameLaunch({
     if (!profile) return;
     pendingProfileLaunchIdRef.current = null;
     void handlePlayPinnedProfileRef.current(profile);
-  }, [profilesHydrated, knownProfiles]);
+  }, [profilesHydrated, knownProfiles, profileLaunchRequestTick]);
 
   const handleOpenGameFolder = async (subdir?: "mods" | "logs") => {
     try {

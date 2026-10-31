@@ -252,6 +252,9 @@ export function useVersionManager({
             updateDownloadJobProgress(
               versionInstallJobId(event.payload.version_id),
               event.payload.percent,
+              event.payload.total > 0
+                ? { current: event.payload.downloaded, total: event.payload.total, unit: "bytes" }
+                : null,
             );
           },
         );

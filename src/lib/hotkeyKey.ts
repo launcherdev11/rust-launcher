@@ -20,3 +20,10 @@ export function hotkeyKey(e: KeyboardEvent): string {
 export function isHotkeyKey(e: KeyboardEvent, expected: string): boolean {
   return hotkeyKey(e).toLowerCase() === expected.toLowerCase();
 }
+
+const IS_MAC =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+
+export function modKeyLabel(): string {
+  return IS_MAC ? "⌘" : "Ctrl";
+}

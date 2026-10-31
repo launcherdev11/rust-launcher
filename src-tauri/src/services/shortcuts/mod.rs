@@ -12,6 +12,10 @@ use crate::infra::window_icon::launcher_icon_file_path;
 #[cfg(windows)]
 use crate::infra::window_icon::windows_shortcut_icon_location;
 
+mod jump_list;
+
+pub use jump_list::update_jump_list;
+
 const SHORTCUT_SUFFIX: &str = " - 16Launcher";
 
 fn sanitize_shortcut_base_name(name: &str) -> String {

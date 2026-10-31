@@ -804,7 +804,18 @@ pub async fn download_curseforge_file(
     let client = http_client_for_binary_download(false);
     fetch_verified(&client, &urls, &dest_path, None, None)
         .await
-        .map_err(|e| format!("Ошибка загрузки файла CurseForge ({safe_name}): {e}"))
+        .map_err(|e| format!("Ошибка загрузки файла CurseForge ({safe_name}): {e}"))?;
+
+    if profile_id.is_some() && subdir != "modpacks" {
+        crate::services::modrinth::record_installed_item_sources(
+            &root,
+            subdir,
+            "curseforge",
+            vec![(safe_name.to_string(), mod_id.to_string())],
+        )
+        .await;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

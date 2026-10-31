@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { recordPaletteUse, rankCommands, type PaletteCommand, type PaletteGroup } from "./matching";
+import { usePaletteContentSearch, type PaletteContentSearchDeps } from "./usePaletteContentSearch";
 
 type Tt = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -8,17 +9,24 @@ export function CommandPalette({
   open,
   onClose,
   commands,
+  contentSearch,
   tt,
 }: {
   open: boolean;
   onClose: () => void;
   commands: PaletteCommand[];
+  contentSearch: Omit<PaletteContentSearchDeps, "tt">;
   tt: Tt;
 }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const { contentCommands, catalogCommands, catalogLoading } = usePaletteContentSearch(open, query, {
+    ...contentSearch,
+    tt,
+  });
+  const searchableCommands = useMemo(() => [...commands, ...contentCommands], [commands, contentCommands]);
 
   useEffect(() => {
     if (!open) return;
@@ -28,10 +36,12 @@ export function CommandPalette({
     return () => window.clearTimeout(t);
   }, [open]);
 
-  const ranked = useMemo(
-    () => (open ? rankCommands(commands, query) : []),
-    [open, commands, query],
-  );
+  const ranked = useMemo(() => {
+    if (!open) return [];
+    const local = rankCommands(searchableCommands, query);
+    if (!query.trim()) return local;
+    return [...local, ...catalogCommands.map((c) => ({ ...c, score: 0, shownGroup: c.group }))];
+  }, [open, searchableCommands, catalogCommands, query]);
 
   useEffect(() => {
     setCursor(0);
@@ -46,7 +56,7 @@ export function CommandPalette({
 
   const run = (cmd: PaletteCommand) => {
     if (cmd.disabled) return;
-    recordPaletteUse(cmd.id);
+    if (!cmd.transient) recordPaletteUse(cmd.id);
     onClose();
     window.setTimeout(() => cmd.run(), 0);
   };
@@ -102,7 +112,9 @@ export function CommandPalette({
         </div>
         <div ref={listRef} role="listbox" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1.5">
           {ranked.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-white/50">{tt("commandPalette.nothing")}</div>
+            <div className="px-3 py-8 text-center text-sm text-white/50">
+              {catalogLoading ? tt("commandPalette.searching") : tt("commandPalette.nothing")}
+            </div>
           ) : (
             ranked.map((cmd, i) => {
               const header = cmd.shownGroup !== lastGroup ? cmd.shownGroup : null;
@@ -132,7 +144,12 @@ export function CommandPalette({
                       <img src={cmd.iconSrc} alt="" className="h-6 w-6 shrink-0 rounded-md object-cover" />
                     ) : null}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{cmd.title}</span>
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
+                        {cmd.badgeSrc ? (
+                          <img src={cmd.badgeSrc} alt="" className="h-3.5 w-3.5 shrink-0 object-contain opacity-80" />
+                        ) : null}
+                        <span className="min-w-0 truncate">{cmd.title}</span>
+                      </span>
                       {cmd.subtitle ? (
                         <span className="block truncate text-[0.75rem] text-white/45">{cmd.subtitle}</span>
                       ) : null}
@@ -147,6 +164,11 @@ export function CommandPalette({
               );
             })
           )}
+          {ranked.length > 0 && catalogLoading && catalogCommands.length === 0 ? (
+            <div className="px-3 pb-2 pt-2.5 text-[0.6875rem] font-semibold text-white/40">
+              {tt("commandPalette.searchingCatalog")}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.07] px-4 py-2 text-[0.6875rem] text-white/40">
           <span>{tt("commandPalette.footer.navigate")}</span>

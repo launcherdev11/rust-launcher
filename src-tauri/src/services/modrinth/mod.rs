@@ -10,7 +10,8 @@ mod updates;
 
 pub use missing_dependency::install_missing_mod_dependency;
 pub use types::ModrinthDownloadTarget;
-pub use content_metadata::resolve_profile_item_metadata;
+pub use content_metadata::{list_installed_content_index, resolve_profile_item_metadata};
+pub(crate) use content_metadata::record_installed_item_sources;
 pub use conflicts::scan_profile_mod_jars;
 pub use updates::{
     apply_profile_content_updates, check_profile_content_updates,

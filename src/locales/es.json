@@ -1,5 +1,7 @@
 {
   "common": {
+    "undo": "Deshacer",
+    "holdToDelete": "Mantén pulsado para eliminar",
     "state": {
       "tabCrashed": "Esta pestaña ha fallado",
       "tabCrashedHint": "El resto del launcher funciona. Recarga la pestaña; tus datos guardados están a salvo.",
@@ -54,6 +56,16 @@
     }
   },
   "mods": {
+    "empty": {
+      "lockedHint": "Los filtros están fijados por la instancia: {{filters}}",
+      "searchHint": "Revisa cómo está escrito «{{query}}» o busca en la otra plataforma",
+      "showAll": "Mostrar no solo los instalados",
+      "resetFilters": "Restablecer categorías y entorno",
+      "unlock": "Buscar sin vincular a la instancia",
+      "anyVersion": "Cualquier versión del juego",
+      "anyLoader": "Cualquier loader",
+      "tryProvider": "Buscar en {{provider}}"
+    },
     "provider": {
       "modrinth": "modrinth",
       "curseforge": "Forja maldita"
@@ -944,6 +956,14 @@
     }
   },
   "modpacks": {
+    "drop": {
+      "hint": "Suelta para añadir a la instancia",
+      "added": "Añadido a «{{name}}»: {{summary}}",
+      "mods": "mods: {{count}}",
+      "resourcepacks": "paquetes de recursos: {{count}}",
+      "shaderpacks": "shaders: {{count}}",
+      "skipped": "No se pudo identificar el tipo de archivo, omitido: {{files}}"
+    },
     "export": {
       "readFilesFailed": "No se pudieron leer los archivos de compilación.",
       "selectAtLeastOnePath": "Seleccione al menos una ruta.",
@@ -1220,6 +1240,9 @@
       "shaderpacks": "Sombreadores"
     },
     "toast": {
+      "itemDeleted": "«{{name}}» eliminado",
+      "itemsDeleted": "Archivos eliminados: {{count}}",
+      "restoreFailed": "No se pudieron restaurar archivos: {{count}}",
       "selectLoaderBeforePreset": "Seleccione una versión del cargador antes de guardar el ajuste preestablecido.",
       "loadProfilesFailed": "No se pudieron cargar los perfiles.",
       "loadFilesFailed": "No se pudieron cargar los archivos de perfil.",
@@ -1254,6 +1277,21 @@
       "noProfilesFound": "No se encontraron perfiles. Pruebe la raíz del iniciador (no las instancias), pero las instancias también son compatibles."
     },
     "manage": {
+      "empty": {
+        "title": {
+          "mods": "Esta instancia aún no tiene mods",
+          "resourcepacks": "Esta instancia aún no tiene paquetes de recursos",
+          "shaderpacks": "Esta instancia aún no tiene shaders"
+        },
+        "find": {
+          "mods": "Buscar mods para {{version}} {{loader}}",
+          "resourcepacks": "Buscar paquetes de recursos para {{version}}",
+          "shaderpacks": "Buscar shaders para {{version}}"
+        },
+        "fromPc": "Añadir desde el ordenador",
+        "noMatches": "Nada coincide con la búsqueda y el filtro",
+        "resetFilters": "Restablecer búsqueda y filtro"
+      },
       "enableItem": "Permitir",
       "disableItem": "Desactivar",
       "toggleFailed": "No se pudo cambiar el estado del elemento.",
@@ -1268,7 +1306,6 @@
       "downloadFromCatalog": "Descargar del catálogo",
       "chooseFileFromPc": "Elija el archivo de la PC",
       "loadingFiles": "Cargando archivos...",
-      "emptyTab": "Aún no hay archivos en esta pestaña.",
       "dropHint": "Arrastre archivos desde el Explorador aquí o use \"Agregar\".",
       "update": "Actualizar",
       "splitResizeAria": "Arrastre para cambiar el tamaño de la lista y la consola",
@@ -1373,8 +1410,7 @@
     },
     "deleteConfirm": {
       "bulkPrompt": "¿Eliminar los perfiles seleccionados ({{count}})? Esta acción no se puede deshacer.",
-      "title": "Eliminar confirmación",
-      "prompt": "¿Eliminar perfil “{{name}}”? Esta acción no se puede deshacer."
+      "title": "Eliminar confirmación"
     },
     "profileSettingsModal": {
       "title": "Configuración de perfil",
@@ -1415,7 +1451,6 @@
       "bulkEnable": "Activar",
       "bulkDisable": "Desactivar",
       "bulkDelete": "Eliminar",
-      "bulkDeleteConfirm": "¿Eliminar {{count}} archivo(s)?",
       "selectAll": "Seleccionar todo",
       "clearSelection": "Quitar selección",
       "worldsTitle": "Mundos",
@@ -2300,6 +2335,13 @@
       "copied": "¡Copiado!"
     },
     "downloads": {
+      "bytesOf": "{{done}} de {{total}}",
+      "filesOf": "{{done}} de {{total}} archivos",
+      "speed": "{{value}}/s",
+      "eta": "quedan {{time}}",
+      "etaSeconds": "~{{n}} s",
+      "etaMinutes": "~{{n}} min",
+      "etaHours": "~{{h}} h {{m}} min",
       "paused": "pausado",
       "preparing": "preparante…",
       "kind": {
@@ -2320,6 +2362,7 @@
       "imagesFilterName": "Imágenes"
     },
     "help": {
+      "paletteHint": "{{keys}} abre la búsqueda rápida: instancias, mods instalados, los catálogos de Modrinth y CurseForge, ajustes y acciones.",
       "title": "Acerca del lanzador",
       "mainInfo": "16Launcher es un lanzador gratuito de Minecraft compatible con Fabric, Forge, Quilt y NeoForge.",
       "icons": "Iconos de",
@@ -2492,6 +2535,10 @@
     "finish": "¡Entendido!",
     "replay": "Repetir tour",
     "steps": {
+      "command-palette": {
+        "title": "Búsqueda rápida",
+        "body": "Ctrl+K (⌘K en macOS) abre la búsqueda en todo el launcher: instancias, mods de todas las instancias, los catálogos de Modrinth y CurseForge, ajustes y acciones. Funciona desde cualquier pestaña."
+      },
       "welcome": {
         "title": "¡Bienvenido al lanzador!",
         "body": "Un tour rápido: elegir versión, iniciar el juego, gestionar mods y registrarse en la plataforma."
@@ -2610,14 +2657,22 @@
     }
   },
   "commandPalette": {
+    "buttonTitle": "Búsqueda y comandos ({{keys}})",
+    "discoverHint": "Pulsa {{keys}} para encontrar rápido una instancia, un mod, un ajuste o una acción",
+    "tryIt": "Probar",
+    "contentDisabled": "desactivado",
+    "searching": "Buscando…",
+    "searchingCatalog": "Buscando en Modrinth y CurseForge…",
     "title": "Paleta de comandos",
     "hotkey": "Paleta de comandos",
-    "placeholder": "Instancia, pestaña, ajuste o acción…",
+    "placeholder": "Instancia, mod, pestaña, ajuste o acción…",
     "nothing": "No se encontró nada",
     "openTab": "Abrir pestaña",
     "openInstance": "Abrir instancia",
     "playInstance": "Jugar: {{name}}",
     "group": {
+      "content": "Instalado en instancias",
+      "catalog": "Catálogo de mods",
       "recent": "Recientes",
       "actions": "Acciones",
       "navigation": "Ir a",
@@ -2848,5 +2903,24 @@
     "build": "Crear archivo",
     "building": "Creando archivo…",
     "built": "Archivo del servidor guardado. Mods: {{mods}}, omitidos: {{skipped}}"
+  },
+  "jumpList": {
+    "category": "Instancias",
+    "description": "Iniciar · {{version}}"
+  },
+  "gameMonitor": {
+    "chip": "{{used}} GB · {{cpu}} %",
+    "openDetails": "Detalles de los recursos del juego",
+    "title": "Recursos del juego",
+    "memoryLabel": "Memoria del proceso",
+    "cpuLabel": "CPU",
+    "systemLabel": "Memoria del sistema",
+    "systemUsed": "{{used}} de {{total}} GB",
+    "gb": "{{value}} GB",
+    "heapHint": "Java tiene asignados {{max}} GB. El proceso suele ocupar más: además del heap están la propia JVM, las bibliotecas nativas y los gráficos.",
+    "now": "ahora",
+    "secondsAgo": "hace {{seconds}} s",
+    "openSettings": "Ajustar la memoria de la instancia",
+    "lowMemory": "El sistema se está quedando sin memoria: cierra otros programas o reduce la memoria asignada"
   }
 }

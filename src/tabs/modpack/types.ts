@@ -1,7 +1,8 @@
-import type { DownloadJobKind } from "../../hooks/useDownloadJobs";
+import type { DownloadJobDetail, DownloadJobKind } from "../../hooks/useDownloadJobs";
 import type { ModpackHotkeyActions, ModpackNavigationActions } from "../../hooks/useHotkeys";
 import type { Language } from "../../i18n";
 import type { EditorSection as EditorSectionId } from "../../features/profile-editor/ManageEditorSections";
+import type { ShowNotificationOptions } from "../../app/notifications";
 
 export type LoaderId = "vanilla" | "fabric" | "forge" | "quilt" | "neoforge";
 export type LoaderVersionChannel = "stable" | "beta" | "alpha";
@@ -154,7 +155,7 @@ export type ContinueTarget = {
 
 export type ModpackTabProps = {
   language: Language;
-  showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean }) => void;
+  showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
   onProfileSelectionChange?: (profile: InstanceProfile | null) => void;
   initialSelectedProfileId?: string | null;
   initialProfiles?: InstanceProfile[];
@@ -182,7 +183,7 @@ export type ModpackTabProps = {
     kind: DownloadJobKind;
     percent?: number | null;
   }) => void;
-  updateDownloadJob?: (id: string, percent: number | null) => void;
+  updateDownloadJob?: (id: string, percent: number | null, detail?: DownloadJobDetail | null) => void;
   finishDownloadJob?: (id: string) => void;
   makeDownloadJobId?: (prefix: string) => string;
   onRegisterModpackHotkeys?: (actions: ModpackHotkeyActions | null) => void;

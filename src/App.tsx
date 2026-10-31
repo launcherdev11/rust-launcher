@@ -83,6 +83,11 @@ import { useRemoteNotices } from "./hooks/useRemoteNotices";
 import { useSidebarLayout } from "./hooks/useSidebarLayout";
 import { useTabSplitView } from "./hooks/useTabSplitView";
 import { useVersionManager } from "./hooks/useVersionManager";
+import { useTaskbarProgress } from "./hooks/useTaskbarProgress";
+import { useQuickLaunchMenus } from "./hooks/useQuickLaunchMenus";
+import { useCommandPaletteHint } from "./hooks/useCommandPaletteHint";
+import { requestCatalogOpen, type CatalogOpenRequest } from "./lib/catalogOpenBridge";
+import { requestProfileContentFocus, type ProfileContentFocus } from "./lib/profileContentFocusBridge";
 
 const ModpackTab = lazy(() =>
   import("./tabs/ModpackTab").then((m) => ({ default: m.ModpackTab })),
@@ -298,6 +303,16 @@ function App() {
   });
   const { gameStatus, isLaunching, isStopping, setRoomPresenceContext, setLaunchPresenceContext } = run;
   const launchStage = useLaunchStage(isLaunching);
+  useTaskbarProgress(activeDownloadJobs, isLaunching, gameStatus);
+  useQuickLaunchMenus(profilesHydrated, knownProfiles, pinnedProfileIds, tt);
+  const openCommandPalette = useCallback(() => setShowCommandPalette(true), []);
+  useCommandPaletteHint({
+    ready: settings !== null && onboardingVisible === false && !productTourActive,
+    paletteOpen: showCommandPalette,
+    tt,
+    showNotification,
+    openPalette: openCommandPalette,
+  });
   const {
     runningConsoleProfileId,
     runningConsoleProfileIdRef,
@@ -571,6 +586,20 @@ function App() {
     toggleSidebar: useCallback(() => appHotkeysRef.current?.toggleSidebar(), []),
     openHotkeysHelp: useCallback(() => setShowHotkeysModal(true), []),
   });
+  const paletteContentSearch = useMemo(
+    () => ({
+      profiles: knownProfiles,
+      openProfileContent: (focus: ProfileContentFocus) => {
+        requestProfileContentFocus(focus);
+        void paletteActionsRef.current.handleOpenProfileInModpacks(focus.profileId);
+      },
+      openCatalogProject: (request: CatalogOpenRequest) => {
+        requestCatalogOpen(request);
+        activateSidebarTab("mods");
+      },
+    }),
+    [knownProfiles, activateSidebarTab],
+  );
   const handleTitleBarProfileSettings = () => {
     if (!activeInstanceProfile) return;
     setActiveItemWithSound("modpacks");
@@ -943,6 +972,7 @@ function App() {
           open={showCommandPalette}
           onClose={() => setShowCommandPalette(false)}
           commands={paletteCommands}
+          contentSearch={paletteContentSearch}
           tt={tt}
         />
         {showHelpModal && (
@@ -997,6 +1027,7 @@ function App() {
           onProfileStop={() => void handleStopGame()}
           onProfileSettings={handleTitleBarProfileSettings}
           onProfileOpen={(profileId) => void handleOpenProfileInModpacks(profileId)}
+          onOpenCommandPalette={openCommandPalette}
         >
           <SessionNotificationsBell
             language={language}

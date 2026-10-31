@@ -1,5 +1,5 @@
 import type { Language } from "../../../i18n";
-import type { DownloadJobKind } from "../../../hooks/useDownloadJobs";
+import type { DownloadJobDetail, DownloadJobKind } from "../../../hooks/useDownloadJobs";
 import type { Dispatch, SetStateAction } from "react";
 import {
   useCallback,
@@ -22,7 +22,7 @@ import { disposeWhenResolved } from "../../../lib/tauriEvents";
 
 type MrpackImportDeps = {
   finishDownloadJob: ((id: string) => void) | undefined;
-  updateDownloadJob: ((id: string, percent: number | null) => void) | undefined;
+  updateDownloadJob: ((id: string, percent: number | null, detail?: DownloadJobDetail | null) => void) | undefined;
   showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean; }) => void;
   language: Language;
   makeDownloadJobId: ((prefix: string) => string) | undefined;
@@ -100,7 +100,11 @@ export function useMrpackImport(deps: MrpackImportDeps) {
         payload.total != null &&
         payload.total > 0
       ) {
-        updateDownloadJob(jobId, (payload.current / payload.total) * 100);
+        updateDownloadJob(jobId, (payload.current / payload.total) * 100, {
+          current: payload.current,
+          total: payload.total,
+          unit: "files",
+        });
       }
       if (payload.phase === "start") {
         showNotification(

@@ -7,7 +7,8 @@ import {
   WorldsPanel,
 } from "../../../features/profile-editor/ManageEditorSections";
 import { ProfileInstanceIcon } from "../../../components/profile_instance_icon";
-import { InputClearButton, Switch } from "../../../components/ui";
+import { EmptyState, InputClearButton, Switch } from "../../../components/ui";
+import { requestCatalogOpen } from "../../../lib/catalogOpenBridge";
 import { ProfileInfoIcon } from "../../../components/profile_info_modal";
 import {
   EditIcon,
@@ -27,6 +28,7 @@ import {
   CONTENT_SEG_BTN_CLASS,
   countLabel,
   formatLastPlayedAt,
+  loaderLabels,
   MANAGE_ACTION_BTN_CLASS,
   MANAGE_ICON_BTN_CLASS,
   MODPACK_MANAGE_SPLIT_MAX,
@@ -35,6 +37,7 @@ import {
 import { ChevronDown, Download, FolderPlus } from "lucide-react";
 import { lazyItemsFromFiles } from "../hooks/useLazyMods";
 import { type ContentTab, type ProfileItemEntry, type Settings } from "../types";
+import type { ModrinthContentType } from "../../mods/types";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { type ConflictActionKind, type ProfileConflict } from "../../../lib/profileConflicts";
 import { invoke } from "@tauri-apps/api/core";
@@ -51,12 +54,26 @@ import { WorldToolsView } from "../../../features/worlds/WorldToolsView";
 import { ServerPackPanel } from "../../../features/server-pack/ServerPackPanel";
 import type { ModpackController } from "../useModpackController";
 import { useContinueTarget } from "../hooks/useContinueTarget";
+import { ProfileIconMorph } from "../ProfileIconMorph";
 import { AssetIcon } from "../../../components/asset_icon";
 
 type Props = { ctx: ModpackController };
 
+const EMPTY_TAB_ICONS: Record<ContentTab, string> = {
+  mods: "/launcher-assets/mods.svg",
+  resourcepacks: "/launcher-assets/palette.svg",
+  shaderpacks: "/launcher-assets/brush.svg",
+};
+
+const CATALOG_TYPE_BY_TAB = {
+  mods: "mod",
+  resourcepacks: "resourcepack",
+  shaderpacks: "shader",
+} as const satisfies Record<ContentTab, ModrinthContentType>;
+
 export function ManageView({ ctx }: Props) {
   const {
+    uiScale,
     selectedProfile,
     itemsSearch,
     items,
@@ -299,13 +316,15 @@ export function ManageView({ ctx }: Props) {
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-ink-900/90 px-4 py-3">
-            <ProfileInstanceIcon
-              profile={selectedProfile}
-              refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
-              editable
-              editTitle={tt("modpacks.profile.changeIconTitle")}
-              onEditClick={() => void handleChooseProfileIcon(selectedProfile)}
-            />
+            <ProfileIconMorph profileId={selectedProfile.id} enabled={uiScale <= 1} className="shrink-0">
+              <ProfileInstanceIcon
+                profile={selectedProfile}
+                refreshKey={profileIconRevisions[selectedProfile.id] ?? 0}
+                editable
+                editTitle={tt("modpacks.profile.changeIconTitle")}
+                onEditClick={() => void handleChooseProfileIcon(selectedProfile)}
+              />
+            </ProfileIconMorph>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold text-white">
@@ -944,16 +963,63 @@ export function ManageView({ ctx }: Props) {
               {tt("modpacks.manage.loadingFiles")}
             </div>
           ) : visibleItems.length === 0 ? (
-            <div className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-black/40 px-4 text-center text-xs text-white/60">
-              <div className="max-w-sm space-y-2">
-                <p>
-                  {tt("modpacks.manage.emptyTab")}
-                </p>
-                <p className="text-white/45">
-                  {tt("modpacks.manage.dropHint")}
-                </p>
-              </div>
-            </div>
+            items.length === 0 ? (
+              <EmptyState
+                icon={
+                  <img
+                    src={EMPTY_TAB_ICONS[contentTab]}
+                    alt=""
+                    className="h-6 w-6 object-contain opacity-70"
+                  />
+                }
+                title={tt(`modpacks.manage.empty.title.${contentTab}`)}
+                description={tt("modpacks.manage.dropHint")}
+                action={
+                  <>
+                    {contentTab === "mods" && selectedProfile.loader === "vanilla" ? null : (
+                      <button
+                        type="button"
+                        className="btn btn-accent btn-sm"
+                        onClick={() => {
+                          requestCatalogOpen({ kind: "browse", contentType: CATALOG_TYPE_BY_TAB[contentTab] });
+                          onOpenModsTab?.();
+                        }}
+                      >
+                        <img src="/launcher-assets/search.png" alt="" className="h-3.5 w-3.5 object-contain" />
+                        {tt(`modpacks.manage.empty.find.${contentTab}`, {
+                          version: selectedProfile.game_version,
+                          loader: loaderLabels[selectedProfile.loader as keyof typeof loaderLabels] ?? selectedProfile.loader,
+                        })}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-soft btn-sm"
+                      onClick={() => void handleAddFilesFromPc()}
+                    >
+                      {tt("modpacks.manage.empty.fromPc")}
+                    </button>
+                  </>
+                }
+              />
+            ) : (
+              <EmptyState
+                compact
+                title={tt("modpacks.manage.empty.noMatches")}
+                action={
+                  <button
+                    type="button"
+                    className="btn btn-soft btn-sm"
+                    onClick={() => {
+                      setItemsSearch("");
+                      setContentFilter("all");
+                    }}
+                  >
+                    {tt("modpacks.manage.empty.resetFilters")}
+                  </button>
+                }
+              />
+            )
           ) : contentTab === "resourcepacks" || contentTab === "shaderpacks" ? (
             (() => {
               const enabledItems = visibleItems.filter((item) => item.enabled);

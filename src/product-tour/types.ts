@@ -3,6 +3,7 @@ export type TourStepId =
   | "sidebar"
   | "launch-controls"
   | "profiles"
+  | "command-palette"
   | "settings"
   | "mods"
   | "modpacks"
@@ -34,6 +35,7 @@ export const TOUR_STEPS: TourStep[] = [
   { id: "sidebar", target: "tour-sidebar", tab: "play", placement: "right" },
   { id: "launch-controls", target: "tour-launch-controls", tab: "play", placement: "top" },
   { id: "profiles", target: "tour-profiles", tab: "play", placement: "bottom" },
+  { id: "command-palette", target: "tour-command-palette", tab: "play", placement: "bottom" },
   { id: "settings", target: "tour-sidebar-settings", tab: "play", placement: "right" },
   { id: "mods", target: "tour-sidebar-mods", tab: "play", placement: "right" },
   { id: "modpacks", target: "tour-sidebar-modpacks", tab: "play", placement: "right" },

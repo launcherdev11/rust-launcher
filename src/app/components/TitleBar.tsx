@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SelectedProfileTitleBar } from "../../components/selected_profile_title_bar";
+import { modKeyLabel } from "../../lib/hotkeyKey";
 import type { Language } from "../../i18n";
 import { CloseIcon, MaximizeIcon, MinimizeIcon } from "../icons";
 import type { GameStatus, InstanceProfileSummary, Tt } from "../types";
@@ -22,6 +23,7 @@ type Props = {
   onProfileStop: () => void;
   onProfileSettings: () => void;
   onProfileOpen: (profileId: string) => void;
+  onOpenCommandPalette: () => void;
   children: ReactNode;
 };
 
@@ -41,8 +43,10 @@ export function TitleBar({
   onProfileStop,
   onProfileSettings,
   onProfileOpen,
+  onOpenCommandPalette,
   children,
 }: Props) {
+  const paletteKeys = `${modKeyLabel()}+K`;
   const handleMinimize = () => {
     getCurrentWindow().minimize();
   };
@@ -133,6 +137,21 @@ export function TitleBar({
         </div>
       ) : null}
       <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onOpenCommandPalette}
+          className="icon-btn h-8 w-auto gap-1.5 px-2"
+          title={tt("commandPalette.buttonTitle", { keys: paletteKeys })}
+          aria-label={tt("commandPalette.title")}
+          aria-keyshortcuts="Control+K Meta+K"
+          data-no-drag
+          data-tour-id="tour-command-palette"
+        >
+          <img src="/launcher-assets/search.png" alt="" className="h-3.5 w-3.5 object-contain opacity-70" />
+          <kbd className="hidden rounded-md border border-white/15 bg-white/[0.07] px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-none text-white/60 lg:inline">
+            {modKeyLabel()} K
+          </kbd>
+        </button>
         {children}
         <div className="ml-1.5 flex items-center gap-0.5 border-l border-white/10 pl-2">
           <button

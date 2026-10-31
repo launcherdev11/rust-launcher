@@ -24,6 +24,7 @@ const BACKUP_SKIP_DIRS: &[&str] = &[
     ".cache",
     "cache",
     super::content_snapshots::SNAPSHOTS_DIR,
+    super::profiles::PROFILE_TRASH_DIR,
 ];
 const MANIFEST_NAME: &str = "16launcher-backup.json";
 

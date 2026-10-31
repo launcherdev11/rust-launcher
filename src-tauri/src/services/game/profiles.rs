@@ -27,6 +27,11 @@ use crate::services::game::options_txt::{
 
 const PROFILE_ITEM_DISABLED_SUFFIX: &str = ".disabled";
 
+// удалённый контент лежит здесь, пока удаление можно отменить
+pub(crate) const PROFILE_TRASH_DIR: &str = ".trash";
+const PROFILE_TRASH_TTL: Duration = Duration::from_secs(15 * 60);
+const PROFILE_TRASH_MANIFEST: &str = "item.json";
+
 const PROFILE_CONTENT_DIRS: &[&str] = &[
     "mods",
     "resourcepacks",
@@ -1032,7 +1037,7 @@ fn sync_resource_packs_options(profile_dir: &Path, packs: &[String]) -> Result<(
 }
 
 #[command]
-pub fn delete_item(id: String, category: String, filename: String) -> Result<(), String> {
+pub fn delete_item(id: String, category: String, filename: String) -> Result<Option<String>, String> {
     let dir = instance_dir(&id)?;
     if !dir.exists() {
         return Err("Папка сборки не найдена".to_string());
@@ -1040,21 +1045,149 @@ pub fn delete_item(id: String, category: String, filename: String) -> Result<(),
     let subdir = profile_content_subdir(&category)?;
     let content_dir = dir.join(subdir);
     let Some(target) = resolve_profile_item_path(&content_dir, &filename) else {
-        return Ok(());
+        return Ok(None);
     };
-    std::fs::remove_file(&target).map_err(|e| format!("Не удалось удалить файл {:?}: {e}", target))?;
+    purge_expired_trash(&dir);
 
+    let stored_name = target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Некорректное имя файла")?
+        .to_string();
+    let token = format!(
+        "{}-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(8)
+            .map(char::from)
+            .collect::<String>()
+    );
+    let entry_dir = dir.join(PROFILE_TRASH_DIR).join(&token);
+    std::fs::create_dir_all(&entry_dir)
+        .map_err(|e| format!("Не удалось подготовить корзину сборки: {e}"))?;
+    if let Err(e) = std::fs::rename(&target, entry_dir.join(&stored_name)) {
+        let _ = std::fs::remove_dir_all(&entry_dir);
+        return Err(format!("Не удалось удалить файл {:?}: {e}", target));
+    }
+
+    let mut trashed = TrashedProfileItem {
+        subdir: subdir.to_string(),
+        stored_name,
+        resource_packs_before: None,
+        shader_was_active: false,
+    };
     if subdir == "resourcepacks" {
         let options_path = profile_options_path(&dir);
         let current = read_resource_packs(&options_path)?;
         let next = remove_resource_pack_from_options(&current, &filename);
         if next != current {
             sync_resource_packs_options(&dir, &next)?;
+            trashed.resource_packs_before = Some(current);
         }
     } else if subdir == "shaderpacks" {
+        trashed.shader_was_active = read_shader_pack_selection(&dir)?.is_active_pack(&filename);
         clear_shader_pack_if_matches(&dir, &filename)?;
     }
-    Ok(())
+
+    let manifest = serde_json::to_string(&trashed)
+        .map_err(|e| format!("Не удалось записать сведения об удалённом файле: {e}"))?;
+    std::fs::write(entry_dir.join(PROFILE_TRASH_MANIFEST), manifest)
+        .map_err(|e| format!("Не удалось записать сведения об удалённом файле: {e}"))?;
+    Ok(Some(token))
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct TrashedProfileItem {
+    subdir: String,
+    stored_name: String,
+    #[serde(default)]
+    resource_packs_before: Option<Vec<String>>,
+    #[serde(default)]
+    shader_was_active: bool,
+}
+
+fn trash_entry_dir(profile_dir: &Path, token: &str) -> Result<PathBuf, String> {
+    if token.is_empty() || !token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("Некорректный идентификатор удалённого файла".to_string());
+    }
+    Ok(profile_dir.join(PROFILE_TRASH_DIR).join(token))
+}
+
+fn purge_expired_trash(profile_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(profile_dir.join(PROFILE_TRASH_DIR)) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let expired = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > PROFILE_TRASH_TTL);
+        if expired {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+#[command]
+pub fn restore_deleted_item(id: String, token: String) -> Result<String, String> {
+    let dir = instance_dir(&id)?;
+    let entry_dir = trash_entry_dir(&dir, &token)?;
+    let manifest = std::fs::read_to_string(entry_dir.join(PROFILE_TRASH_MANIFEST))
+        .map_err(|_| "Удалённый файл уже очищен из корзины".to_string())?;
+    let trashed: TrashedProfileItem = serde_json::from_str(&manifest)
+        .map_err(|e| format!("Повреждены сведения об удалённом файле: {e}"))?;
+    let subdir = profile_content_subdir(&trashed.subdir)?;
+    if Path::new(&trashed.stored_name).file_name().and_then(|n| n.to_str())
+        != Some(trashed.stored_name.as_str())
+    {
+        return Err("Некорректное имя файла".to_string());
+    }
+
+    let content_dir = dir.join(subdir);
+    let display_name = profile_item_display_name(&trashed.stored_name);
+    if resolve_profile_item_path(&content_dir, &display_name).is_some() {
+        return Err("Файл с таким именем уже есть в сборке".to_string());
+    }
+    std::fs::create_dir_all(&content_dir)
+        .map_err(|e| format!("Не удалось создать папку '{subdir}': {e}"))?;
+    std::fs::rename(
+        entry_dir.join(&trashed.stored_name),
+        content_dir.join(&trashed.stored_name),
+    )
+    .map_err(|e| format!("Не удалось восстановить файл: {e}"))?;
+    let _ = std::fs::remove_dir_all(&entry_dir);
+
+    if let Some(before) = trashed.resource_packs_before {
+        let current = read_resource_packs(&profile_options_path(&dir))?;
+        // список с тех пор не меняли: возвращаем пак на прежнее место
+        let next = if current == remove_resource_pack_from_options(&before, &display_name) {
+            before
+        } else {
+            add_resource_pack_to_options(&current, &display_name)
+        };
+        sync_resource_packs_options(&dir, &next)?;
+    }
+    if trashed.shader_was_active {
+        write_shader_pack_selection(&dir, &ShaderPackSelection::active(&display_name))?;
+    }
+    Ok(display_name)
+}
+
+#[command]
+pub fn purge_deleted_item(id: String, token: String) -> Result<(), String> {
+    let dir = instance_dir(&id)?;
+    let entry_dir = trash_entry_dir(&dir, &token)?;
+    match std::fs::remove_dir_all(&entry_dir) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("Не удалось очистить корзину сборки: {e}")),
+    }
 }
 
 #[command]
@@ -1464,3 +1597,126 @@ pub async fn add_profile_files(
     Ok(())
 }
 
+// у шейдерпака есть папка shaders/, у ресурспака pack.mcmeta, иногда во вложенной папке
+fn classify_dropped_content(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "jar" => Some("mods"),
+        "rar" | "7z" | "mcpack" => Some("resourcepacks"),
+        "zip" => {
+            let file = std::fs::File::open(path).ok()?;
+            let archive = zip::ZipArchive::new(file).ok()?;
+            let mut has_pack_meta = false;
+            for name in archive.file_names() {
+                let parts: Vec<&str> = name.split('/').filter(|s| !s.is_empty()).collect();
+                let is_shaders_dir =
+                    |i: usize| parts.len() > i + 1 && parts[i].eq_ignore_ascii_case("shaders");
+                if is_shaders_dir(0) || is_shaders_dir(1) {
+                    return Some("shaderpacks");
+                }
+                if parts.len() <= 2 && parts.last().is_some_and(|p| p.eq_ignore_ascii_case("pack.mcmeta")) {
+                    has_pack_meta = true;
+                }
+            }
+            has_pack_meta.then_some("resourcepacks")
+        }
+        _ => None,
+    }
+}
+
+#[derive(Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DroppedContentResult {
+    mods: u32,
+    resourcepacks: u32,
+    shaderpacks: u32,
+    skipped: Vec<String>,
+}
+
+#[command]
+pub async fn add_dropped_profile_files(
+    id: String,
+    files: Vec<String>,
+) -> Result<DroppedContentResult, String> {
+    let classified = tokio::task::spawn_blocking(move || {
+        files
+            .into_iter()
+            .map(|f| {
+                let category = classify_dropped_content(Path::new(&f));
+                (f, category)
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| format!("Не удалось разобрать файлы: {e}"))?;
+
+    let mut result = DroppedContentResult::default();
+    let mut by_category: Vec<(&'static str, Vec<String>)> = Vec::new();
+    for (file, category) in classified {
+        let Some(category) = category else {
+            let name = Path::new(&file)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&file)
+                .to_string();
+            result.skipped.push(name);
+            continue;
+        };
+        match by_category.iter_mut().find(|(c, _)| *c == category) {
+            Some((_, list)) => list.push(file),
+            None => by_category.push((category, vec![file])),
+        }
+    }
+
+    for (category, list) in by_category {
+        let count = list.len() as u32;
+        add_profile_files(id.clone(), category.to_string(), list).await?;
+        match category {
+            "mods" => result.mods += count,
+            "resourcepacks" => result.resourcepacks += count,
+            _ => result.shaderpacks += count,
+        }
+    }
+    Ok(result)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_zip(path: &Path, entries: &[&str]) {
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        let opts = zip::write::SimpleFileOptions::default();
+        for name in entries {
+            zip.start_file(*name, opts).unwrap();
+            zip.write_all(b"x").unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn classifies_dropped_archives() {
+        let dir = std::env::temp_dir().join(format!("drop_classify_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let shader = dir.join("shader.zip");
+        write_zip(&shader, &["shaders/composite.fsh"]);
+        let nested_shader = dir.join("nested_shader.zip");
+        write_zip(&nested_shader, &["BSL/shaders/final.fsh"]);
+        let pack = dir.join("pack.zip");
+        write_zip(&pack, &["pack.mcmeta", "assets/minecraft/textures/a.png"]);
+        let junk = dir.join("junk.zip");
+        write_zip(&junk, &["readme.txt"]);
+
+        assert_eq!(classify_dropped_content(&shader), Some("shaderpacks"));
+        assert_eq!(classify_dropped_content(&nested_shader), Some("shaderpacks"));
+        assert_eq!(classify_dropped_content(&pack), Some("resourcepacks"));
+        assert_eq!(classify_dropped_content(&junk), None);
+        assert_eq!(classify_dropped_content(Path::new("sodium.jar")), Some("mods"));
+        assert_eq!(classify_dropped_content(Path::new("notes.txt")), None);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

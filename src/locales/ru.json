@@ -1,5 +1,7 @@
 {
   "common": {
+    "undo": "Отменить",
+    "holdToDelete": "Удерживайте, чтобы удалить",
     "state": {
       "tabCrashed": "Эта вкладка сломалась",
       "tabCrashedHint": "Остальной лаунчер работает. Перезагрузите вкладку, сохранённые данные не пострадали.",
@@ -54,6 +56,16 @@
     }
   },
   "mods": {
+    "empty": {
+      "lockedHint": "Фильтры закреплены сборкой: {{filters}}",
+      "searchHint": "Проверьте, как написано «{{query}}», или поищите на другой площадке",
+      "showAll": "Показать не только установленные",
+      "resetFilters": "Сбросить категории и окружение",
+      "unlock": "Искать без привязки к сборке",
+      "anyVersion": "Любая версия игры",
+      "anyLoader": "Любой загрузчик",
+      "tryProvider": "Искать в {{provider}}"
+    },
     "provider": {
       "modrinth": "Modrinth",
       "curseforge": "CurseForge"
@@ -916,6 +928,14 @@
     }
   },
   "modpacks": {
+    "drop": {
+      "hint": "Отпустите, чтобы добавить в сборку",
+      "added": "Добавлено в «{{name}}»: {{summary}}",
+      "mods": "моды: {{count}}",
+      "resourcepacks": "ресурспаки: {{count}}",
+      "shaderpacks": "шейдеры: {{count}}",
+      "skipped": "Не удалось понять, что это за файлы, пропущено: {{files}}"
+    },
     "export": {
       "readFilesFailed": "Не удалось прочитать файлы сборки.",
       "selectAtLeastOnePath": "Выберите хотя бы один путь.",
@@ -1192,6 +1212,9 @@
       "shaderpacks": "Шейдеры"
     },
     "toast": {
+      "itemDeleted": "«{{name}}» удалён",
+      "itemsDeleted": "Удалено файлов: {{count}}",
+      "restoreFailed": "Не удалось восстановить файлов: {{count}}",
       "selectLoaderBeforePreset": "Выберите версию загрузчика перед сохранением пресета.",
       "loadProfilesFailed": "Не удалось загрузить список сборок.",
       "loadFilesFailed": "Не удалось загрузить файлы сборки.",
@@ -1226,6 +1249,21 @@
       "noProfilesFound": "Профили не найдены. Попробуйте указать корень лаунчера (не папку instances) - но instances тоже поддерживается."
     },
     "manage": {
+      "empty": {
+        "title": {
+          "mods": "В сборке пока нет модов",
+          "resourcepacks": "В сборке пока нет ресурспаков",
+          "shaderpacks": "В сборке пока нет шейдеров"
+        },
+        "find": {
+          "mods": "Найти моды для {{version}} {{loader}}",
+          "resourcepacks": "Найти ресурспаки для {{version}}",
+          "shaderpacks": "Найти шейдеры для {{version}}"
+        },
+        "fromPc": "Добавить с компьютера",
+        "noMatches": "Под поиск и фильтр ничего не подходит",
+        "resetFilters": "Сбросить поиск и фильтр"
+      },
       "enableItem": "Включить",
       "disableItem": "Отключить",
       "toggleFailed": "Не удалось изменить состояние файла.",
@@ -1240,7 +1278,6 @@
       "downloadFromCatalog": "Скачать из каталога",
       "chooseFileFromPc": "Выбрать файл с ПК",
       "loadingFiles": "Загрузка файлов...",
-      "emptyTab": "В этой вкладке ещё нет файлов.",
       "dropHint": "Перетащите сюда файлы из проводника или используйте «Добавить».",
       "update": "Обновить",
       "splitResizeAria": "Перетащите, чтобы изменить ширину списка и консоли",
@@ -1345,8 +1382,7 @@
     },
     "deleteConfirm": {
       "bulkPrompt": "Удалить выбранные сборки ({{count}})? Это действие нельзя отменить.",
-      "title": "Подтверждение удаления",
-      "prompt": "Удалить сборку «{{name}}»? Это действие нельзя отменить."
+      "title": "Подтверждение удаления"
     },
     "profileSettingsModal": {
       "title": "Настройки сборки",
@@ -1387,7 +1423,6 @@
       "bulkEnable": "Включить",
       "bulkDisable": "Отключить",
       "bulkDelete": "Удалить",
-      "bulkDeleteConfirm": "Удалить {{count}} файл(ов)?",
       "selectAll": "Выбрать все",
       "clearSelection": "Снять выбор",
       "worldsTitle": "Миры",
@@ -2272,6 +2307,13 @@
       "copied": "Скопировано!"
     },
     "downloads": {
+      "bytesOf": "{{done}} из {{total}}",
+      "filesOf": "{{done}} из {{total}} файлов",
+      "speed": "{{value}}/с",
+      "eta": "осталось {{time}}",
+      "etaSeconds": "~{{n}} с",
+      "etaMinutes": "~{{n}} мин",
+      "etaHours": "~{{h}} ч {{m}} мин",
       "paused": "пауза",
       "preparing": "подготовка…",
       "kind": {
@@ -2292,6 +2334,7 @@
       "imagesFilterName": "Изображения"
     },
     "help": {
+      "paletteHint": "{{keys}} открывает быстрый поиск: сборки, установленные моды, каталоги Modrinth и CurseForge, настройки и действия.",
       "title": "О лаунчере",
       "mainInfo": "16Launcher - бесплатный лаунчер для Minecraft с поддержкой Fabric, Forge, Quilt, NeoForge.",
       "icons": "Иконки взяты с сайта",
@@ -2464,6 +2507,10 @@
     "finish": "Понятно",
     "replay": "Обзор интерфейса",
     "steps": {
+      "command-palette": {
+        "title": "Быстрый поиск",
+        "body": "Ctrl+K (⌘K на macOS) открывает поиск по всему лаунчеру: сборки, моды во всех сборках, каталоги Modrinth и CurseForge, настройки и действия. Работает из любой вкладки."
+      },
       "welcome": {
         "title": "Интерфейс лаунчера",
         "body": "Разберём вкладки: запуск, моды, сборки, аккаунт."
@@ -2582,14 +2629,22 @@
     }
   },
   "commandPalette": {
+    "buttonTitle": "Поиск и команды ({{keys}})",
+    "discoverHint": "Нажмите {{keys}}, чтобы быстро найти сборку, мод, настройку или действие",
+    "tryIt": "Попробовать",
+    "contentDisabled": "отключён",
+    "searching": "Ищем…",
+    "searchingCatalog": "Ищем в Modrinth и CurseForge…",
     "title": "Палитра команд",
     "hotkey": "Палитра команд",
-    "placeholder": "Сборка, вкладка, настройка или действие…",
+    "placeholder": "Сборка, мод, вкладка, настройка или действие…",
     "nothing": "Ничего не найдено",
     "openTab": "Открыть вкладку",
     "openInstance": "Открыть сборку",
     "playInstance": "Играть: {{name}}",
     "group": {
+      "content": "Установлено в сборках",
+      "catalog": "Каталог модов",
       "recent": "Недавние",
       "actions": "Действия",
       "navigation": "Переходы",
@@ -2820,5 +2875,24 @@
     "build": "Собрать архив",
     "building": "Собираю архив…",
     "built": "Архив сервера сохранён. Модов: {{mods}}, пропущено: {{skipped}}"
+  },
+  "jumpList": {
+    "category": "Сборки",
+    "description": "Запустить · {{version}}"
+  },
+  "gameMonitor": {
+    "chip": "{{used}} ГБ · {{cpu}}%",
+    "openDetails": "Подробнее о ресурсах игры",
+    "title": "Ресурсы игры",
+    "memoryLabel": "Память процесса",
+    "cpuLabel": "Процессор",
+    "systemLabel": "Память системы",
+    "systemUsed": "{{used}} из {{total}} ГБ",
+    "gb": "{{value}} ГБ",
+    "heapHint": "Java выделено {{max}} ГБ. Процесс обычно занимает больше: кроме кучи есть сама JVM, нативные библиотеки и графика.",
+    "now": "сейчас",
+    "secondsAgo": "{{seconds}} с назад",
+    "openSettings": "Настроить память сборки",
+    "lowMemory": "Системе не хватает памяти: закройте лишние программы или уменьшите выделенную память"
   }
 }

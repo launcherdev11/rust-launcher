@@ -1,5 +1,7 @@
 {
   "common": {
+    "undo": "Rückgängig",
+    "holdToDelete": "Zum Löschen gedrückt halten",
     "state": {
       "tabCrashed": "Dieser Tab ist abgestürzt",
       "tabCrashedHint": "Der Rest des Launchers funktioniert. Lade den Tab neu, gespeicherte Daten sind sicher.",
@@ -54,6 +56,16 @@
     }
   },
   "mods": {
+    "empty": {
+      "lockedHint": "Filter sind an die Instanz gebunden: {{filters}}",
+      "searchHint": "Prüfe die Schreibweise von „{{query}}“ oder suche auf der anderen Plattform",
+      "showAll": "Nicht nur installierte anzeigen",
+      "resetFilters": "Kategorien und Umgebung zurücksetzen",
+      "unlock": "Ohne Bindung an die Instanz suchen",
+      "anyVersion": "Beliebige Spielversion",
+      "anyLoader": "Beliebiger Loader",
+      "tryProvider": "Auf {{provider}} suchen"
+    },
     "provider": {
       "modrinth": "Modrinth",
       "curseforge": "CurseForge"
@@ -944,6 +956,14 @@
     }
   },
   "modpacks": {
+    "drop": {
+      "hint": "Loslassen, um zur Instanz hinzuzufügen",
+      "added": "Zu „{{name}}“ hinzugefügt: {{summary}}",
+      "mods": "Mods: {{count}}",
+      "resourcepacks": "Ressourcenpakete: {{count}}",
+      "shaderpacks": "Shader: {{count}}",
+      "skipped": "Dateityp nicht erkannt, übersprungen: {{files}}"
+    },
     "export": {
       "readFilesFailed": "Build-Dateien konnten nicht gelesen werden.",
       "selectAtLeastOnePath": "Wählen Sie mindestens einen Pfad aus.",
@@ -1220,6 +1240,9 @@
       "shaderpacks": "Shader"
     },
     "toast": {
+      "itemDeleted": "„{{name}}“ gelöscht",
+      "itemsDeleted": "Dateien gelöscht: {{count}}",
+      "restoreFailed": "Nicht wiederhergestellte Dateien: {{count}}",
       "selectLoaderBeforePreset": "Wählen Sie eine Loader-Version aus, bevor Sie die Voreinstellung speichern.",
       "loadProfilesFailed": "Profile konnten nicht geladen werden.",
       "loadFilesFailed": "Profildateien konnten nicht geladen werden.",
@@ -1254,6 +1277,21 @@
       "noProfilesFound": "Keine Profile gefunden. Versuchen Sie es mit dem Stammverzeichnis des Launchers (nicht mit Instanzen) – Instanzen werden jedoch auch unterstützt."
     },
     "manage": {
+      "empty": {
+        "title": {
+          "mods": "In dieser Instanz gibt es noch keine Mods",
+          "resourcepacks": "In dieser Instanz gibt es noch keine Ressourcenpakete",
+          "shaderpacks": "In dieser Instanz gibt es noch keine Shader"
+        },
+        "find": {
+          "mods": "Mods für {{version}} {{loader}} finden",
+          "resourcepacks": "Ressourcenpakete für {{version}} finden",
+          "shaderpacks": "Shader für {{version}} finden"
+        },
+        "fromPc": "Vom Computer hinzufügen",
+        "noMatches": "Nichts passt zu Suche und Filter",
+        "resetFilters": "Suche und Filter zurücksetzen"
+      },
       "enableItem": "Aktivieren",
       "disableItem": "Deaktivieren",
       "toggleFailed": "Der Elementstatus konnte nicht geändert werden.",
@@ -1268,7 +1306,6 @@
       "downloadFromCatalog": "Aus Katalog herunterladen",
       "chooseFileFromPc": "Wählen Sie eine Datei vom PC aus",
       "loadingFiles": "Dateien werden geladen...",
-      "emptyTab": "Auf dieser Registerkarte befinden sich noch keine Dateien.",
       "dropHint": "Ziehen Sie Dateien aus dem Explorer hierher oder verwenden Sie „Hinzufügen“.",
       "update": "Aktualisieren",
       "splitResizeAria": "Ziehen Sie, um die Größe der Liste und der Konsole zu ändern",
@@ -1373,8 +1410,7 @@
     },
     "deleteConfirm": {
       "bulkPrompt": "Ausgewählte Profile ({{count}}) löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
-      "title": "Bestätigung löschen",
-      "prompt": "Profil „{{name}}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+      "title": "Bestätigung löschen"
     },
     "profileSettingsModal": {
       "title": "Profileinstellungen",
@@ -1415,7 +1451,6 @@
       "bulkEnable": "Aktivieren",
       "bulkDisable": "Deaktivieren",
       "bulkDelete": "Löschen",
-      "bulkDeleteConfirm": "{{count}} Datei(en) löschen?",
       "selectAll": "Alle auswählen",
       "clearSelection": "Auswahl aufheben",
       "worldsTitle": "Welten",
@@ -2300,6 +2335,13 @@
       "copied": "Kopiert!"
     },
     "downloads": {
+      "bytesOf": "{{done}} von {{total}}",
+      "filesOf": "{{done}} von {{total}} Dateien",
+      "speed": "{{value}}/s",
+      "eta": "noch {{time}}",
+      "etaSeconds": "~{{n}} s",
+      "etaMinutes": "~{{n}} Min.",
+      "etaHours": "~{{h}} Std. {{m}} Min.",
       "paused": "pausierte",
       "preparing": "vorbereiten…",
       "kind": {
@@ -2320,6 +2362,7 @@
       "imagesFilterName": "Bilder"
     },
     "help": {
+      "paletteHint": "{{keys}} öffnet die Schnellsuche: Instanzen, installierte Mods, die Kataloge von Modrinth und CurseForge, Einstellungen und Aktionen.",
       "title": "Über Launcher",
       "mainInfo": "16Launcher ist ein kostenloser Minecraft-Launcher mit Unterstützung für Fabric, Forge, Quilt und NeoForge.",
       "icons": "Ikonen aus",
@@ -2492,6 +2535,10 @@
     "finish": "Verstanden!",
     "replay": "Tour wiederholen",
     "steps": {
+      "command-palette": {
+        "title": "Schnellsuche",
+        "body": "Strg+K (⌘K unter macOS) öffnet die Suche im ganzen Launcher: Instanzen, Mods in allen Instanzen, die Kataloge von Modrinth und CurseForge, Einstellungen und Aktionen. Funktioniert in jedem Tab."
+      },
       "welcome": {
         "title": "Willkommen im Launcher!",
         "body": "Eine kurze Tour: Version wählen, Spiel starten, Mods verwalten und auf der Plattform registrieren."
@@ -2610,14 +2657,22 @@
     }
   },
   "commandPalette": {
+    "buttonTitle": "Suche und Befehle ({{keys}})",
+    "discoverHint": "Drücke {{keys}}, um schnell eine Instanz, einen Mod, eine Einstellung oder Aktion zu finden",
+    "tryIt": "Ausprobieren",
+    "contentDisabled": "deaktiviert",
+    "searching": "Suche läuft…",
+    "searchingCatalog": "Suche in Modrinth und CurseForge…",
     "title": "Befehlspalette",
     "hotkey": "Befehlspalette",
-    "placeholder": "Instanz, Tab, Einstellung oder Aktion…",
+    "placeholder": "Instanz, Mod, Tab, Einstellung oder Aktion…",
     "nothing": "Nichts gefunden",
     "openTab": "Tab öffnen",
     "openInstance": "Instanz öffnen",
     "playInstance": "Spielen: {{name}}",
     "group": {
+      "content": "In Instanzen installiert",
+      "catalog": "Mod-Katalog",
       "recent": "Zuletzt",
       "actions": "Aktionen",
       "navigation": "Gehe zu",
@@ -2848,5 +2903,24 @@
     "build": "Archiv erstellen",
     "building": "Archiv wird erstellt…",
     "built": "Serverarchiv gespeichert. Mods: {{mods}}, übersprungen: {{skipped}}"
+  },
+  "jumpList": {
+    "category": "Instanzen",
+    "description": "Starten · {{version}}"
+  },
+  "gameMonitor": {
+    "chip": "{{used}} GB · {{cpu}} %",
+    "openDetails": "Details zu den Spielressourcen",
+    "title": "Spielressourcen",
+    "memoryLabel": "Prozessspeicher",
+    "cpuLabel": "CPU",
+    "systemLabel": "Systemspeicher",
+    "systemUsed": "{{used}} von {{total}} GB",
+    "gb": "{{value}} GB",
+    "heapHint": "Java sind {{max}} GB zugewiesen. Der Prozess belegt meist mehr: Neben dem Heap kommen die JVM selbst, native Bibliotheken und Grafik dazu.",
+    "now": "jetzt",
+    "secondsAgo": "vor {{seconds}} s",
+    "openSettings": "Speicher der Instanz anpassen",
+    "lowMemory": "Dem System geht der Arbeitsspeicher aus: Schließe andere Programme oder verringere den zugewiesenen Speicher"
   }
 }

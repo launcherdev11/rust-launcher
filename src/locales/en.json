@@ -1,5 +1,7 @@
 {
   "common": {
+    "undo": "Undo",
+    "holdToDelete": "Hold to delete",
     "state": {
       "tabCrashed": "This tab has crashed",
       "tabCrashedHint": "The rest of the launcher is fine. Reload the tab; your saved data is safe.",
@@ -54,6 +56,16 @@
     }
   },
   "mods": {
+    "empty": {
+      "lockedHint": "Filters are locked to the instance: {{filters}}",
+      "searchHint": "Check the spelling of “{{query}}” or search on the other platform",
+      "showAll": "Show not only installed",
+      "resetFilters": "Reset categories and environment",
+      "unlock": "Search without the instance lock",
+      "anyVersion": "Any game version",
+      "anyLoader": "Any loader",
+      "tryProvider": "Search on {{provider}}"
+    },
     "provider": {
       "modrinth": "Modrinth",
       "curseforge": "CurseForge"
@@ -916,6 +928,14 @@
     }
   },
   "modpacks": {
+    "drop": {
+      "hint": "Release to add to the instance",
+      "added": "Added to “{{name}}”: {{summary}}",
+      "mods": "mods: {{count}}",
+      "resourcepacks": "resource packs: {{count}}",
+      "shaderpacks": "shaders: {{count}}",
+      "skipped": "Could not tell what these files are, skipped: {{files}}"
+    },
     "export": {
       "readFilesFailed": "Failed to read build files.",
       "selectAtLeastOnePath": "Select at least one path.",
@@ -1192,6 +1212,9 @@
       "shaderpacks": "Shaders"
     },
     "toast": {
+      "itemDeleted": "Deleted “{{name}}”",
+      "itemsDeleted": "Files deleted: {{count}}",
+      "restoreFailed": "Could not restore files: {{count}}",
       "selectLoaderBeforePreset": "Select a loader version before saving the preset.",
       "loadProfilesFailed": "Failed to load profiles.",
       "loadFilesFailed": "Failed to load profile files.",
@@ -1226,6 +1249,21 @@
       "noProfilesFound": "No profiles found. Try the launcher's root (not instances) - but instances is supported too."
     },
     "manage": {
+      "empty": {
+        "title": {
+          "mods": "No mods in this instance yet",
+          "resourcepacks": "No resource packs in this instance yet",
+          "shaderpacks": "No shaders in this instance yet"
+        },
+        "find": {
+          "mods": "Find mods for {{version}} {{loader}}",
+          "resourcepacks": "Find resource packs for {{version}}",
+          "shaderpacks": "Find shaders for {{version}}"
+        },
+        "fromPc": "Add from computer",
+        "noMatches": "Nothing matches the search and filter",
+        "resetFilters": "Reset search and filter"
+      },
       "enableItem": "Enable",
       "disableItem": "Disable",
       "toggleFailed": "Failed to change item state.",
@@ -1240,7 +1278,6 @@
       "downloadFromCatalog": "Download from catalog",
       "chooseFileFromPc": "Choose file from PC",
       "loadingFiles": "Loading files...",
-      "emptyTab": "No files on this tab yet.",
       "dropHint": "Drag files from Explorer here or use “Add”.",
       "update": "Update",
       "splitResizeAria": "Drag to resize the list and console",
@@ -1345,8 +1382,7 @@
     },
     "deleteConfirm": {
       "bulkPrompt": "Delete the selected profiles ({{count}})? This action cannot be undone.",
-      "title": "Delete confirmation",
-      "prompt": "Delete profile “{{name}}”? This action cannot be undone."
+      "title": "Delete confirmation"
     },
     "profileSettingsModal": {
       "title": "Profile settings",
@@ -1387,7 +1423,6 @@
       "bulkEnable": "Enable",
       "bulkDisable": "Disable",
       "bulkDelete": "Delete",
-      "bulkDeleteConfirm": "Delete {{count}} file(s)?",
       "selectAll": "Select all",
       "clearSelection": "Clear selection",
       "worldsTitle": "Worlds",
@@ -2272,6 +2307,13 @@
       "copied": "Copied!"
     },
     "downloads": {
+      "bytesOf": "{{done}} of {{total}}",
+      "filesOf": "{{done}} of {{total}} files",
+      "speed": "{{value}}/s",
+      "eta": "{{time}} left",
+      "etaSeconds": "~{{n}} s",
+      "etaMinutes": "~{{n}} min",
+      "etaHours": "~{{h}} h {{m}} min",
       "paused": "paused",
       "preparing": "preparing…",
       "kind": {
@@ -2292,6 +2334,7 @@
       "imagesFilterName": "Images"
     },
     "help": {
+      "paletteHint": "{{keys}} opens quick search: instances, installed mods, the Modrinth and CurseForge catalogs, settings and actions.",
       "title": "About Launcher",
       "mainInfo": "16Launcher is a free Minecraft launcher with support for Fabric, Forge, Quilt, NeoForge.",
       "icons": "Icons from",
@@ -2464,6 +2507,10 @@
     "finish": "Got it",
     "replay": "UI overview",
     "steps": {
+      "command-palette": {
+        "title": "Quick search",
+        "body": "Ctrl+K (⌘K on macOS) opens search across the whole launcher: instances, mods in every instance, the Modrinth and CurseForge catalogs, settings and actions. Works from any tab."
+      },
       "welcome": {
         "title": "Launcher UI",
         "body": "Quick pass over the tabs: launch, mods, instances, account."
@@ -2582,14 +2629,22 @@
     }
   },
   "commandPalette": {
+    "buttonTitle": "Search and commands ({{keys}})",
+    "discoverHint": "Press {{keys}} to quickly find an instance, mod, setting or action",
+    "tryIt": "Try it",
+    "contentDisabled": "disabled",
+    "searching": "Searching…",
+    "searchingCatalog": "Searching Modrinth and CurseForge…",
     "title": "Command palette",
     "hotkey": "Command palette",
-    "placeholder": "Instance, tab, setting or action…",
+    "placeholder": "Instance, mod, tab, setting or action…",
     "nothing": "Nothing found",
     "openTab": "Open tab",
     "openInstance": "Open instance",
     "playInstance": "Play: {{name}}",
     "group": {
+      "content": "Installed in instances",
+      "catalog": "Mod catalog",
       "recent": "Recent",
       "actions": "Actions",
       "navigation": "Go to",
@@ -2820,5 +2875,24 @@
     "build": "Build archive",
     "building": "Building archive…",
     "built": "Server archive saved. Mods: {{mods}}, skipped: {{skipped}}"
+  },
+  "jumpList": {
+    "category": "Instances",
+    "description": "Launch · {{version}}"
+  },
+  "gameMonitor": {
+    "chip": "{{used}} GB · {{cpu}}%",
+    "openDetails": "Game resource details",
+    "title": "Game resources",
+    "memoryLabel": "Process memory",
+    "cpuLabel": "CPU",
+    "systemLabel": "System memory",
+    "systemUsed": "{{used}} of {{total}} GB",
+    "gb": "{{value}} GB",
+    "heapHint": "Java is allocated {{max}} GB. The process usually takes more: besides the heap there is the JVM itself, native libraries and graphics.",
+    "now": "now",
+    "secondsAgo": "{{seconds}} s ago",
+    "openSettings": "Adjust instance memory",
+    "lowMemory": "The system is running low on memory: close other programs or lower the allocated memory"
   }
 }

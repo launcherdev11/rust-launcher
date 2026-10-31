@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AssetIcon } from "../../components/asset_icon";
 import { CatalogCardSkeleton, EmptyState, ErrorState, Spinner } from "../../components/ui";
@@ -209,6 +209,8 @@ type CatalogGridProps = {
   pageSize: number;
   onPageChange: (page: number) => void;
   emptyMessage: string;
+  emptyDescription?: string;
+  emptyActions?: ReactNode;
   onRetry?: () => void;
 };
 
@@ -238,6 +240,8 @@ export function CatalogGrid({
   pageSize,
   onPageChange,
   emptyMessage,
+  emptyDescription,
+  emptyActions,
   onRetry,
 }: CatalogGridProps) {
   const totalPages =
@@ -446,7 +450,7 @@ export function CatalogGrid({
           />
         ) : null}
         {!loading && projects.length === 0 && !error && (
-          <EmptyState title={emptyMessage} compact />
+          <EmptyState title={emptyMessage} description={emptyDescription} action={emptyActions} compact />
         )}
       </div>
       {showBatchBar ? (

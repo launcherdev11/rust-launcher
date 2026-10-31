@@ -10,6 +10,7 @@ import {
 import { PROFILE_GROUP_COLOR_STYLES } from "../../../lib/profile-groups";
 import { Check, FolderPlus, X } from "lucide-react";
 import { DeleteIcon } from "../../../components/delete_icon";
+import { HoldToConfirmButton } from "../../../components/ui";
 import { invoke } from "@tauri-apps/api/core";
 import type { ModpackController } from "../useModpackController";
 
@@ -38,7 +39,7 @@ export function ContextMenus({ ctx }: Props) {
     onTogglePinInSidebar,
     isPinnedInSidebar,
     setPendingBulkDeleteProfileIds,
-    setPendingDeleteProfileId,
+    handleDeleteProfile,
     setSelectedProfileId,
     setEditorSection,
     setActiveView,
@@ -252,30 +253,41 @@ export function ContextMenus({ ctx }: Props) {
                 })()}
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                const profile = profiles.find(
-                  (p) => p.id === contextMenu.profileId,
+            {(() => {
+              const count = profileIdsForAction(contextMenu.profileId).length;
+              const className =
+                "mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-danger-hi hover:bg-danger-strong/20";
+              if (count > 1) {
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ids = profileIdsForAction(contextMenu.profileId);
+                      setContextMenu(null);
+                      setPendingBulkDeleteProfileIds(ids);
+                    }}
+                    className={className}
+                  >
+                    <DeleteIcon className="h-3.5 w-3.5" />
+                    <span>{tt("modpacks.contextMenu.deleteSelectedProfiles", { count })}</span>
+                  </button>
                 );
-                setContextMenu(null);
-                if (!profile) return;
-                const ids = profileIdsForAction(profile.id);
-                if (ids.length > 1) setPendingBulkDeleteProfileIds(ids);
-                else setPendingDeleteProfileId(profile.id);
-              }}
-              className="mt-0.5 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-danger-hi hover:bg-danger-strong/20"
-            >
-              <DeleteIcon className="h-3.5 w-3.5" />
-              <span>
-                {(() => {
-                  const count = profileIdsForAction(contextMenu.profileId).length;
-                  return count > 1
-                    ? tt("modpacks.contextMenu.deleteSelectedProfiles", { count })
-                    : tt("modpacks.contextMenu.deleteProfile");
-                })()}
-              </span>
-            </button>
+              }
+              return (
+                <HoldToConfirmButton
+                  holdHint={tt("common.holdToDelete")}
+                  onConfirm={() => {
+                    const profile = profiles.find((p) => p.id === contextMenu.profileId);
+                    setContextMenu(null);
+                    if (profile) void handleDeleteProfile(profile);
+                  }}
+                  className={className}
+                >
+                  <DeleteIcon className="h-3.5 w-3.5" />
+                  <span>{tt("modpacks.contextMenu.deleteProfile")}</span>
+                </HoldToConfirmButton>
+              );
+            })()}
             <button
               type="button"
               onClick={() => {

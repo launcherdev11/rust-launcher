@@ -23,6 +23,7 @@ use crate::services::game::core::sha1_hex_of_file;
 use crate::services::game::download::{fetch_verified, resolve_file_path};
 use crate::services::game::profiles::{create_profile_impl, delete_profile, set_profile_icon_path};
 use crate::services::game::state::CANCEL_DOWNLOAD;
+use crate::services::modrinth::record_installed_item_sources;
 
 const DOWNLOAD_CANCELLED_MSG: &str = "Загрузка отменена пользователем";
 const DEFAULT_CONCURRENCY: usize = 16;
@@ -243,7 +244,7 @@ async fn download_manifest_file(
     meta: Option<CfFile>,
     class_id: Option<u32>,
     instance_dir: PathBuf,
-) -> Result<String, FailedMod> {
+) -> Result<(&'static str, String), FailedMod> {
     let failed = |file_name: Option<String>, reason: String| FailedMod {
         project_id: file.project_id,
         file_id: file.file_id,
@@ -264,15 +265,14 @@ async fn download_manifest_file(
         .filter(|s| !s.is_empty())
         .unwrap_or("mod.jar")
         .to_string();
-    let dest = instance_dir
-        .join(subdir_for_class_id(class_id))
-        .join(&safe_name);
+    let subdir = subdir_for_class_id(class_id);
+    let dest = instance_dir.join(subdir).join(&safe_name);
     let sha1 = meta.sha1();
 
     if let (Some(expected), true) = (sha1.as_deref(), dest.is_file()) {
         if let Ok(actual) = sha1_hex_of_file(&dest).await {
             if actual.eq_ignore_ascii_case(expected) {
-                return Ok(safe_name);
+                return Ok((subdir, safe_name));
             }
         }
     }
@@ -282,7 +282,7 @@ async fn download_manifest_file(
     fetch_verified(&client, &urls, &dest, sha1.as_deref(), None)
         .await
         .map_err(|e| failed(Some(safe_name.clone()), e))?;
-    Ok(safe_name)
+    Ok((subdir, safe_name))
 }
 
 async fn download_manifest_mods<F>(
@@ -436,7 +436,7 @@ where
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InstallProgress>();
 
     let download_fut = async {
-        let results: Vec<Result<(), FailedMod>> = stream::iter(files)
+        let results: Vec<Result<(&'static str, String, u32), FailedMod>> = stream::iter(files)
             .map(|file| {
                 let instance_dir = instance_dir.to_path_buf();
                 let completed = completed.clone();
@@ -453,16 +453,18 @@ where
                         });
                     }
 
-                    let name = download_manifest_file(file, meta, class_id, instance_dir).await?;
+                    let project_id = file.project_id;
+                    let (subdir, name) =
+                        download_manifest_file(file, meta, class_id, instance_dir).await?;
 
                     let cur = completed.fetch_add(1, Ordering::SeqCst) + 1;
                     let _ = tx.send(InstallProgress {
                         phase: "files".into(),
                         current: cur,
                         total,
-                        message: name,
+                        message: name.clone(),
                     });
-                    Ok(())
+                    Ok((subdir, name, project_id))
                 }
             })
             .buffer_unordered(concurrency)
@@ -479,7 +481,21 @@ where
     };
 
     let (results, _) = tokio::join!(download_fut, progress_fut);
-    results.into_iter().filter_map(Result::err).collect()
+    let mut failed = Vec::new();
+    let mut installed_by_subdir: HashMap<&'static str, Vec<(String, String)>> = HashMap::new();
+    for result in results {
+        match result {
+            Ok((subdir, name, project_id)) => installed_by_subdir
+                .entry(subdir)
+                .or_default()
+                .push((name, project_id.to_string())),
+            Err(e) => failed.push(e),
+        }
+    }
+    for (subdir, items) in installed_by_subdir {
+        record_installed_item_sources(instance_dir, subdir, "curseforge", items).await;
+    }
+    failed
 }
 
 pub async fn install_curseforge_zip<F>(

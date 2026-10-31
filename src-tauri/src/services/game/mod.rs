@@ -54,7 +54,8 @@ pub use install::{
 };
 pub use integrity::check_version_files_integrity;
 pub use launcher::{
-    cancel_download, get_running_game_session, launch_game, reset_download_cancel, stop_game,
+    cancel_download, get_game_process_stats, get_running_game_session, launch_game,
+    reset_download_cancel, stop_game,
 };
 pub use runtime::{
     lan_bridge_attach, lan_bridge_detach, lan_bridge_probe_port, lan_bridge_set_flow,
@@ -69,9 +70,10 @@ pub use lazy_mods::{
     remove_lazy_mod_item, save_lazy_mod_set,
 };
 pub use profiles::{
-    add_profile_files, change_profile_version, create_profile, delete_item, delete_profile,
+    add_dropped_profile_files, add_profile_files, change_profile_version, create_profile, delete_item, delete_profile,
     get_profile_icon_data_uri, get_profile_play_time_seconds, get_profiles, get_selected_profile,
-    list_profile_items, rename_profile, reorder_profile_resource_packs, set_profile_icon_from_file,
+    list_profile_items, purge_deleted_item, rename_profile, reorder_profile_resource_packs,
+    restore_deleted_item, set_profile_icon_from_file,
     set_profile_item_enabled, set_selected_profile, update_profile_settings, get_profile_account_id,
 };
 pub use external_import::{

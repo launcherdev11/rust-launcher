@@ -1,4 +1,11 @@
-export type PaletteGroup = "recent" | "actions" | "navigation" | "instances" | "settings";
+export type PaletteGroup =
+  | "recent"
+  | "actions"
+  | "navigation"
+  | "instances"
+  | "content"
+  | "catalog"
+  | "settings";
 
 export type PaletteCommand = {
   id: string;
@@ -7,8 +14,11 @@ export type PaletteCommand = {
   subtitle?: string;
   keywords?: string[];
   iconSrc?: string | null;
+  badgeSrc?: string | null;
   hint?: string;
   disabled?: boolean;
+  // не попадает в «Недавние»
+  transient?: boolean;
   run: () => void;
 };
 
@@ -18,6 +28,8 @@ const USAGE_KEY = "launcher_palette_usage_v1";
 const MAX_USAGE_ENTRIES = 120;
 const HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000;
 const RECENT_LIMIT = 5;
+const CONTENT_LIMIT = 12;
+const QUERY_ONLY_GROUPS: ReadonlySet<PaletteGroup> = new Set(["settings", "content", "catalog"]);
 
 type UsageEntry = { weight: number; at: number };
 type UsageMap = Record<string, UsageEntry>;
@@ -92,14 +104,18 @@ export function rankCommands(commands: PaletteCommand[], query: string): RankedC
     }
     const recentSet = new Set(recent.map((c) => c.id));
     const rest = commands
-      .filter((c) => !recentSet.has(c.id) && c.group !== "settings")
+      .filter((c) => !recentSet.has(c.id) && !QUERY_ONLY_GROUPS.has(c.group))
       .map((c) => ({ ...c, score: 0, shownGroup: c.group as PaletteGroup }));
     return [...recent, ...rest];
   }
 
   const ranked: RankedCommand[] = [];
   for (const cmd of commands) {
-    const fields = [cmd.title, cmd.subtitle ?? "", ...(cmd.keywords ?? [])];
+    // в подзаголовке контента имя сборки: по нему ищется сама сборка, а не все её моды
+    const fields =
+      cmd.group === "content"
+        ? [cmd.title, ...(cmd.keywords ?? [])]
+        : [cmd.title, cmd.subtitle ?? "", ...(cmd.keywords ?? [])];
     let best: number | null = null;
     fields.forEach((field, i) => {
       const s = fuzzyScore(q, field);
@@ -113,5 +129,8 @@ export function rankCommands(commands: PaletteCommand[], query: string): RankedC
     ranked.push({ ...cmd, score: (best as number) + boost, shownGroup: cmd.group });
   }
   ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, 60);
+  let contentShown = 0;
+  return ranked
+    .filter((c) => c.group !== "content" || ++contentShown <= CONTENT_LIMIT)
+    .slice(0, 60);
 }

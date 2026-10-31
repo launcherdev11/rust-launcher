@@ -27,6 +27,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { readDataCache, scheduleIdleWork, writeDataCache } from "../../lib/launcherDataCache";
 import { listen } from "@tauri-apps/api/event";
 import { HOTKEY_REFRESH_EVENT } from "../../hooks/useHotkeys";
+import {
+  PROFILE_CONTENT_FOCUS_EVENT,
+  takePendingProfileContentFocus,
+  type ProfileContentFocus,
+} from "../../lib/profileContentFocusBridge";
 import { useManageLayout } from "./hooks/useManageLayout";
 import { useManageConsole } from "./hooks/useManageConsole";
 import { useCreateProfileForm } from "./hooks/useCreateProfileForm";
@@ -45,6 +50,7 @@ import { useMrpackImport } from "./hooks/useMrpackImport";
 import { useProfileConflicts } from "./hooks/useProfileConflicts";
 import { useProfileGroups } from "./hooks/useProfileGroups";
 import { useProfileActions } from "./hooks/useProfileActions";
+import { useProfileCardDrop } from "./hooks/useProfileCardDrop";
 import type { ModpackTabProps } from "./types";
 
 export function useModpackController(props: ModpackTabProps) {
@@ -613,8 +619,6 @@ export function useModpackController(props: ModpackTabProps) {
     setIsRenaming,
     renameValue,
     setRenameValue,
-    pendingDeleteProfileId,
-    setPendingDeleteProfileId,
     pendingBulkDeleteProfileIds,
     setPendingBulkDeleteProfileIds,
     duplicateBusy,
@@ -884,6 +888,22 @@ export function useModpackController(props: ModpackTabProps) {
   }, [requestedModpackView, onRequestedModpackViewApplied]);
 
   useEffect(() => {
+    const apply = (focus: ProfileContentFocus | null) => {
+      if (!focus) return;
+      setSelectedProfileId(focus.profileId);
+      setEditorSection("content");
+      setContentTab(focus.contentTab);
+      setContentFilter("all");
+      setItemsSearch(focus.query);
+      setActiveView("manage");
+    };
+    apply(takePendingProfileContentFocus());
+    const onFocus = () => apply(takePendingProfileContentFocus());
+    window.addEventListener(PROFILE_CONTENT_FOCUS_EVENT, onFocus);
+    return () => window.removeEventListener(PROFILE_CONTENT_FOCUS_EVENT, onFocus);
+  }, []);
+
+  useEffect(() => {
     if (!requestedProfileSettingsId) return;
     void openProfileSettings(requestedProfileSettingsId);
     onRequestedProfileSettingsApplied?.();
@@ -972,9 +992,18 @@ export function useModpackController(props: ModpackTabProps) {
     void ensureExternalImportPathDefault();
   }, [activeView, ensureExternalImportPathDefault]);
 
+  const { dropTargetProfileId } = useProfileCardDrop({
+    activeView,
+    profiles,
+    tt,
+    showNotification,
+    refreshProfiles,
+  });
+
   return {
     language,
     showNotification,
+    dropTargetProfileId,
     onOpenModsTab,
     onPlaySelectedProfile,
     onContinueProfile,
@@ -1124,8 +1153,6 @@ export function useModpackController(props: ModpackTabProps) {
     resourcePackPointerDragRef,
     resourcePackRowRefs,
     groupProfilesDropdownRef,
-    pendingDeleteProfileId,
-    setPendingDeleteProfileId,
     pendingBulkDeleteProfileIds,
     setPendingBulkDeleteProfileIds,
     isProfileSettingsOpen,

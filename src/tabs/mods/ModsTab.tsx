@@ -62,6 +62,25 @@ import {
   downloadCatalogVersion,
   resolveLatestCompatibleVersion,
 } from "./versionActions";
+import { loaderLabels } from "../modpack/helpers";
+import {
+  CATALOG_OPEN_EVENT,
+  takePendingCatalogOpen,
+  type CatalogOpenRequest,
+} from "../../lib/catalogOpenBridge";
+
+function profileLoaderFilter(profileLoader: string | null | undefined): LoaderFilter | null {
+  const normalized = profileLoader?.toLowerCase();
+  if (
+    normalized === "forge" ||
+    normalized === "fabric" ||
+    normalized === "quilt" ||
+    normalized === "neoforge"
+  ) {
+    return normalized;
+  }
+  return normalized === "vanilla" ? "any" : null;
+}
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -337,18 +356,8 @@ export function ModsTab({
   }, [activeProfileGameVersion]);
 
   useEffect(() => {
-    if (!activeProfileLoader) return;
-    const normalized = activeProfileLoader.toLowerCase();
-    if (
-      normalized === "forge" ||
-      normalized === "fabric" ||
-      normalized === "quilt" ||
-      normalized === "neoforge"
-    ) {
-      setLoader(normalized);
-    } else if (normalized === "vanilla") {
-      setLoader("any");
-    }
+    const next = profileLoaderFilter(activeProfileLoader);
+    if (next) setLoader(next);
   }, [activeProfileLoader]);
 
   useEffect(() => {
@@ -526,7 +535,11 @@ export function ModsTab({
         payload.total != null &&
         payload.total > 0
       ) {
-        updateDownloadJob(jobId, (payload.current / payload.total) * 100);
+        updateDownloadJob(jobId, (payload.current / payload.total) * 100, {
+          current: payload.current,
+          total: payload.total,
+          unit: "files",
+        });
       }
     };
     const unlistenMrpack = subscribeTauriEvent<MrpackImportProgressPayload>(
@@ -775,6 +788,59 @@ export function ModsTab({
     } catch {
     }
   };
+
+  const [pendingCatalogOpen, setPendingCatalogOpen] = useState<CatalogOpenRequest | null>(
+    takePendingCatalogOpen,
+  );
+
+  useEffect(() => {
+    const onOpen = () => {
+      const request = takePendingCatalogOpen();
+      if (request) setPendingCatalogOpen(request);
+    };
+    window.addEventListener(CATALOG_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(CATALOG_OPEN_EVENT, onOpen);
+  }, []);
+
+  // openProject берёт площадку и тип из текущего рендера, поэтому переключаем по шагам
+  useEffect(() => {
+    if (!pendingCatalogOpen) return;
+    if (pendingCatalogOpen.kind === "project" && pendingCatalogOpen.provider !== contentProvider) {
+      setContentProviderPersisted(pendingCatalogOpen.provider);
+      return;
+    }
+    if (pendingCatalogOpen.contentType !== contentType) {
+      setContentType(pendingCatalogOpen.contentType);
+      return;
+    }
+    if (sourceTab !== "catalog") {
+      setSourceTab("catalog");
+      return;
+    }
+    setPendingCatalogOpen(null);
+    if (pendingCatalogOpen.kind === "project") {
+      void openProject(pendingCatalogOpen.key);
+      return;
+    }
+    resetCatalogFilters();
+    setSearch("");
+    setPage(0);
+    setShowDetail(false);
+    setSelectedKey(null);
+    if (activeProfileId) {
+      if (activeProfileGameVersion) setGameVersion(activeProfileGameVersion);
+      const profileLoader = profileLoaderFilter(activeProfileLoader);
+      if (profileLoader) setLoader(profileLoader);
+      setVersionLoaderLocked(true);
+    }
+  }, [pendingCatalogOpen, contentProvider, contentType, sourceTab, openProject]);
+
+  function resetCatalogFilters() {
+    setSelectedCategories([]);
+    setClientSide("any");
+    setServerSide("any");
+    setInstalledOnly(false);
+  }
 
   const handleSortChange = (next: CatalogSort) => {
     setSort(next);
@@ -1062,6 +1128,59 @@ export function ModsTab({
         ? tt("mods.nothingFoundCurseforge")
         : tt("mods.nothingFoundModrinth");
 
+  const otherProvider: ContentProvider = contentProvider === "modrinth" ? "curseforge" : "modrinth";
+  const loaderFiltered = contentType === "mod" && loader !== "any";
+  const emptyHint =
+    sourceTab !== "catalog"
+      ? null
+      : versionLoaderLocked && (gameVersion || loaderFiltered)
+        ? tt("mods.empty.lockedHint", {
+            filters: [gameVersion, loaderFiltered ? loaderLabels[loader] : null].filter(Boolean).join(" · "),
+          })
+        : search.trim()
+          ? tt("mods.empty.searchHint", { query: search.trim() })
+          : undefined;
+  const emptyActions =
+    sourceTab !== "catalog" ? null : (
+      <>
+        {installedOnly ? (
+          <button type="button" className="btn btn-soft btn-sm" onClick={() => setInstalledOnly(false)}>
+            {tt("mods.empty.showAll")}
+          </button>
+        ) : null}
+        {selectedCategories.length > 0 || clientSide !== "any" || serverSide !== "any" ? (
+          <button type="button" className="btn btn-soft btn-sm" onClick={resetCatalogFilters}>
+            {tt("mods.empty.resetFilters")}
+          </button>
+        ) : null}
+        {versionLoaderLocked && (gameVersion || loaderFiltered) ? (
+          <button type="button" className="btn btn-soft btn-sm" onClick={() => setShowUnlockConfirm(true)}>
+            {tt("mods.empty.unlock")}
+          </button>
+        ) : (
+          <>
+            {gameVersion ? (
+              <button type="button" className="btn btn-soft btn-sm" onClick={() => setGameVersion("")}>
+                {tt("mods.empty.anyVersion")}
+              </button>
+            ) : null}
+            {loaderFiltered ? (
+              <button type="button" className="btn btn-soft btn-sm" onClick={() => setLoader("any")}>
+                {tt("mods.empty.anyLoader")}
+              </button>
+            ) : null}
+          </>
+        )}
+        <button
+          type="button"
+          className="btn btn-tint btn-sm"
+          onClick={() => setContentProviderPersisted(otherProvider)}
+        >
+          {tt("mods.empty.tryProvider", { provider: tt(`mods.provider.${otherProvider}`) })}
+        </button>
+      </>
+    );
+
   return (
     <div className="flex h-full w-full min-h-0 max-w-none flex-col self-stretch">
       {showUnlockConfirm && (
@@ -1195,10 +1314,7 @@ export function ModsTab({
             onReset={() => {
               setSort("downloads");
               saveStoredSort("downloads");
-              setSelectedCategories([]);
-              setClientSide("any");
-              setServerSide("any");
-              setInstalledOnly(false);
+              resetCatalogFilters();
             }}
           />
         )}
@@ -1268,6 +1384,8 @@ export function ModsTab({
             pageSize={CATALOG_PAGE_SIZE}
             onPageChange={setPage}
             emptyMessage={emptyMessage}
+            emptyDescription={emptyHint ?? undefined}
+            emptyActions={emptyActions}
             onRetry={() => setRefreshNonce((n) => n + 1)}
           />
         )}

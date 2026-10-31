@@ -98,7 +98,7 @@ async fn post_version_files_map(
 
 #[derive(Debug, serde::Serialize)]
 struct CurseforgeFingerprintRequest {
-    fingerprints: Vec<i32>,
+    fingerprints: Vec<u32>,
 }
 
 #[derive(Debug, serde::Deserialize, Clone)]
@@ -121,6 +121,8 @@ struct CfFingerprintFile {
     #[serde(default)]
     hashes: Vec<CfFileHash>,
     #[serde(default)]
+    file_fingerprint: Option<u64>,
+    #[serde(default)]
     #[serde(rename = "gameVersions")]
     game_versions: Vec<String>,
 }
@@ -128,8 +130,6 @@ struct CfFingerprintFile {
 #[derive(Debug, serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CfFingerprintExactMatch {
-    #[serde(default)]
-    id: i32,
     file: CfFingerprintFile,
     #[serde(default)]
     latest_files: Vec<CfFingerprintFile>,
@@ -273,8 +273,8 @@ async fn check_curseforge_content(
     game_version: &str,
     loader: &str,
 ) -> Result<CfScanResult, String> {
-    let mut fingerprint_by_filename: HashMap<String, i32> = HashMap::new();
-    let mut filename_by_fingerprint: HashMap<i32, String> = HashMap::new();
+    let mut fingerprint_by_filename: HashMap<String, u32> = HashMap::new();
+    let mut filename_by_fingerprint: HashMap<u32, String> = HashMap::new();
 
     let mut read_dir = tokio::fs::read_dir(content_dir)
         .await
@@ -307,7 +307,7 @@ async fn check_curseforge_content(
         });
     }
 
-    let fingerprints: Vec<i32> = fingerprint_by_filename.values().copied().collect();
+    let fingerprints: Vec<u32> = fingerprint_by_filename.values().copied().collect();
     let client = crate::infra::http::http_client(false);
     let url = format!("{}/fingerprints/{MINECRAFT_GAME_ID}", curseforge_api_base());
 
@@ -337,8 +337,11 @@ async fn check_curseforge_content(
     let game_version_trimmed = game_version.trim();
 
     for exact in parsed.data.exact_matches {
-        let local_filename = filename_by_fingerprint
-            .get(&exact.id)
+        let local_filename = exact
+            .file
+            .file_fingerprint
+            .and_then(|fp| u32::try_from(fp).ok())
+            .and_then(|fp| filename_by_fingerprint.get(&fp))
             .cloned()
             .or_else(|| {
                 let cf_name = exact.file.file_name.trim();

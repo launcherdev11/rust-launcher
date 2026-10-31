@@ -1,5 +1,6 @@
 import { ContextMenuPanel } from "../../components/ContextMenuPanel";
 import { DeleteIcon } from "../../components/delete_icon";
+import { HoldToConfirmButton } from "../../components/ui";
 import { ProfileInfoIcon } from "../../components/profile_info_modal";
 import type { InstanceProfileCard, Tt } from "../types";
 
@@ -91,9 +92,9 @@ export function PinnedProfileMenu({
         <img src="/launcher-assets/favorite.png" alt="" className="h-3.5 w-3.5 object-contain" />
         <span>{tt("modpacks.contextMenu.unpinFromSidebar")}</span>
       </button>
-      <button
-        type="button"
-        onClick={() => {
+      <HoldToConfirmButton
+        holdHint={tt("common.holdToDelete")}
+        onConfirm={() => {
           const profile = profiles.find((p) => p.id === menu.profileId);
           onClose();
           if (!profile) return;
@@ -103,7 +104,7 @@ export function PinnedProfileMenu({
       >
         <DeleteIcon className="h-3.5 w-3.5" />
         <span>{tt("modpacks.contextMenu.deleteProfile")}</span>
-      </button>
+      </HoldToConfirmButton>
       <button
         type="button"
         onClick={() => {

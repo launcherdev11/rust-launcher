@@ -1,4 +1,4 @@
-import type { DownloadJobKind } from "../../hooks/useDownloadJobs";
+import type { DownloadJobDetail, DownloadJobKind } from "../../hooks/useDownloadJobs";
 import type { Language } from "../../i18n";
 
 export type ModrinthContentType = "mod" | "resourcepack" | "shader" | "modpack";
@@ -190,7 +190,7 @@ export type ModsTabProps = {
     kind: DownloadJobKind;
     percent?: number | null;
   }) => void;
-  updateDownloadJob?: (id: string, percent: number | null) => void;
+  updateDownloadJob?: (id: string, percent: number | null, detail?: DownloadJobDetail | null) => void;
   finishDownloadJob?: (id: string) => void;
   makeDownloadJobId?: (prefix: string) => string;
 };

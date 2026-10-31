@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ProfileInstanceIcon } from "./profile_instance_icon";
+import { GameResourceChip } from "./GameResourceChip";
 import type { Language } from "../i18n";
 import { useT } from "../i18n";
 
@@ -101,6 +102,7 @@ export function SelectedProfileTitleBar({
           {formatSessionElapsed(elapsedSeconds)}
         </span>
       ) : null}
+      <GameResourceChip active={gameStatus === "running"} tt={tt} onOpenSettings={onSettings} />
 
       <div className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1">
         {isRunning ? (

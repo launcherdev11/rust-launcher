@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import type { DownloadJob, DownloadJobKind } from "../hooks/useDownloadJobs";
-import { useT, type Language } from "../i18n";
+import { formatByteSize, useT, type Language } from "../i18n";
 
 type ActiveDownloadsPanelProps = {
   jobs: DownloadJob[];
@@ -13,6 +13,35 @@ const KIND_ICON: Record<DownloadJobKind, string> = {
   mod: "mods.png",
   file: "file.png",
 };
+
+type Tt = ReturnType<typeof useT>;
+
+function formatEta(tt: Tt, seconds: number): string {
+  if (seconds < 60) return tt("app.downloads.etaSeconds", { n: Math.max(1, seconds) });
+  if (seconds < 3600) return tt("app.downloads.etaMinutes", { n: Math.round(seconds / 60) });
+  return tt("app.downloads.etaHours", { h: Math.floor(seconds / 3600), m: Math.round((seconds % 3600) / 60) });
+}
+
+function progressFacts(job: DownloadJob, tt: Tt, language: Language) {
+  const detail = job.detail;
+  const amount = !detail
+    ? null
+    : detail.unit === "bytes"
+      ? tt("app.downloads.bytesOf", {
+          done: formatByteSize(language, detail.current),
+          total: formatByteSize(language, detail.total),
+        })
+      : tt("app.downloads.filesOf", { done: detail.current, total: detail.total });
+  const rate = [
+    job.bytesPerSecond && job.bytesPerSecond > 0
+      ? tt("app.downloads.speed", { value: formatByteSize(language, job.bytesPerSecond) })
+      : null,
+    job.etaSeconds != null ? tt("app.downloads.eta", { time: formatEta(tt, job.etaSeconds) }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return { amount, rate };
+}
 
 export function ActiveDownloadsPanel({ jobs, language }: ActiveDownloadsPanelProps) {
   const tt = useT(language);
@@ -33,6 +62,7 @@ export function ActiveDownloadsPanel({ jobs, language }: ActiveDownloadsPanelPro
             : known
               ? kindLabel
               : `${kindLabel} · ${tt("app.downloads.preparing")}`;
+          const facts = known && !paused ? progressFacts(job, tt, language) : null;
 
           return (
             <motion.div
@@ -81,6 +111,12 @@ export function ActiveDownloadsPanel({ jobs, language }: ActiveDownloadsPanelPro
                   style={known ? { transform: `translateX(${percent - 100}%)` } : undefined}
                 />
               </div>
+              {facts && (facts.amount || facts.rate) ? (
+                <div className="-mt-1 flex items-center justify-between gap-3 text-[0.6875rem] tabular-nums text-white/45">
+                  <span className="truncate">{facts.amount}</span>
+                  <span className="shrink-0">{facts.rate}</span>
+                </div>
+              ) : null}
             </motion.div>
           );
         })}

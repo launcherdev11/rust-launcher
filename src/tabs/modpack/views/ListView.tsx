@@ -39,11 +39,14 @@ import {
 } from "../../../components/ui";
 import { DeleteIcon } from "../../../components/delete_icon";
 import type { ModpackController } from "../useModpackController";
+import { ProfileIconMorph } from "../ProfileIconMorph";
 
 type Props = { ctx: ModpackController };
 
 export function ListView({ ctx }: Props) {
   const {
+    uiScale,
+    dropTargetProfileId,
     selectedProfileId,
     isPinnedInSidebar,
     multiSelectedProfileIds,
@@ -96,17 +99,21 @@ export function ListView({ ctx }: Props) {
     const isPinned = isPinnedInSidebar?.(p.id) ?? false;
     const isMultiSelected = multiSelectedProfileIds.has(p.id);
     const isDragged = profileDrag?.ids.includes(p.id) ?? false;
+    const isDropTarget = dropTargetProfileId === p.id;
     const iconRevision = profileIconRevisions[p.id] ?? 0;
     const lastPlayed = formatLastPlayedAt(p.last_played_at, language);
     return (
       <div
         key={p.id}
         data-profile-card
+        data-profile-drop-id={p.id}
         data-marquee-key={p.id}
         onPointerDown={(e) => handleProfilePointerDown(p.id, e)}
         onDragStart={(e) => e.preventDefault()}
         className={`relative flex cursor-pointer select-none items-center gap-3 overflow-hidden rounded-2xl border px-3 py-2.5 transition ${
-          isMultiSelected
+          isDropTarget
+            ? "border-accent-to bg-accent-from/20 ring-2 ring-accent-to/60"
+            : isMultiSelected
             ? "border-accent-to/70 bg-accent-from/15 ring-1 ring-accent-to/40"
             : isSelected
               ? "border-accent-to/55 bg-ink-900/95 ring-1 ring-accent-to/25"
@@ -140,11 +147,15 @@ export function ListView({ ctx }: Props) {
         }}
       >
         <ProfileCardIconBackdrop profileId={p.id} refreshKey={iconRevision} />
-        <ProfileInstanceIcon
-          profile={p}
-          refreshKey={iconRevision}
-          className="z-[1] h-12 w-12 shrink-0"
-        />
+        {isDropTarget ? (
+          <span className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center gap-2 bg-ink-900/75 text-sm font-semibold text-white">
+            <img src="/launcher-assets/import.svg" alt="" className="h-4 w-4 object-contain" />
+            {tt("modpacks.drop.hint")}
+          </span>
+        ) : null}
+        <ProfileIconMorph profileId={p.id} enabled={uiScale <= 1} className="relative z-[1] shrink-0">
+          <ProfileInstanceIcon profile={p} refreshKey={iconRevision} className="h-12 w-12 shrink-0" />
+        </ProfileIconMorph>
         <div className="relative z-[1] min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-sm font-semibold text-white">{p.name}</span>

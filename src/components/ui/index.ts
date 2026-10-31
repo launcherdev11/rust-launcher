@@ -3,6 +3,7 @@ export { AuthGate } from "./AuthGate";
 export { ConfirmHost } from "./ConfirmHost";
 export { ConnectionNotice } from "./ConnectionNotice";
 export { EmptyState } from "./EmptyState";
+export { HoldToConfirmButton } from "./HoldToConfirmButton";
 export { Modal } from "./Modal";
 export { Panel } from "./Panel";
 export { PromptHost } from "./PromptHost";

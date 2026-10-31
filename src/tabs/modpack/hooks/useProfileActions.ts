@@ -89,10 +89,6 @@ export function useProfileActions(deps: ProfileActionsDeps) {
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
-  const [pendingDeleteProfileId, setPendingDeleteProfileId] = useState<string | null>(
-    null,
-  );
-
   const [pendingBulkDeleteProfileIds, setPendingBulkDeleteProfileIds] = useState<string[] | null>(
     null,
   );
@@ -479,8 +475,6 @@ export function useProfileActions(deps: ProfileActionsDeps) {
     setIsRenaming,
     renameValue,
     setRenameValue,
-    pendingDeleteProfileId,
-    setPendingDeleteProfileId,
     pendingBulkDeleteProfileIds,
     setPendingBulkDeleteProfileIds,
     duplicateBusy,

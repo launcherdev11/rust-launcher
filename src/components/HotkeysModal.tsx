@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { useT } from "../i18n";
 import type { Language } from "../i18n";
 import { HOTKEY_GROUP_ORDER, HOTKEY_HELP } from "../lib/hotkeyList";
+import { modKeyLabel } from "../lib/hotkeyKey";
 import { Modal } from "./ui/Modal";
 
 type HotkeysModalProps = {
@@ -11,13 +12,15 @@ type HotkeysModalProps = {
 };
 
 function KeyCombo({ keys }: { keys: string[] }) {
+  // Cmd+Tab на macOS занят системой
+  const mod = keys.includes("Tab") ? "Ctrl" : modKeyLabel();
   return (
     <span className="inline-flex items-center gap-1">
       {keys.map((key, i) => (
         <Fragment key={`${key}-${i}`}>
           {i > 0 && key !== "…" ? <span className="text-white/30">+</span> : null}
           <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded-md border border-white/15 bg-white/[0.07] px-1.5 py-0.5 text-[0.6875rem] font-semibold text-white/85">
-            {key}
+            {key === "Ctrl" ? mod : key}
           </kbd>
         </Fragment>
       ))}

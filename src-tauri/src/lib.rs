@@ -11,9 +11,9 @@ mod services;
 
 use services::background::{get_background_data_uri, set_background_image};
 use services::game::{
-    add_launcher_account, add_profile_files, cancel_download, check_version_files_integrity,
+    add_dropped_profile_files, add_launcher_account, add_profile_files, cancel_download, check_version_files_integrity,
     clear_launcher_cache, create_build_preset_from_profile, create_profile, delete_build_preset,
-    delete_item, delete_profile, detect_java_runtimes, get_build_preset_icon_data_uri,
+    delete_item, purge_deleted_item, restore_deleted_item, delete_profile, detect_java_runtimes, get_build_preset_icon_data_uri,
     list_build_presets, list_installed_java_runtimes, reinstall_java_runtimes, save_build_preset,
     add_lazy_mod_items, apply_lazy_mod_sets, delete_lazy_mod_set, list_lazy_mod_sets,
     remove_lazy_mod_item, save_lazy_mod_set,
@@ -27,7 +27,7 @@ use services::game::{
     get_profile_icon_data_uri, get_profile_java_settings, get_profile_play_time_seconds, get_profiles,
     set_profile_icon_from_file, list_profile_texture_icons, set_profile_icon_from_texture,
     get_selected_profile,
-    get_graphics_adapters, get_running_game_session, get_settings, get_system_memory_gb, get_launcher_cache_size, import_custom_version,
+    get_game_process_stats, get_graphics_adapters, get_running_game_session, get_settings, get_system_memory_gb, get_launcher_cache_size, import_custom_version,
     import_launcher_settings_backup, import_mrpack_as_new_profile,
     install_fabric, install_forge, install_local_version, install_neoforge, install_quilt, install_version,
         launch_game, list_installed_fabric_game_versions, list_installed_quilt_game_versions,
@@ -64,7 +64,7 @@ use services::curseforge::{
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
     check_profile_incompatible_content, download_modrinth_with_dependencies,
-    install_missing_mod_dependency, resolve_profile_item_metadata,
+    install_missing_mod_dependency, list_installed_content_index, resolve_profile_item_metadata,
     scan_profile_mod_jars,
 };
 use services::rpc::{
@@ -83,7 +83,7 @@ use profile_launch::{
     emit_profile_launch_request,
     take_pending_profile_launch,
 };
-use services::shortcuts::create_profile_desktop_shortcut;
+use services::shortcuts::{create_profile_desktop_shortcut, update_jump_list};
 use services::themes::{
     add_theme_asset, create_empty_theme, delete_theme, duplicate_theme, export_theme_zip,
     get_theme, import_theme_zip, list_themes, open_theme_css_file,
@@ -230,6 +230,7 @@ pub fn run() {
             set_settings,
             get_effective_settings,
                                     stop_game,
+            get_game_process_stats,
             get_running_game_session,
             list_game_runs,
             read_game_run_log,
@@ -273,6 +274,7 @@ pub fn run() {
             scan_profile_mod_jars,
             apply_profile_content_updates,
             resolve_profile_item_metadata,
+            list_installed_content_index,
             download_modrinth_modpack_and_import,
             curseforge_search_mods,
             curseforge_get_mod,
@@ -288,12 +290,15 @@ pub fn run() {
             update_profile_settings,
             get_profile_account_id,
             delete_item,
+            restore_deleted_item,
+            purge_deleted_item,
             list_profile_items,
             set_profile_item_enabled,
             reorder_profile_resource_packs,
             rename_profile,
             change_profile_version,
             add_profile_files,
+            add_dropped_profile_files,
                         delete_profile,
             get_java_settings,
             set_java_settings,
@@ -347,6 +352,8 @@ pub fn run() {
             take_pending_mrpack_open,
             take_pending_profile_launch,
             create_profile_desktop_shortcut,
+            update_jump_list,
+            infra::tray::update_tray_profiles,
                         list_screenshots,
             get_screenshot_data_uri,
             get_screenshot_thumbnail,

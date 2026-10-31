@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use reqwest::header::USER_AGENT;
@@ -8,7 +9,11 @@ use serde::{Deserialize, Serialize};
 use zip::read::ZipArchive;
 
 use crate::app::paths::instance_dir;
-use crate::services::game::profiles::{profile_content_subdir, resolve_profile_item_path};
+use crate::services::game::core::sha1_hex_of_file;
+use crate::services::game::profiles::{
+    load_all_instance_profiles, profile_content_subdir, profile_item_display_name,
+    profile_item_is_disabled, resolve_profile_item_path,
+};
 
 use crate::infra::api_base::curseforge_api_base;
 use super::client::{modrinth_get_json, modrinth_http_client, MODRINTH_API_BASE};
@@ -17,6 +22,9 @@ use super::types::{ModrinthVersion, ProfileItemMetadata, MODRINTH_USER_AGENT};
 
 const VERSION_FILES_BATCH: usize = 96;
 const MINECRAFT_GAME_ID: u32 = 432;
+
+// кеш пишут и resolve_profile_item_metadata, и установщики (параллельно при установке сборки)
+static CACHE_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct MetadataCacheFile {
@@ -37,6 +45,10 @@ struct CachedEntry {
     source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     project_id: Option<String>,
+    // источник записан при установке и важнее совпадения по хешу: многие моды CurseForge
+    // лежат на Modrinth тем же файлом
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    installed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,14 +67,17 @@ struct ModrinthProjectBrief {
 
 #[derive(Debug, Serialize)]
 struct CurseforgeFingerprintRequest {
-    fingerprints: Vec<i32>,
+    fingerprints: Vec<u32>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CfFingerprintFile {
     mod_id: u32,
+    #[serde(default)]
     file_name: String,
+    #[serde(default)]
+    file_fingerprint: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,7 +136,7 @@ fn load_cache(path: &Path) -> MetadataCacheFile {
         .unwrap_or_default()
 }
 
-fn save_cache(path: &Path, cache: &MetadataCacheFile) -> Result<(), String> {
+fn save_cache_locked(path: &Path, cache: &MetadataCacheFile) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Не удалось создать папку кеша метаданных: {e}"))?;
@@ -212,7 +227,7 @@ fn is_ignored_in_curseforge_fingerprint(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r')
 }
 
-pub(super) fn curseforge_file_fingerprint(buf: &[u8]) -> i32 {
+pub(super) fn curseforge_file_fingerprint(buf: &[u8]) -> u32 {
     const MULTIPLEX: u32 = 1540483477;
 
     let mut normalized_len: u32 = 0;
@@ -248,15 +263,14 @@ pub(super) fn curseforge_file_fingerprint(buf: &[u8]) -> i32 {
     }
 
     let num6: u32 = (num2 ^ (num2 >> 13)).wrapping_mul(MULTIPLEX);
-    let out: u32 = num6 ^ (num6 >> 15);
-    out as i32
+    num6 ^ (num6 >> 15)
 }
 
 async fn curseforge_lookup_filenames(
     filenames: &[String],
     content_dir: &Path,
 ) -> Result<HashMap<String, u32>, String> {
-    let mut fingerprint_by_filename: HashMap<String, i32> = HashMap::new();
+    let mut fingerprint_by_filename: HashMap<String, u32> = HashMap::new();
     for filename in filenames {
         let Some(path) = resolve_profile_item_path(content_dir, filename) else {
             continue;
@@ -271,7 +285,7 @@ async fn curseforge_lookup_filenames(
         return Ok(HashMap::new());
     }
 
-    let fingerprints: Vec<i32> = fingerprint_by_filename.values().copied().collect();
+    let fingerprints: Vec<u32> = fingerprint_by_filename.values().copied().collect();
     let client = crate::infra::http::http_client(false);
     let url = format!("{}/fingerprints/{MINECRAFT_GAME_ID}", curseforge_api_base());
     let body = CurseforgeFingerprintRequest { fingerprints };
@@ -294,15 +308,25 @@ async fn curseforge_lookup_filenames(
 
     let mut mod_id_by_filename = HashMap::new();
     for exact in parsed.data.exact_matches {
-        let cf_name = exact.file.file_name.trim();
-        if cf_name.is_empty() {
-            continue;
-        }
-        for (filename, _) in &fingerprint_by_filename {
-            if filename.eq_ignore_ascii_case(cf_name) {
-                mod_id_by_filename.insert(filename.clone(), exact.file.mod_id);
-                break;
+        let by_fingerprint = exact.file.file_fingerprint.and_then(|fp| {
+            fingerprint_by_filename
+                .iter()
+                .filter(|(_, local)| u64::from(**local) == fp)
+                .map(|(filename, _)| filename.clone())
+                .next()
+        });
+        let by_name = || {
+            let cf_name = exact.file.file_name.trim();
+            if cf_name.is_empty() {
+                return None;
             }
+            fingerprint_by_filename
+                .keys()
+                .find(|filename| profile_item_display_name(filename).eq_ignore_ascii_case(cf_name))
+                .cloned()
+        };
+        if let Some(filename) = by_fingerprint.or_else(by_name) {
+            mod_id_by_filename.insert(filename, exact.file.mod_id);
         }
     }
     Ok(mod_id_by_filename)
@@ -347,6 +371,116 @@ async fn fetch_curseforge_mods(
         out.insert(m.id, (m.name, thumbnail));
     }
     Ok(out)
+}
+
+// items: (имя файла в category, id проекта)
+pub(crate) async fn record_installed_item_sources(
+    profile_dir: &Path,
+    category: &str,
+    source: &str,
+    items: Vec<(String, String)>,
+) {
+    let Ok(subdir) = profile_content_subdir(category) else {
+        return;
+    };
+    let content_dir = profile_dir.join(subdir);
+    let mut hashed = Vec::with_capacity(items.len());
+    for (filename, project_id) in items {
+        let path = content_dir.join(&filename);
+        match sha1_hex_of_file(&path).await {
+            Ok(sha1) => hashed.push((filename, project_id, sha1)),
+            Err(e) => eprintln!("record_installed_item_sources: {e}"),
+        }
+    }
+    if hashed.is_empty() {
+        return;
+    }
+
+    let cache_path = metadata_cache_path(profile_dir, subdir);
+    let source = source.to_string();
+    let _ = tokio::task::spawn_blocking(move || {
+        let _guard = CACHE_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cache = load_cache(&cache_path);
+        for (filename, project_id, sha1) in hashed {
+            let previous = cache.entries.remove(&filename);
+            let (title, icon_url) = match previous {
+                Some(prev) if prev.project_id.as_deref() == Some(project_id.as_str()) => {
+                    (prev.title, prev.icon_url)
+                }
+                _ => (None, None),
+            };
+            cache.entries.insert(
+                filename,
+                CachedEntry {
+                    sha1,
+                    title,
+                    icon_url,
+                    icon_data_uri: None,
+                    source: Some(source.clone()),
+                    project_id: Some(project_id),
+                    installed: true,
+                },
+            );
+        }
+        if let Err(e) = save_cache_locked(&cache_path, &cache) {
+            eprintln!("record_installed_item_sources: {e}");
+        }
+    })
+    .await;
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledContentEntry {
+    profile_id: String,
+    category: &'static str,
+    filename: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    enabled: bool,
+}
+
+// без сети: названия берутся из кеша метаданных
+#[tauri::command]
+pub async fn list_installed_content_index() -> Result<Vec<InstalledContentEntry>, String> {
+    tokio::task::spawn_blocking(|| {
+        let mut out = Vec::new();
+        for profile in load_all_instance_profiles()? {
+            let Ok(profile_dir) = instance_dir(&profile.id) else {
+                continue;
+            };
+            for category in ["mods", "resourcepacks", "shaderpacks"] {
+                let Ok(read_dir) = std::fs::read_dir(profile_dir.join(category)) else {
+                    continue;
+                };
+                let cache = load_cache(&metadata_cache_path(&profile_dir, category));
+                for entry in read_dir.flatten() {
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) else {
+                        continue;
+                    };
+                    let filename = profile_item_display_name(stored_name);
+                    let cached = cache.entries.get(&filename);
+                    out.push(InstalledContentEntry {
+                        profile_id: profile.id.clone(),
+                        category,
+                        title: cached.and_then(|c| c.title.clone()),
+                        source: cached.and_then(|c| c.source.clone()),
+                        enabled: !profile_item_is_disabled(stored_name),
+                        filename,
+                    });
+                }
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("Не удалось собрать список контента профилей: {e}"))?
 }
 
 fn read_zip_entry<R: Read + std::io::Seek>(
@@ -456,20 +590,33 @@ pub async fn resolve_profile_item_metadata(
         return Ok(Vec::new());
     }
 
-    let cache_path = metadata_cache_path(&profile_dir, &category);
-    let mut cache = load_cache(&cache_path);
+    let cache_path = metadata_cache_path(&profile_dir, subdir);
+    let cache = load_cache(&cache_path);
+    // после отключения или включения имя файла другое, а хеш тот же
+    let installed_by_sha: HashMap<&str, &CachedEntry> = cache
+        .entries
+        .values()
+        .filter(|e| e.installed)
+        .map(|e| (e.sha1.as_str(), e))
+        .collect();
     let mut resolved: HashMap<String, CachedEntry> = HashMap::new();
     let mut pending_sha: Vec<String> = Vec::new();
     let mut sha_to_filename: HashMap<String, String> = HashMap::new();
+    let mut curseforge_untitled: Vec<String> = Vec::new();
 
     for (filename, sha1) in &sha_by_filename {
-        if let Some(cached) = cache.entries.get(filename) {
-            if cached.sha1 == *sha1 {
-                if cached.source.is_some() && cached.project_id.is_some() {
-                    resolved.insert(filename.clone(), cached.clone());
-                    continue;
+        let cached = cache
+            .entries
+            .get(filename)
+            .filter(|c| c.sha1 == *sha1)
+            .or_else(|| installed_by_sha.get(sha1.as_str()).copied());
+        if let Some(cached) = cached {
+            resolved.insert(filename.clone(), cached.clone());
+            if cached.source.is_some() && cached.project_id.is_some() {
+                if cached.title.is_none() && cached.source.as_deref() == Some("curseforge") {
+                    curseforge_untitled.push(filename.clone());
                 }
-                resolved.insert(filename.clone(), cached.clone());
+                continue;
             }
         }
         pending_sha.push(sha1.clone());
@@ -525,41 +672,63 @@ pub async fn resolve_profile_item_metadata(
                     icon_data_uri: None,
                     source: Some("modrinth".to_string()),
                     project_id: Some(version.project_id.clone()),
+                    installed: false,
                 },
             );
             still_missing.remove(filename);
         }
     }
 
-    if !still_missing.is_empty() {
+    if !still_missing.is_empty() || !curseforge_untitled.is_empty() {
         let missing_list: Vec<String> = still_missing.iter().cloned().collect();
-        if let Ok(cf_mod_by_filename) = curseforge_lookup_filenames(&missing_list, &content_dir).await
-        {
-            let mod_ids: Vec<u32> = cf_mod_by_filename.values().copied().collect::<HashSet<_>>().into_iter().collect();
-            if let Ok(cf_mods) = fetch_curseforge_mods(&mod_ids).await {
-                for filename in &missing_list {
-                    let Some(mod_id) = cf_mod_by_filename.get(filename) else {
-                        continue;
-                    };
-                    let Some((title, icon_url)) = cf_mods.get(mod_id) else {
-                        continue;
-                    };
-                    let Some(sha1) = sha_by_filename.get(filename) else {
-                        continue;
-                    };
-                    resolved.insert(
-                        filename.clone(),
-                        CachedEntry {
-                            sha1: sha1.clone(),
-                            title: Some(title.clone()),
-                            icon_url: icon_url.clone(),
-                            icon_data_uri: None,
-                            source: Some("curseforge".to_string()),
-                            project_id: Some(mod_id.to_string()),
-                        },
-                    );
-                    still_missing.remove(filename);
-                }
+        let mut cf_mod_by_filename = if missing_list.is_empty() {
+            HashMap::new()
+        } else {
+            curseforge_lookup_filenames(&missing_list, &content_dir)
+                .await
+                .unwrap_or_else(|e| {
+                    eprintln!("resolve_profile_item_metadata: CurseForge: {e}");
+                    HashMap::new()
+                })
+        };
+        for filename in &curseforge_untitled {
+            if let Some(id) = resolved
+                .get(filename)
+                .and_then(|e| e.project_id.as_deref())
+                .and_then(|id| id.parse::<u32>().ok())
+            {
+                cf_mod_by_filename.insert(filename.clone(), id);
+            }
+        }
+
+        let mod_ids: Vec<u32> = cf_mod_by_filename
+            .values()
+            .copied()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        if let Ok(cf_mods) = fetch_curseforge_mods(&mod_ids).await {
+            for (filename, mod_id) in &cf_mod_by_filename {
+                let Some((title, icon_url)) = cf_mods.get(mod_id) else {
+                    continue;
+                };
+                let Some(sha1) = sha_by_filename.get(filename) else {
+                    continue;
+                };
+                let installed = resolved.get(filename).is_some_and(|e| e.installed);
+                resolved.insert(
+                    filename.clone(),
+                    CachedEntry {
+                        sha1: sha1.clone(),
+                        title: Some(title.clone()),
+                        icon_url: icon_url.clone(),
+                        icon_data_uri: None,
+                        source: Some("curseforge".to_string()),
+                        project_id: Some(mod_id.to_string()),
+                        installed,
+                    },
+                );
+                still_missing.remove(filename);
             }
         }
     }
@@ -600,18 +769,33 @@ pub async fn resolve_profile_item_metadata(
                     icon_data_uri,
                     source: None,
                     project_id: None,
+                    installed: false,
                 },
             );
         }
     }
 
-    cache.entries.retain(|filename, _| sha_by_filename.contains_key(filename));
-    for (filename, entry) in &resolved {
-        cache.entries.insert(filename.clone(), entry.clone());
-    }
-    if let Err(e) = save_cache(&cache_path, &cache) {
-        eprintln!("resolve_profile_item_metadata: cache save: {e}");
-    }
+    let resolved_for_save = resolved.clone();
+    let live_files: HashSet<String> = sha_by_filename.keys().cloned().collect();
+    let _ = tokio::task::spawn_blocking(move || {
+        let _guard = CACHE_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // пока шли запросы, установщик мог дописать кеш
+        let mut cache = load_cache(&cache_path);
+        cache.entries.retain(|filename, _| live_files.contains(filename));
+        for (filename, entry) in resolved_for_save {
+            let keep_installed = cache
+                .entries
+                .get(&filename)
+                .is_some_and(|e| e.installed && e.sha1 == entry.sha1 && !entry.installed);
+            if !keep_installed {
+                cache.entries.insert(filename, entry);
+            }
+        }
+        if let Err(e) = save_cache_locked(&cache_path, &cache) {
+            eprintln!("resolve_profile_item_metadata: cache save: {e}");
+        }
+    })
+    .await;
 
     let mut result: Vec<ProfileItemMetadata> = sha_by_filename
         .keys()

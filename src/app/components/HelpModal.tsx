@@ -1,5 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { DISCORD_LINK } from "../notifications";
+import { modKeyLabel } from "../../lib/hotkeyKey";
 import type { Tt } from "../types";
 
 type Props = {
@@ -24,6 +25,7 @@ export function HelpModal({ tt, onClose, onReplayTour }: Props) {
         </div>
         <div className="space-y-4 text-sm text-white/90 leading-relaxed">
           <p>{tt("app.help.mainInfo")}</p>
+          <p>{tt("app.help.paletteHint", { keys: `${modKeyLabel()}+K` })}</p>
           <p>
             {tt("app.help.icons")}{" "}
             <button

@@ -19,19 +19,21 @@ import {
 import { useMarqueeSelection } from "../../../hooks/useMarqueeSelection";
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../../../i18n";
-import { confirmDialog } from "../../../lib/confirmDialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { disposeWhenResolved } from "../../../lib/tauriEvents";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { filterPathsForContentTab } from "../helpers";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { NOTIFICATION_WITH_ACTION_DISMISS_MS, type ShowNotificationOptions } from "../../../app/notifications";
+
+const UNDO_PURGE_DELAY_MS = NOTIFICATION_WITH_ACTION_DISMISS_MS + 2000;
 
 type ProfileItemsDeps = {
   selectedProfileId: string | null;
   activeView: ViewId;
   contentTab: ContentTab;
-  showNotification: (kind: NotificationKind, message: string, options?: { sound?: boolean; }) => void;
+  showNotification: (kind: NotificationKind, message: string, options?: ShowNotificationOptions) => void;
   language: Language;
   selectedProfile: InstanceProfile | null;
   isProfileSettingsOpen: boolean;
@@ -73,6 +75,8 @@ export function useProfileItems(deps: ProfileItemsDeps) {
   const manageDropZoneRef = useRef<HTMLDivElement | null>(null);
   const togglingItemsRef = useRef(new Set<string>());
   const [isManageDropTarget, setIsManageDropTarget] = useState(false);
+  const viewRef = useRef({ selectedProfileId, contentTab });
+  viewRef.current = { selectedProfileId, contentTab };
 
   const handleContentMarqueePointerDown = useMarqueeSelection({
     containerRef: manageDropZoneRef,
@@ -259,32 +263,69 @@ export function useProfileItems(deps: ProfileItemsDeps) {
     }
   }
 
+  function offerDeleteUndo(profileId: string, tab: ContentTab, tokens: string[], message: string) {
+    if (tokens.length === 0) return;
+    let settled = false;
+    const purgeTimer = window.setTimeout(() => {
+      settled = true;
+      for (const token of tokens) {
+        void invoke("purge_deleted_item", { id: profileId, token }).catch(() => {});
+      }
+    }, UNDO_PURGE_DELAY_MS);
+
+    const undo = async () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(purgeTimer);
+      let failed = 0;
+      for (const token of [...tokens].reverse()) {
+        try {
+          await invoke("restore_deleted_item", { id: profileId, token });
+        } catch (e) {
+          console.error(e);
+          failed += 1;
+        }
+      }
+      const view = viewRef.current;
+      if (view.selectedProfileId === profileId && view.contentTab === tab) {
+        await refreshItems(profileId, tab);
+      }
+      if (tab === "mods") setProfileConflictsRefreshToken((v) => v + 1);
+      void refreshProfiles({ background: true });
+      if (failed > 0) showNotification("error", tt("modpacks.toast.restoreFailed", { count: failed }));
+    };
+
+    showNotification("success", message, {
+      action: { label: tt("common.undo"), onClick: () => void undo() },
+    });
+  }
+
   async function handleDeleteItem(item: ProfileItemEntry) {
     if (!selectedProfile) return;
+    const profileId = selectedProfile.id;
+    const tab = contentTab;
+    const category = contentCategory();
+    setItems((prev) => prev.filter((f) => f.name !== item.name));
+    setSelectedContentNames((prev) => {
+      if (!prev.has(item.name)) return prev;
+      const next = new Set(prev);
+      next.delete(item.name);
+      return next;
+    });
     try {
-      const category =
-        contentTab === "mods"
-          ? "mods"
-          : contentTab === "resourcepacks"
-            ? "resourcepacks"
-            : "shaderpacks";
-      await invoke("delete_item", {
-        id: selectedProfile.id,
+      const token = await invoke<string | null>("delete_item", {
+        id: profileId,
         category,
         filename: item.name,
       });
-      setItems((prev) => prev.filter((f) => f.name !== item.name));
       if (category === "mods") {
         setProfileConflictsRefreshToken((v) => v + 1);
       }
-      setSelectedContentNames((prev) => {
-        if (!prev.has(item.name)) return prev;
-        const next = new Set(prev);
-        next.delete(item.name);
-        return next;
-      });
+      const name = itemMetadataByFilename[item.name]?.title?.trim() || item.name;
+      offerDeleteUndo(profileId, tab, token ? [token] : [], tt("modpacks.toast.itemDeleted", { name }));
     } catch (e) {
       console.error(e);
+      void refreshItems(profileId, tab);
       showNotification("error", t(language, "modpacks.toast.deleteFileFailed"));
     }
   }
@@ -358,6 +399,8 @@ export function useProfileItems(deps: ProfileItemsDeps) {
     if (!selectedProfile || selectedContentNames.size === 0) return;
     const category = contentCategory();
     const names = [...selectedContentNames];
+    const nameSet = new Set(names);
+    setItems((prev) => prev.map((entry) => (nameSet.has(entry.name) ? { ...entry, enabled } : entry)));
     try {
       for (const filename of names) {
         await invoke("set_profile_item_enabled", {
@@ -372,36 +415,38 @@ export function useProfileItems(deps: ProfileItemsDeps) {
       if (category === "mods") setProfileConflictsRefreshToken((v) => v + 1);
     } catch (e) {
       console.error(e);
+      void refreshItems(selectedProfile.id, contentTab);
       showNotification("error", tt("modpacks.manage.toggleFailed"));
     }
   }
 
   async function handleBulkDelete() {
     if (!selectedProfile || selectedContentNames.size === 0) return;
-    const count = selectedContentNames.size;
-    const ok = await confirmDialog({
-      message: tt("modpacks.editor.bulkDeleteConfirm", { count }),
-      confirmLabel: tt("common.delete"),
-    });
-    if (!ok) return;
+    const profileId = selectedProfile.id;
+    const tab = contentTab;
     const category = contentCategory();
     const names = [...selectedContentNames];
+    const nameSet = new Set(names);
+    setItems((prev) => prev.filter((entry) => !nameSet.has(entry.name)));
+    setSelectedContentNames(new Set());
+    const tokens: string[] = [];
     try {
       for (const filename of names) {
-        await invoke("delete_item", {
-          id: selectedProfile.id,
+        const token = await invoke<string | null>("delete_item", {
+          id: profileId,
           category,
           filename,
         });
+        if (token) tokens.push(token);
       }
-      await refreshItems(selectedProfile.id, contentTab);
-      setSelectedContentNames(new Set());
-      if (category === "mods") setProfileConflictsRefreshToken((v) => v + 1);
-      void refreshProfiles();
     } catch (e) {
       console.error(e);
+      void refreshItems(profileId, tab);
       showNotification("error", t(language, "modpacks.toast.deleteFileFailed"));
     }
+    if (category === "mods") setProfileConflictsRefreshToken((v) => v + 1);
+    void refreshProfiles({ background: true });
+    offerDeleteUndo(profileId, tab, tokens, tt("modpacks.toast.itemsDeleted", { count: tokens.length }));
   }
 
   useEffect(() => {

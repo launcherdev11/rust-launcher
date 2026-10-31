@@ -11,9 +11,9 @@ export function ProfileItemSourceIcon({
 }) {
   const src =
     source === "modrinth"
-      ? "/launcher-assets/Modrinth_Logo.png"
+      ? "/launcher-assets/modrinth.svg"
       : source === "curseforge"
-        ? "/launcher-assets/curseforge.png"
+        ? "/launcher-assets/curseforge.svg"
         : null;
   if (!src) return null;
   return (
