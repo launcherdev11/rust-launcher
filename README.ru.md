@@ -56,6 +56,10 @@
 ![readme_screen3.png](.github/readme/readme_screen3.png)
 ![readme_screen4.png](.github/readme/readme_screen4.png)
 ![readme_screen5.png](.github/readme/readme_screen5.png)
+![readme_screen6.png](.github/readme/readme_screen6.png)
+![readme_screen7.png](.github/readme/readme_screen7.png)
+![readme_screen8.png](.github/readme/readme_screen8.png)
+![readme_screen9.png](.github/readme/readme_screen9.png)
 
 ## Сборка из исходников
 
