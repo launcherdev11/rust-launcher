@@ -2545,6 +2545,7 @@
   },
   "crashFixes": {
     "disableMod": "Disable {{mod}}",
+    "installDependency": "Install {{mod}}",
     "raiseMemory": "Memory {{from}} → {{to}} GB",
     "resetJava": "Use automatic Java",
     "applied": "Done: {{action}}",

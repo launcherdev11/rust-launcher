@@ -2545,6 +2545,7 @@
   },
   "crashFixes": {
     "disableMod": "Отключить {{mod}}",
+    "installDependency": "Установить {{mod}}",
     "raiseMemory": "Память {{from}} → {{to}} ГБ",
     "resetJava": "Вернуть автовыбор Java",
     "applied": "Готово: {{action}}",

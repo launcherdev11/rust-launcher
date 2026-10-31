@@ -22,6 +22,10 @@ pub fn launcher_accounts_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("accounts.json"))
 }
 
+pub fn launcher_secrets_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("secrets.vault"))
+}
+
 pub fn default_game_root_dir() -> Result<PathBuf, String> {
     game_root_from_directory_setting(None)
 }

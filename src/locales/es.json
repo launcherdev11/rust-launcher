@@ -2573,6 +2573,7 @@
   },
   "crashFixes": {
     "disableMod": "Desactivar {{mod}}",
+    "installDependency": "Instalar {{mod}}",
     "raiseMemory": "Memoria {{from}} → {{to}} GB",
     "resetJava": "Elegir Java automáticamente",
     "applied": "Hecho: {{action}}",

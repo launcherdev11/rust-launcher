@@ -7,6 +7,7 @@ pub mod fs_copy;
 pub mod notify;
 pub mod platform;
 pub mod process;
+pub mod secrets;
 pub mod tray;
 pub mod window_icon;
 pub mod window_idle;

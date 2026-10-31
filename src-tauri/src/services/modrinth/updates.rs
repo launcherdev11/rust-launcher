@@ -38,7 +38,7 @@ struct VersionFilesRequest {
     game_versions: Vec<String>,
 }
 
-fn load_profile_config(profile_id: &str) -> Result<InstanceConfig, String> {
+pub(super) fn load_profile_config(profile_id: &str) -> Result<InstanceConfig, String> {
     let cfg_path = instance_config_path(profile_id)?;
     if !cfg_path.is_file() && !crate::infra::fs_atomic::backup_path_for(&cfg_path).is_file() {
         return Err("config.json сборки не найден".to_string());

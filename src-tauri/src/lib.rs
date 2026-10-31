@@ -64,7 +64,7 @@ use services::curseforge::{
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
     check_profile_incompatible_content, download_modrinth_with_dependencies,
-    resolve_profile_item_metadata,
+    install_missing_mod_dependency, resolve_profile_item_metadata,
     scan_profile_mod_jars,
 };
 use services::rpc::{
@@ -267,6 +267,7 @@ pub fn run() {
             reset_download_cancel,
             download_modrinth_file,
             download_modrinth_with_dependencies,
+            install_missing_mod_dependency,
                         check_profile_content_updates,
             check_profile_incompatible_content,
             scan_profile_mod_jars,

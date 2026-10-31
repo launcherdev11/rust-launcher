@@ -45,9 +45,17 @@ discord-rich-presence = "1.1.0"
 image = "0.25"
 url = "2"
 open = "5"
+aes-gcm = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-http = { version = "2", features = ["native-tls"] }
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+keyring = { version = "3", features = ["async-secret-service", "tokio", "crypto-rust"] }
 
 [target.'cfg(not(windows))'.dependencies]
 tauri-plugin-http = { version = "2", features = ["rustls-tls"] }

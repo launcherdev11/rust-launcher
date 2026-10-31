@@ -2,9 +2,12 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 use tauri::command;
 
-use crate::app::paths::{launcher_accounts_path, profile_path};
+use std::collections::BTreeMap;
+
+use crate::app::paths::{launcher_accounts_path, launcher_secrets_path, profile_path};
+use crate::infra::secrets;
 use crate::models::launcher_account::{
-    LauncherAccountEntry, LauncherAccountSummary, LauncherAccountsStore, Profile,
+    AccountSecrets, LauncherAccountEntry, LauncherAccountSummary, LauncherAccountsStore, Profile,
 };
 use crate::services::game::nickname::sanitize_nickname;
 
@@ -19,24 +22,109 @@ fn new_launcher_account_id() -> String {
     )
 }
 
+type SecretsMap = BTreeMap<String, AccountSecrets>;
+
+fn read_secrets_map() -> SecretsMap {
+    let Ok(path) = launcher_secrets_path() else {
+        return SecretsMap::new();
+    };
+    match secrets::read_vault(&path) {
+        Ok(Some(bytes)) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+            eprintln!("[Secrets] Ошибка разбора хранилища: {e}");
+            SecretsMap::new()
+        }),
+        Ok(None) => SecretsMap::new(),
+        Err(e) => {
+            eprintln!("[Secrets] {e}");
+            SecretsMap::new()
+        }
+    }
+}
+
+// Заменяет содержимое хранилища токенами всех аккаунтов из store. Если токенов нет
+// и хранилища ещё не создавали, ключ в системном хранилище не трогаем.
+fn sync_secrets_vault(store: &LauncherAccountsStore) -> Result<(), String> {
+    let map: SecretsMap = store
+        .accounts
+        .iter()
+        .filter_map(|a| {
+            let s = a.profile.secrets();
+            (!s.is_empty()).then(|| (a.id.clone(), s))
+        })
+        .collect();
+    let path = launcher_secrets_path()?;
+    if map.is_empty() && !path.exists() {
+        return Ok(());
+    }
+    let bytes =
+        serde_json::to_vec(&map).map_err(|e| format!("Ошибка сериализации хранилища: {e}"))?;
+    secrets::write_vault(&path, &bytes)
+}
+
+fn raw_active_account_id() -> Option<String> {
+    let text = std::fs::read_to_string(launcher_accounts_path().ok()?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    v.get("active_id")?.as_str().map(str::to_string)
+}
+
+fn active_account_profile(store: &LauncherAccountsStore) -> Option<Profile> {
+    let aid = store.active_id.as_deref()?;
+    store
+        .accounts
+        .iter()
+        .find(|a| a.id == aid)
+        .map(|a| a.profile.clone())
+}
+
 pub fn read_profile_from_disk() -> Result<Profile, String> {
     let path = profile_path()?;
     if !path.exists() {
         return Ok(Profile::default());
     }
     let s = std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения профиля: {e}"))?;
-    serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора профиля: {e}"))
+    let mut profile: Profile =
+        serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора профиля: {e}"))?;
+    if let Some(id) = raw_active_account_id() {
+        if let Some(sec) = read_secrets_map().get(&id) {
+            profile.fill_missing_secrets(sec);
+        }
+    }
+    Ok(profile)
 }
 
-fn save_accounts_store(store: &LauncherAccountsStore) -> Result<(), String> {
+// Возвращает true, если токены надёжно лежат в хранилище (или их нет вовсе) и в json
+// их писать не нужно. При false токены остаются в json, как до появления хранилища.
+fn save_accounts_store(store: &LauncherAccountsStore) -> Result<bool, String> {
     let path = launcher_accounts_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку: {e}"))?;
     }
-    let s = serde_json::to_string_pretty(store)
-        .map_err(|e| format!("Ошибка сериализации accounts.json: {e}"))?;
+    let in_vault = match sync_secrets_vault(store) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("[Secrets] Токены останутся в accounts.json: {e}");
+            false
+        }
+    };
+    let s = if in_vault {
+        let on_disk = LauncherAccountsStore {
+            active_id: store.active_id.clone(),
+            accounts: store
+                .accounts
+                .iter()
+                .map(|a| LauncherAccountEntry {
+                    id: a.id.clone(),
+                    profile: a.profile.without_secrets(),
+                })
+                .collect(),
+        };
+        serde_json::to_string_pretty(&on_disk)
+    } else {
+        serde_json::to_string_pretty(store)
+    }
+    .map_err(|e| format!("Ошибка сериализации accounts.json: {e}"))?;
     std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить accounts.json: {e}"))?;
-    Ok(())
+    Ok(in_vault)
 }
 
 fn load_accounts_store() -> Result<LauncherAccountsStore, String> {
@@ -44,7 +132,28 @@ fn load_accounts_store() -> Result<LauncherAccountsStore, String> {
     if path.exists() {
         let s =
             std::fs::read_to_string(&path).map_err(|e| format!("Ошибка чтения accounts.json: {e}"))?;
-        return serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора accounts.json: {e}"));
+        let mut store: LauncherAccountsStore =
+            serde_json::from_str(&s).map_err(|e| format!("Ошибка разбора accounts.json: {e}"))?;
+        let legacy_plaintext = store.accounts.iter().any(|a| !a.profile.secrets().is_empty());
+        let vault = read_secrets_map();
+        for a in &mut store.accounts {
+            if let Some(sec) = vault.get(&a.id) {
+                a.profile.fill_missing_secrets(sec);
+            }
+        }
+        if legacy_plaintext {
+            // токены из старых json переезжают в хранилище
+            match save_accounts_store(&store) {
+                Ok(true) => {
+                    if let Some(p) = active_account_profile(&store) {
+                        let _ = persist_profile_json(&p, true);
+                    }
+                }
+                Ok(false) => {}
+                Err(e) => eprintln!("[Secrets] Не удалось перенести токены: {e}"),
+            }
+        }
+        return Ok(store);
     }
 
     let profile = read_profile_from_disk()?;
@@ -53,7 +162,12 @@ fn load_accounts_store() -> Result<LauncherAccountsStore, String> {
         active_id: Some(id.clone()),
         accounts: vec![LauncherAccountEntry { id, profile }],
     };
-    save_accounts_store(&store)?;
+    let in_vault = save_accounts_store(&store)?;
+    if in_vault {
+        if let Some(p) = active_account_profile(&store) {
+            let _ = persist_profile_json(&p, true);
+        }
+    }
     Ok(store)
 }
 
@@ -121,7 +235,7 @@ fn launcher_account_kind(p: &Profile) -> &'static str {
     "offline"
 }
 
-fn upsert_launcher_accounts_store(profile: &Profile) -> Result<(), String> {
+fn upsert_launcher_accounts_store(profile: &Profile) -> Result<bool, String> {
     let mut store = load_accounts_store()?;
     if let Some(idx) = find_account_by_online_identity(&store, profile) {
         store.accounts[idx].profile = profile.clone();
@@ -159,21 +273,25 @@ fn upsert_launcher_accounts_store(profile: &Profile) -> Result<(), String> {
     save_accounts_store(&store)
 }
 
-pub fn persist_profile_json(profile: &Profile) -> Result<(), String> {
+// strip_secrets = true только после того, как токены сохранены в хранилище
+fn persist_profile_json(profile: &Profile, strip_secrets: bool) -> Result<(), String> {
     let path = profile_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку: {e}"))?;
     }
-    let s =
-        serde_json::to_string_pretty(profile).map_err(|e| format!("Ошибка сериализации: {e}"))?;
+    let s = if strip_secrets {
+        serde_json::to_string_pretty(&profile.without_secrets())
+    } else {
+        serde_json::to_string_pretty(profile)
+    }
+    .map_err(|e| format!("Ошибка сериализации: {e}"))?;
     std::fs::write(&path, s).map_err(|e| format!("Не удалось сохранить профиль: {e}"))?;
     Ok(())
 }
 
 pub fn save_full_profile(profile: &Profile) -> Result<(), String> {
-    persist_profile_json(profile)?;
-    upsert_launcher_accounts_store(profile)?;
-    Ok(())
+    let in_vault = upsert_launcher_accounts_store(profile)?;
+    persist_profile_json(profile, in_vault)
 }
 
 #[command]
@@ -233,8 +351,8 @@ pub fn switch_launcher_account(account_id: String) -> Result<(), String> {
         .profile
         .clone();
     store.active_id = Some(account_id);
-    save_accounts_store(&store)?;
-    persist_profile_json(&p)?;
+    let in_vault = save_accounts_store(&store)?;
+    persist_profile_json(&p, in_vault)?;
     Ok(())
 }
 
@@ -261,19 +379,12 @@ pub fn remove_launcher_account(account_id: String) -> Result<(), String> {
     let was_active = store.active_id.as_deref() == Some(account_id.as_str());
     if was_active {
         store.active_id = store.accounts.first().map(|a| a.id.clone());
-        if let Some(ref aid) = store.active_id {
-            let p = store
-                .accounts
-                .iter()
-                .find(|a| &a.id == aid)
-                .map(|a| a.profile.clone())
-                .unwrap_or_default();
-            persist_profile_json(&p)?;
-        } else {
-            persist_profile_json(&Profile::default())?;
-        }
     }
-    save_accounts_store(&store)?;
+    let in_vault = save_accounts_store(&store)?;
+    if was_active {
+        let p = active_account_profile(&store).unwrap_or_default();
+        persist_profile_json(&p, in_vault)?;
+    }
     Ok(())
 }
 
@@ -295,7 +406,7 @@ pub fn add_launcher_account(nickname: Option<String>) -> Result<(), String> {
         profile: profile.clone(),
     });
     store.active_id = Some(id);
-    save_accounts_store(&store)?;
-    persist_profile_json(&profile)?;
+    let in_vault = save_accounts_store(&store)?;
+    persist_profile_json(&profile, in_vault)?;
     Ok(())
 }

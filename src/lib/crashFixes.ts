@@ -3,6 +3,7 @@ import type { JarModInfo } from "./profileConflicts";
 
 export type CrashFixAction =
   | { kind: "disableMod"; filename: string; label: string }
+  | { kind: "installDependency"; ref: string; label: string }
   | { kind: "raiseMemory"; fromMb: number; toMb: number }
   | { kind: "resetJava" };
 
@@ -67,6 +68,25 @@ function subjectRefs(findingId: string, subject: string): string[] {
   return refs.flatMap((r) => r.split(/,\s*/)).filter(Boolean);
 }
 
+// "Имя (id) ← Кто требует" → id (или имя) недостающего мода
+function missingDependencyRef(subject: string): string | null {
+  const dep = subject.split("←")[0].trim();
+  const id = dep.match(/\(([^()]+)\)\s*$/)?.[1]?.trim();
+  const ref = id || dep;
+  return ref && !/\s/.test(ref) ? ref : null;
+}
+
+function isPresent(ref: string, mods: JarModInfo[]): boolean {
+  const key = norm(ref);
+  return mods.some(
+    (m) =>
+      norm(m.modId) === key ||
+      norm(m.title) === key ||
+      fileStem(m.filename) === key ||
+      m.provides?.some((p) => norm(p) === key),
+  );
+}
+
 function findMod(ref: string, mods: JarModInfo[]): JarModInfo | null {
   const key = norm(ref);
   if (!key || NEVER_DISABLE.has(key)) return null;
@@ -112,6 +132,17 @@ export function planCrashFixes(
     actions.push({ kind: "resetJava" });
   }
 
+  if (finding.id === "missingDependency" && finding.subjects?.length) {
+    const wanted = new Set<string>();
+    for (const subject of finding.subjects) {
+      const ref = missingDependencyRef(subject);
+      if (!ref || wanted.has(norm(ref)) || isPresent(ref, ctx.mods)) continue;
+      wanted.add(norm(ref));
+      actions.push({ kind: "installDependency", ref, label: ref });
+      if (wanted.size >= MAX_DISABLE) break;
+    }
+  }
+
   if (DISABLE_FROM_SUBJECTS.has(finding.id) && finding.subjects?.length) {
     const picked = new Set<string>();
     for (const subject of finding.subjects) {
@@ -140,6 +171,8 @@ export function fixKey(action: CrashFixAction): string {
   switch (action.kind) {
     case "disableMod":
       return `disable:${action.filename}`;
+    case "installDependency":
+      return `install:${norm(action.ref)}`;
     case "raiseMemory":
       return `memory:${action.toMb}`;
     case "resetJava":

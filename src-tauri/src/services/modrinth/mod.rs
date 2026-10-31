@@ -4,9 +4,11 @@ mod content_metadata;
 mod dependencies;
 mod installed;
 pub(crate) mod jar_compat;
+mod missing_dependency;
 pub(crate) mod types;
 mod updates;
 
+pub use missing_dependency::install_missing_mod_dependency;
 pub use types::ModrinthDownloadTarget;
 pub use content_metadata::resolve_profile_item_metadata;
 pub use conflicts::scan_profile_mod_jars;

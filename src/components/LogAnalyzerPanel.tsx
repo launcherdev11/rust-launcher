@@ -65,6 +65,8 @@ function fixLabel(action: CrashFixAction, tt: Tt): string {
   switch (action.kind) {
     case "disableMod":
       return tt("crashFixes.disableMod", { mod: action.label });
+    case "installDependency":
+      return tt("crashFixes.installDependency", { mod: action.label });
     case "raiseMemory":
       return tt("crashFixes.raiseMemory", {
         from: (action.fromMb / 1024).toFixed(1),
@@ -248,6 +250,9 @@ async function applyCrashFix(profileId: string, action: CrashFixAction): Promise
         filename: action.filename,
         enabled: false,
       });
+      return;
+    case "installDependency":
+      await invoke("install_missing_mod_dependency", { profileId, modRef: action.ref });
       return;
     case "raiseMemory":
       await invoke("update_profile_settings", { id: profileId, patch: { ram_mb: action.toMb } });
