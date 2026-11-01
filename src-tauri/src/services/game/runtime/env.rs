@@ -4,17 +4,14 @@ pub(crate) fn apply_windows_graphics_preference(
     java_path: &std::path::Path,
     adapter: Option<&str>,
 ) {
-    const KEY: &str = "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences";
-    let value_name = java_path.to_string_lossy().to_string();
-
-    let reg = |args: &[&str]| -> bool {
-        let mut c = std::process::Command::new("reg");
-        c.args(args)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
-        crate::infra::process::hide_console(&mut c);
-        c.status().is_ok_and(|s| s.success())
+    use windows::core::HSTRING;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
+        KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
     };
+
+    const KEY: &str = "Software\\Microsoft\\DirectX\\UserGpuPreferences";
+    let value_name = HSTRING::from(java_path.as_os_str());
 
     let preference = match adapter.map(str::trim).filter(|value| !value.is_empty()) {
         Some(adapter) => {
@@ -25,18 +22,46 @@ pub(crate) fn apply_windows_graphics_preference(
                 || lower.contains("vega")
                 || lower.contains("radeon graphics");
             cmd.env("MC16_SELECTED_GRAPHICS_ADAPTER", adapter);
-            if integrated { "1" } else { "2" }
+            Some(if integrated { "1" } else { "2" })
         }
-        None => {
-            if reg(&["query", KEY, "/v", &value_name]) {
-                return;
-            }
-            "2"
-        }
+        None => None,
     };
 
-    let data = format!("GpuPreference={preference};");
-    reg(&["add", KEY, "/v", &value_name, "/t", "REG_SZ", "/d", &data, "/f"]);
+    let mut key = HKEY::default();
+    let opened = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(KEY),
+            None,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            None,
+            &mut key,
+            None,
+        )
+    };
+    if opened.is_err() {
+        return;
+    }
+
+    let exists = || unsafe { RegQueryValueExW(key, &value_name, None, None, None, None) }.is_ok();
+    // без явного выбора не трогаем то, что пользователь задал в настройках Windows
+    let preference = match preference {
+        Some(p) => Some(p),
+        None if exists() => None,
+        None => Some("2"),
+    };
+
+    if let Some(preference) = preference {
+        let data: Vec<u8> = format!("GpuPreference={preference};")
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        let _ = unsafe { RegSetValueExW(key, &value_name, None, REG_SZ, Some(&data)) };
+    }
+    let _ = unsafe { RegCloseKey(key) };
 }
 
 #[cfg(not(target_os = "windows"))]

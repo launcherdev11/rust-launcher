@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use tauri::command;
 
@@ -7,10 +6,8 @@ use crate::profile_launch::LAUNCH_PROFILE_ARG;
 use crate::services::game::profiles::load_all_instance_profiles;
 #[cfg(target_os = "linux")]
 use crate::services::game::profiles::profile_icon_file_path;
-#[cfg(target_os = "linux")]
+#[cfg(any(windows, target_os = "linux"))]
 use crate::infra::window_icon::launcher_icon_file_path;
-#[cfg(windows)]
-use crate::infra::window_icon::windows_shortcut_icon_location;
 
 mod jump_list;
 
@@ -75,52 +72,53 @@ fn create_windows_shortcut(
     exe: &Path,
     profile_id: &str,
 ) -> Result<(), String> {
+    use windows::core::{Interface, HSTRING};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+
+    struct ComGuard;
+
+    impl Drop for ComGuard {
+        fn drop(&mut self) {
+            unsafe { CoUninitialize() };
+        }
+    }
+
     let work_dir = exe
         .parent()
-        .ok_or("Не удалось определить рабочую папку лаунчера")?;
+        .ok_or("Не удалось определить рабочую папку лаунчера")?
+        .to_path_buf();
+    let icon = launcher_icon_file_path(exe).unwrap_or_else(|| exe.to_path_buf());
+    let exe = exe.to_path_buf();
+    let link_path = shortcut_path.to_path_buf();
+    let arguments = format!("{LAUNCH_PROFILE_ARG} {profile_id}");
 
-    fn ps_quote(value: &str) -> String {
-        format!("'{}'", value.replace('\'', "''"))
-    }
+    // COM в отдельном STA-потоке, чтобы не зависеть от модели потока вызывающего
+    std::thread::spawn(move || -> Result<(), String> {
+        let fail = |e: windows::core::Error| format!("Не удалось создать ярлык: {e}");
+        unsafe {
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().map_err(fail)?;
+            let _com = ComGuard;
 
-    let target = ps_quote(&exe.to_string_lossy());
-    let args = ps_quote(&format!("{LAUNCH_PROFILE_ARG} {profile_id}"));
-    let work = ps_quote(&work_dir.to_string_lossy());
-    let link = ps_quote(&shortcut_path.to_string_lossy());
-    let icon_loc = windows_shortcut_icon_location(exe);
-    let icon_line = format!("$s.IconLocation = {};", ps_quote(&icon_loc));
+            let link: IShellLinkW =
+                CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).map_err(fail)?;
+            link.SetPath(&HSTRING::from(exe.as_os_str())).map_err(fail)?;
+            link.SetArguments(&HSTRING::from(arguments)).map_err(fail)?;
+            link.SetWorkingDirectory(&HSTRING::from(work_dir.as_os_str()))
+                .map_err(fail)?;
+            let _ = link.SetIconLocation(&HSTRING::from(icon.as_os_str()), 0);
 
-    let script = format!(
-        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut({link}); \
-         $s.TargetPath = {target}; \
-         $s.Arguments = {args}; \
-         $s.WorkingDirectory = {work}; \
-         {icon_line} \
-         $s.Save();"
-    );
-
-    let mut ps = Command::new("powershell");
-    ps.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        &script,
-    ]);
-    crate::infra::process::hide_console(&mut ps);
-    let status = ps
-        .status()
-        .map_err(|e| format!("Не удалось запустить PowerShell: {e}"))?;
-
-    if status.success() {
+            let file: IPersistFile = link.cast().map_err(fail)?;
+            file.Save(&HSTRING::from(link_path.as_os_str()), true)
+                .map_err(fail)?;
+        }
         Ok(())
-    } else {
-        Err(format!(
-            "PowerShell завершился с кодом {}",
-            status.code().unwrap_or(-1)
-        ))
-    }
+    })
+    .join()
+    .map_err(|_| "Не удалось создать ярлык".to_string())?
 }
 
 #[cfg(target_os = "linux")]

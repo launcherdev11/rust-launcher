@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use sysinfo::System;
-
 use crate::models::{InstanceSettings, JavaSettings, Settings};
 use crate::services::game::arguments::{
     format_mb_to_spec, parse_memory_spec_to_mb, replace_basic_placeholders,
@@ -111,9 +109,7 @@ pub(crate) fn build_java_command(
         std::mem::swap(&mut xms_mb, &mut xmx_mb);
     }
 
-    let mut sys = System::new_all();
-    sys.refresh_memory();
-    let total_mb: u64 = sys.total_memory() / 1024;
+    let total_mb: u64 = crate::infra::process_probe::total_memory_bytes() / 1024;
     if total_mb > 0 {
         let reserve_mb: u64 = 2048;
         let hard_max = total_mb.saturating_sub(reserve_mb).max(1024);

@@ -2,6 +2,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub(crate) static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
 pub(crate) static GAME_PROCESS_PID: AtomicU64 = AtomicU64::new(0);
+// -Xmx запущенной игры в байтах, 0 — неизвестно
+pub(crate) static GAME_PROCESS_MAX_HEAP_BYTES: AtomicU64 = AtomicU64::new(0);
 pub(crate) static REOPEN_LAUNCHER_ON_GAME_EXIT: AtomicBool = AtomicBool::new(false);
 
 pub const VERSION_MANIFEST_URL: &str =

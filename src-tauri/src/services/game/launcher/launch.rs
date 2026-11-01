@@ -45,12 +45,12 @@ use crate::services::game::runtime::{
     forge_java_runtime_for_mc_version, uses_natives_subdirectories, download_file_checked,
     ensure_assets_for_launch,
 };
-use crate::services::game::launcher::process::is_our_game_process_alive;
+use crate::services::game::launcher::process::{is_our_game_process_alive, max_heap_from_args};
 use crate::services::game::launcher::session::{forget_game_session, remember_game_session};
 use crate::services::game::run_history::RunRecorder;
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{
-    BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_PID, REOPEN_LAUNCHER_ON_GAME_EXIT,
+    BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_MAX_HEAP_BYTES, GAME_PROCESS_PID, REOPEN_LAUNCHER_ON_GAME_EXIT,
 };
 use crate::services::game::version_types::*;
 use crate::services::game::versions::get_mojang_version_url;
@@ -1366,6 +1366,10 @@ pub async fn launch_game(
         );
     }
     GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+    GAME_PROCESS_MAX_HEAP_BYTES.store(
+        max_heap_from_args(&jvm_args).unwrap_or(0),
+        Ordering::SeqCst,
+    );
 
     let mut cmd = std::process::Command::new(&java_path);
     cmd.args(&jvm_args)

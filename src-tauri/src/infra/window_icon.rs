@@ -19,15 +19,6 @@ pub fn launcher_icon_file_path(exe: &Path) -> Option<PathBuf> {
     None
 }
 
-#[cfg(windows)]
-pub fn windows_shortcut_icon_location(exe: &Path) -> String {
-    if let Some(ico) = launcher_icon_file_path(exe) {
-        format!("{},0", ico.display())
-    } else {
-        format!("{},0", exe.display())
-    }
-}
-
 pub fn apply_launcher_icon_to_main_window(app: &App) {
     let Some(icon) = app.default_window_icon().cloned() else {
         return;

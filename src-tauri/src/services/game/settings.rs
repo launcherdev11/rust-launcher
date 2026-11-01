@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use sysinfo::System;
 use tauri::{command, AppHandle, Manager};
 
 use crate::models::settings::default_interface_language;
@@ -295,9 +294,7 @@ pub fn effective_settings_for_launch() -> Settings {
 
 #[command]
 pub fn get_system_memory_gb() -> Result<u64, String> {
-    let mut sys = System::new_all();
-    sys.refresh_memory();
-    let total_bytes = sys.total_memory();
+    let total_bytes = crate::infra::process_probe::total_memory_bytes();
     if total_bytes == 0 {
         return Err("Не удалось определить объём памяти системы".to_string());
     }
@@ -309,22 +306,34 @@ pub fn get_system_memory_gb() -> Result<u64, String> {
 pub fn get_graphics_adapters() -> Result<Vec<String>, String> {
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = std::process::Command::new("powershell");
-        cmd.args(["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"]);
-        crate::infra::process::hide_console(&mut cmd);
-        let output = cmd
-            .output()
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
+        };
+
+        let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }
             .map_err(|e| format!("Не удалось получить список видеокарт: {e}"))?;
-        if !output.status.success() {
-            return Err("Не удалось получить список видеокарт".to_string());
+        let mut adapters = Vec::new();
+        // EnumAdapters1 возвращает DXGI_ERROR_NOT_FOUND после последнего адаптера
+        for index in 0.. {
+            let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else {
+                break;
+            };
+            let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+                continue;
+            };
+            if desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+                continue;
+            }
+            let len = desc
+                .Description
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(desc.Description.len());
+            let name = String::from_utf16_lossy(&desc.Description[..len]).trim().to_string();
+            if !name.is_empty() {
+                adapters.push(name);
+            }
         }
-        let text = String::from_utf8_lossy(&output.stdout);
-        let mut adapters: Vec<String> = text
-            .lines()
-            .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .map(ToOwned::to_owned)
-            .collect();
         adapters.sort_by_key(|name| name.to_lowercase());
         adapters.dedup();
         return Ok(adapters);

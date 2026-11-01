@@ -1,21 +1,16 @@
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::command;
 
-use crate::services::game::state::{CANCEL_DOWNLOAD, GAME_PROCESS_PID};
+use crate::infra::process_probe;
+use crate::services::game::state::{CANCEL_DOWNLOAD, GAME_PROCESS_MAX_HEAP_BYTES, GAME_PROCESS_PID};
 
 pub(crate) fn is_our_game_process_alive() -> bool {
     let pid = GAME_PROCESS_PID.load(Ordering::SeqCst);
-    if pid == 0 {
-        return false;
-    }
-
-    let mut sys = System::new_all();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
-    sys.process(Pid::from_u32(pid as u32)).is_some()
+    pid != 0 && process_probe::is_alive(pid as u32)
 }
 
 #[command]
@@ -25,17 +20,7 @@ pub fn stop_game() -> Result<(), String> {
         return Ok(());
     }
     crate::services::game::run_history::STOP_REQUESTED.store(true, Ordering::SeqCst);
-
-    let pid_u32 = pid as u32;
-    let pid_obj = Pid::from_u32(pid_u32);
-
-    let mut sys = System::new_all();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
-
-    if let Some(process) = sys.process(pid_obj) {
-        let _ = process.kill();
-    }
-
+    process_probe::terminate(pid as u32);
     Ok(())
 }
 
@@ -44,13 +29,21 @@ pub fn stop_game() -> Result<(), String> {
 pub struct GameProcessStats {
     pid: u32,
     memory_bytes: u64,
+    // 0–100 от всех ядер
     cpu_percent: f32,
     max_heap_bytes: Option<u64>,
     system_total_bytes: u64,
     system_available_bytes: u64,
 }
 
-static STATS_SYSTEM: Mutex<Option<(u32, System)>> = Mutex::new(None);
+// cpu_percent считается по разнице процессорного времени между замерами
+struct CpuSample {
+    pid: u32,
+    cpu_time: Duration,
+    at: Instant,
+}
+
+static LAST_CPU_SAMPLE: Mutex<Option<CpuSample>> = Mutex::new(None);
 
 fn parse_jvm_size(value: &str) -> Option<u64> {
     let value = value.trim();
@@ -66,9 +59,9 @@ fn parse_jvm_size(value: &str) -> Option<u64> {
     Some(n * mult)
 }
 
-fn max_heap_from_cmd(cmd: &[std::ffi::OsString]) -> Option<u64> {
-    cmd.iter()
-        .filter_map(|arg| arg.to_str()?.strip_prefix("-Xmx"))
+pub(crate) fn max_heap_from_args<S: AsRef<str>>(args: &[S]) -> Option<u64> {
+    args.iter()
+        .filter_map(|arg| arg.as_ref().strip_prefix("-Xmx"))
         .last()
         .and_then(parse_jvm_size)
 }
@@ -76,36 +69,43 @@ fn max_heap_from_cmd(cmd: &[std::ffi::OsString]) -> Option<u64> {
 #[command]
 pub fn get_game_process_stats() -> Option<GameProcessStats> {
     let pid = GAME_PROCESS_PID.load(Ordering::SeqCst) as u32;
-    let mut guard = STATS_SYSTEM.lock().unwrap_or_else(|e| e.into_inner());
+    let mut last = LAST_CPU_SAMPLE.lock().unwrap_or_else(|e| e.into_inner());
     if pid == 0 {
-        *guard = None;
+        *last = None;
         return None;
     }
-    if guard.as_ref().map(|(p, _)| *p) != Some(pid) {
-        *guard = Some((pid, System::new()));
-    }
-    let (_, sys) = guard.as_mut()?;
 
-    let sys_pid = Pid::from_u32(pid);
-    sys.refresh_processes_specifics(
-        ProcessesToUpdate::Some(&[sys_pid]),
-        true,
-        ProcessRefreshKind::nothing()
-            .with_cpu()
-            .with_memory()
-            .with_cmd(UpdateKind::OnlyIfNotSet),
-    );
-    sys.refresh_memory();
-    let process = sys.process(sys_pid)?;
+    let snapshot = process_probe::snapshot(pid)?;
+    let now = Instant::now();
     let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1) as f32;
+    let cpu_percent = match last.as_ref().filter(|s| s.pid == pid) {
+        Some(prev) => {
+            let wall = now.duration_since(prev.at).as_secs_f32();
+            let busy = snapshot.cpu_time.saturating_sub(prev.cpu_time).as_secs_f32();
+            if wall > 0.0 {
+                (busy / wall / cores * 100.0).clamp(0.0, 100.0)
+            } else {
+                0.0
+            }
+        }
+        None => 0.0,
+    };
+    *last = Some(CpuSample {
+        pid,
+        cpu_time: snapshot.cpu_time,
+        at: now,
+    });
+
+    let (system_total_bytes, system_available_bytes) = process_probe::system_memory();
+    let max_heap = GAME_PROCESS_MAX_HEAP_BYTES.load(Ordering::SeqCst);
 
     Some(GameProcessStats {
         pid,
-        memory_bytes: process.memory(),
-        cpu_percent: (process.cpu_usage() / cores).clamp(0.0, 100.0),
-        max_heap_bytes: max_heap_from_cmd(process.cmd()),
-        system_total_bytes: sys.total_memory(),
-        system_available_bytes: sys.available_memory(),
+        memory_bytes: snapshot.memory_bytes,
+        cpu_percent,
+        max_heap_bytes: (max_heap > 0).then_some(max_heap),
+        system_total_bytes,
+        system_available_bytes,
     })
 }
 
@@ -128,7 +128,18 @@ mod tests {
         assert_eq!(parse_jvm_size("4G"), Some(4 * 1024 * 1024 * 1024));
         assert_eq!(parse_jvm_size("2048m"), Some(2048 * 1024 * 1024));
         assert_eq!(parse_jvm_size("512"), None);
-        let cmd = ["java", "-Xms1G", "-Xmx2G", "-Xmx6G"].map(std::ffi::OsString::from);
-        assert_eq!(max_heap_from_cmd(&cmd), Some(6 * 1024 * 1024 * 1024));
+        let args = ["-Xms1G", "-Xmx2G", "-Xmx6G"];
+        assert_eq!(max_heap_from_args(&args), Some(6 * 1024 * 1024 * 1024));
+    }
+
+    #[test]
+    fn probes_own_process() {
+        let pid = std::process::id();
+        assert!(process_probe::is_alive(pid));
+        let snapshot = process_probe::snapshot(pid).expect("snapshot");
+        assert!(snapshot.memory_bytes > 0);
+        assert!(snapshot.start_time > 0);
+        assert!(!snapshot.name.is_empty());
+        assert!(!process_probe::is_alive(0));
     }
 }

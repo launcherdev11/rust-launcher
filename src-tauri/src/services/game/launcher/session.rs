@@ -2,11 +2,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use sysinfo::{Pid, ProcessesToUpdate, System};
 use tauri::{command, AppHandle, Emitter};
 
 use crate::app::paths::launcher_data_dir;
 use crate::infra::fs_atomic::write_atomic;
+use crate::infra::process_probe;
 use crate::models::events::{
     GameProcessExitedPayload, PlaytimeUpdatedPayload, EVENT_GAME_PROCESS_EXITED,
     EVENT_PLAYTIME_UPDATED,
@@ -14,7 +14,7 @@ use crate::models::events::{
 use crate::services::game::profiles::{
     finish_playtime_session, flush_active_playtime, start_playtime_session,
 };
-use crate::services::game::state::GAME_PROCESS_PID;
+use crate::services::game::state::{GAME_PROCESS_MAX_HEAP_BYTES, GAME_PROCESS_PID};
 
 const SESSION_FILE: &str = "running_game.json";
 const START_TIME_TOLERANCE_SECS: u64 = 2;
@@ -28,6 +28,8 @@ struct StoredSession {
     process_start_time: u64,
     profile_id: Option<String>,
     started_at_ms: u64,
+    #[serde(default)]
+    max_heap_bytes: u64,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -41,15 +43,7 @@ fn session_path() -> Option<std::path::PathBuf> {
 }
 
 fn probe_process(pid: u32) -> Option<(String, u64)> {
-    let pid = Pid::from_u32(pid);
-    let mut sys = System::new();
-    sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-    sys.process(pid).map(|p| {
-        (
-            p.name().to_string_lossy().to_ascii_lowercase(),
-            p.start_time(),
-        )
-    })
+    process_probe::snapshot(pid).map(|p| (p.name, p.start_time))
 }
 
 fn is_java_name(name: &str) -> bool {
@@ -70,6 +64,7 @@ pub(crate) fn remember_game_session(pid: u32, profile_id: Option<String>) {
         process_start_time,
         profile_id,
         started_at_ms,
+        max_heap_bytes: GAME_PROCESS_MAX_HEAP_BYTES.load(Ordering::SeqCst),
     };
     match serde_json::to_vec(&session) {
         Ok(bytes) => {
@@ -116,7 +111,7 @@ fn spawn_session_watcher(app: AppHandle, pid: u32) {
     }
     std::thread::spawn(move || {
         let mut last_flush_at = Instant::now();
-        while probe_process(pid).is_some() {
+        while process_probe::is_alive(pid) {
             if last_flush_at.elapsed() >= PLAYTIME_FLUSH_INTERVAL {
                 if let Some((profile_id, delta_seconds, total_seconds)) = flush_active_playtime() {
                     let _ = app.emit(
@@ -161,6 +156,7 @@ pub fn get_running_game_session(app: AppHandle) -> Option<RunningGameSession> {
 
     let current = GAME_PROCESS_PID.load(Ordering::SeqCst);
     if current == 0 {
+        GAME_PROCESS_MAX_HEAP_BYTES.store(session.max_heap_bytes, Ordering::SeqCst);
         GAME_PROCESS_PID.store(pid, Ordering::SeqCst);
         crate::infra::window_idle::sync(&app);
         if let Some(profile_id) = session.profile_id.as_deref() {
