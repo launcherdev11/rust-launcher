@@ -41,9 +41,12 @@ export type ModrinthFile = {
   primary?: boolean;
 };
 
+export type VersionChannel = "release" | "beta" | "alpha";
+
 export type ModrinthVersion = {
   id: string;
   version_number: string;
+  version_type?: VersionChannel;
   game_versions: string[];
   loaders: string[];
   files: ModrinthFile[];
@@ -69,6 +72,7 @@ export type CurseforgeFileHit = {
   gameVersions: string[];
   loaders: string[];
   fileDate: string;
+  releaseType?: VersionChannel;
 };
 
 export type CurseforgeCategoryHit = {
@@ -124,11 +128,13 @@ export type CatalogVersion = {
   loaders: string[];
   file_url: string;
   filename: string;
+  channel: VersionChannel;
 };
 
 export type GalleryItem = {
   url: string;
   title?: string | null;
+  description?: string | null;
 };
 
 export type ProjectDetail = {

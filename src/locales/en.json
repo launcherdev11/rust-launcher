@@ -186,11 +186,37 @@
       "wiki": "Wiki",
       "issues": "Issues",
       "source": "Source",
-      "discord": "Discord"
+      "discord": "Discord",
+      "prevImage": "Previous image",
+      "nextImage": "Next image",
+      "showAll": "Full gallery · {{count}}",
+      "details": "Details",
+      "links": "Links",
+      "type": "Type",
+      "author": "Author",
+      "categories": "Categories",
+      "downloads": "Downloads",
+      "followers": "Followers",
+      "scrollTop": "Back to top"
     },
     "pageLabel": "Page",
     "pageOfTotal": "of {{total}}",
-    "pageInputLabel": "Page number"
+    "pageInputLabel": "Page number",
+    "byAuthor": "by {{author}}",
+    "channel": {
+      "all": "All",
+      "release": "Release",
+      "beta": "Beta",
+      "alpha": "Alpha"
+    },
+    "projectType": {
+      "mod": "Mod",
+      "modpack": "Modpack",
+      "resourcepack": "Resource pack",
+      "shader": "Shader",
+      "datapack": "Data pack",
+      "plugin": "Plugin"
+    }
   },
   "settings": {
     "common": {
@@ -2875,6 +2901,12 @@
     "build": "Build archive",
     "building": "Building archive…",
     "built": "Server archive saved. Mods: {{mods}}, skipped: {{skipped}}"
+  },
+  "trayMenu": {
+    "show": "Open launcher",
+    "quit": "Quit",
+    "empty": "Recent and pinned instances will appear here",
+    "launch": "Launch “{{name}}”"
   },
   "jumpList": {
     "category": "Instances",

@@ -44,14 +44,12 @@ pub fn stop_game() -> Result<(), String> {
 pub struct GameProcessStats {
     pid: u32,
     memory_bytes: u64,
-    // 0–100 от всех ядер
     cpu_percent: f32,
     max_heap_bytes: Option<u64>,
     system_total_bytes: u64,
     system_available_bytes: u64,
 }
 
-// cpu_usage считается между замерами, поэтому System живёт между вызовами
 static STATS_SYSTEM: Mutex<Option<(u32, System)>> = Mutex::new(None);
 
 fn parse_jvm_size(value: &str) -> Option<u64> {

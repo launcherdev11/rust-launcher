@@ -1016,6 +1016,7 @@ pub async fn launch_game(
                 },
             )
             .replace("${auth_xuid}", "")
+            .replace("${user_properties}", "{}")
             .replace("${user_type}", &user_type)
             .replace("${version_type}", "release")
             .replace("${is_demo_user}", "false")
@@ -1259,7 +1260,8 @@ pub async fn launch_game(
         .java_path
         .as_ref()
         .is_some_and(|s| !s.trim().is_empty());
-    let (java_path, mut jvm_args) = build_java_command(
+    let bundled_java_path = default_java_path.clone();
+    let (mut java_path, mut jvm_args) = build_java_command(
         default_java_path.clone(),
         &settings,
         instance_settings_for_launch.as_ref(),
@@ -1276,6 +1278,21 @@ pub async fn launch_game(
             None
         },
     )?;
+
+    let uses_launchwrapper = detail.main_class == "net.minecraft.launchwrapper.Launch";
+    if uses_launchwrapper && java_major <= 8 && java_path != bundled_java_path {
+        if crate::services::java::detect::detect_java_major_version(&java_path)
+            .is_some_and(|major| major > 8)
+        {
+            log_to_console(
+                &app,
+                &format!(
+                    "[Launch] {effective_jar_version} с LaunchWrapper работает только на Java 8, выбранная Java пропущена"
+                ),
+            );
+            java_path = bundled_java_path.clone();
+        }
+    }
 
     if let Some(actual_java_major) =
         crate::services::java::detect::detect_java_major_version(&java_path)

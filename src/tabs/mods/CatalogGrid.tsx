@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AssetIcon } from "../../components/asset_icon";
 import { CatalogCardSkeleton, EmptyState, ErrorState, Spinner } from "../../components/ui";
@@ -194,6 +194,7 @@ type CatalogGridProps = {
   installedKeys: Set<string>;
   installingKeys?: Set<string>;
   batchSelectedKeys?: Set<string>;
+  batchSelectedProjects?: CatalogProject[];
   batchInstalling?: boolean;
   allowBatchSelect?: boolean;
   contentTypeIsModpack: boolean;
@@ -225,6 +226,7 @@ export function CatalogGrid({
   installedKeys,
   installingKeys = new Set(),
   batchSelectedKeys = new Set(),
+  batchSelectedProjects,
   batchInstalling = false,
   allowBatchSelect = false,
   contentTypeIsModpack,
@@ -253,8 +255,13 @@ export function CatalogGrid({
   const skeletonCount = layout === "grid" ? 8 : 5;
   const batchCount = batchSelectedKeys.size;
   const showBatchBar = allowBatchSelect && batchCount > 0;
-  const batchSelectedProjects = projects.filter((p) => batchSelectedKeys.has(p.key));
+  const selectedProjects =
+    batchSelectedProjects ?? projects.filter((p) => batchSelectedKeys.has(p.key));
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [page]);
   const handleMarqueePointerDown = useMarqueeSelection({
     containerRef: scrollRef,
     selected: batchSelectedKeys,
@@ -384,9 +391,11 @@ export function CatalogGrid({
                       <p className="mt-0.5 line-clamp-2 text-xs text-white/70">
                         {p.description}
                       </p>
-                      <p className="mt-1 text-[0.8125rem] text-white/50">
-                        by {p.author}
-                      </p>
+                      {p.author ? (
+                        <p className="mt-1 text-[0.8125rem] text-white/50">
+                          {tt("mods.byAuthor", { author: p.author })}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-col items-end justify-between text-right text-[0.8125rem] text-white/70">
                       <div className="flex items-center gap-3">
@@ -458,7 +467,7 @@ export function CatalogGrid({
           <BatchSelectionToggle
             tt={tt}
             count={batchCount}
-            projects={batchSelectedProjects}
+            projects={selectedProjects}
             disabled={batchInstalling}
             onRemove={(key) => onToggleBatchSelect?.(key)}
           />

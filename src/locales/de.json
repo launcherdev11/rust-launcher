@@ -186,11 +186,37 @@
       "wiki": "Wiki",
       "issues": "Issues",
       "source": "Quellcode",
-      "discord": "Discord"
+      "discord": "Discord",
+      "prevImage": "Vorheriges Bild",
+      "nextImage": "Nächstes Bild",
+      "showAll": "Ganze Galerie · {{count}}",
+      "details": "Details",
+      "links": "Links",
+      "type": "Typ",
+      "author": "Autor",
+      "categories": "Kategorien",
+      "downloads": "Downloads",
+      "followers": "Follower",
+      "scrollTop": "Nach oben"
     },
     "pageLabel": "Seite",
     "pageOfTotal": "von {{total}}",
-    "pageInputLabel": "Seitennummer"
+    "pageInputLabel": "Seitennummer",
+    "byAuthor": "von {{author}}",
+    "channel": {
+      "all": "Alle",
+      "release": "Release",
+      "beta": "Beta",
+      "alpha": "Alpha"
+    },
+    "projectType": {
+      "mod": "Mod",
+      "modpack": "Modpack",
+      "resourcepack": "Ressourcenpaket",
+      "shader": "Shader",
+      "datapack": "Datenpaket",
+      "plugin": "Plugin"
+    }
   },
   "settings": {
     "common": {
@@ -2903,6 +2929,12 @@
     "build": "Archiv erstellen",
     "building": "Archiv wird erstellt…",
     "built": "Serverarchiv gespeichert. Mods: {{mods}}, übersprungen: {{skipped}}"
+  },
+  "trayMenu": {
+    "show": "Launcher öffnen",
+    "quit": "Beenden",
+    "empty": "Hier erscheinen zuletzt gespielte und angeheftete Instanzen",
+    "launch": "„{{name}}“ starten"
   },
   "jumpList": {
     "category": "Instanzen",

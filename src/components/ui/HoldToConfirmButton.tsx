@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const DEFAULT_HOLD_MS = 900;
-// короче — обычный клик, показываем подсказку
 const TAP_THRESHOLD_MS = 250;
 const HINT_VISIBLE_MS = 1600;
 

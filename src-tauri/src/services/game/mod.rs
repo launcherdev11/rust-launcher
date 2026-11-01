@@ -13,6 +13,7 @@ pub mod worlds;
 pub mod config_files;
 pub mod download;
 pub mod files;
+pub mod forge_legacy;
 pub mod install;
 pub mod integrity;
 pub mod launcher;

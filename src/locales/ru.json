@@ -186,11 +186,37 @@
       "wiki": "Вики",
       "issues": "Issues",
       "source": "Исходники",
-      "discord": "Discord"
+      "discord": "Discord",
+      "prevImage": "Предыдущее изображение",
+      "nextImage": "Следующее изображение",
+      "showAll": "Вся галерея · {{count}}",
+      "details": "Подробности",
+      "links": "Ссылки",
+      "type": "Тип",
+      "author": "Автор",
+      "categories": "Категории",
+      "downloads": "Загрузки",
+      "followers": "Подписчики",
+      "scrollTop": "Наверх"
     },
     "pageLabel": "Страница",
     "pageOfTotal": "из {{total}}",
-    "pageInputLabel": "Номер страницы"
+    "pageInputLabel": "Номер страницы",
+    "byAuthor": "автор: {{author}}",
+    "channel": {
+      "all": "Все",
+      "release": "Релиз",
+      "beta": "Бета",
+      "alpha": "Альфа"
+    },
+    "projectType": {
+      "mod": "Мод",
+      "modpack": "Сборка",
+      "resourcepack": "Ресурспак",
+      "shader": "Шейдер",
+      "datapack": "Датапак",
+      "plugin": "Плагин"
+    }
   },
   "settings": {
     "common": {
@@ -2875,6 +2901,12 @@
     "build": "Собрать архив",
     "building": "Собираю архив…",
     "built": "Архив сервера сохранён. Модов: {{mods}}, пропущено: {{skipped}}"
+  },
+  "trayMenu": {
+    "show": "Открыть лаунчер",
+    "quit": "Выход",
+    "empty": "Здесь появятся недавние и закреплённые сборки",
+    "launch": "Запустить «{{name}}»"
   },
   "jumpList": {
     "category": "Сборки",

@@ -275,7 +275,6 @@ export function useGameLaunch({
           const id = event.payload.profile_id?.trim();
           if (!id) return;
           pendingProfileLaunchIdRef.current = id;
-          // без счётчика запрос в уже открытый лаунчер ждал бы смены списка профилей
           setProfileLaunchRequestTick((n) => n + 1);
         });
       } catch {

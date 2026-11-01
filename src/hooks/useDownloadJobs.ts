@@ -87,7 +87,6 @@ export function useDownloadJobs() {
       if (percent != null) {
         const samples = samplesRef.current.get(id) ?? [];
         const last = samples[samples.length - 1];
-        // откат назад — новая фаза или повтор
         if (last && (percent < last.percent || (detail && last.current != null && detail.current < last.current))) {
           samples.length = 0;
         }

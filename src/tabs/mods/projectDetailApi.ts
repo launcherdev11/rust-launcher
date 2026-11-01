@@ -20,7 +20,9 @@ type ModrinthProjectFull = {
   gallery?: {
     url: string;
     title?: string | null;
+    description?: string | null;
     featured?: boolean;
+    ordering?: number;
   }[];
   source_url?: string | null;
   issues_url?: string | null;
@@ -63,10 +65,17 @@ export async function fetchProjectDetail(
       author: fallback?.author || "—",
       project_type: data.project_type || contentType,
       categories: (data.categories || []).filter(Boolean),
-      gallery: (data.gallery || []).map((g) => ({
-        url: g.url,
-        title: g.title,
-      })),
+      gallery: [...(data.gallery || [])]
+        .sort(
+          (a, b) =>
+            Number(Boolean(b.featured)) - Number(Boolean(a.featured)) ||
+            (a.ordering ?? 0) - (b.ordering ?? 0),
+        )
+        .map((g) => ({
+          url: g.url,
+          title: g.title,
+          description: g.description,
+        })),
       links: {
         website: `https://modrinth.com/${data.project_type}/${data.slug}`,
         wiki: data.wiki_url,

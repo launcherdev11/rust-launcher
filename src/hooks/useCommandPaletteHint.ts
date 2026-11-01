@@ -23,7 +23,6 @@ function markSeen() {
   }
 }
 
-// для тех, кто прошёл тур до появления палитры; новые узнают о ней из тура
 export function useCommandPaletteHint({
   ready,
   paletteOpen,

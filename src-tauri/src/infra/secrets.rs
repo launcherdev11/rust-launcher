@@ -20,7 +20,6 @@ const KEY_LEN: usize = 32;
 type VaultKey = [u8; KEY_LEN];
 
 static MASTER_KEY: Mutex<Option<VaultKey>> = Mutex::new(None);
-// после первого сбоя системного хранилища до перезапуска больше не пробуем
 static KEYRING_FAILED: AtomicBool = AtomicBool::new(false);
 
 fn decode_key(s: &str) -> Result<VaultKey, String> {
@@ -54,7 +53,6 @@ fn load_or_create_key() -> Result<VaultKey, String> {
     }
 }
 
-// keyring на Linux гоняет свой runtime, поэтому обращаемся к нему из отдельного потока
 fn master_key() -> Result<VaultKey, String> {
     let mut cached = MASTER_KEY.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(key) = *cached {
@@ -104,9 +102,6 @@ fn open(key: &VaultKey, blob: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "Не удалось расшифровать хранилище".to_string())
 }
 
-/// Читает и расшифровывает файл хранилища. `Ok(None)` — файла нет или его не
-/// удалось расшифровать (например, ключ в системном хранилище был сброшен).
-/// `Err` — системное хранилище недоступно.
 pub fn read_vault(path: &Path) -> Result<Option<Vec<u8>>, String> {
     if !path.is_file() {
         return Ok(None);
@@ -153,16 +148,12 @@ mod tests {
         assert!(open(&KEY, b"nope").is_err());
     }
 
-    // Требует доступного системного хранилища, поэтому в CI не запускается:
-    // cargo test --lib vault_roundtrip_with_system_keyring -- --ignored
     #[test]
     #[ignore]
     fn vault_roundtrip_with_system_keyring() {
         let dir = std::env::temp_dir().join(format!("secrets_vault_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("secrets.vault");
-
-        // заметно больше лимита записи Windows Credential Manager (2560 байт)
         let payload = "x".repeat(20_000).into_bytes();
         write_vault(&path, &payload).unwrap();
         assert_eq!(read_vault(&path).unwrap().unwrap(), payload);

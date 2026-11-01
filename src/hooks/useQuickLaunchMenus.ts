@@ -30,6 +30,8 @@ export function useQuickLaunchMenus(
       profiles: picked.slice(0, QUICK_LAUNCH_LIMIT).map((p) => ({
         profileId: p.id,
         name: p.name,
+        gameVersion: p.game_version,
+        loader: p.loader,
         description: tt("jumpList.description", {
           version: [p.game_version, p.loader !== "vanilla" ? p.loader : null].filter(Boolean).join(" · "),
         }),
@@ -42,7 +44,13 @@ export function useQuickLaunchMenus(
     const timer = window.setTimeout(() => {
       const { category, profiles: list } = JSON.parse(payload) as {
         category: string;
-        profiles: { profileId: string; name: string; description: string }[];
+        profiles: {
+          profileId: string;
+          name: string;
+          gameVersion: string;
+          loader: string;
+          description: string;
+        }[];
       };
       invoke("update_tray_profiles", { title: category, profiles: list }).catch((e) => console.error(e));
       if (IS_WINDOWS) {

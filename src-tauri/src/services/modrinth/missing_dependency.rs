@@ -28,7 +28,6 @@ fn normalize(s: &str) -> String {
         .collect()
 }
 
-// id мода из лога не всегда совпадает со slug на Modrinth
 fn known_slug_alias(mod_ref: &str) -> Option<&'static str> {
     match mod_ref {
         "fabric" | "fabricapi" => Some("fabric-api"),
@@ -88,7 +87,6 @@ async fn resolve_targets(
     loader: &str,
 ) -> Result<Option<Vec<ModrinthDownloadTarget>>, String> {
     for slug in slug_candidates(mod_ref) {
-        // несуществующий slug даёт HTTP 404, это не ошибка: пробуем следующий вариант
         if let Ok(Some(targets)) =
             resolve_latest_project_targets(client, &slug, game_version, loader).await
         {
@@ -101,8 +99,6 @@ async fn resolve_targets(
     }
 }
 
-/// Ставит в сборку мод, которого не хватает по логу, вместе с его обязательными
-/// зависимостями. Берётся только точное совпадение slug или названия на Modrinth.
 #[tauri::command]
 pub async fn install_missing_mod_dependency(
     profile_id: String,

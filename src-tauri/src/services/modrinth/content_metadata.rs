@@ -23,7 +23,6 @@ use super::types::{ModrinthVersion, ProfileItemMetadata, MODRINTH_USER_AGENT};
 const VERSION_FILES_BATCH: usize = 96;
 const MINECRAFT_GAME_ID: u32 = 432;
 
-// кеш пишут и resolve_profile_item_metadata, и установщики (параллельно при установке сборки)
 static CACHE_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -45,8 +44,6 @@ struct CachedEntry {
     source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     project_id: Option<String>,
-    // источник записан при установке и важнее совпадения по хешу: многие моды CurseForge
-    // лежат на Modrinth тем же файлом
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     installed: bool,
 }
@@ -373,7 +370,6 @@ async fn fetch_curseforge_mods(
     Ok(out)
 }
 
-// items: (имя файла в category, id проекта)
 pub(crate) async fn record_installed_item_sources(
     profile_dir: &Path,
     category: &str,
@@ -442,7 +438,6 @@ pub struct InstalledContentEntry {
     enabled: bool,
 }
 
-// без сети: названия берутся из кеша метаданных
 #[tauri::command]
 pub async fn list_installed_content_index() -> Result<Vec<InstalledContentEntry>, String> {
     tokio::task::spawn_blocking(|| {
@@ -592,7 +587,6 @@ pub async fn resolve_profile_item_metadata(
 
     let cache_path = metadata_cache_path(&profile_dir, subdir);
     let cache = load_cache(&cache_path);
-    // после отключения или включения имя файла другое, а хеш тот же
     let installed_by_sha: HashMap<&str, &CachedEntry> = cache
         .entries
         .values()
@@ -779,7 +773,6 @@ pub async fn resolve_profile_item_metadata(
     let live_files: HashSet<String> = sha_by_filename.keys().cloned().collect();
     let _ = tokio::task::spawn_blocking(move || {
         let _guard = CACHE_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        // пока шли запросы, установщик мог дописать кеш
         let mut cache = load_cache(&cache_path);
         cache.entries.retain(|filename, _| live_files.contains(filename));
         for (filename, entry) in resolved_for_save {

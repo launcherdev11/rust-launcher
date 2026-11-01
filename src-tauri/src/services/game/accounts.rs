@@ -41,8 +41,6 @@ fn read_secrets_map() -> SecretsMap {
     }
 }
 
-// Заменяет содержимое хранилища токенами всех аккаунтов из store. Если токенов нет
-// и хранилища ещё не создавали, ключ в системном хранилище не трогаем.
 fn sync_secrets_vault(store: &LauncherAccountsStore) -> Result<(), String> {
     let map: SecretsMap = store
         .accounts
@@ -92,8 +90,6 @@ pub fn read_profile_from_disk() -> Result<Profile, String> {
     Ok(profile)
 }
 
-// Возвращает true, если токены надёжно лежат в хранилище (или их нет вовсе) и в json
-// их писать не нужно. При false токены остаются в json, как до появления хранилища.
 fn save_accounts_store(store: &LauncherAccountsStore) -> Result<bool, String> {
     let path = launcher_accounts_path()?;
     if let Some(parent) = path.parent() {
@@ -142,7 +138,6 @@ fn load_accounts_store() -> Result<LauncherAccountsStore, String> {
             }
         }
         if legacy_plaintext {
-            // токены из старых json переезжают в хранилище
             match save_accounts_store(&store) {
                 Ok(true) => {
                     if let Some(p) = active_account_profile(&store) {
@@ -273,7 +268,6 @@ fn upsert_launcher_accounts_store(profile: &Profile) -> Result<bool, String> {
     save_accounts_store(&store)
 }
 
-// strip_secrets = true только после того, как токены сохранены в хранилище
 fn persist_profile_json(profile: &Profile, strip_secrets: bool) -> Result<(), String> {
     let path = profile_path()?;
     if let Some(parent) = path.parent() {

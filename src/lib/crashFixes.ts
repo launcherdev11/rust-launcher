@@ -68,7 +68,6 @@ function subjectRefs(findingId: string, subject: string): string[] {
   return refs.flatMap((r) => r.split(/,\s*/)).filter(Boolean);
 }
 
-// "Имя (id) ← Кто требует" → id (или имя) недостающего мода
 function missingDependencyRef(subject: string): string | null {
   const dep = subject.split("←")[0].trim();
   const id = dep.match(/\(([^()]+)\)\s*$/)?.[1]?.trim();

@@ -192,6 +192,11 @@ export function ModsTab({
     () => new Set(),
   );
   const [batchInstalling, setBatchInstalling] = useState(false);
+  const [batchProjects, setBatchProjects] = useState<Map<string, CatalogProject>>(
+    () => new Map(),
+  );
+  const batchProjectsRef = useRef(batchProjects);
+  batchProjectsRef.current = batchProjects;
 
   const [installedFilenames, setInstalledFilenames] = useState<Set<string>>(
     new Set(),
@@ -598,6 +603,7 @@ export function ModsTab({
             loaders: v.loaders,
             file_url: primaryFile?.url ?? "",
             filename: primaryFile?.filename ?? "",
+            channel: v.version_type ?? "release",
           };
         })
       : filteredCurseforgeVersions.map((f) => ({
@@ -607,6 +613,7 @@ export function ModsTab({
           loaders: f.loaders,
           file_url: f.downloadUrl ?? "",
           filename: f.fileName,
+          channel: f.releaseType ?? "release",
         }));
 
   const catalogProjects: CatalogProject[] = useMemo(() => {
@@ -668,6 +675,30 @@ export function ModsTab({
     installedOnly,
     installedProjectKeys,
   ]);
+
+  useEffect(() => {
+    setBatchProjects((prev) => {
+      const next = new Map<string, CatalogProject>();
+      for (const key of batchSelectedKeys) {
+        const known =
+          catalogProjects.find((p) => p.key === key && p.author) ??
+          prev.get(key) ??
+          catalogProjects.find((p) => p.key === key);
+        if (known) next.set(key, known);
+      }
+      const unchanged =
+        next.size === prev.size && [...next].every(([k, v]) => prev.get(k) === v);
+      return unchanged ? prev : next;
+    });
+  }, [batchSelectedKeys, catalogProjects]);
+
+  const batchSelectedProjects = useMemo(
+    () =>
+      Array.from(batchSelectedKeys)
+        .map((key) => batchProjects.get(key) ?? catalogProjects.find((p) => p.key === key))
+        .filter((p): p is CatalogProject => Boolean(p)),
+    [batchSelectedKeys, batchProjects, catalogProjects],
+  );
 
   const loadVersionsForProject = useCallback(
     async (key: string) => {
@@ -802,7 +833,6 @@ export function ModsTab({
     return () => window.removeEventListener(CATALOG_OPEN_EVENT, onOpen);
   }, []);
 
-  // openProject берёт площадку и тип из текущего рендера, поэтому переключаем по шагам
   useEffect(() => {
     if (!pendingCatalogOpen) return;
     if (pendingCatalogOpen.kind === "project" && pendingCatalogOpen.provider !== contentProvider) {
@@ -874,7 +904,8 @@ export function ModsTab({
     (projectKey: string | null) => {
       const projectDetail = detail && detail.key === projectKey ? detail : null;
       const fromCatalog = projectKey
-        ? catalogProjects.find((p) => p.key === projectKey)
+        ? catalogProjects.find((p) => p.key === projectKey) ??
+          batchProjectsRef.current.get(projectKey)
         : undefined;
       return {
         contentProvider,
@@ -1039,6 +1070,7 @@ export function ModsTab({
     const BATCH_CONCURRENCY = 8;
     let ok = 0;
     let failed = 0;
+    const failedKeys: string[] = [];
 
     try {
       let next = 0;
@@ -1063,6 +1095,7 @@ export function ModsTab({
             ok += 1;
           } catch {
             failed += 1;
+            failedKeys.push(targetKey);
           }
         }
       };
@@ -1086,7 +1119,7 @@ export function ModsTab({
       } else {
         showNotification("error", tt("mods.batch.failed"));
       }
-      clearBatchSelection();
+      setBatchSelectedKeys(new Set(failedKeys));
     } finally {
       keys.forEach((key) => removeInstallingKey(key));
       setBatchInstalling(false);
@@ -1110,7 +1143,7 @@ export function ModsTab({
 
   useEffect(() => {
     setBatchSelectedKeys(new Set());
-  }, [contentProvider, contentType, sourceTab, page]);
+  }, [contentProvider, contentType]);
 
   const externalUrl = useMemo(() => {
     if (!detail && !selectedKey) return null;
@@ -1363,6 +1396,7 @@ export function ModsTab({
             installedKeys={installedProjectKeys}
             installingKeys={installingKeys}
             batchSelectedKeys={batchSelectedKeys}
+            batchSelectedProjects={batchSelectedProjects}
             batchInstalling={batchInstalling}
             allowBatchSelect={contentType !== "modpack"}
             contentTypeIsModpack={contentType === "modpack"}

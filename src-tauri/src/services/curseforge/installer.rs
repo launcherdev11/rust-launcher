@@ -223,8 +223,6 @@ fn subdir_for_class_id(class_id: Option<u32>) -> &'static str {
     }
 }
 
-// Без downloadUrl файл всё равно лежит на CDN по предсказуемому пути, поэтому
-// лишний запрос к API (который тратит общий лимит прокси) не делаем.
 fn resolve_mod_urls(file_id: u32, meta: &CfFile) -> Vec<String> {
     let mut urls = Vec::new();
     if let Some(url) = meta
@@ -354,8 +352,6 @@ where
     )
     .await;
 
-    // Сбои первого прохода чаще всего временные (лимит запросов прокси, обрыв
-    // соединения с CDN), поэтому даём им ещё попытки с паузой и меньшим параллелизмом.
     for (pass, delay_secs) in [(2u32, 5u64), (3, 20)] {
         if failed.is_empty() {
             break;

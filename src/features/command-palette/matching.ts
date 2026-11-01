@@ -17,7 +17,6 @@ export type PaletteCommand = {
   badgeSrc?: string | null;
   hint?: string;
   disabled?: boolean;
-  // не попадает в «Недавние»
   transient?: boolean;
   run: () => void;
 };
@@ -111,7 +110,6 @@ export function rankCommands(commands: PaletteCommand[], query: string): RankedC
 
   const ranked: RankedCommand[] = [];
   for (const cmd of commands) {
-    // в подзаголовке контента имя сборки: по нему ищется сама сборка, а не все её моды
     const fields =
       cmd.group === "content"
         ? [cmd.title, ...(cmd.keywords ?? [])]

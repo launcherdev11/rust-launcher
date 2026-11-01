@@ -12,7 +12,6 @@ type HotkeysModalProps = {
 };
 
 function KeyCombo({ keys }: { keys: string[] }) {
-  // Cmd+Tab на macOS занят системой
   const mod = keys.includes("Tab") ? "Ctrl" : modKeyLabel();
   return (
     <span className="inline-flex items-center gap-1">

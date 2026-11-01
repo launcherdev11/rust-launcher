@@ -16,6 +16,7 @@ use crate::services::game::core::{
     library_applies, resolve_native_artifact, try_fetch_remote_sha1,
 };
 use crate::services::game::console::log_to_console;
+use crate::services::game::forge_legacy::{install_legacy_forge, read_legacy_install_profile};
 use crate::services::game::runtime::{
     download_assets, download_file_checked, download_forge_installer_once,
     ensure_launcher_profiles_json, extract_natives_jar, file_starts_with_pk,
@@ -751,6 +752,32 @@ pub async fn install_forge(
                     ),
                 );
                 let _ = tokio::fs::remove_file(&vanilla_client_jar).await;
+            }
+        }
+    }
+
+    if !is_neoforge {
+        let probe = installer_path.clone();
+        let legacy = tokio::task::spawn_blocking(move || read_legacy_install_profile(&probe))
+            .await
+            .map_err(|e| format!("Ошибка чтения Forge installer: {e}"))?;
+        match legacy {
+            Ok(Some(profile)) => {
+                return install_legacy_forge(
+                    &app,
+                    profile,
+                    &installer_path,
+                    &version_id,
+                    &resolved_mc,
+                    &libs_root,
+                    &vers_root,
+                )
+                .await;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&installer_path).await;
+                return Err(e);
             }
         }
     }

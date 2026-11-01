@@ -186,11 +186,37 @@
       "wiki": "Wiki",
       "issues": "Issues",
       "source": "Código",
-      "discord": "Discord"
+      "discord": "Discord",
+      "prevImage": "Imagen anterior",
+      "nextImage": "Imagen siguiente",
+      "showAll": "Galería completa · {{count}}",
+      "details": "Detalles",
+      "links": "Enlaces",
+      "type": "Tipo",
+      "author": "Autor",
+      "categories": "Categorías",
+      "downloads": "Descargas",
+      "followers": "Seguidores",
+      "scrollTop": "Volver arriba"
     },
     "pageLabel": "Página",
     "pageOfTotal": "de {{total}}",
-    "pageInputLabel": "Número de página"
+    "pageInputLabel": "Número de página",
+    "byAuthor": "por {{author}}",
+    "channel": {
+      "all": "Todas",
+      "release": "Estable",
+      "beta": "Beta",
+      "alpha": "Alfa"
+    },
+    "projectType": {
+      "mod": "Mod",
+      "modpack": "Modpack",
+      "resourcepack": "Paquete de recursos",
+      "shader": "Shader",
+      "datapack": "Paquete de datos",
+      "plugin": "Plugin"
+    }
   },
   "settings": {
     "common": {
@@ -2903,6 +2929,12 @@
     "build": "Crear archivo",
     "building": "Creando archivo…",
     "built": "Archivo del servidor guardado. Mods: {{mods}}, omitidos: {{skipped}}"
+  },
+  "trayMenu": {
+    "show": "Abrir launcher",
+    "quit": "Salir",
+    "empty": "Aquí aparecerán las instancias recientes y fijadas",
+    "launch": "Iniciar «{{name}}»"
   },
   "jumpList": {
     "category": "Instancias",

@@ -27,7 +27,6 @@ use crate::services::game::options_txt::{
 
 const PROFILE_ITEM_DISABLED_SUFFIX: &str = ".disabled";
 
-// удалённый контент лежит здесь, пока удаление можно отменить
 pub(crate) const PROFILE_TRASH_DIR: &str = ".trash";
 const PROFILE_TRASH_TTL: Duration = Duration::from_secs(15 * 60);
 const PROFILE_TRASH_MANIFEST: &str = "item.json";
@@ -1165,7 +1164,6 @@ pub fn restore_deleted_item(id: String, token: String) -> Result<String, String>
 
     if let Some(before) = trashed.resource_packs_before {
         let current = read_resource_packs(&profile_options_path(&dir))?;
-        // список с тех пор не меняли: возвращаем пак на прежнее место
         let next = if current == remove_resource_pack_from_options(&before, &display_name) {
             before
         } else {
@@ -1597,7 +1595,6 @@ pub async fn add_profile_files(
     Ok(())
 }
 
-// у шейдерпака есть папка shaders/, у ресурспака pack.mcmeta, иногда во вложенной папке
 fn classify_dropped_content(path: &Path) -> Option<&'static str> {
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
     match ext.as_str() {

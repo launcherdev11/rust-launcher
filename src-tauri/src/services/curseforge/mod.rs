@@ -77,6 +77,7 @@ pub struct CurseforgeFileHit {
     pub game_versions: Vec<String>,
     pub loaders: Vec<String>,
     pub file_date: String,
+    pub release_type: &'static str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -196,6 +197,8 @@ pub(crate) struct CfFile {
     #[serde(default)]
     pub(crate) file_date: String,
     #[serde(default)]
+    release_type: u8,
+    #[serde(default)]
     hashes: Vec<CfFileHash>,
 }
 
@@ -206,6 +209,14 @@ struct CfFileHash {
 }
 
 impl CfFile {
+    pub(crate) fn channel(&self) -> &'static str {
+        match self.release_type {
+            2 => "beta",
+            3 => "alpha",
+            _ => "release",
+        }
+    }
+
     pub(crate) fn sha1(&self) -> Option<String> {
         self.hashes
             .iter()
@@ -363,8 +374,6 @@ fn parse_retry_after(resp: &reqwest::Response) -> Option<std::time::Duration> {
         .map(|s| std::time::Duration::from_secs(s.min(15)))
 }
 
-// Прокси лаунчера отвечает 429 без Retry-After, а окно лимита у него минутное:
-// короткий экспоненциальный бэкофф успевает исчерпать попытки до сброса окна.
 fn rate_limit_pause(status: reqwest::StatusCode) -> Option<std::time::Duration> {
     (status == reqwest::StatusCode::TOO_MANY_REQUESTS).then(|| std::time::Duration::from_secs(12))
 }
@@ -717,6 +726,7 @@ pub async fn curseforge_get_mod_files(
         .into_iter()
         .map(|f| {
             let loaders = loaders_from_filename(&f.file_name);
+            let release_type = f.channel();
             CurseforgeFileHit {
                 id: f.id,
                 display_name: f.display_name,
@@ -732,6 +742,7 @@ pub async fn curseforge_get_mod_files(
                 },
                 loaders,
                 file_date: f.file_date,
+                release_type,
             }
         })
         .collect();

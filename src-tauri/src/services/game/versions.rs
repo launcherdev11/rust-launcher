@@ -881,6 +881,7 @@ pub(crate) async fn resolve_forge_installer_url(
 #[tauri::command]
 pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let prefix = format!("{game_version}-");
+    let mc_suffix = format!("-{game_version}");
     let settings = load_settings_from_disk();
     let direct_client = http_client(false);
     let metadata = match download_text_with_retries(
@@ -914,6 +915,7 @@ pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<Loa
         .into_iter()
         .filter_map(|full| {
             let build = full.strip_prefix(&prefix)?;
+            let build = build.strip_suffix(&mc_suffix).unwrap_or(build);
             if build.is_empty() || build.contains('-') {
                 return None;
             }

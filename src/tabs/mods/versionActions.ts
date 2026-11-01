@@ -307,7 +307,7 @@ export async function resolveLatestCompatibleVersion(params: {
   } = params;
 
   if (fallbackVersions && fallbackVersions.length > 0) {
-    return fallbackVersions[0];
+    return fallbackVersions.find((v) => v.channel === "release") ?? fallbackVersions[0];
   }
 
   if (contentProvider === "modrinth") {
@@ -328,7 +328,7 @@ export async function resolveLatestCompatibleVersion(params: {
       }
       return true;
     });
-    const v = filtered[0];
+    const v = filtered.find((item) => (item.version_type ?? "release") === "release") ?? filtered[0];
     if (!v) return null;
     const primaryFile = v.files.find((f) => f.primary) ?? v.files[0];
     return {
@@ -338,6 +338,7 @@ export async function resolveLatestCompatibleVersion(params: {
       loaders: v.loaders,
       file_url: primaryFile?.url ?? "",
       filename: primaryFile?.filename ?? "",
+      channel: v.version_type ?? "release",
     };
   }
 
@@ -364,7 +365,7 @@ export async function resolveLatestCompatibleVersion(params: {
     }
     return true;
   });
-  const f = filtered[0];
+  const f = filtered.find((item) => (item.releaseType ?? "release") === "release") ?? filtered[0];
   if (!f) return null;
   return {
     id: String(f.id),
@@ -373,6 +374,7 @@ export async function resolveLatestCompatibleVersion(params: {
     loaders: f.loaders,
     file_url: f.downloadUrl ?? "",
     filename: f.fileName,
+    channel: f.releaseType ?? "release",
   };
 }
 

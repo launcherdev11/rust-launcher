@@ -15,7 +15,6 @@ pub struct JumpListProfile {
 pub async fn update_jump_list(category: String, profiles: Vec<JumpListProfile>) -> Result<(), String> {
     #[cfg(windows)]
     {
-        // COM в отдельном потоке, чтобы не трогать апартамент потоков Tauri
         tokio::task::spawn_blocking(move || windows_impl::update(&category, &profiles))
             .await
             .map_err(|e| format!("Jump List: {e}"))?
@@ -106,7 +105,6 @@ mod windows_impl {
                     collection.AddObject(&link).map_err(|e| format!("Jump List: {e}"))?;
                 }
                 let items: IObjectArray = collection.cast().map_err(|e| format!("Jump List: {e}"))?;
-                // при выключенных недавних элементах в списках переходов своя категория недоступна
                 if list.AppendCategory(&HSTRING::from(category), &items).is_err() {
                     if let Err(e) = list.AddUserTasks(&items) {
                         let _ = list.AbortList();

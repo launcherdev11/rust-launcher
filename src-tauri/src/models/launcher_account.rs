@@ -27,7 +27,6 @@ pub struct Profile {
     pub mc_access_token: Option<String>,
 }
 
-/// Токены аккаунта. Хранятся в зашифрованном хранилище, а не в json-файлах.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct AccountSecrets {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,7 +76,6 @@ impl Profile {
         }
     }
 
-    /// Копия профиля без токенов — именно она попадает в json на диске.
     pub(crate) fn without_secrets(&self) -> Profile {
         Profile {
             ely_access_token: None,
@@ -91,7 +89,6 @@ impl Profile {
         }
     }
 
-    /// Подставляет токены из хранилища туда, где в профиле они пустые.
     pub(crate) fn fill_missing_secrets(&mut self, s: &AccountSecrets) {
         fill_if_blank(&mut self.ely_access_token, &s.ely_access_token);
         fill_if_blank(&mut self.ely_client_token, &s.ely_client_token);

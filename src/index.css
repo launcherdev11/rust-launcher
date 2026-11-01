@@ -109,6 +109,13 @@ body {
   outline-color: var(--accent-to, #d4d4d8);
 }
 
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+}
+
 .ui-title {
   font-size: 1.25rem;
   font-weight: 650;
@@ -651,6 +658,26 @@ html.launcher-linux .tab-animate {
   animation: mods-detail-panel-in 180ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 
+.mods-hero-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+}
+
+@keyframes mods-lightbox-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mods-lightbox-img {
+  animation: mods-lightbox-in 200ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
 @keyframes list-item-in {
   from {
     opacity: 0;
@@ -719,6 +746,7 @@ html.launcher-linux .tab-animate {
   .tab-animate,
   html.launcher-linux .tab-animate,
   .mods-detail-panel-animate,
+  .mods-lightbox-img,
   .list-item-in,
   .menu-pop-in,
   .glass-overlay:not(.motion-managed),
@@ -982,3 +1010,15 @@ html.launcher-linux .profile-card-icon-blur img {
   }
 }
 
+html.tray-menu-view,
+html.tray-menu-view body,
+html.tray-menu-view #root {
+  height: auto;
+  overflow: hidden;
+  background: transparent;
+}
+
+.tray-menu-panel {
+  box-shadow: var(--glass-highlight), 0 6px 18px rgba(0, 0, 0, 0.5);
+  animation: menu-pop-in 140ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}

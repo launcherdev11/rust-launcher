@@ -51,7 +51,6 @@ export function useProfileCardDrop({ activeView, profiles, tt, showNotification,
           return;
         }
         setDropTargetProfileId(null);
-        // .mrpack импортирует отдельный обработчик
         const files = (p.paths ?? []).filter((f) => !f.toLowerCase().endsWith(".mrpack"));
         if (!profileId || files.length === 0) return;
 
