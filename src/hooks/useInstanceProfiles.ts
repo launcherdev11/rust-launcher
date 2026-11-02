@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { reportStats } from "../api/stats";
+import { reportGameStats, reportStats, type GameStats } from "../api/stats";
 import { getStoredAccessToken } from "../api/client";
 import { readDataCache, writeDataCache } from "../lib/launcherDataCache";
 import type { NotificationKind } from "../app/notifications";
@@ -113,6 +113,21 @@ export function useInstanceProfiles({
     },
     [],
   );
+
+  useEffect(() => {
+    if (getStoredAccessToken()) void reportGameStats();
+    let unlisten: (() => void) | undefined;
+    void listen<{ stats: GameStats }>("game-stats-delta", (event) => {
+      const stats = event.payload?.stats;
+      if (!stats || !getStoredAccessToken()) return;
+      void reportGameStats(stats);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;

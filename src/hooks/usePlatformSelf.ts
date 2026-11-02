@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_NICKNAME_KEY, fetchMe, type PlatformUser } from "../api/auth";
-import { fetchMyStats, type UserStats } from "../api/stats";
+import { fetchMyStats, STATS_UPDATED_EVENT, type UserStats } from "../api/stats";
 import { usePlatformAccessToken } from "./usePlatformAccessToken";
 
 export type PlatformSelfState = {
@@ -45,6 +45,16 @@ export function usePlatformSelf(): PlatformSelfState {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    const onStats = (ev: Event) => {
+      const next = (ev as CustomEvent<UserStats>).detail;
+      if (next) setStats(next);
+    };
+    window.addEventListener(STATS_UPDATED_EVENT, onStats);
+    return () => window.removeEventListener(STATS_UPDATED_EVENT, onStats);
+  }, [signedIn]);
 
   return { signedIn, user, nickname: user?.nickname?.trim() || nickname, stats, reload };
 }

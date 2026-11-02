@@ -34,6 +34,7 @@ pub mod texture_icons;
 pub mod version_types;
 pub mod version_remove;
 pub mod versions;
+pub mod world_stats;
 
 pub use accounts::{
     add_launcher_account, get_profile, list_launcher_accounts, remove_launcher_account,

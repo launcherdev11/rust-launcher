@@ -142,4 +142,11 @@ mod tests {
         assert!(!snapshot.name.is_empty());
         assert!(!process_probe::is_alive(0));
     }
+
+    #[test]
+    fn reads_system_info() {
+        let (total, available) = process_probe::system_memory();
+        assert!(total > 0 && available > 0 && available <= total);
+        assert!(!process_probe::os_description().is_empty());
+    }
 }

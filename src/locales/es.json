@@ -1990,6 +1990,218 @@
       "theme_submit": {
         "title": "Estilista",
         "description": "Envía un tema personalizado del launcher."
+      },
+      "dragon_1": {
+        "title": "El fin del End",
+        "description": "Derrota al dragón del End."
+      },
+      "dragon_3": {
+        "title": "Visita de vuelta",
+        "description": "Derrota al dragón del End 3 veces."
+      },
+      "dragon_10": {
+        "title": "Granja de dragones",
+        "description": "Derrota al dragón del End 10 veces."
+      },
+      "dragon_25": {
+        "title": "Amo del End",
+        "description": "Derrota al dragón del End 25 veces."
+      },
+      "dragon_egg": {
+        "title": "Huevo en la estantería",
+        "description": "Recoge el huevo de dragón."
+      },
+      "hardcore_dragon": {
+        "title": "De un tirón",
+        "description": "Derrota al dragón del End en un mundo extremo."
+      },
+      "wither_1": {
+        "title": "Tres calaveras",
+        "description": "Derrota al Wither."
+      },
+      "wither_5": {
+        "title": "Polvo de estrellas",
+        "description": "Derrota al Wither 5 veces."
+      },
+      "warden_1": {
+        "title": "Ni un ruido",
+        "description": "Derrota al Warden."
+      },
+      "boss_trio": {
+        "title": "Los tres grandes",
+        "description": "Derrota al dragón del End, al Wither y al Warden."
+      },
+      "elder_guardian_3": {
+        "title": "Achique",
+        "description": "Derrota a 3 guardianes ancianos."
+      },
+      "ravager_15": {
+        "title": "Por los cuernos",
+        "description": "Derrota a 15 devastadores."
+      },
+      "breeze_30": {
+        "title": "Contra el viento",
+        "description": "Derrota a 30 brisas."
+      },
+      "creeper_500": {
+        "title": "Explosión cancelada",
+        "description": "Derrota a 500 creepers."
+      },
+      "enderman_200": {
+        "title": "No le mires a los ojos",
+        "description": "Derrota a 200 endermen."
+      },
+      "phantom_100": {
+        "title": "Insomnio",
+        "description": "Derrota a 100 phantoms."
+      },
+      "totem_10": {
+        "title": "Segunda oportunidad",
+        "description": "Sálvate con un tótem de la inmortalidad 10 veces."
+      },
+      "shield_10k": {
+        "title": "Defensa cerrada",
+        "description": "Bloquea 10.000 de daño con un escudo."
+      },
+      "damage_100k": {
+        "title": "Mano dura",
+        "description": "Inflige 100.000 de daño."
+      },
+      "killed_by_creeper_10": {
+        "title": "¡Sorpresa!",
+        "description": "Muere por un creeper 10 veces."
+      },
+      "killed_by_dragon": {
+        "title": "Argumento ardiente",
+        "description": "Muere a manos del dragón del End."
+      },
+      "killed_by_warden": {
+        "title": "Demasiado ruido",
+        "description": "Muere a manos del Warden."
+      },
+      "deaths_300": {
+        "title": "Reaparición automática",
+        "description": "Muere 300 veces."
+      },
+      "no_death_day": {
+        "title": "Ni un rasguño",
+        "description": "Sobrevive 24 horas de juego sin morir."
+      },
+      "fall_1km": {
+        "title": "Caída libre",
+        "description": "Cae un total de 1 km."
+      },
+      "cake_100": {
+        "title": "Goloso",
+        "description": "Come 100 porciones de tarta."
+      },
+      "diamond_200": {
+        "title": "Brillo en las profundidades",
+        "description": "Extrae 200 menas de diamante."
+      },
+      "emerald_50": {
+        "title": "Ciudad Esmeralda",
+        "description": "Extrae 50 menas de esmeralda."
+      },
+      "debris_32": {
+        "title": "Ceniza y escombros",
+        "description": "Extrae 32 escombros ancestrales."
+      },
+      "amethyst_256": {
+        "title": "Veta de amatista",
+        "description": "Extrae 256 racimos de amatista."
+      },
+      "blocks_50k": {
+        "title": "El pico no se enfría",
+        "description": "Extrae 50.000 bloques."
+      },
+      "pickaxes_25": {
+        "title": "Consumible",
+        "description": "Desgasta 25 picos."
+      },
+      "netherite_broken": {
+        "title": "Capricho caro",
+        "description": "Desgasta un pico de netherita."
+      },
+      "walk_25km": {
+        "title": "Botas gastadas",
+        "description": "Recorre 25 km a pie."
+      },
+      "walk_250km": {
+        "title": "El borde del mapa está cerca",
+        "description": "Recorre 250 km a pie."
+      },
+      "elytra_100km": {
+        "title": "Viento en los oídos",
+        "description": "Vuela 100 km con élitros."
+      },
+      "boat_20km": {
+        "title": "Capitán",
+        "description": "Navega 20 km en barca."
+      },
+      "minecart_10km": {
+        "title": "Vía estrecha",
+        "description": "Recorre 10 km en vagoneta."
+      },
+      "swim_10km": {
+        "title": "Anfibio",
+        "description": "Nada 10 km."
+      },
+      "strider_1km": {
+        "title": "Paseo por la lava",
+        "description": "Recorre 1 km a lomos de un strider."
+      },
+      "pig_1km": {
+        "title": "Cerdo de carreras",
+        "description": "Recorre 1 km montado en un cerdo."
+      },
+      "all_biomes": {
+        "title": "Un globo en la cabeza",
+        "description": "Consigue el progreso «Hora de aventuras»."
+      },
+      "trades_300": {
+        "title": "Bolsa de esmeraldas",
+        "description": "Comercia 300 veces con aldeanos."
+      },
+      "raids_5": {
+        "title": "Milicia",
+        "description": "Gana 5 invasiones."
+      },
+      "bred_200": {
+        "title": "Arca",
+        "description": "Cría 200 animales."
+      },
+      "fish_250": {
+        "title": "¡Pican!",
+        "description": "Pesca 250 peces."
+      },
+      "enchant_100": {
+        "title": "Ratón de biblioteca",
+        "description": "Encanta 100 objetos."
+      },
+      "beacon": {
+        "title": "Luz en la noche",
+        "description": "Fabrica un faro."
+      },
+      "noteblock_1000": {
+        "title": "Orquesta",
+        "description": "Toca un bloque musical 1.000 veces."
+      },
+      "records_10": {
+        "title": "DJ",
+        "description": "Reproduce 10 discos."
+      },
+      "bell_100": {
+        "title": "Campanero",
+        "description": "Toca una campana 100 veces."
+      },
+      "chests_1000": {
+        "title": "Estaba por aquí",
+        "description": "Abre cofres 1.000 veces."
+      },
+      "flowers_50": {
+        "title": "Alféizar",
+        "description": "Planta 50 plantas en macetas."
       }
     },
     "filterAll": "Todos",
@@ -1999,10 +2211,17 @@
     "noneInFilter": "Aquí aún no hay nada.",
     "progressLaunches": "{{current}} / {{target}} inicios",
     "progressPlaytime": "{{current}} / {{target}} h",
+    "progressCount": "{{current}} / {{target}}",
+    "progressDistance": "{{current}} / {{target}} km",
     "category": {
       "profile": "Perfil",
       "game": "Juego",
       "social": "Comunidad",
+      "bosses": "Jefes y combate",
+      "survival": "Supervivencia",
+      "mining": "Minería",
+      "travel": "Viajes",
+      "village": "Aldea y hogar",
       "other": "Otros"
     }
   },

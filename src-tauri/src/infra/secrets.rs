@@ -4,15 +4,15 @@ use std::sync::Mutex;
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
+#[cfg(not(windows))]
 use base64::engine::general_purpose::STANDARD as B64;
+#[cfg(not(windows))]
 use base64::Engine;
 use rand::rngs::OsRng;
 use rand::RngCore;
 
 use crate::infra::fs_atomic::write_atomic;
 
-const KEYRING_SERVICE: &str = "16Launcher";
-const KEYRING_USER: &str = "account-vault-key";
 const VAULT_MAGIC: &[u8; 4] = b"16V1";
 const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
@@ -22,6 +22,94 @@ type VaultKey = [u8; KEY_LEN];
 static MASTER_KEY: Mutex<Option<VaultKey>> = Mutex::new(None);
 static KEYRING_FAILED: AtomicBool = AtomicBool::new(false);
 
+fn new_key() -> VaultKey {
+    let mut key = [0u8; KEY_LEN];
+    OsRng.fill_bytes(&mut key);
+    key
+}
+
+#[cfg(windows)]
+mod dpapi {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
+    use windows::Win32::Security::Cryptography::{
+        CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    };
+
+    const ENTROPY: &[u8] = b"16Launcher/secrets.key";
+
+    fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB {
+        CRYPT_INTEGER_BLOB {
+            cbData: data.len() as u32,
+            pbData: data.as_ptr() as *mut u8,
+        }
+    }
+
+    fn run(data: &[u8], protect: bool) -> windows::core::Result<Vec<u8>> {
+        let input = blob(data);
+        let entropy = blob(ENTROPY);
+        let mut output = CRYPT_INTEGER_BLOB::default();
+        unsafe {
+            if protect {
+                CryptProtectData(
+                    &input,
+                    PCWSTR::null(),
+                    Some(&entropy as *const _),
+                    None,
+                    None,
+                    CRYPTPROTECT_UI_FORBIDDEN,
+                    &mut output,
+                )?;
+            } else {
+                CryptUnprotectData(
+                    &input,
+                    None,
+                    Some(&entropy as *const _),
+                    None,
+                    None,
+                    CRYPTPROTECT_UI_FORBIDDEN,
+                    &mut output,
+                )?;
+            }
+            let out = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+            LocalFree(Some(HLOCAL(output.pbData.cast())));
+            Ok(out)
+        }
+    }
+
+    pub fn protect(data: &[u8]) -> Result<Vec<u8>, String> {
+        run(data, true).map_err(|e| format!("Не удалось зашифровать ключ хранилища: {e}"))
+    }
+
+    pub fn unprotect(data: &[u8]) -> Result<Vec<u8>, String> {
+        run(data, false).map_err(|e| format!("Не удалось расшифровать ключ хранилища: {e}"))
+    }
+}
+
+#[cfg(windows)]
+fn load_or_create_key() -> Result<VaultKey, String> {
+    let path = crate::app::paths::launcher_secrets_key_path()?;
+    if let Ok(stored) = std::fs::read(&path) {
+        let key = dpapi::unprotect(&stored).and_then(|raw| {
+            VaultKey::try_from(raw.as_slice())
+                .map_err(|_| "Повреждён ключ хранилища: неверная длина".to_string())
+        });
+        match key {
+            Ok(key) => return Ok(key),
+            Err(e) => eprintln!("[Secrets] {e}, создаётся новый ключ"),
+        }
+    }
+    let key = new_key();
+    write_atomic(&path, dpapi::protect(&key)?)?;
+    Ok(key)
+}
+
+#[cfg(not(windows))]
+const KEYRING_SERVICE: &str = "16Launcher";
+#[cfg(not(windows))]
+const KEYRING_USER: &str = "account-vault-key";
+
+#[cfg(not(windows))]
 fn decode_key(s: &str) -> Result<VaultKey, String> {
     let raw = B64
         .decode(s.trim())
@@ -30,14 +118,14 @@ fn decode_key(s: &str) -> Result<VaultKey, String> {
         .map_err(|_| "Повреждён ключ хранилища: неверная длина".to_string())
 }
 
+#[cfg(not(windows))]
 fn load_or_create_key() -> Result<VaultKey, String> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
         .map_err(|e| format!("Системное хранилище недоступно: {e}"))?;
     match entry.get_password() {
         Ok(s) => decode_key(&s),
         Err(keyring::Error::NoEntry) => {
-            let mut key = [0u8; KEY_LEN];
-            OsRng.fill_bytes(&mut key);
+            let key = new_key();
             entry
                 .set_password(&B64.encode(key))
                 .map_err(|e| format!("Не удалось сохранить ключ в системном хранилище: {e}"))?;
@@ -160,6 +248,16 @@ mod tests {
         assert!(!std::fs::read(&path).unwrap().windows(64).any(|w| w == &payload[..64]));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dpapi_roundtrip() {
+        let key = new_key();
+        let sealed = dpapi::protect(&key).unwrap();
+        assert!(!sealed.windows(KEY_LEN).any(|w| w == key));
+        assert_eq!(dpapi::unprotect(&sealed).unwrap(), key);
+        assert!(dpapi::unprotect(b"garbage").is_err());
     }
 
     #[test]

@@ -191,18 +191,39 @@ export function formatAchievementProgress(
   language: Language,
   progress: NonNullable<ReturnType<typeof achievementProgress>>,
 ): string {
+  const locale = localeTag(language);
+  const number = (value: number, digits = 0) =>
+    value.toLocaleString(locale, { maximumFractionDigits: digits });
+  const hours = (seconds: number) => number(seconds / 3600, 1);
+  const { current, target } = progress;
+
   if (progress.metric === "launches") {
-    return t(language, "achievements.progressLaunches", {
-      current: progress.current,
-      target: progress.target,
+    return t(language, "achievements.progressLaunches", { current, target });
+  }
+  if (progress.metric === "playtime") {
+    return t(language, "achievements.progressPlaytime", {
+      current: hours(current),
+      target: hours(target),
     });
   }
-  const hours = (seconds: number) =>
-    (seconds / 3600).toLocaleString(localeTag(language), { maximumFractionDigits: 1 });
-  return t(language, "achievements.progressPlaytime", {
-    current: hours(progress.current),
-    target: hours(progress.target),
-  });
+  switch (progress.unit) {
+    case "distance": {
+      const km = (cm: number) => number(cm / 100_000, 1);
+      return t(language, "achievements.progressDistance", { current: km(current), target: km(target) });
+    }
+    case "ticks":
+      return t(language, "achievements.progressPlaytime", {
+        current: hours(current / 20),
+        target: hours(target / 20),
+      });
+    case "damage":
+      return t(language, "achievements.progressCount", {
+        current: number(Math.floor(current / 10)),
+        target: number(target / 10),
+      });
+    default:
+      return t(language, "achievements.progressCount", { current: number(current), target: number(target) });
+  }
 }
 
 export function AchievementCard({

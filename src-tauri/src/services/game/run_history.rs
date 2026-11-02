@@ -498,16 +498,12 @@ pub async fn build_game_run_report(
         push("### Отчёт о запуске / Launch report".to_string());
         push(format!("Launcher: 16Launcher {launcher_version}"));
         push(format!(
-            "OS: {} {} ({})",
-            sysinfo::System::name().unwrap_or_default(),
-            sysinfo::System::os_version().unwrap_or_default(),
+            "OS: {} ({})",
+            crate::infra::process_probe::os_description(),
             std::env::consts::ARCH
         ));
-        let total_gb = {
-            let mut sys = sysinfo::System::new();
-            sys.refresh_memory();
-            sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0
-        };
+        let total_gb =
+            crate::infra::process_probe::total_memory_bytes() as f64 / 1024.0 / 1024.0 / 1024.0;
         push(format!("RAM: {total_gb:.1} GB"));
         push(format!("Version: {}", record.version_id));
         if let Some(ram) = record.ram_mb {

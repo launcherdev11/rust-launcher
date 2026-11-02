@@ -1,11 +1,4 @@
-// Сведения о запущенном процессе игры. На Windows процесс открывается только с
-// PROCESS_QUERY_LIMITED_INFORMATION: без PROCESS_VM_READ и без чтения его памяти
-// (sysinfo читает PEB через ReadProcessMemory, антивирусы считают это шпионажем).
-
-use std::sync::Mutex;
 use std::time::Duration;
-
-use sysinfo::System;
 
 #[derive(Debug, Clone)]
 pub struct ProcessSnapshot {
@@ -18,16 +11,6 @@ pub struct ProcessSnapshot {
     pub memory_bytes: u64,
 }
 
-static MEMORY_SYSTEM: Mutex<Option<System>> = Mutex::new(None);
-
-// (всего, доступно) байт оперативной памяти
-pub fn system_memory() -> (u64, u64) {
-    let mut guard = MEMORY_SYSTEM.lock().unwrap_or_else(|e| e.into_inner());
-    let sys = guard.get_or_insert_with(System::new);
-    sys.refresh_memory();
-    (sys.total_memory(), sys.available_memory())
-}
-
 pub fn total_memory_bytes() -> u64 {
     system_memory().0
 }
@@ -36,8 +19,10 @@ pub fn total_memory_bytes() -> u64 {
 mod imp {
     use std::time::Duration;
 
-    use windows::core::PWSTR;
+    use windows::core::{w, HSTRING, PWSTR};
     use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE};
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
     use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
     use windows::Win32::System::Threading::{
         GetExitCodeProcess, GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
@@ -101,6 +86,59 @@ mod imp {
             .is_some_and(|h| unsafe { TerminateProcess(h.0, 1) }.is_ok())
     }
 
+    pub fn system_memory() -> (u64, u64) {
+        let mut status = MEMORYSTATUSEX {
+            dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+            ..Default::default()
+        };
+        match unsafe { GlobalMemoryStatusEx(&mut status) } {
+            Ok(()) => (status.ullTotalPhys, status.ullAvailPhys),
+            Err(_) => (0, 0),
+        }
+    }
+
+    fn registry_string(name: &str) -> Option<String> {
+        let mut buf = [0u16; 256];
+        let mut size = std::mem::size_of_val(&buf) as u32;
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_LOCAL_MACHINE,
+                w!("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"),
+                &HSTRING::from(name),
+                RRF_RT_REG_SZ,
+                None,
+                Some(buf.as_mut_ptr().cast()),
+                Some(&mut size),
+            )
+        };
+        if status.is_err() {
+            return None;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]).trim().to_string()).filter(|s| !s.is_empty())
+    }
+
+    pub fn os_description() -> String {
+        let build = registry_string("CurrentBuildNumber");
+        let major = match build.as_deref().and_then(|b| b.parse::<u32>().ok()) {
+            Some(n) if n >= 22000 => Some("11"),
+            Some(n) if n >= 10240 => Some("10"),
+            _ => None,
+        };
+        let mut out = String::from("Windows");
+        for part in [major.map(str::to_string), registry_string("DisplayVersion")]
+            .into_iter()
+            .flatten()
+        {
+            out.push(' ');
+            out.push_str(&part);
+        }
+        if let Some(build) = build {
+            out.push_str(&format!(" ({build})"));
+        }
+        out
+    }
+
     pub fn snapshot(pid: u32) -> Option<ProcessSnapshot> {
         let handle = Handle::open(pid, PROCESS_QUERY_LIMITED_INFORMATION)?;
         if exit_code(&handle)? != STILL_ACTIVE {
@@ -142,11 +180,31 @@ mod imp {
 
 #[cfg(not(windows))]
 mod imp {
+    use std::sync::Mutex;
     use std::time::Duration;
 
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
     use super::ProcessSnapshot;
+
+    static MEMORY_SYSTEM: Mutex<Option<System>> = Mutex::new(None);
+
+    pub fn system_memory() -> (u64, u64) {
+        let mut guard = MEMORY_SYSTEM.lock().unwrap_or_else(|e| e.into_inner());
+        let sys = guard.get_or_insert_with(System::new);
+        sys.refresh_memory();
+        (sys.total_memory(), sys.available_memory())
+    }
+
+    pub fn os_description() -> String {
+        format!(
+            "{} {}",
+            System::name().unwrap_or_default(),
+            System::os_version().unwrap_or_default()
+        )
+        .trim()
+        .to_string()
+    }
 
     fn with_process<T>(pid: u32, kind: ProcessRefreshKind, f: impl FnOnce(&sysinfo::Process) -> T) -> Option<T> {
         if pid == 0 {
@@ -180,4 +238,4 @@ mod imp {
     }
 }
 
-pub use imp::{is_alive, snapshot, terminate};
+pub use imp::{is_alive, os_description, snapshot, system_memory, terminate};

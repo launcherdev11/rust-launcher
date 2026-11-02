@@ -1962,6 +1962,218 @@
       "theme_submit": {
         "title": "Stylist",
         "description": "Submit a custom launcher theme."
+      },
+      "dragon_1": {
+        "title": "End of the End",
+        "description": "Defeat the Ender Dragon."
+      },
+      "dragon_3": {
+        "title": "Return visit",
+        "description": "Defeat the Ender Dragon 3 times."
+      },
+      "dragon_10": {
+        "title": "Dragon farm",
+        "description": "Defeat the Ender Dragon 10 times."
+      },
+      "dragon_25": {
+        "title": "Master of the End",
+        "description": "Defeat the Ender Dragon 25 times."
+      },
+      "dragon_egg": {
+        "title": "Egg on the shelf",
+        "description": "Pick up the dragon egg."
+      },
+      "hardcore_dragon": {
+        "title": "In one breath",
+        "description": "Defeat the Ender Dragon in a hardcore world."
+      },
+      "wither_1": {
+        "title": "Three skulls",
+        "description": "Defeat the Wither."
+      },
+      "wither_5": {
+        "title": "Stardust",
+        "description": "Defeat the Wither 5 times."
+      },
+      "warden_1": {
+        "title": "Keep it down",
+        "description": "Defeat the Warden."
+      },
+      "boss_trio": {
+        "title": "The big three",
+        "description": "Defeat the Ender Dragon, the Wither and the Warden."
+      },
+      "elder_guardian_3": {
+        "title": "Drained",
+        "description": "Defeat 3 elder guardians."
+      },
+      "ravager_15": {
+        "title": "By the horns",
+        "description": "Defeat 15 ravagers."
+      },
+      "breeze_30": {
+        "title": "Against the wind",
+        "description": "Defeat 30 breezes."
+      },
+      "creeper_500": {
+        "title": "Boom cancelled",
+        "description": "Defeat 500 creepers."
+      },
+      "enderman_200": {
+        "title": "Don't look them in the eye",
+        "description": "Defeat 200 endermen."
+      },
+      "phantom_100": {
+        "title": "Insomnia",
+        "description": "Defeat 100 phantoms."
+      },
+      "totem_10": {
+        "title": "Second chance",
+        "description": "Get saved by a totem of undying 10 times."
+      },
+      "shield_10k": {
+        "title": "Solid defence",
+        "description": "Block 10,000 damage with a shield."
+      },
+      "damage_100k": {
+        "title": "Heavy hand",
+        "description": "Deal 100,000 damage."
+      },
+      "killed_by_creeper_10": {
+        "title": "Surprise!",
+        "description": "Get blown up by a creeper 10 times."
+      },
+      "killed_by_dragon": {
+        "title": "Fire-breathing argument",
+        "description": "Get killed by the Ender Dragon."
+      },
+      "killed_by_warden": {
+        "title": "Too loud",
+        "description": "Get killed by the Warden."
+      },
+      "deaths_300": {
+        "title": "Respawn on autopilot",
+        "description": "Die 300 times."
+      },
+      "no_death_day": {
+        "title": "Not a scratch",
+        "description": "Survive 24 hours of playtime without dying."
+      },
+      "fall_1km": {
+        "title": "Free fall",
+        "description": "Fall a total of 1 km."
+      },
+      "cake_100": {
+        "title": "Sweet tooth",
+        "description": "Eat 100 slices of cake."
+      },
+      "diamond_200": {
+        "title": "Glint in the deep",
+        "description": "Mine 200 diamond ore."
+      },
+      "emerald_50": {
+        "title": "Emerald city",
+        "description": "Mine 50 emerald ore."
+      },
+      "debris_32": {
+        "title": "Ash and debris",
+        "description": "Mine 32 ancient debris."
+      },
+      "amethyst_256": {
+        "title": "Amethyst vein",
+        "description": "Mine 256 amethyst clusters."
+      },
+      "blocks_50k": {
+        "title": "The pickaxe never cools",
+        "description": "Mine 50,000 blocks."
+      },
+      "pickaxes_25": {
+        "title": "Consumable",
+        "description": "Wear out 25 pickaxes."
+      },
+      "netherite_broken": {
+        "title": "Pricey habit",
+        "description": "Wear out a netherite pickaxe."
+      },
+      "walk_25km": {
+        "title": "Worn-out boots",
+        "description": "Walk and run 25 km."
+      },
+      "walk_250km": {
+        "title": "The edge of the map is near",
+        "description": "Walk and run 250 km."
+      },
+      "elytra_100km": {
+        "title": "Wind in your ears",
+        "description": "Fly 100 km with elytra."
+      },
+      "boat_20km": {
+        "title": "Captain",
+        "description": "Sail 20 km by boat."
+      },
+      "minecart_10km": {
+        "title": "Narrow gauge",
+        "description": "Ride 10 km in a minecart."
+      },
+      "swim_10km": {
+        "title": "Waterfowl",
+        "description": "Swim 10 km."
+      },
+      "strider_1km": {
+        "title": "Walking on lava",
+        "description": "Ride a strider for 1 km."
+      },
+      "pig_1km": {
+        "title": "Racing pig",
+        "description": "Ride a pig for 1 km."
+      },
+      "all_biomes": {
+        "title": "Globe in your head",
+        "description": "Complete the vanilla \"Adventuring Time\" advancement."
+      },
+      "trades_300": {
+        "title": "Emerald exchange",
+        "description": "Trade with villagers 300 times."
+      },
+      "raids_5": {
+        "title": "Militia",
+        "description": "Win 5 raids."
+      },
+      "bred_200": {
+        "title": "Ark",
+        "description": "Breed 200 animals."
+      },
+      "fish_250": {
+        "title": "Got a bite!",
+        "description": "Catch 250 fish."
+      },
+      "enchant_100": {
+        "title": "Bookworm",
+        "description": "Enchant 100 items."
+      },
+      "beacon": {
+        "title": "Light in the night",
+        "description": "Craft a beacon."
+      },
+      "noteblock_1000": {
+        "title": "Orchestra",
+        "description": "Play a note block 1,000 times."
+      },
+      "records_10": {
+        "title": "DJ",
+        "description": "Play 10 music discs."
+      },
+      "bell_100": {
+        "title": "Bell ringer",
+        "description": "Ring a bell 100 times."
+      },
+      "chests_1000": {
+        "title": "It was here somewhere",
+        "description": "Open chests 1,000 times."
+      },
+      "flowers_50": {
+        "title": "Windowsill",
+        "description": "Pot 50 plants."
       }
     },
     "filterAll": "All",
@@ -1971,10 +2183,17 @@
     "noneInFilter": "Nothing here yet.",
     "progressLaunches": "{{current}} / {{target}} launches",
     "progressPlaytime": "{{current}} / {{target}} h",
+    "progressCount": "{{current}} / {{target}}",
+    "progressDistance": "{{current}} / {{target}} km",
     "category": {
       "profile": "Profile",
       "game": "Game",
       "social": "Community",
+      "bosses": "Bosses & combat",
+      "survival": "Survival",
+      "mining": "Mining",
+      "travel": "Travel",
+      "village": "Village & home",
       "other": "Other"
     }
   },

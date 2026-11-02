@@ -1990,6 +1990,218 @@
       "theme_submit": {
         "title": "Stylist",
         "description": "Reiche ein eigenes Launcher-Theme ein."
+      },
+      "dragon_1": {
+        "title": "Ende vom Ende",
+        "description": "Besiege den Enderdrachen."
+      },
+      "dragon_3": {
+        "title": "Wiedersehen",
+        "description": "Besiege den Enderdrachen 3-mal."
+      },
+      "dragon_10": {
+        "title": "Drachenfarm",
+        "description": "Besiege den Enderdrachen 10-mal."
+      },
+      "dragon_25": {
+        "title": "Herr des Endes",
+        "description": "Besiege den Enderdrachen 25-mal."
+      },
+      "dragon_egg": {
+        "title": "Ei im Regal",
+        "description": "Hebe das Drachenei auf."
+      },
+      "hardcore_dragon": {
+        "title": "In einem Atemzug",
+        "description": "Besiege den Enderdrachen in einer Hardcore-Welt."
+      },
+      "wither_1": {
+        "title": "Drei Schädel",
+        "description": "Besiege den Wither."
+      },
+      "wither_5": {
+        "title": "Sternenstaub",
+        "description": "Besiege den Wither 5-mal."
+      },
+      "warden_1": {
+        "title": "Psst",
+        "description": "Besiege den Wärter."
+      },
+      "boss_trio": {
+        "title": "Die großen Drei",
+        "description": "Besiege den Enderdrachen, den Wither und den Wärter."
+      },
+      "elder_guardian_3": {
+        "title": "Trockengelegt",
+        "description": "Besiege 3 Großwächter."
+      },
+      "ravager_15": {
+        "title": "Bei den Hörnern",
+        "description": "Besiege 15 Verwüster."
+      },
+      "breeze_30": {
+        "title": "Gegen den Wind",
+        "description": "Besiege 30 Böen."
+      },
+      "creeper_500": {
+        "title": "Bumm abgesagt",
+        "description": "Besiege 500 Creeper."
+      },
+      "enderman_200": {
+        "title": "Nicht in die Augen sehen",
+        "description": "Besiege 200 Endermen."
+      },
+      "phantom_100": {
+        "title": "Schlaflos",
+        "description": "Besiege 100 Phantome."
+      },
+      "totem_10": {
+        "title": "Zweite Chance",
+        "description": "Werde 10-mal von einem Totem der Unsterblichkeit gerettet."
+      },
+      "shield_10k": {
+        "title": "Eiserne Abwehr",
+        "description": "Blocke 10.000 Schaden mit einem Schild."
+      },
+      "damage_100k": {
+        "title": "Schwere Hand",
+        "description": "Verursache 100.000 Schaden."
+      },
+      "killed_by_creeper_10": {
+        "title": "Überraschung!",
+        "description": "Stirb 10-mal durch einen Creeper."
+      },
+      "killed_by_dragon": {
+        "title": "Feuriges Argument",
+        "description": "Stirb durch den Enderdrachen."
+      },
+      "killed_by_warden": {
+        "title": "Zu laut",
+        "description": "Stirb durch den Wärter."
+      },
+      "deaths_300": {
+        "title": "Respawn im Autopilot",
+        "description": "Stirb 300-mal."
+      },
+      "no_death_day": {
+        "title": "Kein Kratzer",
+        "description": "Überlebe 24 Stunden Spielzeit, ohne zu sterben."
+      },
+      "fall_1km": {
+        "title": "Freier Fall",
+        "description": "Falle insgesamt 1 km tief."
+      },
+      "cake_100": {
+        "title": "Naschkatze",
+        "description": "Iss 100 Kuchenstücke."
+      },
+      "diamond_200": {
+        "title": "Glanz in der Tiefe",
+        "description": "Baue 200 Diamanterz ab."
+      },
+      "emerald_50": {
+        "title": "Smaragdstadt",
+        "description": "Baue 50 Smaragderz ab."
+      },
+      "debris_32": {
+        "title": "Asche und Schrott",
+        "description": "Baue 32 antiken Schrott ab."
+      },
+      "amethyst_256": {
+        "title": "Amethystader",
+        "description": "Baue 256 Amethysthaufen ab."
+      },
+      "blocks_50k": {
+        "title": "Die Spitzhacke glüht",
+        "description": "Baue 50.000 Blöcke ab."
+      },
+      "pickaxes_25": {
+        "title": "Verbrauchsmaterial",
+        "description": "Verschleiße 25 Spitzhacken."
+      },
+      "netherite_broken": {
+        "title": "Teures Vergnügen",
+        "description": "Verschleiße eine Netheritspitzhacke."
+      },
+      "walk_25km": {
+        "title": "Abgelaufene Stiefel",
+        "description": "Lege 25 km zu Fuß zurück."
+      },
+      "walk_250km": {
+        "title": "Der Kartenrand ist nah",
+        "description": "Lege 250 km zu Fuß zurück."
+      },
+      "elytra_100km": {
+        "title": "Wind in den Ohren",
+        "description": "Fliege 100 km mit Elytren."
+      },
+      "boat_20km": {
+        "title": "Kapitän",
+        "description": "Fahre 20 km mit dem Boot."
+      },
+      "minecart_10km": {
+        "title": "Schmalspur",
+        "description": "Fahre 10 km mit der Lore."
+      },
+      "swim_10km": {
+        "title": "Wasserratte",
+        "description": "Schwimme 10 km."
+      },
+      "strider_1km": {
+        "title": "Über Lava wandeln",
+        "description": "Reite 1 km auf einem Schreiter."
+      },
+      "pig_1km": {
+        "title": "Rennschwein",
+        "description": "Reite 1 km auf einem Schwein."
+      },
+      "all_biomes": {
+        "title": "Globus im Kopf",
+        "description": "Schließe den Fortschritt „Abenteuerzeit“ ab."
+      },
+      "trades_300": {
+        "title": "Smaragdbörse",
+        "description": "Handle 300-mal mit Dorfbewohnern."
+      },
+      "raids_5": {
+        "title": "Bürgerwehr",
+        "description": "Gewinne 5 Überfälle."
+      },
+      "bred_200": {
+        "title": "Arche",
+        "description": "Züchte 200 Tiere."
+      },
+      "fish_250": {
+        "title": "Er beißt!",
+        "description": "Fange 250 Fische."
+      },
+      "enchant_100": {
+        "title": "Bücherwurm",
+        "description": "Verzaubere 100 Gegenstände."
+      },
+      "beacon": {
+        "title": "Licht in der Nacht",
+        "description": "Stelle ein Leuchtfeuer her."
+      },
+      "noteblock_1000": {
+        "title": "Orchester",
+        "description": "Spiele 1.000-mal einen Notenblock."
+      },
+      "records_10": {
+        "title": "DJ",
+        "description": "Spiele 10 Schallplatten ab."
+      },
+      "bell_100": {
+        "title": "Glöckner",
+        "description": "Läute 100-mal eine Glocke."
+      },
+      "chests_1000": {
+        "title": "Irgendwo war es doch",
+        "description": "Öffne 1.000-mal Truhen."
+      },
+      "flowers_50": {
+        "title": "Fensterbank",
+        "description": "Topfe 50 Pflanzen ein."
       }
     },
     "filterAll": "Alle",
@@ -1999,10 +2211,17 @@
     "noneInFilter": "Hier ist noch nichts.",
     "progressLaunches": "{{current}} / {{target}} Starts",
     "progressPlaytime": "{{current}} / {{target}} Std.",
+    "progressCount": "{{current}} / {{target}}",
+    "progressDistance": "{{current}} / {{target}} km",
     "category": {
       "profile": "Profil",
       "game": "Spiel",
       "social": "Community",
+      "bosses": "Bosse & Kämpfe",
+      "survival": "Überleben",
+      "mining": "Bergbau",
+      "travel": "Reisen",
+      "village": "Dorf & Zuhause",
       "other": "Sonstiges"
     }
   },

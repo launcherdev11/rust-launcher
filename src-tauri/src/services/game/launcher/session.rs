@@ -145,6 +145,7 @@ fn spawn_session_watcher(app: AppHandle, pid: u32) {
                 },
             );
         }
+        crate::services::game::world_stats::finish_session(&app);
         WATCHER_ACTIVE.store(false, Ordering::SeqCst);
     });
 }

@@ -2648,13 +2648,11 @@ version = "3.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
 dependencies = [
- "byteorder",
  "dbus-secret-service",
  "log",
  "secret-service",
  "security-framework 2.11.1",
  "security-framework 3.6.0",
- "windows-sys 0.60.2",
  "zbus 4.4.0",
  "zeroize",
 ]
@@ -2891,7 +2889,7 @@ dependencies = [
 
 [[package]]
 name = "mc16launcher"
-version = "3.3.4"
+version = "3.3.5"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",

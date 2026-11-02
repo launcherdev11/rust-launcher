@@ -1387,6 +1387,8 @@ pub async fn launch_game(
     );
     hide_console(&mut cmd);
 
+    crate::services::game::world_stats::begin_session(&app, &game_dir, &auth_uuid);
+
     emit_launch_stage(&app, "starting");
     let mut child = cmd.spawn().map_err(|e| {
 
@@ -1540,6 +1542,7 @@ pub async fn launch_game(
             };
             let _ = app_clone_for_playtime.emit(EVENT_PLAYTIME_UPDATED, payload);
         }
+        crate::services::game::world_stats::finish_session(&app_clone_for_playtime);
 
         if REOPEN_LAUNCHER_ON_GAME_EXIT.swap(false, Ordering::SeqCst) {
             if let Some(window) = app_clone_for_playtime.get_webview_window("main") {

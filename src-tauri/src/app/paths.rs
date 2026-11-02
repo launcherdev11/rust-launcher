@@ -26,6 +26,11 @@ pub fn launcher_secrets_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("secrets.vault"))
 }
 
+#[cfg(windows)]
+pub fn launcher_secrets_key_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("secrets.key"))
+}
+
 pub fn default_game_root_dir() -> Result<PathBuf, String> {
     game_root_from_directory_setting(None)
 }
