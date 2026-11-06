@@ -11,7 +11,7 @@ replay_pid*.log
 *.hprof
 *.mdmp
 *.dmp
-DESCRIPTION.md
+DESCRIPTION.md*
 
 #dependencies/build
 node_modules/
