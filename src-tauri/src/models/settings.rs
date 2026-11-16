@@ -25,6 +25,8 @@ pub struct Settings {
     pub download_source: String,
     #[serde(default = "default_world_auto_backup")]
     pub world_auto_backup: bool,
+    #[serde(default = "default_launch_preflight")]
+    pub launch_preflight: bool,
 
     pub notify_new_update: bool,
     pub notify_new_message: bool,
@@ -106,6 +108,10 @@ pub fn default_download_source() -> String {
     "auto".to_string()
 }
 
+pub fn default_launch_preflight() -> bool {
+    true
+}
+
 pub fn default_world_auto_backup() -> bool {
     true
 }
@@ -139,6 +145,7 @@ impl Default for Settings {
             forge_proxy_fallback: true,
             download_source: default_download_source(),
             world_auto_backup: default_world_auto_backup(),
+            launch_preflight: default_launch_preflight(),
             notify_new_update: true,
             notify_new_message: true,
             notify_system_message: true,

@@ -40,6 +40,7 @@ export type Settings = {
   forge_proxy_fallback: boolean;
   download_source?: DownloadSource;
   world_auto_backup?: boolean;
+  launch_preflight?: boolean;
   notify_new_update: boolean;
   notify_new_message: boolean;
   notify_system_message: boolean;

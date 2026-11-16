@@ -278,6 +278,10 @@
       "closeLauncherOnStart": {
         "label": "Schließen Sie den Launcher, wenn das Spiel beginnt:"
       },
+      "launchPreflight": {
+        "label": "Instanz vor dem Start prüfen:",
+        "hint": "Warnt vor wenig Speicherplatz und Arbeitsspeicher, unpassendem Java und Mod-Konflikten."
+      },
       "checkGameProcesses": {
         "label": "Überprüfen Sie laufende Spielprozesse:"
       },
@@ -2434,6 +2438,20 @@
       "account": "Konto wird geprüft…",
       "java": "Java wird vorbereitet…",
       "starting": "Spiel wird gestartet…"
+    },
+    "preflight": {
+      "title": "Vor dem Start",
+      "confirm": "Trotzdem starten",
+      "footer": "Du kannst diese Prüfung in den Spieleinstellungen abschalten.",
+      "disk_low": "Auf dem Datenträger sind noch {{free}} GB frei. Das Spiel startet eventuell nicht oder kann die Welt nicht speichern.",
+      "memory_over_total": "Dem Spiel sind {{heap}} GB zugewiesen, der Launcher begrenzt den Speicher beim Start aber auf {{limit}} GB, damit dem System genug bleibt.",
+      "memory_low_available": "Dem Spiel sind {{heap}} GB zugewiesen, frei sind nur {{available}} GB. Schließe andere Programme oder verringere den Speicher.",
+      "memory_low_for_mods": "Mods in dieser Instanz: {{mods}}, zugewiesener Speicher: {{heap}} GB. Empfohlen sind mindestens {{recommended}} GB.",
+      "java_missing": "Das gewählte Java wurde nicht gefunden: {{path}}. Das mitgelieferte wird verwendet.",
+      "java_too_old": "Java {{required}} wird benötigt, gewählt ist Java {{actual}}. Das Spiel startet nicht: Ändere Java in den Einstellungen.",
+      "java_newer": "Diese Version braucht Java {{required}}, gewählt ist Java {{actual}}. Loader oder Mods funktionieren eventuell nicht.",
+      "conflicts": "Mod-Konflikte: {{count}}",
+      "conflictsMore": "– und {{count}} weitere"
     },
     "launchActions": {
       "retry": "Erneut versuchen"

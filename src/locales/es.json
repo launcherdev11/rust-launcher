@@ -278,6 +278,10 @@
       "closeLauncherOnStart": {
         "label": "Cerrar el iniciador cuando comience el juego:"
       },
+      "launchPreflight": {
+        "label": "Comprobar la instancia antes de iniciar:",
+        "hint": "Avisa de poco espacio en disco y memoria, Java inadecuado y conflictos de mods."
+      },
       "checkGameProcesses": {
         "label": "Verifique los procesos en ejecución del juego:"
       },
@@ -2434,6 +2438,20 @@
       "account": "Comprobando la cuenta…",
       "java": "Preparando Java…",
       "starting": "Iniciando el juego…"
+    },
+    "preflight": {
+      "title": "Antes de iniciar",
+      "confirm": "Iniciar de todos modos",
+      "footer": "Puedes desactivar esta comprobación en los ajustes del juego.",
+      "disk_low": "Quedan {{free}} GB en el disco. Es posible que el juego no se inicie o no guarde el mundo.",
+      "memory_over_total": "El juego tiene asignados {{heap}} GB, pero el launcher lo limitará a {{limit}} GB al iniciar para dejar memoria al sistema.",
+      "memory_low_available": "El juego tiene asignados {{heap}} GB, pero solo hay {{available}} GB libres. Cierra otros programas o reduce la memoria.",
+      "memory_low_for_mods": "Mods en esta instancia: {{mods}}, memoria asignada: {{heap}} GB. Se recomiendan al menos {{recommended}} GB.",
+      "java_missing": "No se encontró el Java seleccionado: {{path}}. Se usará el integrado.",
+      "java_too_old": "Se necesita Java {{required}}, pero está seleccionado Java {{actual}}. El juego no se iniciará: cambia Java en los ajustes.",
+      "java_newer": "Esta versión necesita Java {{required}}, pero está seleccionado Java {{actual}}. Es posible que el cargador o los mods no funcionen.",
+      "conflicts": "Conflictos de mods: {{count}}",
+      "conflictsMore": "– y {{count}} más"
     },
     "launchActions": {
       "retry": "Reintentar"

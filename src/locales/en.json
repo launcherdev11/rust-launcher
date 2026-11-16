@@ -278,6 +278,10 @@
       "closeLauncherOnStart": {
         "label": "Close launcher when game starts:"
       },
+      "launchPreflight": {
+        "label": "Check the instance before launch:",
+        "hint": "Warns about low disk space and memory, an unsuitable Java and mod conflicts."
+      },
       "checkGameProcesses": {
         "label": "Check running game processes:"
       },
@@ -2406,6 +2410,20 @@
       "account": "Checking account…",
       "java": "Preparing Java…",
       "starting": "Starting the game…"
+    },
+    "preflight": {
+      "title": "Before you launch",
+      "confirm": "Launch anyway",
+      "footer": "You can turn this check off in the game settings.",
+      "disk_low": "{{free}} GB left on the disk. The game may fail to start or fail to save your world.",
+      "memory_over_total": "The game is allocated {{heap}} GB, but the launcher will limit it to {{limit}} GB at launch to leave memory for the system.",
+      "memory_low_available": "The game is allocated {{heap}} GB, but only {{available}} GB is free. Close other programs or lower the memory.",
+      "memory_low_for_mods": "Mods in this instance: {{mods}}, allocated memory: {{heap}} GB. At least {{recommended}} GB is recommended.",
+      "java_missing": "The selected Java was not found: {{path}}. The bundled one will be used.",
+      "java_too_old": "Java {{required}} is required, but Java {{actual}} is selected. The game will not start: change Java in the settings.",
+      "java_newer": "This version needs Java {{required}}, but Java {{actual}} is selected. The loader or mods may not work.",
+      "conflicts": "Mod conflicts: {{count}}",
+      "conflictsMore": "– and {{count}} more"
     },
     "launchActions": {
       "retry": "Retry"

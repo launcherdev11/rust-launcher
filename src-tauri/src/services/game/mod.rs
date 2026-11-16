@@ -19,6 +19,7 @@ pub mod forge_legacy;
 pub mod install;
 pub mod integrity;
 pub mod launch_hooks;
+pub mod launch_preflight;
 pub mod launcher;
 pub mod lazy_mods;
 pub mod mirrors;
@@ -85,6 +86,7 @@ pub use profiles::{
 };
 pub use content_pins::set_profile_item_pinned;
 pub use launch_hooks::{get_profile_launch_hooks, set_profile_launch_hooks};
+pub use launch_preflight::run_launch_preflight;
 pub use external_import::{
     default_external_launcher_path,
     import_selected_external_instance,

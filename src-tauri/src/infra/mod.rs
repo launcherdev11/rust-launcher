@@ -1,4 +1,5 @@
 pub mod autostart;
+pub mod disk_space;
 pub mod api_base;
 pub mod http;
 pub mod network;

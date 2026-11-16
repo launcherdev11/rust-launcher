@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   forge_proxy_fallback: true,
   download_source: "auto",
   world_auto_backup: true,
+  launch_preflight: true,
   notify_new_update: true,
   notify_new_message: true,
   notify_system_message: true,

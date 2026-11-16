@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { reportStats } from "../api/stats";
+import { confirmLaunchPreflight } from "../features/launch-preflight/preflight";
 import { launchErrorMessage } from "../lib/launchErrors";
 import type { LaunchPresenceContext } from "../lib/socialActivity";
 import type { NotificationKind, ShowNotificationOptions } from "../app/notifications";
@@ -140,7 +141,6 @@ export function useGameLaunch({
     }
     if (target.loader === "forge" || target.loader === "neoforge") {
       if (loaderVersion) return `${gameVersion}-${target.loader}-${loaderVersion}`;
-      // у импортированных сборок версия загрузчика в конфиге бывает пустой
       const id = await installedLoaderVersionId(gameVersion, target.loader);
       if (!id) {
         throw new Error(
@@ -150,6 +150,27 @@ export function useGameLaunch({
       return id;
     }
     return gameVersion;
+  };
+
+  const passLaunchPreflight = async (
+    target: Pick<InstanceProfileSummary, "id" | "loader" | "game_version"> | null,
+    versionId: string,
+  ): Promise<boolean> => {
+    if (settings?.launch_preflight === false) return true;
+    setIsLaunching(true);
+    try {
+      return await confirmLaunchPreflight(
+        {
+          profileId: target?.id ?? null,
+          loader: target?.loader,
+          gameVersion: target?.game_version,
+          versionId,
+        },
+        tt,
+      );
+    } finally {
+      setIsLaunching(false);
+    }
   };
 
   const handlePlayPinnedProfile = async (profile: InstanceProfileCard, join?: ProfileJoinTarget) => {
@@ -163,6 +184,7 @@ export function useGameLaunch({
         loader_version: profile.loader_version ?? null,
       });
       const launchVersionId = await resolveProfileVersionId(profile);
+      if (!(await passLaunchPreflight(profile, launchVersionId))) return;
       const consoleProfileId = profile.id;
       setRunningConsoleProfile(consoleProfileId);
       archiveCurrentConsoleAndClear(consoleProfileId);
@@ -371,8 +393,6 @@ export function useGameLaunch({
           loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
             ? (selectedVersion as VersionSummary)
             : null;
-        // Выбранная сборка задаёт версию сама: selectedVersion мог остаться от другой
-        // сборки или от комнаты, и игра запустилась бы не той версией в папке этой сборки.
         const versionId = activeInstanceProfile
           ? await resolveProfileVersionId(activeInstanceProfile)
           : loader === "fabric" && fabricProfileId
@@ -387,6 +407,7 @@ export function useGameLaunch({
           vanillaSummary.url
             ? vanillaSummary.url
             : undefined;
+        if (!(await passLaunchPreflight(activeInstanceProfile, versionId))) return;
         const consoleProfileId = await resolveLaunchConsoleProfileId();
         if (consoleProfileId) {
           setRunningConsoleProfile(consoleProfileId);

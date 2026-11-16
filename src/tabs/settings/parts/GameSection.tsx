@@ -59,6 +59,7 @@ export function GameSection({ ctx }: Props) {
               "game.closeLauncher",
               "game.checkProcesses",
               "game.worldAutoBackup",
+              "game.launchPreflight",
             ) && (
               <SettingsSection
                 title={tt("settings.game.subtab.general")}
@@ -126,6 +127,14 @@ export function GameSection({ ctx }: Props) {
                     label={tt("settings.game.checkGameProcesses.label")}
                     value={settings?.check_game_processes ?? true}
                     onChange={(v) => updateSettings({ check_game_processes: v })}
+                  />
+                )}
+                {showSetting("game.launchPreflight") && (
+                  <SettingsSwitchRow
+                    label={tt("settings.game.launchPreflight.label")}
+                    hint={tt("settings.game.launchPreflight.hint")}
+                    value={settings?.launch_preflight ?? true}
+                    onChange={(v) => updateSettings({ launch_preflight: v })}
                   />
                 )}
                 {showSetting("game.worldAutoBackup") && (
