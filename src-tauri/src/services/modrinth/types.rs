@@ -93,6 +93,20 @@ pub struct ProfileIncompatibleContent {
     pub project_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedProfileContentUpdate {
+    pub filename: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyProfileContentUpdatesResult {
+    pub applied: u32,
+    pub failed: Vec<FailedProfileContentUpdate>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyProfileContentUpdate {

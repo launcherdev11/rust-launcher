@@ -271,6 +271,11 @@ export type ProfileContentUpdate = {
   latestSha1?: string | null;
 };
 
+export type ApplyContentUpdatesResult = {
+  applied: number;
+  failed: { filename: string; error: string }[];
+};
+
 export type ContentSnapshot = {
   id: string;
   category: "mods" | "resourcepacks" | "shaderpacks";

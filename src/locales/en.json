@@ -1162,6 +1162,7 @@
       "loadFailed": "Failed to load sets."
     },
     "contentUpdates": {
+      "appliedPartial": "Updated {{count}} file(s), {{failed}} failed. {{msg}}",
       "check": "Check for updates",
       "checking": "Checking for updates…",
       "checkFailed": "Could not check for updates: {{msg}}",

@@ -1190,6 +1190,7 @@
       "loadFailed": "No se pudieron cargar los conjuntos."
     },
     "contentUpdates": {
+      "appliedPartial": "{{count}} archivo(s) actualizado(s), {{failed}} con error. {{msg}}",
       "check": "Buscar actualizaciones",
       "checking": "Buscando actualizaciones...",
       "checkFailed": "No se pudo buscar actualizaciones: {{msg}}",

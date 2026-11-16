@@ -13,7 +13,7 @@ use crate::services::game::profiles::{
     profile_item_display_name, profile_item_is_disabled, profile_item_stored_name,
     read_instance_config, resolve_profile_item_path,
 };
-use crate::services::game::state::DEFAULT_DOWNLOAD_CONCURRENCY;
+use crate::services::game::state::{CANCEL_DOWNLOAD, DEFAULT_DOWNLOAD_CONCURRENCY};
 
 use crate::infra::api_base::curseforge_api_base;
 use super::client::{modrinth_http_client, should_filter_by_loader, MODRINTH_API_BASE};
@@ -21,8 +21,8 @@ use super::content_metadata::curseforge_file_fingerprint;
 use super::installed::index_content_dir_sha1;
 use super::jar_compat::{compatible_loaders, jar_supports_game_version};
 use super::types::{
-    ApplyProfileContentUpdate, ModrinthVersion, ProfileContentUpdate, ProfileIncompatibleContent,
-    MODRINTH_USER_AGENT,
+    ApplyProfileContentUpdate, ApplyProfileContentUpdatesResult, FailedProfileContentUpdate,
+    ModrinthVersion, ProfileContentUpdate, ProfileIncompatibleContent, MODRINTH_USER_AGENT,
 };
 
 const VERSION_FILES_BATCH: usize = 96;
@@ -241,12 +241,18 @@ fn pick_cf_latest_for_target<'a>(
     game_version: &str,
     loader: &str,
 ) -> Option<&'a CfFingerprintFile> {
-    exact.latest_files.iter().find(|f| {
-        f.id != exact.file.id
-            && f.download_url.as_ref().map(|u| !u.trim().is_empty()).unwrap_or(false)
-            && cf_game_versions_include(&f.game_versions, game_version)
-            && cf_file_supports_loader(&f.game_versions, &f.file_name, loader, game_version)
-    })
+    // latestFiles перечисляет файлы для разных версий игры и не гарантирует, что они новее
+    // установленного: без сравнения файл «обновлялся» на более старый и обратно по кругу.
+    exact
+        .latest_files
+        .iter()
+        .filter(|f| {
+            f.id > exact.file.id
+                && f.download_url.as_ref().map(|u| !u.trim().is_empty()).unwrap_or(false)
+                && cf_game_versions_include(&f.game_versions, game_version)
+                && cf_file_supports_loader(&f.game_versions, &f.file_name, loader, game_version)
+        })
+        .max_by_key(|f| f.id)
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -566,7 +572,12 @@ async fn collect_modrinth_version_maps(
 
     let hashes: Vec<String> = sha_by_filename.values().cloned().collect();
     let loaders = if category == "mods" && should_filter_by_loader(loader) {
-        vec![loader.to_string()]
+        let compatible = compatible_loaders(loader, game_version);
+        if compatible.is_empty() {
+            vec![loader.to_string()]
+        } else {
+            compatible.into_iter().map(str::to_string).collect()
+        }
     } else {
         Vec::new()
     };
@@ -676,16 +687,19 @@ pub async fn check_profile_content_updates(
         &latest_map,
     );
 
-    let modrinth_update_filenames: std::collections::HashSet<String> = all_updates
+    // Файл, опознанный Modrinth, обновляется только оттуда: один и тот же мод на CurseForge
+    // лежит под другим id, и его «новая» версия заменяла бы актуальный файл снова и снова.
+    let modrinth_known_filenames: std::collections::HashSet<String> = sha_by_filename
         .iter()
-        .map(|u| u.filename.clone())
+        .filter(|(_, sha1)| current_map.contains_key(*sha1))
+        .map(|(filename, _)| filename.clone())
         .collect();
 
     if let Ok(cf) =
         check_curseforge_content(&content_dir, &enabled_by_filename, &game_version, &loader).await
     {
         let mut cf_updates = cf.updates;
-        cf_updates.retain(|u| !modrinth_update_filenames.contains(&u.filename));
+        cf_updates.retain(|u| !modrinth_known_filenames.contains(&u.filename));
         all_updates.extend(cf_updates);
     } else {
         eprintln!("CurseForge content updates check failed (ignored).");
@@ -833,10 +847,16 @@ pub async fn apply_profile_content_updates(
     profile_id: String,
     category: String,
     updates: Vec<ApplyProfileContentUpdate>,
-) -> Result<u32, String> {
+) -> Result<ApplyProfileContentUpdatesResult, String> {
     if updates.is_empty() {
-        return Ok(0);
+        return Ok(ApplyProfileContentUpdatesResult {
+            applied: 0,
+            failed: Vec::new(),
+        });
     }
+
+    // После паузы или отмены установки флаг остаётся поднятым и оборвал бы эти загрузки
+    CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
     let download_category = modrinth_download_category(&category)?;
     let subdir = modrinth_category_from_profile_category(&category)?;
@@ -848,7 +868,7 @@ pub async fn apply_profile_content_updates(
 
     let snapshot = Arc::new(UpdateSnapshot::begin(&profile_id, subdir, &content_dir)?);
     let applied = Arc::new(AtomicU32::new(0));
-    let results: Vec<Result<(), String>> = stream::iter(updates.into_iter())
+    let results: Vec<Result<(), FailedProfileContentUpdate>> = stream::iter(updates.into_iter())
         .map(|item| {
             let content_dir = content_dir.clone();
             let profile_id = profile_id.clone();
@@ -859,6 +879,10 @@ pub async fn apply_profile_content_updates(
                     item.filename.as_str()
                 } else {
                     item.latest_filename.as_str()
+                };
+                let fail = |error: String| FailedProfileContentUpdate {
+                    filename: item.filename.clone(),
+                    error,
                 };
                 let stored_name = profile_item_stored_name(target_display, item.enabled);
                 let dest_path = content_dir.join(&stored_name);
@@ -877,11 +901,20 @@ pub async fn apply_profile_content_updates(
                     Some(&profile_id),
                     item.latest_sha1.as_deref(),
                 )
-                .await?;
+                .await
+                .map_err(&fail)?;
 
                 if let Some(old_path) = old_path {
                     if old_path != dest_path && old_path.is_file() {
                         snapshot.stash_move(&old_path, Some(&stored_name));
+                        if old_path.is_file() {
+                            // старый файл занят запущенной игрой: две версии мода в папке её сломают
+                            let _ = tokio::fs::remove_file(&dest_path).await;
+                            return Err(fail(format!(
+                                "Файл {} занят другой программой. Закройте игру и повторите обновление.",
+                                item.filename
+                            )));
+                        }
                     }
                 }
 
@@ -903,13 +936,67 @@ pub async fn apply_profile_content_updates(
 
     let snapshot = Arc::try_unwrap(snapshot)
         .map_err(|_| "Не удалось завершить снимок обновления".to_string())?;
-    if let Some(err) = results.into_iter().find_map(Result::err) {
-        snapshot.rollback();
-        return Err(err);
+    let failed: Vec<FailedProfileContentUpdate> =
+        results.into_iter().filter_map(Result::err).collect();
+    let applied = applied.load(Ordering::SeqCst);
+
+    if applied == 0 {
+        if let Some(first) = failed.into_iter().next() {
+            snapshot.rollback();
+            return Err(first.error);
+        }
+        snapshot.finish();
+        return Ok(ApplyProfileContentUpdatesResult {
+            applied,
+            failed: Vec::new(),
+        });
     }
     snapshot.finish();
 
-    let applied = applied.load(Ordering::SeqCst);
+    Ok(ApplyProfileContentUpdatesResult { applied, failed })
+}
 
-    Ok(applied)
+#[cfg(test)]
+mod curseforge_update_tests {
+    use super::*;
+
+    fn file(id: u32, game_version: &str) -> CfFingerprintFile {
+        CfFingerprintFile {
+            id,
+            mod_id: 1,
+            display_name: format!("build {id}"),
+            file_name: format!("mod-{id}.jar"),
+            download_url: Some(format!("https://edge.forgecdn.net/{id}.jar")),
+            hashes: Vec::new(),
+            file_fingerprint: None,
+            game_versions: vec![game_version.to_string()],
+        }
+    }
+
+    fn exact(current: u32, latest: &[u32]) -> CfFingerprintExactMatch {
+        CfFingerprintExactMatch {
+            file: file(current, "1.20.1"),
+            latest_files: latest.iter().map(|id| file(*id, "1.20.1")).collect(),
+        }
+    }
+
+    #[test]
+    fn older_files_are_not_offered_as_updates() {
+        assert!(pick_cf_latest_for_target(&exact(200, &[100, 150]), "1.20.1", "any").is_none());
+    }
+
+    #[test]
+    fn newest_matching_file_wins() {
+        let m = exact(100, &[120, 300, 200]);
+        assert_eq!(pick_cf_latest_for_target(&m, "1.20.1", "any").map(|f| f.id), Some(300));
+    }
+
+    #[test]
+    fn other_game_versions_are_skipped() {
+        let m = CfFingerprintExactMatch {
+            file: file(100, "1.20.1"),
+            latest_files: vec![file(500, "1.21.1"), file(150, "1.20.1")],
+        };
+        assert_eq!(pick_cf_latest_for_target(&m, "1.20.1", "any").map(|f| f.id), Some(150));
+    }
 }

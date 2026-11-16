@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { confirmDialog } from "../../../lib/confirmDialog";
 import {
+  type ApplyContentUpdatesResult,
   type ContentSnapshot,
   type ContentTab,
   type InstanceProfile,
@@ -45,12 +46,28 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
   const [contentRollbackBusy, setContentRollbackBusy] = useState(false);
 
   const profileId = selectedProfile?.id ?? null;
+  const profileIdRef = useRef(profileId);
+  profileIdRef.current = profileId;
   const snapshotCategory =
     contentTab === "mods"
       ? "mods"
       : contentTab === "resourcepacks"
         ? "resourcepacks"
         : "shaderpacks";
+
+  async function refreshModUpdateBadges(forProfileId: string) {
+    if (snapshotCategory !== "mods") return;
+    try {
+      const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+        profileId: forProfileId,
+        category: "mods",
+      });
+      if (profileIdRef.current !== forProfileId) return;
+      setContentUpdatesAvailableFilenames(new Set(updates.map((u) => u.filename)));
+    } catch (e) {
+      console.warn("Failed to refresh update badges:", e);
+    }
+  }
 
   async function refreshContentSnapshot() {
     if (!profileId) {
@@ -94,12 +111,15 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
           latestFilename: u.latestFilename,
           latestSha1: u.latestSha1 ?? null,
         }));
-        const applied = await invoke<number>("apply_profile_content_updates", {
+        const result = await invoke<ApplyContentUpdatesResult>("apply_profile_content_updates", {
           profileId,
           category,
           updates: payload,
         });
-        total += applied;
+        total += result.applied;
+        if (result.failed.length > 0) {
+          console.warn(`Content update failed for ${category}:`, result.failed);
+        }
       } catch (e) {
         console.warn(`Content update failed for ${category}:`, e);
       }
@@ -229,15 +249,39 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
         latestFilename: u.latestFilename,
         latestSha1: u.latestSha1 ?? null,
       }));
-      const applied = await invoke<number>("apply_profile_content_updates", {
+      const result = await invoke<ApplyContentUpdatesResult>("apply_profile_content_updates", {
         profileId: selectedProfile.id,
         category,
         updates: payload,
       });
-      showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
-      setIsContentUpdatesModalOpen(false);
-      setContentUpdates([]);
-      setSelectedContentUpdateFilenames(new Set());
+      const failedNames = new Set(result.failed.map((f) => f.filename));
+      if (result.failed.length === 0) {
+        showNotification("success", tt("modpacks.contentUpdates.applied", { count: result.applied }));
+        setIsContentUpdatesModalOpen(false);
+      } else {
+        showNotification(
+          "warning",
+          tt("modpacks.contentUpdates.appliedPartial", {
+            count: result.applied,
+            failed: result.failed.length,
+            msg: result.failed[0].error,
+          }),
+        );
+      }
+      const selectedNames = new Set(selected.map((u) => u.filename));
+      setContentUpdates((prev) =>
+        prev.filter((u) => !selectedNames.has(u.filename) || failedNames.has(u.filename)),
+      );
+      setSelectedContentUpdateFilenames(failedNames);
+      if (category === "mods") {
+        setContentUpdatesAvailableFilenames((prev) => {
+          const next = new Set(prev);
+          for (const name of selectedNames) {
+            if (!failedNames.has(name)) next.delete(name);
+          }
+          return next;
+        });
+      }
       await refreshItems(selectedProfile.id, contentTab);
       await refreshContentSnapshot();
     } catch (e) {
@@ -278,7 +322,7 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
 
       if (!(await backupBeforeUpdate(selectedProfile.id))) return;
 
-      const applied = await invoke<number>("apply_profile_content_updates", {
+      const result = await invoke<ApplyContentUpdatesResult>("apply_profile_content_updates", {
         profileId: selectedProfile.id,
         category,
         updates: [
@@ -292,7 +336,7 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
         ],
       });
 
-      showNotification("success", tt("modpacks.contentUpdates.applied", { count: applied }));
+      showNotification("success", tt("modpacks.contentUpdates.applied", { count: result.applied }));
       await refreshItems(selectedProfile.id, contentTab);
       await refreshContentSnapshot();
       setContentUpdatesAvailableFilenames((prev) => {
@@ -328,6 +372,7 @@ export function useContentUpdates(deps: ContentUpdatesDeps) {
       showNotification("success", tt("modpacks.contentUpdates.rollbackDone", { count: restored }));
       await refreshItems(selectedProfile.id, contentTab);
       await refreshContentSnapshot();
+      void refreshModUpdateBadges(selectedProfile.id);
     } catch (e) {
       console.error(e);
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);

@@ -1190,6 +1190,7 @@
       "loadFailed": "Sets konnten nicht geladen werden."
     },
     "contentUpdates": {
+      "appliedPartial": "{{count}} Datei(en) aktualisiert, {{failed}} fehlgeschlagen. {{msg}}",
       "check": "Suchen Sie nach Updates",
       "checking": "Suche nach Updates…",
       "checkFailed": "Konnte nicht nach Updates suchen: {{msg}}",
