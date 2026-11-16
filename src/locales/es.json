@@ -1836,6 +1836,25 @@
     "profileFriendsOnlyHint": "Añade al jugador como amigo para ver sus logros y su estado."
   },
   "rooms": {
+    "modpackGate": {
+      "title": "Instancia de la sala",
+      "body": "Para entrar en la sala, tienes que descargar la instancia «{{name}}» ({{version}}).",
+      "hint": "Los mods de Modrinth y CurseForge se descargan de allí, el resto llega directamente del anfitrión. Antes de instalar verás la lista de archivos.",
+      "haveIt": "Ya la tengo",
+      "download": "Descargar",
+      "leave": "Salir de la sala",
+      "back": "Atrás",
+      "waitingHost": "Esperando la conexión con el anfitrión de la sala…",
+      "pickHint": "Elige tu instancia en {{version}}. El launcher la comparará con la del anfitrión y descargará las diferencias.",
+      "noMatching": "No tienes ninguna instancia en esta versión. Pulsa «Atrás» y elige «Descargar».",
+      "wrongVersion": "La instancia usa otra versión del juego u otro cargador"
+    },
+    "createModpack": {
+      "label": "Elegir instancia",
+      "hint": "Los miembros tendrán que descargarla para entrar en la sala. Los archivos se envían desde ti directamente, sin pasar por el servidor.",
+      "empty": "Todavía no tienes instancias.",
+      "mods": "{{count}} mods"
+    },
     "sync": {
       "missingAssets": "Archivos de paquetes distintos (texturas, sonidos, estructuras): {{count}}",
       "assetsReceived": "Archivos de paquetes del anfitrión: {{count}}",
@@ -2014,6 +2033,7 @@
       "member": "miembro"
     },
     "toast": {
+      "modpackRequired": "Elige una instancia para la sala.",
       "signInFirst": "Inicia sesión primero en la pestaña Cuentas",
       "created": "Sala creada",
       "joined": "Te uniste a la sala",

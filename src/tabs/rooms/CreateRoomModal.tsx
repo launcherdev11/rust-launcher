@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import type { CreateRoomInput } from "../../api/rooms";
+import type { InstanceProfileCard } from "../../app/types";
 import { LoaderIcon } from "../../components/loader_icon";
 import { ActionButton, Modal, TextField } from "../../components/ui";
 import type { useT } from "../../i18n";
 import {
   MAX_ROOM_PLAYERS,
   ROOM_LOADERS,
+  isRoomLoaderId,
   pickRoomVersionId,
   useLoaderVersions,
   type RoomCurrentGame,
@@ -22,6 +24,7 @@ export function CreateRoomModal({
   busy,
   tt,
   currentGame,
+  profiles,
   onClose,
   onSubmit,
   onWarning,
@@ -31,8 +34,9 @@ export function CreateRoomModal({
   busy: boolean;
   tt: ReturnType<typeof useT>;
   currentGame: RoomCurrentGame | null;
+  profiles: InstanceProfileCard[];
   onClose: () => void;
-  onSubmit: (input: CreateRoomInput) => void;
+  onSubmit: (input: CreateRoomInput, modpackProfileId?: string) => void;
   onWarning: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -43,6 +47,20 @@ export function CreateRoomModal({
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [password, setPassword] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(MAX_ROOM_PLAYERS);
+  const [withModpack, setWithModpack] = useState(false);
+  const [modpackId, setModpackId] = useState<string | null>(null);
+
+  const modpack = withModpack ? profiles.find((p) => p.id === modpackId) ?? null : null;
+  const sourceGame: RoomCurrentGame | null = modpack
+    ? {
+        loader: isRoomLoaderId(modpack.loader) ? modpack.loader : "vanilla",
+        gameVersion: modpack.game_version,
+        loaderVersion: modpack.loader_version ?? null,
+        source: "profile",
+        label: modpack.name,
+        profileId: modpack.id,
+      }
+    : currentGame;
 
   const { versions, loading: versionsLoading } = useLoaderVersions(loader, open, onError);
 
@@ -55,9 +73,17 @@ export function CreateRoomModal({
     setVisibility("public");
     setPassword("");
     setMaxPlayers(MAX_ROOM_PLAYERS);
+    setWithModpack(false);
+    setModpackId(null);
   }, [open]);
 
-  const autoGame = !manual && currentGame?.loader === loader ? currentGame : null;
+  const autoGame = (modpack || !manual) && sourceGame?.loader === loader ? sourceGame : null;
+
+  const pickModpack = (profile: InstanceProfileCard) => {
+    setModpackId(profile.id);
+    setLoader(isRoomLoaderId(profile.loader) ? profile.loader : "vanilla");
+    setManual(false);
+  };
 
   useEffect(() => {
     if (versionsLoading) return;
@@ -73,18 +99,26 @@ export function CreateRoomModal({
       onWarning(tt("rooms.toast.passwordRequired"));
       return;
     }
+    if (withModpack && !modpack) {
+      onWarning(tt("rooms.toast.modpackRequired"));
+      return;
+    }
     if (!gameVersion.trim()) {
       onWarning(tt("rooms.toast.versionRequired"));
       return;
     }
-    onSubmit({
-      name: name.trim() || undefined,
-      visibility,
-      password: visibility === "private" ? trimmedPassword : undefined,
-      gameVersion: gameVersion.trim(),
-      loader,
-      maxPlayers,
-    });
+    onSubmit(
+      {
+        name: name.trim() || undefined,
+        visibility,
+        password: visibility === "private" ? trimmedPassword : undefined,
+        gameVersion: gameVersion.trim(),
+        loader,
+        maxPlayers,
+        modpackName: modpack?.name,
+      },
+      modpack?.id,
+    );
   };
 
   const versionLabel = versions.find((v) => v.id === gameVersion)?.label ?? gameVersion;
@@ -127,7 +161,52 @@ export function CreateRoomModal({
           />
         </label>
 
-        {currentGame && !manual ? (
+        <div className="flex flex-col gap-2">
+          <label className="flex items-start gap-2 text-sm text-white/85">
+            <input
+              type="checkbox"
+              className="accent-checkbox mt-0.5"
+              checked={withModpack}
+              disabled={busy}
+              onChange={(e) => setWithModpack(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold">{tt("rooms.createModpack.label")}</span>
+              <span className="ui-meta mt-0.5 block">{tt("rooms.createModpack.hint")}</span>
+            </span>
+          </label>
+          {withModpack ? (
+            profiles.length === 0 ? (
+              <p className="locked-hint">{tt("rooms.createModpack.empty")}</p>
+            ) : (
+              <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-1.5">
+                {profiles.map((profile) => (
+                  <li key={profile.id}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => pickModpack(profile)}
+                      aria-pressed={profile.id === modpackId}
+                      className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+                        profile.id === modpackId ? "seg-on" : "hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <LoaderIcon loader={profile.loader} className="h-5 w-5" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{profile.name}</span>
+                        <span className="ui-meta block truncate">
+                          {profile.loader} {profile.game_version} · {tt("rooms.createModpack.mods", { count: profile.mods_count })}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
+        </div>
+
+        {sourceGame && (modpack || !manual) ? (
           <div className="glass-inset flex items-center gap-3 px-3.5 py-3">
             <LoaderIcon loader={loader} className="h-7 w-7" />
             <div className="min-w-0 flex-1">
@@ -135,14 +214,16 @@ export function CreateRoomModal({
                 {versionsLoading ? tt("common.loading") : versionLabel}
               </p>
               <p className="ui-meta truncate">
-                {currentGame.source === "profile"
-                  ? tt("rooms.auto.fromProfile", { name: currentGame.label })
+                {sourceGame.source === "profile"
+                  ? tt("rooms.auto.fromProfile", { name: sourceGame.label })
                   : tt("rooms.auto.fromMenu")}
               </p>
             </div>
-            <ActionButton size="sm" variant="ghost" onClick={() => setManual(true)}>
-              {tt("rooms.auto.manual")}
-            </ActionButton>
+            {modpack ? null : (
+              <ActionButton size="sm" variant="ghost" onClick={() => setManual(true)}>
+                {tt("rooms.auto.manual")}
+              </ActionButton>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-2">

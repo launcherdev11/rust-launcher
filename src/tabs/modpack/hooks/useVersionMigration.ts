@@ -4,7 +4,6 @@ import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ContentTab,
-  type ForgeVersionSummary,
   type InstanceProfile,
   type LoaderId,
   type LoaderVersionOption,
@@ -15,6 +14,7 @@ import {
 } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { pickDefaultLoaderVersion } from "../helpers";
+import { installGameAndLoader as installGameAndLoaderFiles } from "../../../lib/installGameAndLoader";
 import { t } from "../../../i18n";
 
 type VersionMigrationDeps = {
@@ -148,73 +148,32 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
       loaderVersion: string | null,
       versions: VersionSummary[],
     ) => {
-      let versionUrl: string | null = versions.find((v) => v.id === gameVersion)?.url ?? null;
-      if (!versionUrl) {
-        const all = await invoke<VersionSummary[]>("fetch_all_versions");
-        versionUrl = all.find((v) => v.id === gameVersion)?.url ?? null;
-      }
-      if (!versionUrl) {
-        throw new Error(t(language, "modpacks.toast.manifestUrlFailed", { version: gameVersion }));
-      }
-
-      try {
-        await invoke("reset_download_cancel");
-      } catch (e) {
-        console.error(e);
-      }
-
       prepareInstallConsole?.(selectedProfileId);
       setSelectedLogSessionId("live");
       setManageConsoleExpanded(true);
 
-      const installed = await invoke<string[]>("list_installed_versions");
-      if (!installed.includes(gameVersion)) {
-        const versionJobId = `version:${gameVersion}`;
-        registerDownloadJob?.({
-          id: versionJobId,
-          label: gameVersion,
-          kind: "version",
-        });
-        showNotification("info", t(language, "modpacks.toast.versionNotInstalled", { version: gameVersion }));
-        try {
-          await invoke("install_version", {
-            versionId: gameVersion,
-            versionUrl,
-          });
-        } finally {
-          finishDownloadJob?.(versionJobId);
-        }
-        showNotification("success", t(language, "modpacks.toast.versionInstalled", { version: gameVersion }));
-      }
-
-      if (loader === "fabric" && loaderVersion) {
-        showNotification("info", t(language, "modpacks.toast.installingFabric", { version: loaderVersion }));
-        await invoke("install_fabric", {
-          gameVersion,
-          loaderVersion,
-        });
-      } else if (loader === "quilt" && loaderVersion) {
-        showNotification("info", t(language, "modpacks.toast.installingQuilt", { version: loaderVersion }));
-        await invoke("install_quilt", {
-          gameVersion,
-          loaderVersion,
-        });
-      } else if (loader === "forge" && loaderVersion) {
-        const forgeList = await invoke<ForgeVersionSummary[]>("fetch_forge_versions");
-        const match = forgeList.find(
-          (v) => v.mc_version === gameVersion && v.forge_build === loaderVersion,
-        );
-        const versionId = match?.id ?? `${gameVersion}-forge-${loaderVersion}`;
-        const installerUrl =
-          match?.installer_url ??
-          `https://forgemvn.lumintomc.ru/net/minecraftforge/forge/${gameVersion}-${loaderVersion}/forge-${gameVersion}-${loaderVersion}-installer.jar`;
-        showNotification("info", t(language, "modpacks.toast.installingForge", { version: loaderVersion }));
-        await invoke("install_forge", { versionId, installerUrl });
-      } else if (loader === "neoforge" && loaderVersion) {
-        const versionId = `${gameVersion}-neoforge-${loaderVersion}`;
-        showNotification("info", t(language, "modpacks.toast.installingNeoForge", { version: loaderVersion }));
-        await invoke("install_neoforge", { versionId });
-      }
+      const loaderToastKey: Record<Exclude<LoaderId, "vanilla">, string> = {
+        fabric: "modpacks.toast.installingFabric",
+        quilt: "modpacks.toast.installingQuilt",
+        forge: "modpacks.toast.installingForge",
+        neoforge: "modpacks.toast.installingNeoForge",
+      };
+      await installGameAndLoaderFiles(gameVersion, loader, loaderVersion, {
+        knownVersions: versions,
+        manifestUrlError: (version) =>
+          new Error(t(language, "modpacks.toast.manifestUrlFailed", { version })),
+        onGameInstallStart: (version) => {
+          registerDownloadJob?.({ id: `version:${version}`, label: version, kind: "version" });
+          showNotification("info", t(language, "modpacks.toast.versionNotInstalled", { version }));
+        },
+        onGameInstallEnd: (version) => {
+          finishDownloadJob?.(`version:${version}`);
+          showNotification("success", t(language, "modpacks.toast.versionInstalled", { version }));
+        },
+        onLoaderInstallStart: (id, version) => {
+          if (id !== "vanilla") showNotification("info", t(language, loaderToastKey[id], { version }));
+        },
+      });
     },
     [language, showNotification, registerDownloadJob, finishDownloadJob, prepareInstallConsole, selectedProfileId],
   );

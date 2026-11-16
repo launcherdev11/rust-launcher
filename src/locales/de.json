@@ -1836,6 +1836,25 @@
     "profileFriendsOnlyHint": "Füge den Spieler als Freund hinzu, um seine Erfolge und seinen Status zu sehen."
   },
   "rooms": {
+    "modpackGate": {
+      "title": "Instanz des Raums",
+      "body": "Um den Raum zu betreten, musst du die Instanz „{{name}}“ ({{version}}) herunterladen.",
+      "hint": "Mods von Modrinth und CurseForge kommen von dort, der Rest direkt vom Host. Vor der Installation siehst du die Dateiliste.",
+      "haveIt": "Habe ich schon",
+      "download": "Herunterladen",
+      "leave": "Raum verlassen",
+      "back": "Zurück",
+      "waitingHost": "Warte auf die Verbindung zum Host des Raums…",
+      "pickHint": "Wähle deine Instanz auf {{version}}. Der Launcher vergleicht sie mit der des Hosts und lädt die Unterschiede nach.",
+      "noMatching": "Du hast keine Instanz auf dieser Version. Klicke auf „Zurück“ und wähle „Herunterladen“.",
+      "wrongVersion": "Die Instanz nutzt eine andere Spielversion oder einen anderen Loader"
+    },
+    "createModpack": {
+      "label": "Instanz auswählen",
+      "hint": "Mitglieder müssen sie herunterladen, um den Raum zu betreten. Die Dateien gehen direkt von dir, nicht über den Server.",
+      "empty": "Du hast noch keine Instanzen.",
+      "mods": "{{count}} Mods"
+    },
     "sync": {
       "missingAssets": "Abweichende Paketdateien (Texturen, Sounds, Strukturen): {{count}}",
       "assetsReceived": "Paketdateien vom Host: {{count}}",
@@ -2014,6 +2033,7 @@
       "member": "Mitglied"
     },
     "toast": {
+      "modpackRequired": "Wähle eine Instanz für den Raum.",
       "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an",
       "created": "Raum erstellt",
       "joined": "Raum beigetreten",

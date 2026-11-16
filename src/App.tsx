@@ -37,14 +37,14 @@ import { TabPaneLoading } from "./app/components/TabPaneLoading";
 import { ConfirmHost, PromptHost, TabErrorBoundary, TooltipHost } from "./components/ui";
 import { TabSplitPanes } from "./app/components/TabSplitPanes";
 import { TitleBar } from "./app/components/TitleBar";
-import { toInstanceProfileCard } from "./app/profiles";
+import { toInstanceProfileCard, toInstanceProfileSummary } from "./app/profiles";
 import {
   BOTTOM_SIDEBAR_ITEMS,
   isReorderableSidebarId,
   isSidebarHorizontal,
   parseSidebarPosition,
 } from "./app/sidebar";
-import type { InstanceProfileCard, Settings, SettingsTabId, SidebarItemId } from "./app/types";
+import type { InstanceProfileCard, InstanceProfileSummary, Settings, SettingsTabId, SidebarItemId } from "./app/types";
 import { useDiscordPresence } from "./hooks/useDiscordPresence";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
 import { useDownloadsWindow } from "./hooks/useDownloadsWindow";
@@ -312,6 +312,20 @@ function App() {
     activeInstanceName: activeInstanceProfile?.name ?? null,
   });
   const { gameStatus, isLaunching, isStopping, setRoomPresenceContext, setLaunchPresenceContext } = run;
+
+  const refreshKnownProfiles = useCallback(async () => {
+    const list = await invoke<InstanceProfileCard[]>("get_profiles");
+    setKnownProfiles(list.map(toInstanceProfileCard));
+  }, [setKnownProfiles]);
+
+  const selectInstanceProfileById = useCallback(
+    async (profileId: string) => {
+      await invoke("set_selected_profile", { id: profileId });
+      const current = await invoke<InstanceProfileSummary | null>("get_selected_profile");
+      if (current) setActiveInstanceProfile(toInstanceProfileSummary(current));
+    },
+    [setActiveInstanceProfile],
+  );
   const launchStage = useLaunchStage(isLaunching);
   useTaskbarProgress(activeDownloadJobs, isLaunching, gameStatus);
   useQuickLaunchMenus(profilesHydrated, knownProfiles, pinnedProfileIds, tt);
@@ -1177,6 +1191,9 @@ function App() {
                   onOpenAccounts={() => setActiveItemWithSound("accounts")}
                   onApplyRoomGameSettings={applyRoomGameSettings}
                   currentGame={roomCurrentGame}
+                  profiles={knownProfiles}
+                  onSelectProfile={selectInstanceProfileById}
+                  onProfilesChanged={refreshKnownProfiles}
                 />
                 </Suspense>
               </TabErrorBoundary>

@@ -1808,6 +1808,25 @@
     "profileFriendsOnlyHint": "Add the player as a friend to see their achievements and status."
   },
   "rooms": {
+    "modpackGate": {
+      "title": "Room instance",
+      "body": "To enter this room, you need to download the instance \"{{name}}\" ({{version}}).",
+      "hint": "Mods from Modrinth and CurseForge are downloaded from there, everything else comes directly from the host. You will see the file list before installing.",
+      "haveIt": "I already have it",
+      "download": "Download",
+      "leave": "Leave room",
+      "back": "Back",
+      "waitingHost": "Waiting for the connection to the room host…",
+      "pickHint": "Pick your instance on {{version}}. The launcher will compare it with the host's and fetch the differences.",
+      "noMatching": "You have no instance on this version. Press \"Back\" and choose \"Download\".",
+      "wrongVersion": "The instance uses a different game version or loader"
+    },
+    "createModpack": {
+      "label": "Select an instance",
+      "hint": "Members will have to download it to enter the room. Files are sent from you directly, not through the server.",
+      "empty": "You have no instances yet.",
+      "mods": "{{count}} mods"
+    },
     "sync": {
       "missingAssets": "Different pack files (textures, sounds, structures): {{count}}",
       "assetsReceived": "Pack files from the host: {{count}}",
@@ -1986,6 +2005,7 @@
       "member": "member"
     },
     "toast": {
+      "modpackRequired": "Select an instance for the room.",
       "signInFirst": "Sign in first in the Accounts tab",
       "created": "Room created",
       "joined": "Joined the room",

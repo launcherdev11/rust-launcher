@@ -24,6 +24,13 @@ import { UserProfileModal, type UserProfileSeed } from "../components/UserProfil
 import { WS_EVENT, type WsEvent } from "../api/ws";
 import { useRoomPeerSession } from "../hooks/useRoomPeerSession";
 import { RoomSyncPanel } from "../features/room-sync/RoomSyncPanel";
+import { RoomModpackGate } from "../features/room-sync/RoomModpackGate";
+import {
+  createProfileForRoom,
+  getHostRoomProfile,
+  setHostRoomProfile,
+} from "../features/room-sync/roomModpacks";
+import type { InstanceProfileCard } from "../app/types";
 import { useRoomSyncHost } from "../features/room-sync/useRoomSyncHost";
 import { useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
@@ -69,7 +76,12 @@ type RoomsTabProps = {
   onOpenAccounts?: () => void;
   onApplyRoomGameSettings?: (settings: RoomGameSettings) => void;
   currentGame?: RoomCurrentGame | null;
+  profiles?: InstanceProfileCard[];
+  onSelectProfile?: (profileId: string) => Promise<void>;
+  onProfilesChanged?: () => Promise<void>;
 };
+
+const NO_PROFILES: InstanceProfileCard[] = [];
 
 function errorText(e: unknown): string {
   return e instanceof ApiError || e instanceof Error ? e.message : String(e);
@@ -89,6 +101,9 @@ export function RoomsTab({
   onOpenAccounts,
   onApplyRoomGameSettings,
   currentGame = null,
+  profiles = NO_PROFILES,
+  onSelectProfile,
+  onProfilesChanged,
 }: RoomsTabProps) {
   const tt = useT(language);
 
@@ -499,7 +514,7 @@ export function RoomsTab({
     selectedRoom?.loader,
   ]);
 
-  const handleCreate = async (input: CreateRoomInput) => {
+  const handleCreate = async (input: CreateRoomInput, modpackProfileId?: string) => {
     if (!accessToken) {
       showNotification("warning", tt("rooms.toast.signInFirst"));
       return;
@@ -508,6 +523,7 @@ export function RoomsTab({
     setLoading(true);
     try {
       const room = await createRoom(input);
+      if (modpackProfileId) setHostRoomProfile(room.id, modpackProfileId);
       showNotification("success", tt("rooms.toast.created"));
       setShowCreateModal(false);
       await reloadRooms();
@@ -829,6 +845,24 @@ export function RoomsTab({
           onSaveSettings={(input) => void handleSaveSettings(input)}
           onWarning={(message) => showNotification("warning", message)}
         />
+        {!isOwner && selectedRoom.modpack_name ? (
+          <RoomModpackGate
+            key={selectedRoom.id}
+            room={selectedRoom}
+            tt={tt}
+            session={sessions[selectedRoom.owner_user_id] ?? null}
+            profiles={profiles}
+            onSelectProfile={async (profileId) => {
+              await onSelectProfile?.(profileId);
+            }}
+            onCreateProfile={async (manifest) => {
+              const id = await createProfileForRoom(selectedRoom.modpack_name ?? manifest.gameVersion, manifest);
+              await onProfilesChanged?.();
+              return id;
+            }}
+            onLeave={() => void handleLeave()}
+          />
+        ) : null}
         {viewingProfile ? (
           <UserProfileModal
             language={language}
@@ -886,10 +920,11 @@ export function RoomsTab({
         busy={busyAction === "create"}
         tt={tt}
         currentGame={currentGame}
+        profiles={profiles}
         onClose={() => {
           if (busyAction !== "create") setShowCreateModal(false);
         }}
-        onSubmit={(input) => void handleCreate(input)}
+        onSubmit={(input, modpackProfileId) => void handleCreate(input, modpackProfileId)}
         onWarning={(message) => showNotification("warning", message)}
         onError={(message) => showNotification("error", message)}
       />

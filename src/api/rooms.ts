@@ -27,6 +27,7 @@ export type Room = {
   world_name?: string | null;
   game_version?: string | null;
   loader?: string | null;
+  modpack_name?: string | null;
   members?: RoomMember[];
 };
 
@@ -198,6 +199,7 @@ export function normalizeRoom(input: unknown): Room | null {
       asOptionalString(raw.gameVersion) ??
       asOptionalString(raw.version) ??
       null,
+    modpack_name: asOptionalString(raw.modpack_name) ?? asOptionalString(raw.modpackName) ?? null,
     loader: asOptionalString(raw.loader) ?? null,
     members,
   };
@@ -257,6 +259,7 @@ export type CreateRoomInput = {
   worldName?: string;
   gameVersion?: string;
   loader?: string;
+  modpackName?: string;
 };
 
 export type UpdateRoomInput = {
@@ -276,6 +279,7 @@ export async function createRoom(input?: number | CreateRoomInput): Promise<Room
     world_name?: string;
     game_version?: string;
     loader?: string;
+    modpack_name?: string;
   } = {};
   if (typeof input === "number") {
     body.max_players = input;
@@ -300,6 +304,9 @@ export async function createRoom(input?: number | CreateRoomInput): Promise<Room
     }
     if (typeof input.loader === "string" && input.loader.trim()) {
       body.loader = input.loader.trim();
+    }
+    if (typeof input.modpackName === "string" && input.modpackName.trim()) {
+      body.modpack_name = input.modpackName.trim().slice(0, 64);
     }
   }
   const data = await apiFetch<{ room: Room }>("/rooms", {
