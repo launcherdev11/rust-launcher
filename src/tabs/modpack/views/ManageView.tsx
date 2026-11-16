@@ -56,6 +56,7 @@ import type { ModpackController } from "../useModpackController";
 import { useContinueTarget } from "../hooks/useContinueTarget";
 import { ProfileIconMorph } from "../ProfileIconMorph";
 import { AssetIcon } from "../../../components/asset_icon";
+import { PinItemButton } from "../ProfileItemParts";
 
 type Props = { ctx: ModpackController };
 
@@ -192,6 +193,7 @@ export function ManageView({ ctx }: Props) {
     toggleContentSelected,
     handleResourcePackGripPointerDown,
     handleToggleItemEnabled,
+    handleToggleItemPinned,
     handleDeleteItem,
     conflictFilenames,
     contentUpdatesAvailabilityLoading,
@@ -1056,7 +1058,7 @@ export function ManageView({ ctx }: Props) {
                     }}
                     data-marquee-key={item.name}
                     onClick={(e) => handleContentRowClick(item.name, e)}
-                    className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-[opacity,background-color,box-shadow] duration-150 ${
+                    className={`group flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-[opacity,background-color,box-shadow] duration-150 ${
                       selectedContentNames.has(item.name)
                         ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
                         : "bg-black/45"
@@ -1116,6 +1118,11 @@ export function ManageView({ ctx }: Props) {
                               : tt("modpacks.manage.enableItem")
                         }
                       />
+                      <PinItemButton
+                        pinned={Boolean(item.pinned)}
+                        onToggle={() => void handleToggleItemPinned(item)}
+                        tt={tt}
+                      />
                       <button
                         type="button"
                         onClick={() => void handleDeleteItem(item)}
@@ -1165,7 +1172,7 @@ export function ManageView({ ctx }: Props) {
                   key={item.name}
                   data-marquee-key={item.name}
                   onClick={(e) => handleContentRowClick(item.name, e)}
-                  className={`flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-[opacity,background-color,box-shadow] duration-150 ${
+                  className={`group flex items-center justify-between gap-2.5 rounded-2xl px-3 py-3 text-xs transition-[opacity,background-color,box-shadow] duration-150 ${
                     selectedContentNames.has(item.name)
                       ? "bg-accent-from/15 ring-1 ring-accent-to/45 ring-inset"
                       : hasConflict
@@ -1236,6 +1243,11 @@ export function ManageView({ ctx }: Props) {
                         />
                       </button>
                     )}
+                    <PinItemButton
+                      pinned={Boolean(item.pinned)}
+                      onToggle={() => void handleToggleItemPinned(item)}
+                      tt={tt}
+                    />
                     <button
                       type="button"
                       onClick={() => void handleDeleteItem(item)}

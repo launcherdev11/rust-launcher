@@ -11,6 +11,7 @@ use tauri::command;
 
 use crate::models::profile::{InstanceConfig, ProfileItemEntry, SelectedProfileFile};
 use crate::models::{InstanceProfileSummary, InstanceSettings};
+use crate::services::game::content_pins::pinned_items;
 use crate::app::paths::{
     instance_config_path, instance_dir, instance_settings_path, instances_root_dir,
     selected_profile_path,
@@ -1216,6 +1217,7 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileIte
         ShaderPackSelection::inactive()
     };
 
+    let pinned = pinned_items(&id, subdir);
     let mut files = Vec::new();
     for entry in std::fs::read_dir(&target_dir).map_err(|e| format!("Ошибка чтения папки сборки: {e}"))? {
         let entry = entry.map_err(|e| format!("Ошибка чтения файла сборки: {e}"))?;
@@ -1237,6 +1239,7 @@ pub fn list_profile_items(id: String, category: String) -> Result<Vec<ProfileIte
                     file_enabled
                 };
                 files.push(ProfileItemEntry {
+                    pinned: pinned.contains(&display_name),
                     name: display_name,
                     enabled,
                 });

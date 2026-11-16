@@ -1191,6 +1191,7 @@
       "applied": "Updated {{count}} file(s)",
       "applyFailed": "Update failed: {{msg}}",
       "selectAtLeastOne": "Select at least one file to update.",
+      "pinnedSkipped": "Pinned files are not updated: {{count}}.",
       "notOnModrinth": "Files not found on Modrinth or CurseForge are skipped.",
       "noneFoundForItem": "No updates for this file.",
       "rollback": "Undo update",
@@ -1294,6 +1295,9 @@
       "noProfilesFound": "No profiles found. Try the launcher's root (not instances) - but instances is supported too."
     },
     "manage": {
+      "pinVersion": "Pin version",
+      "unpinVersion": "Unpin version",
+      "pinFailed": "Could not change the version pin.",
       "empty": {
         "title": {
           "mods": "No mods in this instance yet",

@@ -1,3 +1,4 @@
+import { AssetIcon } from "../../components/asset_icon";
 import { useEffect, useState } from "react";
 import { ModsIcon } from "./icons";
 import type { ContentTab, ProfileItemMetadata } from "./types";
@@ -112,5 +113,31 @@ export function ProfileItemIcon({
         "S"
       )}
     </span>
+  );
+}
+
+export function PinItemButton({
+  pinned,
+  onToggle,
+  tt,
+}: {
+  pinned: boolean;
+  onToggle: () => void;
+  tt: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={pinned}
+      className={`interactive-press rounded-lg p-2 ${
+        pinned
+          ? "bg-accent-from/25 text-accent-hi hover:bg-accent-from/35"
+          : "hidden bg-white/10 text-white/60 hover:bg-white/20 hover:text-white group-focus-within:block group-hover:block"
+      }`}
+      title={tt(pinned ? "modpacks.manage.unpinVersion" : "modpacks.manage.pinVersion")}
+    >
+      <AssetIcon name="pin" className="h-4 w-4" />
+    </button>
   );
 }

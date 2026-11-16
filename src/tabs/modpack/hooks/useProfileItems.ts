@@ -330,6 +330,57 @@ export function useProfileItems(deps: ProfileItemsDeps) {
     }
   }
 
+  async function handleToggleItemPinned(item: ProfileItemEntry) {
+    if (!selectedProfile) return;
+    const profileId = selectedProfile.id;
+    const nextPinned = !item.pinned;
+    const applyPinned = (pinned: boolean) =>
+      setItems((prev) =>
+        prev.map((entry) => (entry.name === item.name ? { ...entry, pinned } : entry)),
+      );
+    const category =
+      contentTab === "mods"
+        ? "mods"
+        : contentTab === "resourcepacks"
+          ? "resourcepacks"
+          : "shaderpacks";
+    applyPinned(nextPinned);
+    try {
+      await invoke("set_profile_item_pinned", {
+        id: profileId,
+        category,
+        filename: item.name,
+        pinned: nextPinned,
+      });
+    } catch (e) {
+      console.error(e);
+      applyPinned(Boolean(item.pinned));
+      showNotification("error", tt("modpacks.manage.pinFailed"));
+      return;
+    }
+    if (category !== "mods") return;
+    if (nextPinned) {
+      setContentUpdatesAvailableFilenames((prev) => {
+        if (!prev.has(item.name)) return prev;
+        const next = new Set(prev);
+        next.delete(item.name);
+        return next;
+      });
+      return;
+    }
+    try {
+      const updates = await invoke<ProfileContentUpdate[]>("check_profile_content_updates", {
+        profileId,
+        category,
+      });
+      if (updates.some((update) => update.filename === item.name)) {
+        setContentUpdatesAvailableFilenames((prev) => new Set(prev).add(item.name));
+      }
+    } catch (e) {
+      console.warn("Failed to refresh update badge:", e);
+    }
+  }
+
   async function handleToggleItemEnabled(item: ProfileItemEntry) {
     if (!selectedProfile) return;
     if (togglingItemsRef.current.has(item.name)) return;
@@ -500,6 +551,7 @@ export function useProfileItems(deps: ProfileItemsDeps) {
     handleAddFilesFromPc,
     handleDeleteItem,
     handleToggleItemEnabled,
+    handleToggleItemPinned,
     toggleContentSelected,
     handleContentRowClick,
     handleBulkSetEnabled,

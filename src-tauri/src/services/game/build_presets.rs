@@ -218,6 +218,7 @@ pub fn create_build_preset_from_profile(profile_id: String, name: String) -> Res
         })
         .map(|mut s| {
             s.account_id = None;
+            s.pinned_items.clear();
             s
         });
 

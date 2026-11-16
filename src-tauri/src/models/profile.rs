@@ -85,5 +85,6 @@ pub(crate) struct SelectedProfileFile {
 pub struct ProfileItemEntry {
     pub name: String,
     pub enabled: bool,
+    pub pinned: bool,
 }
 

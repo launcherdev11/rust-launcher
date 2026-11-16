@@ -1219,6 +1219,7 @@
       "applied": "Aktualisierte {{count}}-Datei(en)",
       "applyFailed": "Aktualisierung fehlgeschlagen: {{msg}}",
       "selectAtLeastOne": "Wählen Sie mindestens eine Datei zum Aktualisieren aus.",
+      "pinnedSkipped": "Fixierte Dateien werden nicht aktualisiert: {{count}}.",
       "notOnModrinth": "Dateien, die nicht auf Modrinth oder CurseForge gefunden werden, werden übersprungen.",
       "noneFoundForItem": "Keine Updates für diese Datei.",
       "rollback": "Update rückgängig machen",
@@ -1322,6 +1323,9 @@
       "noProfilesFound": "Keine Profile gefunden. Versuchen Sie es mit dem Stammverzeichnis des Launchers (nicht mit Instanzen) – Instanzen werden jedoch auch unterstützt."
     },
     "manage": {
+      "pinVersion": "Version fixieren",
+      "unpinVersion": "Fixierung aufheben",
+      "pinFailed": "Die Fixierung der Version konnte nicht geändert werden.",
       "empty": {
         "title": {
           "mods": "In dieser Instanz gibt es noch keine Mods",

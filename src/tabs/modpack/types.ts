@@ -221,6 +221,7 @@ export type ProfileDiskUsage = {
 export type ProfileItemEntry = {
   name: string;
   enabled: boolean;
+  pinned?: boolean;
 };
 
 export type VersionChangeItemStatus = "incompatible" | "unknown" | "update" | "compatible";
@@ -229,6 +230,7 @@ export type VersionChangePreviewItem = {
   filename: string;
   title: string;
   enabled: boolean;
+  pinned: boolean;
   status: VersionChangeItemStatus;
   currentVersion?: string;
   latestVersion?: string;

@@ -295,6 +295,7 @@ pub fn run() {
             get_profile_account_id,
             get_profile_launch_hooks,
             set_profile_launch_hooks,
+            set_profile_item_pinned,
             preview_profile_version_change,
             delete_item,
             restore_deleted_item,

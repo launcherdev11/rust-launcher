@@ -83,6 +83,7 @@ pub use profiles::{
     restore_deleted_item, set_profile_icon_from_file,
     set_profile_item_enabled, set_selected_profile, update_profile_settings, get_profile_account_id,
 };
+pub use content_pins::set_profile_item_pinned;
 pub use launch_hooks::{get_profile_launch_hooks, set_profile_launch_hooks};
 pub use external_import::{
     default_external_launcher_path,

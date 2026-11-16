@@ -14,7 +14,10 @@ export function ContentUpdatesModal({ ctx }: Props) {
     selectedContentUpdateFilenames,
     setSelectedContentUpdateFilenames,
     handleApplyContentUpdates,
+    items,
   } = ctx;
+
+  const pinnedCount = items.filter((item) => item.pinned).length;
 
   return (
     <>
@@ -98,6 +101,9 @@ export function ContentUpdatesModal({ ctx }: Props) {
 
             <div className="mt-3 text-xs text-white/55">
               {tt("modpacks.contentUpdates.notOnModrinth")}
+              {pinnedCount > 0
+                ? ` ${tt("modpacks.contentUpdates.pinnedSkipped", { count: pinnedCount })}`
+                : ""}
             </div>
 
             <div className="mt-4 flex flex-wrap justify-end gap-2">

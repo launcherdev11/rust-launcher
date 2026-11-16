@@ -1219,6 +1219,7 @@
       "applied": "Archivo(s) {{count}} actualizados",
       "applyFailed": "Error en la actualización: {{msg}}",
       "selectAtLeastOne": "Seleccione al menos un archivo para actualizar.",
+      "pinnedSkipped": "Los archivos fijados no se actualizan: {{count}}.",
       "notOnModrinth": "Se omiten los archivos que no se encuentran en Modrinth o CurseForge.",
       "noneFoundForItem": "No hay actualizaciones para este archivo.",
       "rollback": "Deshacer actualización",
@@ -1322,6 +1323,9 @@
       "noProfilesFound": "No se encontraron perfiles. Pruebe la raíz del iniciador (no las instancias), pero las instancias también son compatibles."
     },
     "manage": {
+      "pinVersion": "Fijar versión",
+      "unpinVersion": "Dejar de fijar la versión",
+      "pinFailed": "No se pudo cambiar la fijación de la versión.",
       "empty": {
         "title": {
           "mods": "Esta instancia aún no tiene mods",
