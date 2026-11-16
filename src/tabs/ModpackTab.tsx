@@ -57,7 +57,7 @@ export function ModpackTab(props: ModpackTabProps) {
           : undefined
       }
     >
-      {(activeView === "create" || activeView === "import") && (
+      {activeView === "create" && (
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold text-white">{headerTitle}</h1>
         </div>

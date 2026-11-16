@@ -1239,7 +1239,8 @@
       "copyFailed": "No se pudo copiar la captura: {{msg}}"
     },
     "import": {
-      "title": "Importar paquete Modrinth",
+      "fileSection": "Desde un archivo",
+      "title": "Importar un modpack",
       "chooseFile": "Elige el archivo",
       "progress": {
         "preparing": "Preparante…",
@@ -1248,17 +1249,18 @@
         "importing": "Importador…"
       },
       "dropzone": {
-        "title": "Arrastre y suelte un archivo .mrpack aquí",
-        "hint": "Se creará un nuevo perfil con el nombre del paquete y la versión del juego desde .mrpack. Las modificaciones y los recursos se descargarán automáticamente."
+        "active": "Suelta el archivo para iniciar la importación",
+        "title": "Suelta aquí un archivo .mrpack o .zip",
+        "hint": "Sirven paquetes de Modrinth, archivos de CurseForge, exportaciones de Prism y MultiMC y archivos .zip de 16Launcher. Los mods que falten se descargan automáticamente."
       },
       "started": "Importación iniciada...",
       "finishedWithVersion": "Importación finalizada. Perfil creado con la versión del juego del paquete.",
-      "failed": "No se pudo importar .mrpack: {{msg}}",
+      "failed": "No se pudo importar el modpack: {{msg}}",
       "cancelledKeyword": "cancelado"
     },
     "header": {
       "profiles": "Perfiles",
-      "importMrpack": "Importar .mrpack",
+      "importMrpack": "Importar desde archivo",
       "totalProfiles": "Perfiles totales: {{count}}"
     },
     "contentTabs": {
@@ -1355,16 +1357,19 @@
       "inactiveShaders": "Inactivos"
     },
     "externalImport": {
-      "title": "Importar desde otro lanzador",
-      "hint": "Prefiere la raíz de PrismLauncher/MultiMC (no instancias), pero también se admite la entrada de instancias.",
+      "nothingMatches": "Ninguna instancia coincide con la búsqueda.",
+      "found": "Instancias encontradas: {{count}}",
+      "pathAutoPlaceholder": "Carpeta del launcher (opcional)",
+      "title": "Desde otro launcher",
+      "hint": "Las carpetas estándar se encuentran automáticamente. Si tus instancias están en otro sitio, elige la carpeta del launcher y pulsa «Buscar instancias».",
       "copying": "Copiando archivos…",
       "importing": "Importar…",
       "launcher": "Lanzacohetes",
       "auto": "Auto",
       "path": "Camino",
       "pathPlaceholder": "Ejemplo: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher",
-      "scanning": "Exploración…",
-      "scan": "Escanear",
+      "scanning": "Buscando…",
+      "scan": "Buscar instancias",
       "sort": "Clasificar",
       "sortName": "Nombre",
       "sortDate": "Fecha",

@@ -10,6 +10,7 @@ pub mod continue_target;
 pub mod core;
 pub mod server_pack;
 pub mod worlds;
+pub mod zip_import;
 pub mod config_files;
 pub mod download;
 pub mod files;
@@ -51,6 +52,7 @@ pub use download::{
     download_modrinth_file, download_modrinth_modpack_and_import,     import_mrpack_as_new_profile,
 };
 pub use files::open_game_folder;
+pub use zip_import::import_zip_as_new_profile;
 pub use install::{
     install_fabric, install_forge, install_local_version, install_neoforge, install_quilt,
     install_version,

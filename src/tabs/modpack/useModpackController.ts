@@ -579,6 +579,7 @@ export function useModpackController(props: ModpackTabProps) {
   const {
     mrpackBusy,
     mrpackProgress,
+    importDragActive,
     handleCancelMrpackImport,
     handleImportMrpack,
   } = useMrpackImport({
@@ -1065,6 +1066,7 @@ export function useModpackController(props: ModpackTabProps) {
     setIsVersionDropdownOpen,
     mrpackBusy,
     mrpackProgress,
+    importDragActive,
     externalImportLauncher,
     setExternalImportLauncher,
     externalImportPath,

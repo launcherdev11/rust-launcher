@@ -1211,7 +1211,8 @@
       "copyFailed": "Failed to copy screenshot: {{msg}}"
     },
     "import": {
-      "title": "Import Modrinth pack",
+      "fileSection": "From a file",
+      "title": "Import a modpack",
       "chooseFile": "Choose file",
       "progress": {
         "preparing": "Preparing…",
@@ -1220,17 +1221,18 @@
         "importing": "Importing…"
       },
       "dropzone": {
-        "title": "Drag & drop a .mrpack file here",
-        "hint": "A new profile will be created with the pack name and game version from the .mrpack. Mods and resources will be downloaded automatically."
+        "active": "Release the file to start the import",
+        "title": "Drop a .mrpack or .zip file here",
+        "hint": "Works with Modrinth packs, CurseForge archives, Prism and MultiMC exports, and .zip files from 16Launcher. Missing mods are downloaded automatically."
       },
       "started": "Import started…",
       "finishedWithVersion": "Import finished. Profile created with pack's game version.",
-      "failed": "Failed to import .mrpack: {{msg}}",
+      "failed": "Could not import the modpack: {{msg}}",
       "cancelledKeyword": "cancelled"
     },
     "header": {
       "profiles": "Profiles",
-      "importMrpack": "Import .mrpack",
+      "importMrpack": "Import from file",
       "totalProfiles": "Total profiles: {{count}}"
     },
     "contentTabs": {
@@ -1327,16 +1329,19 @@
       "inactiveShaders": "Inactive"
     },
     "externalImport": {
-      "title": "Import from another launcher",
-      "hint": "Prefer PrismLauncher/MultiMC root (not instances), but instances input is supported too.",
+      "nothingMatches": "No instances match this search.",
+      "found": "Instances found: {{count}}",
+      "pathAutoPlaceholder": "Launcher folder (optional)",
+      "title": "From another launcher",
+      "hint": "Standard folders are found automatically. If your instances live elsewhere, pick the launcher folder and press “Find instances”.",
       "copying": "Copying files…",
       "importing": "Import…",
       "launcher": "Launcher",
       "auto": "Auto",
       "path": "Path",
       "pathPlaceholder": "Example: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher",
-      "scanning": "Scanning…",
-      "scan": "Scan",
+      "scanning": "Searching…",
+      "scan": "Find instances",
       "sort": "Sort",
       "sortName": "Name",
       "sortDate": "Date",

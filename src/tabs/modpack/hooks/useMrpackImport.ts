@@ -64,6 +64,7 @@ export function useMrpackImport(deps: MrpackImportDeps) {
     message?: string;
   } | null>(null);
 
+  const [importDragActive, setImportDragActive] = useState(false);
   const mrpackDownloadJobIdRef = useRef<string | null>(null);
   const mrpackImportStopReasonRef = useRef<"cancel" | null>(null);
 
@@ -83,12 +84,14 @@ export function useMrpackImport(deps: MrpackImportDeps) {
   }, [mrpackBusy, finishDownloadJob]);
 
   useEffect(() => {
-    const unlistenPromise = listen<{
+    type ProgressPayload = {
       phase: string;
       current?: number;
       total?: number;
       message?: string;
-    }>("mrpack-import-progress", (event) => {
+    };
+    const onProgress = (event: { payload: ProgressPayload }) => {
+      if (!mrpackDownloadJobIdRef.current) return;
       const payload = event.payload;
       setMrpackProgress(payload);
       const jobId = mrpackDownloadJobIdRef.current;
@@ -112,9 +115,13 @@ export function useMrpackImport(deps: MrpackImportDeps) {
           t(language, "modpacks.import.started"),
         );
       }
-    });
+    };
+    const unlistenPromises = [
+      listen<ProgressPayload>("mrpack-import-progress", onProgress),
+      listen<ProgressPayload>("curseforge-install-progress", onProgress),
+    ];
     return () => {
-      unlistenPromise.then((fn) => fn());
+      unlistenPromises.forEach((p) => void p.then((fn) => fn()));
     };
   }, [language, showNotification, updateDownloadJob]);
 
@@ -125,7 +132,7 @@ export function useMrpackImport(deps: MrpackImportDeps) {
         const p = await openFileDialog({
           multiple: false,
           directory: false,
-          filters: [{ name: "Modrinth pack", extensions: ["mrpack"] }],
+          filters: [{ name: "Modpack", extensions: ["mrpack", "zip"] }],
         });
         if (typeof p === "string") {
           chosen = p;
@@ -138,7 +145,7 @@ export function useMrpackImport(deps: MrpackImportDeps) {
 
     const jobId = makeDownloadJobId?.("modpack") ?? `modpack-${Date.now()}`;
     const jobLabel =
-      chosen.split(/[/\\]/).pop()?.replace(/\.mrpack$/i, "") ?? "Modpack";
+      chosen.split(/[/\\]/).pop()?.replace(/\.(mrpack|zip)$/i, "") ?? "Modpack";
     mrpackImportStopReasonRef.current = null;
     try {
       await invoke("reset_download_cancel");
@@ -150,9 +157,20 @@ export function useMrpackImport(deps: MrpackImportDeps) {
     setMrpackBusy(true);
     setMrpackProgress(null);
     try {
-      const newProfile = await invoke<InstanceProfile>("import_mrpack_as_new_profile", {
-        mrpackPath: chosen,
-      });
+      let failedFiles = 0;
+      let newProfile: InstanceProfile;
+      if (/\.mrpack$/i.test(chosen)) {
+        newProfile = await invoke<InstanceProfile>("import_mrpack_as_new_profile", {
+          mrpackPath: chosen,
+        });
+      } else {
+        const result = await invoke<{ profile: InstanceProfile; failed_files: number }>(
+          "import_zip_as_new_profile",
+          { zipPath: chosen },
+        );
+        newProfile = result.profile;
+        failedFiles = result.failed_files;
+      }
       setMrpackProgress(null);
       await invoke("set_selected_profile", { id: newProfile.id });
       await refreshProfiles();
@@ -160,7 +178,14 @@ export function useMrpackImport(deps: MrpackImportDeps) {
       setContentTab("mods");
       setActiveView("manage");
       await refreshItems(newProfile.id, "mods");
-      showNotification("success", t(language, "modpacks.import.finishedWithVersion"));
+      if (failedFiles > 0) {
+        showNotification(
+          "warning",
+          t(language, "modpacks.import.finishedWithMissing", { count: failedFiles }),
+        );
+      } else {
+        showNotification("success", t(language, "modpacks.import.finishedWithVersion"));
+      }
     } catch (e) {
       console.error(e);
       setMrpackProgress(null);
@@ -198,21 +223,25 @@ export function useMrpackImport(deps: MrpackImportDeps) {
   useEffect(() => {
     if (activeView !== "import") return;
     const webview = getCurrentWebview();
-    return disposeWhenResolved(
+    const dispose = disposeWhenResolved(
       webview.onDragDropEvent((event: { payload: { type: string; paths?: string[] } }) => {
+        setImportDragActive(event.payload.type === "enter" || event.payload.type === "over");
         if (event.payload.type === "drop" && event.payload.paths?.length) {
-          const path = event.payload.paths.find((p: string) =>
-            p.toLowerCase().endsWith(".mrpack"),
-          );
+          const path = event.payload.paths.find((p: string) => /\.(mrpack|zip)$/i.test(p));
           if (path) void handleImportMrpack(path);
         }
       }),
     );
+    return () => {
+      setImportDragActive(false);
+      dispose();
+    };
   }, [activeView]);
 
   return {
     mrpackBusy,
     mrpackProgress,
+    importDragActive,
     handleCancelMrpackImport,
     handleImportMrpack,
   };

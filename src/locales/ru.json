@@ -1211,7 +1211,8 @@
       "copyFailed": "Не удалось скопировать скриншот: {{msg}}"
     },
     "import": {
-      "title": "Импорт Modrinth пакета",
+      "fileSection": "Из файла",
+      "title": "Импорт сборки",
       "chooseFile": "Выбрать файл",
       "progress": {
         "preparing": "Подготовка…",
@@ -1220,17 +1221,18 @@
         "importing": "Импорт…"
       },
       "dropzone": {
-        "title": "Перетащите сюда .mrpack файл",
-        "hint": "Будет создана новая сборка с именем пакета и версией игры из .mrpack. Моды и ресурсы скачаются автоматически."
+        "active": "Отпустите файл, чтобы начать импорт",
+        "title": "Перетащите сюда файл .mrpack или .zip",
+        "hint": "Подходят пакеты Modrinth, архивы CurseForge, экспорт из Prism и MultiMC, а также .zip из 16Launcher. Недостающие моды скачаются автоматически."
       },
       "started": "Импорт начат…",
       "finishedWithVersion": "Импорт завершён. Сборка создана с версией игры из пакета.",
-      "failed": "Не удалось импортировать .mrpack: {{msg}}",
+      "failed": "Не удалось импортировать сборку: {{msg}}",
       "cancelledKeyword": "отменена"
     },
     "header": {
       "profiles": "Сборки",
-      "importMrpack": "Импортировать .mrpack",
+      "importMrpack": "Импортировать из файла",
       "totalProfiles": "Всего сборок: {{count}}"
     },
     "contentTabs": {
@@ -1327,16 +1329,19 @@
       "inactiveShaders": "Неактивные"
     },
     "externalImport": {
-      "title": "Импорт из другого лаунчера",
-      "hint": "Укажите корень PrismLauncher/MultiMC (не папку instances), но вставка instances тоже поддерживается.",
+      "nothingMatches": "По этому запросу сборок нет.",
+      "found": "Найдено сборок: {{count}}",
+      "pathAutoPlaceholder": "Папка лаунчера (необязательно)",
+      "title": "Из другого лаунчера",
+      "hint": "Стандартные папки находятся автоматически. Если сборки лежат в другом месте, укажите папку лаунчера и нажмите «Найти сборки».",
       "copying": "Копирование файлов…",
       "importing": "Импорт…",
       "launcher": "Лаунчер",
       "auto": "Auto",
       "path": "Путь",
       "pathPlaceholder": "Например: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher",
-      "scanning": "Сканирование…",
-      "scan": "Сканировать",
+      "scanning": "Поиск…",
+      "scan": "Найти сборки",
       "sort": "Сортировка",
       "sortName": "Имя",
       "sortDate": "Дата",
@@ -2765,7 +2770,7 @@
       "pathHint": "Корень лаунчера или папка instances / Instances",
       "browse": "Выбрать папку",
       "scan": "Найти сборки",
-      "scanning": "Ищем сборки…",
+      "scanning": "Поиск сборок…",
       "emptyTitle": "Сборок не нашли",
       "emptyHint": "Если сборки лежат в нестандартной папке, укажите её вручную. Позже это можно сделать во вкладке «Сборки» → «Импорт».",
       "cta": "Перенести · {{count}}",
@@ -2782,7 +2787,7 @@
       "selectedCount": "Выбрано: {{count}} из {{total}}",
       "manual": "Указать папку вручную",
       "manualHide": "Скрыть",
-      "importing": "Переносим сборки…",
+      "importing": "Перенос сборок…",
       "resultTitle": "Перенесено: {{done}} из {{total}}",
       "resultFailed": "Не удалось перенести:"
     },

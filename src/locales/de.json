@@ -1239,7 +1239,8 @@
       "copyFailed": "Screenshot konnte nicht kopiert werden: {{msg}}"
     },
     "import": {
-      "title": "Modrinth-Paket importieren",
+      "fileSection": "Aus einer Datei",
+      "title": "Modpack importieren",
       "chooseFile": "Datei auswählen",
       "progress": {
         "preparing": "Vorbereiten…",
@@ -1248,17 +1249,18 @@
         "importing": "Importieren…"
       },
       "dropzone": {
-        "title": "Ziehen Sie eine .mrpack-Datei per Drag & Drop hierher",
-        "hint": "Es wird ein neues Profil mit dem Paketnamen und der Spielversion aus dem .mrpack erstellt. Mods und Ressourcen werden automatisch heruntergeladen."
+        "active": "Datei loslassen, um den Import zu starten",
+        "title": "Zieh eine .mrpack- oder .zip-Datei hierher",
+        "hint": "Geeignet sind Modrinth-Pakete, CurseForge-Archive, Exporte aus Prism und MultiMC sowie .zip-Dateien aus 16Launcher. Fehlende Mods werden automatisch heruntergeladen."
       },
       "started": "Import gestartet…",
       "finishedWithVersion": "Import abgeschlossen. Profil erstellt mit der Spielversion des Packs.",
-      "failed": "Fehler beim Importieren von .mrpack: {{msg}}",
+      "failed": "Modpack konnte nicht importiert werden: {{msg}}",
       "cancelledKeyword": "abgesagt"
     },
     "header": {
       "profiles": "Profile",
-      "importMrpack": ".mrpack importieren",
+      "importMrpack": "Aus Datei importieren",
       "totalProfiles": "Gesamtprofile: {{count}}"
     },
     "contentTabs": {
@@ -1355,16 +1357,19 @@
       "inactiveShaders": "Inaktiv"
     },
     "externalImport": {
-      "title": "Von einem anderen Launcher importieren",
-      "hint": "Bevorzugen Sie PrismLauncher/MultiMC-Root (keine Instanzen), aber auch die Eingabe von Instanzen wird unterstützt.",
+      "nothingMatches": "Keine Instanzen zu dieser Suche.",
+      "found": "Gefundene Instanzen: {{count}}",
+      "pathAutoPlaceholder": "Launcher-Ordner (optional)",
+      "title": "Aus einem anderen Launcher",
+      "hint": "Standardordner werden automatisch gefunden. Liegen die Instanzen woanders, wähle den Launcher-Ordner und klicke auf „Instanzen suchen“.",
       "copying": "Dateien kopieren…",
       "importing": "Import…",
       "launcher": "Launcher",
       "auto": "Auto",
       "path": "Weg",
       "pathPlaceholder": "Beispiel: C:\\Benutzer\\…\\AppData\\Roaming\\PrismLauncher",
-      "scanning": "Scannen…",
-      "scan": "Scan",
+      "scanning": "Suche…",
+      "scan": "Instanzen suchen",
       "sort": "Sortieren",
       "sortName": "Name",
       "sortDate": "Datum",
