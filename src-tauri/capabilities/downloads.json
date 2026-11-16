@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "downloads",
+  "description": "Detached downloads window",
+  "windows": ["downloads"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title"
+  ]
+}

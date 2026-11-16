@@ -54,6 +54,7 @@ import {
 import type { InstanceProfileCard, Settings, SettingsTabId, SidebarItemId } from "./app/types";
 import { useDiscordPresence } from "./hooks/useDiscordPresence";
 import { useDownloadJobs } from "./hooks/useDownloadJobs";
+import { useDownloadsWindow } from "./hooks/useDownloadsWindow";
 import { useGameConsole } from "./hooks/useGameConsole";
 import { useGameConsoleWindow } from "./hooks/useGameConsoleWindow";
 import { useGameLaunch } from "./hooks/useGameLaunch";
@@ -558,7 +559,14 @@ function App() {
     handlePlayPinnedProfile,
     handleOpenGameFolder,
   };
+  const { accentColor, backgroundImageUrl, backgroundIsAnimated } = useLauncherAppearance(settings, activeItem);
+  const { isDownloadsDetached, openDownloadsWindow } = useDownloadsWindow({
+    jobs: activeDownloadJobs,
+    language,
+    accentColor,
+  });
   const paletteCommands = usePaletteCommands({
+    openDownloadsWindow,
     tt,
     profiles: knownProfiles,
     hotkeyForTab,
@@ -606,7 +614,6 @@ function App() {
     setRequestedProfileSettingsId(activeInstanceProfile.id);
   };
 
-  const { accentColor, backgroundImageUrl, backgroundIsAnimated } = useLauncherAppearance(settings, activeItem);
 
   const renderMainTabContentRaw = useCallback(
     (tab: SplittableTabId, inSplitPane = false) => {
@@ -1224,7 +1231,13 @@ function App() {
             ) : null}
           </main>
 
-          <ActiveDownloadsPanel jobs={activeDownloadJobs} language={language} />
+          {isDownloadsDetached ? null : (
+            <ActiveDownloadsPanel
+              jobs={activeDownloadJobs}
+              language={language}
+              onOpenWindow={() => void openDownloadsWindow()}
+            />
+          )}
         </div>
 
         <ProductTour

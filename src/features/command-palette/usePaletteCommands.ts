@@ -21,6 +21,7 @@ export type PaletteDeps = {
   launchGame: () => void;
   stopGame: () => void;
   openGameFolder: () => void;
+  openDownloadsWindow: () => void;
   toggleSidebar: () => void;
   openHotkeysHelp: () => void;
 };
@@ -53,6 +54,7 @@ export function usePaletteCommands(deps: PaletteDeps): PaletteCommand[] {
     launchGame,
     stopGame,
     openGameFolder,
+    openDownloadsWindow,
     toggleSidebar,
     openHotkeysHelp,
   } = deps;
@@ -95,6 +97,13 @@ export function usePaletteCommands(deps: PaletteDeps): PaletteCommand[] {
         group: "actions",
         title: tt("commandPalette.action.gameFolder"),
         run: openGameFolder,
+      },
+      {
+        id: "action:downloads",
+        group: "actions",
+        title: tt("commandPalette.action.downloads"),
+        keywords: ["downloads", "install", "загрузки", "скачивания"],
+        run: openDownloadsWindow,
       },
       {
         id: "action:sidebar",
@@ -187,6 +196,7 @@ export function usePaletteCommands(deps: PaletteDeps): PaletteCommand[] {
     launchGame,
     stopGame,
     openGameFolder,
+    openDownloadsWindow,
     toggleSidebar,
     openHotkeysHelp,
   ]);

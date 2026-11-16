@@ -2634,6 +2634,10 @@
       "copied": "¡Copiado!"
     },
     "downloads": {
+      "openWindow": "Abrir en una ventana aparte",
+      "windowTitle": "Instalaciones",
+      "emptyTitle": "No hay instalaciones activas",
+      "emptyHint": "Aquí aparecerán las versiones, modpacks y mods que se están descargando ahora.",
       "bytesOf": "{{done}} de {{total}}",
       "filesOf": "{{done}} de {{total}} archivos",
       "speed": "{{value}}/s",
@@ -2981,6 +2985,7 @@
       "settings": "Ajustes"
     },
     "action": {
+      "downloads": "Abrir ventana de instalaciones",
       "launch": "Iniciar el juego",
       "stop": "Detener el juego",
       "create": "Crear una instancia",

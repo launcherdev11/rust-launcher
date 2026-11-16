@@ -2,6 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ConsoleApp } from "./ConsoleApp";
+import { DownloadsApp } from "./DownloadsApp";
+import { isDownloadsWindowView } from "./lib/downloadsWindow";
 import { isGameConsoleWindowView } from "./lib/gameConsoleWindow";
 import { TRAY_MENU_WINDOW_LABEL, TrayMenuApp } from "./features/tray-menu/TrayMenuApp";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -26,7 +28,13 @@ function isTrayMenuWindow(): boolean {
 const isTrayMenu = isTrayMenuWindow();
 document.documentElement.classList.toggle("tray-menu-view", isTrayMenu);
 
-const Root = isTrayMenu ? TrayMenuApp : isGameConsoleWindowView() ? ConsoleApp : App;
+const Root = isTrayMenu
+  ? TrayMenuApp
+  : isGameConsoleWindowView()
+    ? ConsoleApp
+    : isDownloadsWindowView()
+      ? DownloadsApp
+      : App;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
