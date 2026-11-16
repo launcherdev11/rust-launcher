@@ -5,6 +5,7 @@ pub mod build_presets;
 pub mod cache;
 pub mod console;
 pub mod console_filter;
+pub mod content_pins;
 pub mod content_snapshots;
 pub mod continue_target;
 pub mod core;

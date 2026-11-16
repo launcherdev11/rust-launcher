@@ -10,6 +10,7 @@ import {
   type LoaderVersionOption,
   type NotificationKind,
   type ProfileIncompatibleContent,
+  type ProfileVersionChangePreview,
   type VersionSummary,
 } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -69,6 +70,10 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
   const [migrateVersionOptions, setMigrateVersionOptions] = useState<VersionSummary[]>([]);
   const [migrateVersionsLoading, setMigrateVersionsLoading] = useState(false);
   const migrateLoaderRequestRef = useRef(0);
+  const [migratePreview, setMigratePreview] = useState<ProfileVersionChangePreview | null>(null);
+  const [migratePreviewLoading, setMigratePreviewLoading] = useState(false);
+  const [migratePreviewFailed, setMigratePreviewFailed] = useState(false);
+  const migratePreviewRequestRef = useRef(0);
 
   async function ensureMigrateVersionsLoaded() {
     if (migrateVersionOptions.length > 0 || migrateVersionsLoading) return;
@@ -353,6 +358,46 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
   }, [isChangeVersionOpen, selectedProfile, migrateLoader, migrateGameVersion, loadMigrateLoaderVersions]);
 
   useEffect(() => {
+    const requestId = ++migratePreviewRequestRef.current;
+    setMigratePreview(null);
+    setMigratePreviewFailed(false);
+    const profileId = selectedProfile?.id;
+    const unchanged =
+      migrateGameVersion === selectedProfile?.game_version &&
+      migrateLoader === selectedProfile?.loader;
+    if (!isChangeVersionOpen || !profileId || !migrateGameVersion || unchanged) {
+      setMigratePreviewLoading(false);
+      return;
+    }
+    setMigratePreviewLoading(true);
+    const timer = window.setTimeout(() => {
+      invoke<ProfileVersionChangePreview>("preview_profile_version_change", {
+        profileId,
+        gameVersion: migrateGameVersion,
+        loader: migrateLoader,
+      })
+        .then((preview) => {
+          if (requestId === migratePreviewRequestRef.current) setMigratePreview(preview);
+        })
+        .catch((e) => {
+          console.warn("Version change preview failed:", e);
+          if (requestId === migratePreviewRequestRef.current) setMigratePreviewFailed(true);
+        })
+        .finally(() => {
+          if (requestId === migratePreviewRequestRef.current) setMigratePreviewLoading(false);
+        });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [
+    isChangeVersionOpen,
+    selectedProfile?.id,
+    selectedProfile?.game_version,
+    selectedProfile?.loader,
+    migrateGameVersion,
+    migrateLoader,
+  ]);
+
+  useEffect(() => {
     if (!isChangeVersionOpen) return;
     setMigrateVersionOptions([]);
     void ensureMigrateVersionsLoaded();
@@ -371,6 +416,9 @@ export function useVersionMigration(deps: VersionMigrationDeps) {
     migrateLoaderVersionOptions,
     migrateLoaderVersionsLoading,
     migrateBusy,
+    migratePreview,
+    migratePreviewLoading,
+    migratePreviewFailed,
     isMigrateVersionDropdownOpen,
     setIsMigrateVersionDropdownOpen,
     isMigrateLoaderVersionDropdownOpen,

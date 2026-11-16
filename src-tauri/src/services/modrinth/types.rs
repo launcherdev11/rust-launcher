@@ -93,6 +93,37 @@ pub struct ProfileIncompatibleContent {
     pub project_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionChangeItemStatus {
+    Incompatible,
+    Unknown,
+    Update,
+    Compatible,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionChangePreviewItem {
+    pub filename: String,
+    pub title: String,
+    pub enabled: bool,
+    pub pinned: bool,
+    pub status: VersionChangeItemStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileVersionChangePreview {
+    pub items: Vec<VersionChangePreviewItem>,
+    pub lookup_failed: bool,
+    pub mods_ignored_by_vanilla: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FailedProfileContentUpdate {

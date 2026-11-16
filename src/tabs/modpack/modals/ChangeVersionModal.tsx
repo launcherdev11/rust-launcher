@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { LoaderIcon } from "../../../components/loader_icon";
 import { loaderLabels } from "../helpers";
+import { VersionChangePreview } from "./VersionChangePreview";
 import { type LoaderId } from "../types";
 import type { ModpackController } from "../useModpackController";
 
@@ -47,7 +48,7 @@ export function ChangeVersionModal({ ctx }: Props) {
           onClick={closeChangeVersionModal}
         >
           <div
-            className="glass-modal w-full max-w-lg p-5"
+            className="glass-modal max-h-[90vh] w-full max-w-lg overflow-y-auto p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4">
@@ -210,6 +211,8 @@ export function ChangeVersionModal({ ctx }: Props) {
                   </div>
                 </div>
               )}
+
+              <VersionChangePreview ctx={ctx} />
             </div>
 
             <label className="mt-4 flex items-start gap-2 text-xs text-white/80">

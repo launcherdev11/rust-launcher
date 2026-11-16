@@ -976,6 +976,19 @@
       "saveFailed": "Failed to save profile settings."
     },
     "changeVersion": {
+      "preview": {
+        "title": "Mods on {{version}}",
+        "checking": "Checking mods for this version…",
+        "failed": "Could not check mods. You can still change the version.",
+        "lookupFailed": "Some mods could not be checked: Modrinth or CurseForge did not respond.",
+        "vanilla": "Mods are not loaded in vanilla. Files in the mods folder: {{count}}.",
+        "incompatible": "No matching version, will be disabled",
+        "unknown": "Could not determine, will stay enabled",
+        "update": "Will be updated",
+        "compatible": "Already compatible",
+        "pinned": "Version is pinned",
+        "unknownHint": "These are usually local or modified mods that are not on any platform. Check them manually."
+      },
       "button": "Change profile version",
       "title": "Change profile version",
       "description": "Mods, resource packs, shaders, and worlds stay in this profile and remain available after the version change. The selected Minecraft and loader versions will be installed. Compatible content from Modrinth and CurseForge will be updated automatically. Mods without a release for the new Minecraft version will be disabled and listed in a warning.",

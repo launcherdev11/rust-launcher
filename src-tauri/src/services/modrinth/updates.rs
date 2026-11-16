@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -7,6 +7,7 @@ use futures_util::stream::{self, StreamExt};
 use reqwest::header::USER_AGENT;
 use crate::app::paths::{instance_config_path, instance_dir};
 use crate::models::profile::InstanceConfig;
+use crate::services::game::content_pins::pinned_items;
 use crate::services::game::content_snapshots::UpdateSnapshot;
 use crate::services::game::download::save_modrinth_file;
 use crate::services::game::profiles::{
@@ -22,7 +23,8 @@ use super::installed::index_content_dir_sha1;
 use super::jar_compat::{compatible_loaders, jar_supports_game_version};
 use super::types::{
     ApplyProfileContentUpdate, ApplyProfileContentUpdatesResult, FailedProfileContentUpdate,
-    ModrinthVersion, ProfileContentUpdate, ProfileIncompatibleContent, MODRINTH_USER_AGENT,
+    ModrinthVersion, ProfileContentUpdate, ProfileIncompatibleContent, ProfileVersionChangePreview,
+    VersionChangeItemStatus, VersionChangePreviewItem, MODRINTH_USER_AGENT,
 };
 
 const VERSION_FILES_BATCH: usize = 96;
@@ -135,9 +137,11 @@ struct CfFingerprintExactMatch {
     latest_files: Vec<CfFingerprintFile>,
 }
 
+#[derive(Default)]
 struct CfScanResult {
     updates: Vec<ProfileContentUpdate>,
     incompatible: Vec<ProfileIncompatibleContent>,
+    identified: HashSet<String>,
 }
 
 fn cf_game_versions_include(versions: &[String], needle: &str) -> bool {
@@ -241,8 +245,6 @@ fn pick_cf_latest_for_target<'a>(
     game_version: &str,
     loader: &str,
 ) -> Option<&'a CfFingerprintFile> {
-    // latestFiles перечисляет файлы для разных версий игры и не гарантирует, что они новее
-    // установленного: без сравнения файл «обновлялся» на более старый и обратно по кругу.
     exact
         .latest_files
         .iter()
@@ -278,6 +280,7 @@ async fn check_curseforge_content(
     enabled_by_filename: &HashMap<String, bool>,
     game_version: &str,
     loader: &str,
+    pinned: &HashSet<String>,
 ) -> Result<CfScanResult, String> {
     let mut fingerprint_by_filename: HashMap<String, u32> = HashMap::new();
     let mut filename_by_fingerprint: HashMap<u32, String> = HashMap::new();
@@ -307,10 +310,7 @@ async fn check_curseforge_content(
     }
 
     if fingerprint_by_filename.is_empty() {
-        return Ok(CfScanResult {
-            updates: Vec::new(),
-            incompatible: Vec::new(),
-        });
+        return Ok(CfScanResult::default());
     }
 
     let fingerprints: Vec<u32> = fingerprint_by_filename.values().copied().collect();
@@ -339,7 +339,7 @@ async fn check_curseforge_content(
 
     let mut updates = Vec::new();
     let mut incompatible = Vec::new();
-    let mut seen: HashMap<String, bool> = HashMap::new();
+    let mut identified: HashSet<String> = HashSet::new();
     let game_version_trimmed = game_version.trim();
 
     for exact in parsed.data.exact_matches {
@@ -363,10 +363,9 @@ async fn check_curseforge_content(
         let Some(filename) = local_filename else {
             continue;
         };
-        if seen.contains_key(&filename) {
+        if !identified.insert(filename.clone()) {
             continue;
         }
-        seen.insert(filename.clone(), true);
 
         let enabled = enabled_by_filename.get(&filename).copied().unwrap_or(true);
         let current = &exact.file;
@@ -378,7 +377,12 @@ async fn check_curseforge_content(
                 game_version_trimmed,
             );
 
-        if let Some(latest) = pick_cf_latest_for_target(&exact, game_version_trimmed, loader) {
+        let latest = if pinned.contains(&filename) {
+            None
+        } else {
+            pick_cf_latest_for_target(&exact, game_version_trimmed, loader)
+        };
+        if let Some(latest) = latest {
             if let Some(download_url) = latest.download_url.clone() {
                 let latest_sha1 = cf_sha1_hex_from_hashes(&latest.hashes);
                 let title = if !latest.display_name.trim().is_empty() {
@@ -434,6 +438,7 @@ async fn check_curseforge_content(
     Ok(CfScanResult {
         updates,
         incompatible,
+        identified,
     })
 }
 
@@ -452,10 +457,14 @@ fn build_updates_for_batch(
     enabled_by_filename: &HashMap<String, bool>,
     current_map: &HashMap<String, ModrinthVersion>,
     latest_map: &HashMap<String, ModrinthVersion>,
+    pinned: &HashSet<String>,
 ) -> Vec<ProfileContentUpdate> {
     let mut updates = Vec::new();
 
     for (filename, sha1) in sha_by_filename {
+        if pinned.contains(filename) {
+            continue;
+        }
         let Some(current) = current_map.get(sha1) else {
             continue;
         };
@@ -502,6 +511,7 @@ fn build_incompatible_for_batch(
     latest_map: &HashMap<String, ModrinthVersion>,
     game_version: &str,
     loader: &str,
+    pinned: &HashSet<String>,
 ) -> Vec<ProfileIncompatibleContent> {
     let mut out = Vec::new();
 
@@ -509,7 +519,7 @@ fn build_incompatible_for_batch(
         let Some(current) = current_map.get(sha1) else {
             continue;
         };
-        if latest_map.contains_key(sha1) {
+        if latest_map.contains_key(sha1) && !pinned.contains(filename) {
             continue;
         }
         if modrinth_version_fits(current, game_version, loader) {
@@ -526,30 +536,7 @@ fn build_incompatible_for_batch(
     out
 }
 
-async fn collect_modrinth_version_maps(
-    content_dir: &Path,
-    category: &str,
-    loader: &str,
-    game_version: &str,
-) -> Result<
-    (
-        HashMap<String, String>,
-        HashMap<String, bool>,
-        HashMap<String, ModrinthVersion>,
-        HashMap<String, ModrinthVersion>,
-    ),
-    String,
-> {
-    let sha_by_filename = index_content_dir_sha1(content_dir).await?;
-    if sha_by_filename.is_empty() {
-        return Ok((
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        ));
-    }
-
+async fn read_enabled_by_filename(content_dir: &Path) -> Result<HashMap<String, bool>, String> {
     let mut enabled_by_filename = HashMap::new();
     let mut read_dir = tokio::fs::read_dir(content_dir)
         .await
@@ -569,8 +556,15 @@ async fn collect_modrinth_version_maps(
         let display = profile_item_display_name(stored_name);
         enabled_by_filename.insert(display, !profile_item_is_disabled(stored_name));
     }
+    Ok(enabled_by_filename)
+}
 
-    let hashes: Vec<String> = sha_by_filename.values().cloned().collect();
+async fn fetch_modrinth_version_maps(
+    hashes: &[String],
+    category: &str,
+    loader: &str,
+    game_version: &str,
+) -> Result<(HashMap<String, ModrinthVersion>, HashMap<String, ModrinthVersion>), String> {
     let loaders = if category == "mods" && should_filter_by_loader(loader) {
         let compatible = compatible_loaders(loader, game_version);
         if compatible.is_empty() {
@@ -620,7 +614,239 @@ async fn collect_modrinth_version_maps(
         latest_map.extend(latest);
     }
 
-    Ok((sha_by_filename, enabled_by_filename, current_map, latest_map))
+    Ok((current_map, latest_map))
+}
+
+#[derive(Default)]
+struct ContentScan {
+    sha_by_filename: HashMap<String, String>,
+    enabled_by_filename: HashMap<String, bool>,
+    current_map: HashMap<String, ModrinthVersion>,
+    latest_map: HashMap<String, ModrinthVersion>,
+    updates: Vec<ProfileContentUpdate>,
+    cf_incompatible: Vec<ProfileIncompatibleContent>,
+    cf_identified: HashSet<String>,
+    lookup_failed: bool,
+}
+
+async fn scan_content_for_target(
+    content_dir: &Path,
+    category: &str,
+    game_version: &str,
+    loader: &str,
+    pinned: &HashSet<String>,
+) -> ContentScan {
+    let mut scan = ContentScan::default();
+
+    match index_content_dir_sha1(content_dir).await {
+        Ok(index) => scan.sha_by_filename = index,
+        Err(e) => {
+            eprintln!("Content index failed (ignored): {e}");
+            scan.lookup_failed = true;
+            return scan;
+        }
+    }
+    if scan.sha_by_filename.is_empty() {
+        return scan;
+    }
+    scan.enabled_by_filename = read_enabled_by_filename(content_dir).await.unwrap_or_default();
+
+    let hashes: Vec<String> = scan.sha_by_filename.values().cloned().collect();
+    match fetch_modrinth_version_maps(&hashes, category, loader, game_version).await {
+        Ok((current_map, latest_map)) => {
+            scan.current_map = current_map;
+            scan.latest_map = latest_map;
+        }
+        Err(e) => {
+            eprintln!("Modrinth content check failed (ignored): {e}");
+            scan.lookup_failed = true;
+        }
+    }
+
+    scan.updates = build_updates_for_batch(
+        &scan.sha_by_filename,
+        &scan.enabled_by_filename,
+        &scan.current_map,
+        &scan.latest_map,
+        pinned,
+    );
+
+    match check_curseforge_content(
+        content_dir,
+        &scan.enabled_by_filename,
+        game_version,
+        loader,
+        pinned,
+    )
+    .await
+    {
+        Ok(mut cf) => {
+            let sha_by_filename = &scan.sha_by_filename;
+            let current_map = &scan.current_map;
+            cf.updates.retain(|u| {
+                !sha_by_filename
+                    .get(&u.filename)
+                    .is_some_and(|sha1| current_map.contains_key(sha1))
+            });
+            scan.updates.extend(cf.updates);
+            scan.cf_incompatible = cf.incompatible;
+            scan.cf_identified = cf.identified;
+        }
+        Err(e) => {
+            eprintln!("CurseForge content check failed (ignored): {e}");
+            scan.lookup_failed = true;
+        }
+    }
+
+    scan.updates.sort_by(|a, b| a.title.cmp(&b.title));
+    scan
+}
+
+#[derive(Default)]
+struct IncompatibleScan {
+    incompatible: Vec<ProfileIncompatibleContent>,
+    jar_supported: HashSet<String>,
+    jar_titles: HashMap<String, String>,
+}
+
+async fn collect_incompatible_content(
+    scan: &ContentScan,
+    content_dir: &Path,
+    category: &str,
+    game_version: &str,
+    loader: &str,
+    pinned: &HashSet<String>,
+) -> IncompatibleScan {
+    let updatable: HashSet<String> = scan.updates.iter().map(|u| u.filename.clone()).collect();
+
+    let mut incompatible = build_incompatible_for_batch(
+        &scan.sha_by_filename,
+        &scan.enabled_by_filename,
+        &scan.current_map,
+        &scan.latest_map,
+        game_version,
+        loader,
+        pinned,
+    );
+
+    let known: HashSet<String> = incompatible.iter().map(|i| i.filename.clone()).collect();
+    for item in &scan.cf_incompatible {
+        if !updatable.contains(&item.filename) && !known.contains(&item.filename) {
+            incompatible.push(item.clone());
+        }
+    }
+
+    let mut result = IncompatibleScan::default();
+    if category == "mods" {
+        let candidates: Vec<(String, std::path::PathBuf)> = scan
+            .sha_by_filename
+            .keys()
+            .filter(|filename| !updatable.contains(*filename))
+            .filter_map(|filename| {
+                let path = resolve_profile_item_path(content_dir, filename)?;
+                Some((filename.clone(), path))
+            })
+            .collect();
+        let game_version_owned = game_version.to_string();
+        let loader_owned = loader.to_string();
+        let jar_verdicts = tokio::task::spawn_blocking(move || {
+            candidates
+                .into_iter()
+                .map(|(filename, path)| {
+                    let verdict = jar_supports_game_version(&path, &game_version_owned, &loader_owned);
+                    (filename, verdict)
+                })
+                .collect::<HashMap<String, (Option<bool>, Option<String>)>>()
+        })
+        .await
+        .unwrap_or_default();
+
+        incompatible.retain(|i| !matches!(jar_verdicts.get(&i.filename), Some((Some(true), _))));
+
+        let known: HashSet<String> = incompatible.iter().map(|i| i.filename.clone()).collect();
+        for (filename, (supports, title)) in jar_verdicts {
+            if let Some(title) = title.clone() {
+                result.jar_titles.insert(filename.clone(), title);
+            }
+            if supports == Some(true) {
+                result.jar_supported.insert(filename.clone());
+            }
+            if supports != Some(false) || known.contains(&filename) {
+                continue;
+            }
+            incompatible.push(ProfileIncompatibleContent {
+                enabled: *scan.enabled_by_filename.get(&filename).unwrap_or(&true),
+                title: title.unwrap_or_else(|| filename.clone()),
+                filename,
+                project_id: None,
+            });
+        }
+    }
+
+    incompatible.retain(|i| !updatable.contains(&i.filename));
+    incompatible.sort_by(|a, b| a.title.cmp(&b.title));
+    result.incompatible = incompatible;
+    result
+}
+
+fn classify_version_change_items(
+    scan: &ContentScan,
+    incompatible: &IncompatibleScan,
+    pinned: &HashSet<String>,
+) -> Vec<VersionChangePreviewItem> {
+    let updates: HashMap<&str, &ProfileContentUpdate> =
+        scan.updates.iter().map(|u| (u.filename.as_str(), u)).collect();
+    let incompatible_by_name: HashMap<&str, &ProfileIncompatibleContent> = incompatible
+        .incompatible
+        .iter()
+        .map(|i| (i.filename.as_str(), i))
+        .collect();
+
+    let mut items: Vec<VersionChangePreviewItem> = scan
+        .sha_by_filename
+        .iter()
+        .map(|(filename, sha1)| {
+            let current = scan.current_map.get(sha1);
+            let update = updates.get(filename.as_str());
+            let blocked = incompatible_by_name.get(filename.as_str());
+            let status = if update.is_some() {
+                VersionChangeItemStatus::Update
+            } else if blocked.is_some() {
+                VersionChangeItemStatus::Incompatible
+            } else if current.is_some()
+                || scan.cf_identified.contains(filename)
+                || incompatible.jar_supported.contains(filename)
+            {
+                VersionChangeItemStatus::Compatible
+            } else {
+                VersionChangeItemStatus::Unknown
+            };
+            let title = update
+                .map(|u| u.title.clone())
+                .or_else(|| blocked.map(|i| i.title.clone()))
+                .or_else(|| incompatible.jar_titles.get(filename).cloned())
+                .or_else(|| current.map(version_display_title))
+                .unwrap_or_else(|| filename.clone());
+            VersionChangePreviewItem {
+                filename: filename.clone(),
+                title,
+                enabled: *scan.enabled_by_filename.get(filename).unwrap_or(&true),
+                pinned: pinned.contains(filename),
+                status,
+                current_version: update
+                    .map(|u| u.current_version_number.clone())
+                    .or_else(|| current.map(|c| c.version_number.clone()))
+                    .filter(|v| !v.is_empty()),
+                latest_version: update.map(|u| u.latest_version_number.clone()),
+            }
+        })
+        .collect();
+    items.sort_by(|a, b| {
+        a.status
+            .cmp(&b.status)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    items
 }
 
 #[tauri::command]
@@ -642,71 +868,9 @@ pub async fn check_profile_content_updates(
         return Ok(Vec::new());
     }
 
-    let (sha_by_filename, enabled_by_filename, current_map, latest_map) =
-        match collect_modrinth_version_maps(&content_dir, &category, &loader, &game_version).await {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Modrinth content updates check failed (ignored): {e}");
-                (
-                    index_content_dir_sha1(&content_dir).await.unwrap_or_default(),
-                    HashMap::new(),
-                    HashMap::new(),
-                    HashMap::new(),
-                )
-            }
-        };
-
-    let enabled_by_filename = if enabled_by_filename.is_empty() && !sha_by_filename.is_empty() {
-        let mut enabled = HashMap::new();
-        if let Ok(mut read_dir) = tokio::fs::read_dir(&content_dir).await {
-            while let Ok(Some(entry)) = read_dir.next_entry().await {
-                let path = entry.path();
-                if !path.is_file() {
-                    continue;
-                }
-                let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) else {
-                    continue;
-                };
-                let display = profile_item_display_name(stored_name);
-                enabled.insert(display, !profile_item_is_disabled(stored_name));
-            }
-        }
-        enabled
-    } else {
-        enabled_by_filename
-    };
-
-    if sha_by_filename.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut all_updates = build_updates_for_batch(
-        &sha_by_filename,
-        &enabled_by_filename,
-        &current_map,
-        &latest_map,
-    );
-
-    // Файл, опознанный Modrinth, обновляется только оттуда: один и тот же мод на CurseForge
-    // лежит под другим id, и его «новая» версия заменяла бы актуальный файл снова и снова.
-    let modrinth_known_filenames: std::collections::HashSet<String> = sha_by_filename
-        .iter()
-        .filter(|(_, sha1)| current_map.contains_key(*sha1))
-        .map(|(filename, _)| filename.clone())
-        .collect();
-
-    if let Ok(cf) =
-        check_curseforge_content(&content_dir, &enabled_by_filename, &game_version, &loader).await
-    {
-        let mut cf_updates = cf.updates;
-        cf_updates.retain(|u| !modrinth_known_filenames.contains(&u.filename));
-        all_updates.extend(cf_updates);
-    } else {
-        eprintln!("CurseForge content updates check failed (ignored).");
-    }
-
-    all_updates.sort_by(|a, b| a.title.cmp(&b.title));
-    Ok(all_updates)
+    let pinned = pinned_items(&profile_id, subdir);
+    let scan = scan_content_for_target(&content_dir, &category, &game_version, &loader, &pinned).await;
+    Ok(scan.updates)
 }
 
 #[tauri::command]
@@ -728,118 +892,47 @@ pub async fn check_profile_incompatible_content(
         return Ok(Vec::new());
     }
 
-    let (sha_by_filename, enabled_by_filename, current_map, latest_map) =
-        match collect_modrinth_version_maps(&content_dir, &category, &loader, &game_version).await {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Modrinth incompatible check failed (ignored): {e}");
-                (
-                    index_content_dir_sha1(&content_dir).await.unwrap_or_default(),
-                    HashMap::new(),
-                    HashMap::new(),
-                    HashMap::new(),
-                )
-            }
-        };
+    let pinned = pinned_items(&profile_id, subdir);
+    let scan = scan_content_for_target(&content_dir, &category, &game_version, &loader, &pinned).await;
+    let result =
+        collect_incompatible_content(&scan, &content_dir, &category, &game_version, &loader, &pinned)
+            .await;
+    Ok(result.incompatible)
+}
 
-    let enabled_by_filename = if enabled_by_filename.is_empty() && !sha_by_filename.is_empty() {
-        let mut enabled = HashMap::new();
-        if let Ok(mut read_dir) = tokio::fs::read_dir(&content_dir).await {
-            while let Ok(Some(entry)) = read_dir.next_entry().await {
-                let path = entry.path();
-                if !path.is_file() {
-                    continue;
-                }
-                let Some(stored_name) = path.file_name().and_then(|n| n.to_str()) else {
-                    continue;
-                };
-                let display = profile_item_display_name(stored_name);
-                enabled.insert(display, !profile_item_is_disabled(stored_name));
-            }
-        }
-        enabled
-    } else {
-        enabled_by_filename
-    };
-
-    if sha_by_filename.is_empty() {
-        return Ok(Vec::new());
+#[tauri::command]
+pub async fn preview_profile_version_change(
+    profile_id: String,
+    game_version: String,
+    loader: String,
+) -> Result<ProfileVersionChangePreview, String> {
+    let game_version = game_version.trim().to_string();
+    if game_version.is_empty() {
+        return Err("Версия Minecraft не указана".to_string());
+    }
+    let loader = loader.trim().to_lowercase();
+    let content_dir = instance_dir(&profile_id)?.join("mods");
+    if !content_dir.is_dir() {
+        return Ok(ProfileVersionChangePreview::default());
     }
 
-    let mut updatable: std::collections::HashSet<String> = build_updates_for_batch(
-        &sha_by_filename,
-        &enabled_by_filename,
-        &current_map,
-        &latest_map,
-    )
-    .into_iter()
-    .map(|u| u.filename)
-    .collect();
-
-    let mut incompatible = build_incompatible_for_batch(
-        &sha_by_filename,
-        &enabled_by_filename,
-        &current_map,
-        &latest_map,
-        &game_version,
-        &loader,
-    );
-
-    if let Ok(cf) =
-        check_curseforge_content(&content_dir, &enabled_by_filename, &game_version, &loader).await
-    {
-        for u in cf.updates {
-            updatable.insert(u.filename);
-        }
-        let known: std::collections::HashSet<String> =
-            incompatible.iter().map(|i| i.filename.clone()).collect();
-        for item in cf.incompatible {
-            if updatable.contains(&item.filename) || known.contains(&item.filename) {
-                continue;
-            }
-            incompatible.push(item);
-        }
-    } else {
-        eprintln!("CurseForge incompatible check failed (ignored).");
-    }
-
-    if category == "mods" {
-        let mut jar_verdicts: HashMap<String, (Option<bool>, Option<String>)> = HashMap::new();
-        for filename in sha_by_filename.keys() {
-            if updatable.contains(filename) {
-                continue;
-            }
-            let Some(path) = resolve_profile_item_path(&content_dir, filename) else {
-                continue;
-            };
-            jar_verdicts.insert(
-                filename.clone(),
-                jar_supports_game_version(&path, &game_version, &loader),
-            );
-        }
-
-        incompatible.retain(|i| {
-            !matches!(jar_verdicts.get(&i.filename), Some((Some(true), _)))
+    if loader == "vanilla" {
+        return Ok(ProfileVersionChangePreview {
+            mods_ignored_by_vanilla: read_enabled_by_filename(&content_dir).await?.len(),
+            ..Default::default()
         });
-
-        let known: std::collections::HashSet<String> =
-            incompatible.iter().map(|i| i.filename.clone()).collect();
-        for (filename, (supports, title)) in jar_verdicts {
-            if supports != Some(false) || known.contains(&filename) {
-                continue;
-            }
-            incompatible.push(ProfileIncompatibleContent {
-                enabled: *enabled_by_filename.get(&filename).unwrap_or(&true),
-                title: title.unwrap_or_else(|| filename.clone()),
-                filename,
-                project_id: None,
-            });
-        }
     }
 
-    incompatible.retain(|i| !updatable.contains(&i.filename));
-    incompatible.sort_by(|a, b| a.title.cmp(&b.title));
-    Ok(incompatible)
+    let pinned = pinned_items(&profile_id, "mods");
+    let scan = scan_content_for_target(&content_dir, "mods", &game_version, &loader, &pinned).await;
+    let incompatible =
+        collect_incompatible_content(&scan, &content_dir, "mods", &game_version, &loader, &pinned)
+            .await;
+    Ok(ProfileVersionChangePreview {
+        items: classify_version_change_items(&scan, &incompatible, &pinned),
+        lookup_failed: scan.lookup_failed,
+        mods_ignored_by_vanilla: 0,
+    })
 }
 
 #[tauri::command]
@@ -855,7 +948,6 @@ pub async fn apply_profile_content_updates(
         });
     }
 
-    // После паузы или отмены установки флаг остаётся поднятым и оборвал бы эти загрузки
     CANCEL_DOWNLOAD.store(false, Ordering::SeqCst);
 
     let download_category = modrinth_download_category(&category)?;
@@ -908,7 +1000,6 @@ pub async fn apply_profile_content_updates(
                     if old_path != dest_path && old_path.is_file() {
                         snapshot.stash_move(&old_path, Some(&stored_name));
                         if old_path.is_file() {
-                            // старый файл занят запущенной игрой: две версии мода в папке её сломают
                             let _ = tokio::fs::remove_file(&dest_path).await;
                             return Err(fail(format!(
                                 "Файл {} занят другой программой. Закройте игру и повторите обновление.",
@@ -998,5 +1089,106 @@ mod curseforge_update_tests {
             latest_files: vec![file(500, "1.21.1"), file(150, "1.20.1")],
         };
         assert_eq!(pick_cf_latest_for_target(&m, "1.20.1", "any").map(|f| f.id), Some(150));
+    }
+}
+
+#[cfg(test)]
+mod pinned_content_tests {
+    use super::*;
+    use crate::services::modrinth::types::{ModrinthFileHashes, ModrinthVersionFile};
+
+    fn version(id: &str, game_version: &str) -> ModrinthVersion {
+        ModrinthVersion {
+            id: id.to_string(),
+            project_id: "project".to_string(),
+            name: format!("Mod {id}"),
+            version_number: id.to_string(),
+            dependencies: Vec::new(),
+            files: vec![ModrinthVersionFile {
+                id: format!("file-{id}"),
+                url: format!("https://cdn.modrinth.com/{id}.jar"),
+                filename: format!("mod-{id}.jar"),
+                primary: true,
+                hashes: ModrinthFileHashes::default(),
+            }],
+            game_versions: vec![game_version.to_string()],
+            loaders: vec!["fabric".to_string()],
+        }
+    }
+
+    fn scan_with_update() -> ContentScan {
+        ContentScan {
+            sha_by_filename: HashMap::from([("mod.jar".to_string(), "sha".to_string())]),
+            enabled_by_filename: HashMap::from([("mod.jar".to_string(), true)]),
+            current_map: HashMap::from([("sha".to_string(), version("old", "1.20.1"))]),
+            latest_map: HashMap::from([("sha".to_string(), version("new", "1.21.1"))]),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn pinned_file_is_not_offered_as_update() {
+        let scan = scan_with_update();
+        let updates = |pinned: &HashSet<String>| {
+            build_updates_for_batch(
+                &scan.sha_by_filename,
+                &scan.enabled_by_filename,
+                &scan.current_map,
+                &scan.latest_map,
+                pinned,
+            )
+        };
+        assert_eq!(updates(&HashSet::new()).len(), 1);
+        assert!(updates(&HashSet::from(["mod.jar".to_string()])).is_empty());
+    }
+
+    #[test]
+    fn pinned_file_that_does_not_fit_target_is_incompatible() {
+        let scan = scan_with_update();
+        let blocked = |pinned: &HashSet<String>| {
+            build_incompatible_for_batch(
+                &scan.sha_by_filename,
+                &scan.enabled_by_filename,
+                &scan.current_map,
+                &scan.latest_map,
+                "1.21.1",
+                "fabric",
+                pinned,
+            )
+        };
+        assert!(blocked(&HashSet::new()).is_empty());
+        assert_eq!(blocked(&HashSet::from(["mod.jar".to_string()])).len(), 1);
+    }
+
+    #[test]
+    fn preview_marks_unidentified_jar_as_unknown_and_sorts_problems_first() {
+        let mut scan = scan_with_update();
+        scan.sha_by_filename.insert("custom.jar".to_string(), "local".to_string());
+        scan.updates = build_updates_for_batch(
+            &scan.sha_by_filename,
+            &scan.enabled_by_filename,
+            &scan.current_map,
+            &scan.latest_map,
+            &HashSet::new(),
+        );
+        let items = classify_version_change_items(&scan, &IncompatibleScan::default(), &HashSet::new());
+        assert_eq!(items[0].filename, "custom.jar");
+        assert_eq!(items[0].status, VersionChangeItemStatus::Unknown);
+        assert_eq!(items[1].status, VersionChangeItemStatus::Update);
+        assert_eq!(items[1].latest_version.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn preview_trusts_jar_metadata_for_local_mods() {
+        let mut scan = ContentScan::default();
+        scan.sha_by_filename.insert("custom.jar".to_string(), "local".to_string());
+        let incompatible = IncompatibleScan {
+            jar_supported: HashSet::from(["custom.jar".to_string()]),
+            jar_titles: HashMap::from([("custom.jar".to_string(), "My Fork".to_string())]),
+            ..Default::default()
+        };
+        let items = classify_version_change_items(&scan, &incompatible, &HashSet::new());
+        assert_eq!(items[0].status, VersionChangeItemStatus::Compatible);
+        assert_eq!(items[0].title, "My Fork");
     }
 }

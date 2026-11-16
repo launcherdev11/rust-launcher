@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde::{Deserialize, Serialize};
 
 use crate::models::JavaSettings;
@@ -34,6 +36,8 @@ pub struct InstanceSettings {
     pub auto_backup: Option<String>,
     pub auto_backup_keep: Option<u32>,
     pub backup_before_update: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub pinned_items: BTreeMap<String, BTreeSet<String>>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]

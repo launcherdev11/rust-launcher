@@ -15,7 +15,7 @@ pub(crate) use content_metadata::record_installed_item_sources;
 pub use conflicts::scan_profile_mod_jars;
 pub use updates::{
     apply_profile_content_updates, check_profile_content_updates,
-    check_profile_incompatible_content,
+    check_profile_incompatible_content, preview_profile_version_change,
 };
 
 use std::path::PathBuf;

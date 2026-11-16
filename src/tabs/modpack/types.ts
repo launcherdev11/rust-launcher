@@ -223,6 +223,23 @@ export type ProfileItemEntry = {
   enabled: boolean;
 };
 
+export type VersionChangeItemStatus = "incompatible" | "unknown" | "update" | "compatible";
+
+export type VersionChangePreviewItem = {
+  filename: string;
+  title: string;
+  enabled: boolean;
+  status: VersionChangeItemStatus;
+  currentVersion?: string;
+  latestVersion?: string;
+};
+
+export type ProfileVersionChangePreview = {
+  items: VersionChangePreviewItem[];
+  lookupFailed: boolean;
+  modsIgnoredByVanilla: number;
+};
+
 export type ProfileItemMetadata = {
   filename: string;
   title?: string | null;

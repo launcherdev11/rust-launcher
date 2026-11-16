@@ -1004,6 +1004,19 @@
       "saveFailed": "No se pudo guardar la configuración del perfil."
     },
     "changeVersion": {
+      "preview": {
+        "title": "Mods en {{version}}",
+        "checking": "Comprobando los mods para esta versión…",
+        "failed": "No se pudieron comprobar los mods. Aun así puedes cambiar la versión.",
+        "lookupFailed": "Algunos mods no se pudieron comprobar: Modrinth o CurseForge no respondieron.",
+        "vanilla": "En vanilla no se cargan mods. Archivos en la carpeta mods: {{count}}.",
+        "incompatible": "Sin versión compatible, se desactivarán",
+        "unknown": "No se pudo determinar, seguirán activados",
+        "update": "Se actualizarán",
+        "compatible": "Ya son compatibles",
+        "pinned": "Versión fijada",
+        "unknownHint": "Suelen ser mods locales o modificados que no están en ninguna plataforma. Compruébalos manualmente."
+      },
       "button": "Cambiar versión de perfil",
       "title": "Cambiar versión de perfil",
       "description": "Los mods, paquetes de recursos, sombreadores y mundos permanecen en este perfil y permanecen disponibles después del cambio de versión. Se instalarán las versiones seleccionadas de Minecraft y del cargador. El contenido compatible de Modrinth y CurseForge se actualizará automáticamente. Los mods sin versión para la nueva Minecraft se desactivarán y se mostrarán en una advertencia.",

@@ -1004,6 +1004,19 @@
       "saveFailed": "Profileinstellungen konnten nicht gespeichert werden."
     },
     "changeVersion": {
+      "preview": {
+        "title": "Mods für {{version}}",
+        "checking": "Mods für diese Version werden geprüft…",
+        "failed": "Mods konnten nicht geprüft werden. Du kannst die Version trotzdem ändern.",
+        "lookupFailed": "Einige Mods konnten nicht geprüft werden: Modrinth oder CurseForge hat nicht geantwortet.",
+        "vanilla": "In Vanilla werden keine Mods geladen. Dateien im Ordner mods: {{count}}.",
+        "incompatible": "Keine passende Version, werden deaktiviert",
+        "unknown": "Nicht ermittelbar, bleiben aktiviert",
+        "update": "Werden aktualisiert",
+        "compatible": "Bereits kompatibel",
+        "pinned": "Version ist fixiert",
+        "unknownHint": "Das sind meist lokale oder veränderte Mods, die auf keiner Plattform liegen. Prüfe sie von Hand."
+      },
       "button": "Profilversion ändern",
       "title": "Profilversion ändern",
       "description": "Mods, Ressourcenpakete, Shader und Welten bleiben in diesem Profil und bleiben nach dem Versionswechsel verfügbar. Die ausgewählten Minecraft- und Loader-Versionen werden installiert. Kompatible Inhalte von Modrinth und CurseForge werden automatisch aktualisiert. Mods ohne Version für die neue Minecraft-Version werden deaktiviert und in einer Warnung angezeigt.",
