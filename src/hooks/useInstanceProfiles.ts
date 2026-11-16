@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { reportGameStats, reportStats, type GameStats } from "../api/stats";
+import { queueGameStats, reportGameStats, reportStats, type GameStats } from "../api/stats";
 import { getStoredAccessToken } from "../api/client";
+import { API_AUTH_CHANGED_EVENT } from "../api/auth";
 import { readDataCache, writeDataCache } from "../lib/launcherDataCache";
 import type { NotificationKind } from "../app/notifications";
 import { toInstanceProfileCard, toInstanceProfileSummary } from "../app/profiles";
@@ -115,16 +116,22 @@ export function useInstanceProfiles({
   );
 
   useEffect(() => {
-    if (getStoredAccessToken()) void reportGameStats();
+    const flushPending = () => {
+      if (getStoredAccessToken()) void reportGameStats();
+    };
+    flushPending();
+    window.addEventListener(API_AUTH_CHANGED_EVENT, flushPending);
     let unlisten: (() => void) | undefined;
     void listen<{ stats: GameStats }>("game-stats-delta", (event) => {
       const stats = event.payload?.stats;
-      if (!stats || !getStoredAccessToken()) return;
-      void reportGameStats(stats);
+      if (!stats) return;
+      if (getStoredAccessToken()) void reportGameStats(stats);
+      else queueGameStats(stats);
     }).then((fn) => {
       unlisten = fn;
     });
     return () => {
+      window.removeEventListener(API_AUTH_CHANGED_EVENT, flushPending);
       unlisten?.();
     };
   }, []);

@@ -19,8 +19,6 @@ const HARDCORE_DRAGON_KILLS: &str = "hardcore:killed:ender_dragon";
 const TIME_SINCE_DEATH: &str = "max:custom:time_since_death";
 const ADVENTURING_TIME: &str = "max:adv:adventure/adventuring_time";
 
-/// Counters read from `stats/<uuid>.json` (1.13+ layout, without the `minecraft:` namespace).
-/// Must stay in sync with the backend whitelist.
 const TRACKED: &[&str] = &[
     "killed:ender_dragon",
     "killed:wither",
@@ -74,7 +72,6 @@ const TRACKED: &[&str] = &[
     "custom:pot_flower",
 ];
 
-/// Pre-1.13 flat stat names mapped onto the modern keys.
 const LEGACY: &[(&str, &str)] = &[
     ("stat.killEntity.EnderDragon", "killed:ender_dragon"),
     ("stat.killEntity.WitherBoss", "killed:wither"),
@@ -217,7 +214,6 @@ fn adventuring_time_done(raw: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// `(excluded, hardcore)`: worlds with cheats or a creative/spectator default mode do not count.
 fn read_level_flags(world: &Path) -> (bool, bool) {
     let Ok(level) = nbt::read_gzip_file(&world.join("level.dat")) else {
         return (true, false);
@@ -228,10 +224,17 @@ fn read_level_flags(world: &Path) -> (bool, bool) {
     (cheats || creative_or_spectator, flag("hardcore") == Some(1))
 }
 
+fn read_player_file(world: &Path, kind: &str, uuid: &str) -> Option<String> {
+    let file = format!("{uuid}.json");
+    [world.join("players").join(kind), world.join(kind)]
+        .iter()
+        .find_map(|dir| fs::read_to_string(dir.join(&file)).ok())
+}
+
 fn snapshot_world(world: &Path, uuid: &str) -> Option<WorldSnapshot> {
-    let raw = fs::read_to_string(world.join("stats").join(format!("{uuid}.json"))).ok()?;
+    let raw = read_player_file(world, "stats", uuid)?;
     let mut values = parse_stats(&raw);
-    if let Ok(adv) = fs::read_to_string(world.join("advancements").join(format!("{uuid}.json"))) {
+    if let Some(adv) = read_player_file(world, "advancements", uuid) {
         if adventuring_time_done(&adv) {
             values.insert(ADVENTURING_TIME.to_string(), 1);
         }
@@ -258,8 +261,6 @@ fn snapshot_saves(saves_dir: &Path, uuid: &str) -> BTreeMap<String, WorldSnapsho
     worlds
 }
 
-/// Session delta between two snapshots. Sum counters are differences, `max:` keys are taken
-/// as-is but only from worlds whose stats changed during the session.
 fn diff(
     before: &BTreeMap<String, WorldSnapshot>,
     after: &BTreeMap<String, WorldSnapshot>,
@@ -292,8 +293,6 @@ fn diff(
     out
 }
 
-/// Remembers the current world stats right before the game starts. A snapshot left over from a
-/// session that ended while the launcher was closed is settled first.
 pub(crate) fn begin_session(app: &AppHandle, game_dir: &Path, uuid: &str) {
     finish_session(app);
     let Some(path) = baseline_path() else { return };
@@ -318,7 +317,6 @@ pub(crate) fn begin_session(app: &AppHandle, game_dir: &Path, uuid: &str) {
     }
 }
 
-/// Compares world stats with the snapshot taken at launch and emits the session delta.
 pub(crate) fn finish_session(app: &AppHandle) {
     let Some(path) = baseline_path() else { return };
     let Ok(raw) = fs::read(&path) else { return };
@@ -412,6 +410,23 @@ mod tests {
         assert_eq!(delta.get(HARDCORE_DRAGON_KILLS), Some(&1));
         assert_eq!(delta.get(TIME_SINCE_DEATH), Some(&12_000));
         assert_eq!(delta.get("custom:deaths"), None);
+    }
+
+    #[test]
+    fn reads_player_files_from_both_layouts() {
+        let root = std::env::temp_dir().join(format!("mc16-world-stats-{}", std::process::id()));
+        let modern = root.join("modern");
+        let legacy = root.join("legacy");
+        fs::create_dir_all(modern.join("players").join("stats")).unwrap();
+        fs::create_dir_all(legacy.join("stats")).unwrap();
+        fs::write(modern.join("players").join("stats").join("u.json"), "new").unwrap();
+        fs::write(legacy.join("stats").join("u.json"), "old").unwrap();
+
+        assert_eq!(read_player_file(&modern, "stats", "u").as_deref(), Some("new"));
+        assert_eq!(read_player_file(&legacy, "stats", "u").as_deref(), Some("old"));
+        assert_eq!(read_player_file(&legacy, "advancements", "u"), None);
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

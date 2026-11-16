@@ -26,7 +26,6 @@ export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [
   "other",
 ];
 
-/** count: plain number, distance: centimetres, damage: tenths of a point, ticks: game ticks. */
 export type GameStatUnit = "count" | "distance" | "damage" | "ticks";
 
 type AchievementGoal =
@@ -58,7 +57,6 @@ function game(
   };
 }
 
-/** Thresholds mirror GAME_GOALS in backend/src/achievements.rs. */
 const META: Record<string, AchievementMeta> = {
   welcome: { category: "profile" },
   identity_linked: { category: "profile" },

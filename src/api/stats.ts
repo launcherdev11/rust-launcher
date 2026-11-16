@@ -71,9 +71,12 @@ function mergeGameStats(base: GameStats, extra: GameStats): GameStats {
 
 let flushing: Promise<void> | null = null;
 
-/** Sends in-game counters; on failure they stay queued and go out with the next report. */
-export function reportGameStats(delta: GameStats = {}): Promise<void> {
+export function queueGameStats(delta: GameStats) {
   writePendingGameStats(mergeGameStats(readPendingGameStats(), delta));
+}
+
+export function reportGameStats(delta: GameStats = {}): Promise<void> {
+  queueGameStats(delta);
   if (flushing) return flushing.then(() => reportGameStats());
   flushing = (async () => {
     const pending = readPendingGameStats();
