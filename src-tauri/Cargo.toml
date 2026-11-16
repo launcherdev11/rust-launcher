@@ -44,7 +44,6 @@ discord-rich-presence = "1.1.0"
 image = "0.25"
 url = "2"
 open = "5"
-aes-gcm = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-http = { version = "2", features = ["native-tls"] }
@@ -52,7 +51,6 @@ windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dxgi",
     "Win32_Security",
-    "Win32_Security_Cryptography",
     "Win32_Storage_EnhancedStorage",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
@@ -75,6 +73,7 @@ keyring = { version = "3", features = ["async-secret-service", "tokio", "crypto-
 [target.'cfg(not(windows))'.dependencies]
 tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
 sysinfo = "0.38.2"
+aes-gcm = "0.10"
 
 
 [profile.release]

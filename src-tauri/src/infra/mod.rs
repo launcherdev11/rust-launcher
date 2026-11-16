@@ -8,6 +8,7 @@ pub mod notify;
 pub mod platform;
 pub mod process;
 pub mod process_probe;
+#[cfg(not(windows))]
 pub mod secrets;
 pub mod tray;
 pub mod window_icon;
