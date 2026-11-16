@@ -110,6 +110,48 @@ export function useGameLaunch({
     (profile: InstanceProfileCard, join?: ProfileJoinTarget) => Promise<void>
   >(async () => {});
 
+  const installedLoaderVersionId = async (gameVersion: string, loaderId: "forge" | "neoforge") => {
+    const prefix = `${gameVersion}-${loaderId}-`;
+    const installed = await invoke<string[]>("list_installed_versions");
+    return (
+      installed
+        .filter((id) => id.startsWith(prefix))
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] ?? null
+    );
+  };
+
+  const resolveProfileVersionId = async (
+    target: Pick<InstanceProfileSummary, "game_version" | "loader" | "loader_version">,
+  ): Promise<string> => {
+    const gameVersion = target.game_version;
+    const loaderVersion = target.loader_version?.trim() || null;
+    if (target.loader === "fabric" || target.loader === "quilt") {
+      const command =
+        target.loader === "fabric" ? "get_installed_fabric_profile_id" : "get_installed_quilt_profile_id";
+      const id =
+        (await invoke<string | null>(command, { gameVersion, loaderVersion })) ??
+        (loaderVersion ? await invoke<string | null>(command, { gameVersion, loaderVersion: null }) : null);
+      if (!id) {
+        throw new Error(
+          tt(target.loader === "fabric" ? "app.pinnedProfiles.fabricNotInstalled" : "app.pinnedProfiles.quiltNotInstalled"),
+        );
+      }
+      return id;
+    }
+    if (target.loader === "forge" || target.loader === "neoforge") {
+      if (loaderVersion) return `${gameVersion}-${target.loader}-${loaderVersion}`;
+      // у импортированных сборок версия загрузчика в конфиге бывает пустой
+      const id = await installedLoaderVersionId(gameVersion, target.loader);
+      if (!id) {
+        throw new Error(
+          tt(target.loader === "forge" ? "app.pinnedProfiles.forgeNotInstalled" : "app.pinnedProfiles.neoforgeNotInstalled"),
+        );
+      }
+      return id;
+    }
+    return gameVersion;
+  };
+
   const handlePlayPinnedProfile = async (profile: InstanceProfileCard, join?: ProfileJoinTarget) => {
     try {
       await invoke("set_selected_profile", { id: profile.id });
@@ -120,31 +162,7 @@ export function useGameLaunch({
         loader: profile.loader,
         loader_version: profile.loader_version ?? null,
       });
-      let launchVersionId = profile.game_version;
-      const profileLoaderVersion = profile.loader_version?.trim() || null;
-      if (profile.loader === "fabric") {
-        const installedFabricId = await invoke<string | null>("get_installed_fabric_profile_id", {
-          gameVersion: profile.game_version,
-          loaderVersion: profileLoaderVersion,
-        });
-        if (!installedFabricId) {
-          throw new Error(tt("app.pinnedProfiles.fabricNotInstalled"));
-        }
-        launchVersionId = installedFabricId;
-      } else if (profile.loader === "quilt") {
-        const installedQuiltId = await invoke<string | null>("get_installed_quilt_profile_id", {
-          gameVersion: profile.game_version,
-          loaderVersion: profileLoaderVersion,
-        });
-        if (!installedQuiltId) {
-          throw new Error(tt("app.pinnedProfiles.quiltNotInstalled"));
-        }
-        launchVersionId = installedQuiltId;
-      } else if (profile.loader === "forge" && profileLoaderVersion) {
-        launchVersionId = `${profile.game_version}-forge-${profileLoaderVersion}`;
-      } else if (profile.loader === "neoforge" && profileLoaderVersion) {
-        launchVersionId = `${profile.game_version}-neoforge-${profileLoaderVersion}`;
-      }
+      const launchVersionId = await resolveProfileVersionId(profile);
       const consoleProfileId = profile.id;
       setRunningConsoleProfile(consoleProfileId);
       archiveCurrentConsoleAndClear(consoleProfileId);
@@ -353,16 +371,22 @@ export function useGameLaunch({
           loader === "vanilla" && !isForgeVersion(selectedVersion) && !isNeoForgeVersion(selectedVersion)
             ? (selectedVersion as VersionSummary)
             : null;
-        const versionUrl =
-          vanillaSummary && vanillaSummary.version_type !== "custom" && vanillaSummary.url
-            ? vanillaSummary.url
-            : undefined;
-        const versionId =
-          loader === "fabric" && fabricProfileId
+        // Выбранная сборка задаёт версию сама: selectedVersion мог остаться от другой
+        // сборки или от комнаты, и игра запустилась бы не той версией в папке этой сборки.
+        const versionId = activeInstanceProfile
+          ? await resolveProfileVersionId(activeInstanceProfile)
+          : loader === "fabric" && fabricProfileId
             ? fabricProfileId
             : loader === "quilt" && quiltProfileId
               ? quiltProfileId
               : selectedVersion.id;
+        const versionUrl =
+          vanillaSummary &&
+          vanillaSummary.id === versionId &&
+          vanillaSummary.version_type !== "custom" &&
+          vanillaSummary.url
+            ? vanillaSummary.url
+            : undefined;
         const consoleProfileId = await resolveLaunchConsoleProfileId();
         if (consoleProfileId) {
           setRunningConsoleProfile(consoleProfileId);

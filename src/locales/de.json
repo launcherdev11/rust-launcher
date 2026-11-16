@@ -2699,6 +2699,8 @@
       "playing": "Spielt:"
     },
     "pinnedProfiles": {
+      "forgeNotInstalled": "Forge ist für diese Version nicht installiert.",
+      "neoforgeNotInstalled": "NeoForge ist für diese Version nicht installiert.",
       "pinLimit": "Sie können bis zu 3 Profile anpinnen.",
       "fabricNotInstalled": "Das Fabric-Profil ist für diese Version nicht installiert.",
       "quiltNotInstalled": "Das Quilt-Profil ist für diese Version nicht installiert."

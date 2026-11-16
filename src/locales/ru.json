@@ -2671,6 +2671,8 @@
       "playing": "Играет:"
     },
     "pinnedProfiles": {
+      "forgeNotInstalled": "Forge не установлен для этой версии.",
+      "neoforgeNotInstalled": "NeoForge не установлен для этой версии.",
       "pinLimit": "Можно закрепить не более 3 сборок.",
       "fabricNotInstalled": "Fabric-профиль не установлен для этой версии.",
       "quiltNotInstalled": "Quilt-профиль не установлен для этой версии."
