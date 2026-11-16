@@ -1728,6 +1728,18 @@
     }
   },
   "friends": {
+    "feed": {
+      "title": "Aktivitäten",
+      "empty": "Noch nichts Neues",
+      "emptyHint": "Hier erscheinen Erfolge deiner Freunde, ihre Räume und was sie gerade spielen.",
+      "achievement": "Neuer Erfolg: {{title}}",
+      "roomOpened": "Raum geöffnet",
+      "roomOpenedNamed": "Raum „{{name}}“ geöffnet",
+      "roomSession": "Spiel in einem Raum gestartet",
+      "roomSessionNamed": "Spiel im Raum „{{name}}“ gestartet",
+      "shareLabel": "Freunden zeigen, was ich spiele",
+      "shareHint": "Wenn aus, sehen Freunde nur, dass du im Launcher bist. Erfolge und Räume sehen sie immer."
+    },
     "subtitleSignedIn": "Füge Freunde hinzu, sieh wer online ist und tritt ihren Räumen bei.",
     "subtitleSignedOut": "Melde dich auf der Registerkarte „Konten“ an, um Freunde zu sehen.",
     "friendNicknamePlaceholder": "Spitzname eines Freundes",

@@ -23,7 +23,9 @@ import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey
 import { confirmDialog } from "../lib/confirmDialog";
 import { formatDurationShort, formatPresenceStatus, getElapsedSeconds } from "../lib/socialActivity";
 import { NicknameWithSponsor } from "../components/SponsorBadge";
+import { FriendActivityPanel } from "../features/friends/FriendActivityPanel";
 import { NicknameSuggestions, useNicknameSuggestions } from "../features/friends/NicknameSuggestions";
+import { useFriendActivityFeed } from "../features/friends/useFriendActivityFeed";
 import type { UserSearchRow } from "../api/users";
 import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 import {
@@ -595,6 +597,13 @@ export function FriendsTab({
     [friendsRooms, userId],
   );
 
+  const activityEvents = useFriendActivityFeed({
+    userId,
+    friends,
+    presenceByUserId,
+    rooms: visibleFriendsRooms,
+  });
+
   const roomByFriendId = useMemo(() => {
     const map = new Map<string, Room>();
     for (const room of visibleFriendsRooms) {
@@ -1155,6 +1164,16 @@ export function FriendsTab({
                 </div>
               )}
             </Panel>
+
+            <FriendActivityPanel
+              events={activityEvents}
+              friends={friends}
+              language={language}
+              tt={tt}
+              avatarSrcFor={avatarFor}
+              formatTime={(iso) => formatLastSeen(iso, language, tt, nowMs)}
+              onOpenProfile={openFriendProfile}
+            />
           </div>
         </div>
       </div>

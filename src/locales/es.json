@@ -1728,6 +1728,18 @@
     }
   },
   "friends": {
+    "feed": {
+      "title": "Actividad",
+      "empty": "Nada nuevo por ahora",
+      "emptyHint": "Aquí aparecerán los logros de tus amigos, sus salas y a qué están jugando.",
+      "achievement": "Nuevo logro: {{title}}",
+      "roomOpened": "Abrió una sala",
+      "roomOpenedNamed": "Abrió la sala «{{name}}»",
+      "roomSession": "Empezó una partida en una sala",
+      "roomSessionNamed": "Empezó una partida en la sala «{{name}}»",
+      "shareLabel": "Mostrar a mis amigos a qué juego",
+      "shareHint": "Si lo desactivas, tus amigos solo verán que estás en el launcher. Tus logros y salas siempre son visibles para ellos."
+    },
     "subtitleSignedIn": "Añade amigos, mira quién está en línea y únete a sus salas.",
     "subtitleSignedOut": "Inicia sesión en la pestaña Cuentas para ver a tus amigos.",
     "friendNicknamePlaceholder": "Apodo del amigo",

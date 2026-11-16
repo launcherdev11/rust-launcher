@@ -29,6 +29,8 @@ export type LaunchPresenceContext =
       startedAt?: string | null;
     };
 
+export const HIDDEN_PRESENCE_ACTIVITY: PresenceActivity = { kind: "launcher" };
+
 export function derivePresenceActivity(params: {
   gameStatus: "idle" | "running" | "stopped" | "crashed";
   activeItem: string;

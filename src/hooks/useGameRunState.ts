@@ -1,5 +1,11 @@
 import { useMemo, useRef, useState } from "react";
-import { derivePresenceActivity, type LaunchPresenceContext, type RoomPresenceContext } from "../lib/socialActivity";
+import { useActivitySharing } from "../lib/activityPrivacy";
+import {
+  derivePresenceActivity,
+  HIDDEN_PRESENCE_ACTIVITY,
+  type LaunchPresenceContext,
+  type RoomPresenceContext,
+} from "../lib/socialActivity";
 import { usePresenceHeartbeat } from "./usePresenceHeartbeat";
 import type { GameStatus, SidebarItemId } from "../app/types";
 
@@ -17,16 +23,19 @@ export function useGameRunState({ activeItem, activeInstanceName }: UseGameRunSt
   const [roomPresenceContext, setRoomPresenceContext] = useState<RoomPresenceContext | null>(null);
   const [launchPresenceContext, setLaunchPresenceContext] = useState<LaunchPresenceContext | null>(null);
 
+  const shareActivity = useActivitySharing();
   const presenceActivity = useMemo(
     () =>
-      derivePresenceActivity({
-        gameStatus,
-        activeItem,
-        activeInstanceName,
-        roomContext: roomPresenceContext,
-        launchContext: launchPresenceContext,
-      }),
-    [activeItem, activeInstanceName, gameStatus, launchPresenceContext, roomPresenceContext],
+      shareActivity
+        ? derivePresenceActivity({
+            gameStatus,
+            activeItem,
+            activeInstanceName,
+            roomContext: roomPresenceContext,
+            launchContext: launchPresenceContext,
+          })
+        : HIDDEN_PRESENCE_ACTIVITY,
+    [activeItem, activeInstanceName, gameStatus, launchPresenceContext, roomPresenceContext, shareActivity],
   );
   usePresenceHeartbeat(presenceActivity);
 

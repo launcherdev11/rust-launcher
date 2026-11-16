@@ -1700,6 +1700,18 @@
     }
   },
   "friends": {
+    "feed": {
+      "title": "Activity feed",
+      "empty": "Nothing new yet",
+      "emptyHint": "Friends' achievements, rooms and what they are playing will appear here.",
+      "achievement": "New achievement: {{title}}",
+      "roomOpened": "Opened a room",
+      "roomOpenedNamed": "Opened the room \"{{name}}\"",
+      "roomSession": "Started a game in a room",
+      "roomSessionNamed": "Started a game in the room \"{{name}}\"",
+      "shareLabel": "Show friends what I am playing",
+      "shareHint": "When off, friends only see that you are in the launcher. They can always see your achievements and rooms."
+    },
     "subtitleSignedIn": "Add friends, see who's online, and join their rooms.",
     "subtitleSignedOut": "Sign in on the Accounts tab to see your friends.",
     "friendNicknamePlaceholder": "Friend's nickname",
