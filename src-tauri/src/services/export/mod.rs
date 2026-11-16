@@ -811,6 +811,7 @@ pub async fn export_build(
 }
 
 const ELY_AVATAR_CACHE_TTL_SECS: u64 = 24 * 60 * 60;
+const ELY_TEXTURE_TIMEOUT: Duration = Duration::from_secs(8);
 
 fn ely_avatar_cache_dir() -> Result<PathBuf, String> {
     cache::ensure_launcher_cache_layout()?;
@@ -885,6 +886,7 @@ async fn fetch_ely_texture(kind: &str, username: &str) -> Result<Vec<u8>, String
     );
     let client = reqwest::Client::builder()
         .user_agent("mc16launcher/2.0")
+        .timeout(ELY_TEXTURE_TIMEOUT)
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 
@@ -946,18 +948,11 @@ pub async fn get_ely_avatar(username: String) -> Result<Option<String>, String> 
 
     let cache_path = avatar_cache_file_path(trimmed)?;
 
-    if is_cache_fresh(&cache_path) {
-        match std::fs::read(&cache_path) {
-            Ok(bytes) => return Ok(Some(png_data_url(&bytes))),
-            Err(error) => eprintln!("[avatar] failed to read Ely avatar cache: {error}"),
-        }
-    }
-
     let skin_png = match fetch_ely_skin(trimmed).await {
         Ok(v) => v,
         Err(error) => {
             eprintln!("[avatar] failed to fetch Ely skin for '{}': {}", trimmed, error);
-            return Ok(None);
+            return Ok(std::fs::read(&cache_path).ok().map(|bytes| png_data_url(&bytes)));
         }
     };
     let avatar_png = match render_skin_head_png(&skin_png) {

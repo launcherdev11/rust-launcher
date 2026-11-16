@@ -1,3 +1,5 @@
+import { dataUrlToBlob } from "./dataUrl";
+
 export type McCape = {
   id: string;
   alias: string;
@@ -41,9 +43,7 @@ async function loadCapeImageBitmap(url: string): Promise<ImageBitmap> {
   const { fetchMcTextureDataUrl } = await import("./skin");
   const dataUrl = await fetchMcTextureDataUrl(url);
   if (dataUrl) {
-    const response = await fetch(dataUrl);
-    const blob = await response.blob();
-    return createImageBitmap(blob);
+    return createImageBitmap(dataUrlToBlob(dataUrl));
   }
 
   const response = await fetch(url, { cache: "no-cache" });

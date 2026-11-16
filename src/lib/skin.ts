@@ -1,3 +1,5 @@
+import { dataUrlToBlob } from "./dataUrl";
+
 export type McSkin = {
   id: string;
   alias: string;
@@ -83,9 +85,7 @@ async function loadSkinBitmap(url: string): Promise<ImageBitmap> {
   if (!dataUrl) {
     throw new Error("Failed to load skin texture");
   }
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
-  return createImageBitmap(blob);
+  return createImageBitmap(dataUrlToBlob(dataUrl));
 }
 
 function blit(

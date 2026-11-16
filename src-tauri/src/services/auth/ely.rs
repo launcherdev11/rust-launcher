@@ -1,6 +1,7 @@
 ﻿#![allow(dead_code, non_snake_case)]
 
 use std::io::Read;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -13,6 +14,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 use crate::app::paths::launcher_data_dir;
+use crate::infra::fs_atomic::write_atomic;
 use crate::services::game::accounts::{get_profile, save_full_profile};
 
 fn http_client() -> Client {
@@ -37,9 +39,12 @@ const AUTHLIB_INJECTOR_META_URLS: &[&str] = &[
     "https://authlib-injector.yushi.moe/artifact/latest.json",
     "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json",
 ];
+const AUTHLIB_INJECTOR_UPDATE_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+static AUTHLIB_INJECTOR_CHECKED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
+    tag_name: String,
     assets: Vec<GithubReleaseAsset>,
 }
 #[derive(Debug, Deserialize)]
@@ -50,7 +55,21 @@ struct GithubReleaseAsset {
 
 #[derive(Debug, Deserialize)]
 struct AuthlibArtifactMeta {
+    version: String,
     download_url: String,
+    #[serde(default)]
+    checksums: Option<AuthlibArtifactChecksums>,
+}
+#[derive(Debug, Deserialize)]
+struct AuthlibArtifactChecksums {
+    #[serde(default)]
+    sha256: Option<String>,
+}
+
+struct AuthlibRelease {
+    version: String,
+    download_url: String,
+    sha256: Option<String>,
 }
 
 async fn download_jar_bytes(client: &Client, url: &str) -> Result<Vec<u8>, String> {
@@ -71,34 +90,21 @@ async fn download_jar_bytes(client: &Client, url: &str) -> Result<Vec<u8>, Strin
         .map_err(|e| format!("authlib-injector download body: {e}"))
 }
 
-async fn try_download_via_official_meta(client: &Client) -> Result<Vec<u8>, String> {
-    let mut last_err = String::from("no authlib-injector mirrors tried");
-    for meta_url in AUTHLIB_INJECTOR_META_URLS {
-        let meta: AuthlibArtifactMeta = match client.get(*meta_url).send().await {
-            Ok(resp) => match handle_resp(resp, "authlib-injector latest meta").await {
-                Ok(v) => v,
-                Err(e) => {
-                    last_err = e;
-                    continue;
-                }
-            },
-            Err(e) => {
-                last_err = format!("error sending request for url ({meta_url}): {e}");
-                continue;
-            }
-        };
-        match download_jar_bytes(client, &meta.download_url).await {
-            Ok(bytes) if bytes.len() >= 2 && &bytes[..2] == b"PK" => return Ok(bytes),
-            Ok(_) => {
-                last_err = format!("Скачанный файл с {meta_url} не является корректным JAR.");
-            }
-            Err(e) => last_err = e,
-        }
-    }
-    Err(last_err)
+async fn release_from_meta(client: &Client, meta_url: &str) -> Result<AuthlibRelease, String> {
+    let resp = client
+        .get(meta_url)
+        .send()
+        .await
+        .map_err(|e| format!("error sending request for url ({meta_url}): {e}"))?;
+    let meta: AuthlibArtifactMeta = handle_resp(resp, "authlib-injector latest meta").await?;
+    Ok(AuthlibRelease {
+        version: meta.version.trim().to_string(),
+        download_url: meta.download_url,
+        sha256: meta.checksums.and_then(|c| c.sha256),
+    })
 }
 
-async fn try_download_via_github(client: &Client) -> Result<Vec<u8>, String> {
+async fn release_from_github(client: &Client) -> Result<AuthlibRelease, String> {
     let release: GithubRelease = handle_resp(
         client
             .get(AUTHLIB_INJECTOR_LATEST_RELEASE_API)
@@ -122,20 +128,66 @@ async fn try_download_via_github(client: &Client) -> Result<Vec<u8>, String> {
         })
         .ok_or("В релизе не найден authlib-injector.jar")?;
 
-    download_jar_bytes(client, &asset.browser_download_url).await
+    Ok(AuthlibRelease {
+        version: release.tag_name.trim().trim_start_matches('v').to_string(),
+        download_url: asset.browser_download_url,
+        sha256: None,
+    })
 }
 
-async fn download_authlib_injector_jar_bytes() -> Result<Vec<u8>, String> {
-    let client = http_client();
-    match try_download_via_official_meta(&client).await {
-        Ok(bytes) => Ok(bytes),
-        Err(meta_err) => match try_download_via_github(&client).await {
-            Ok(bytes) => Ok(bytes),
-            Err(gh_err) => Err(format!(
-                "Не удалось скачать authlib-injector (зеркала: {meta_err}; GitHub: {gh_err})"
-            )),
-        },
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+async fn fetch_release(
+    client: &Client,
+    release: AuthlibRelease,
+    installed: Option<&str>,
+) -> Result<Option<(String, Vec<u8>)>, String> {
+    if installed == Some(release.version.as_str()) {
+        return Ok(None);
     }
+    let bytes = download_jar_bytes(client, &release.download_url).await?;
+    if bytes.len() < 2 || &bytes[..2] != b"PK" {
+        return Err(format!(
+            "Скачанный файл {} не является корректным JAR.",
+            release.download_url
+        ));
+    }
+    if let Some(expected) = release.sha256.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if !sha256_hex(&bytes).eq_ignore_ascii_case(expected) {
+            return Err(format!(
+                "Контрольная сумма authlib-injector {} не совпала",
+                release.version
+            ));
+        }
+    }
+    Ok(Some((release.version, bytes)))
+}
+
+async fn fetch_authlib_injector_update(
+    client: &Client,
+    installed: Option<&str>,
+) -> Result<Option<(String, Vec<u8>)>, String> {
+    let mut mirror_err = String::from("no authlib-injector mirrors tried");
+    for meta_url in AUTHLIB_INJECTOR_META_URLS {
+        let attempt = match release_from_meta(client, meta_url).await {
+            Ok(release) => fetch_release(client, release, installed).await,
+            Err(e) => Err(e),
+        };
+        match attempt {
+            Ok(update) => return Ok(update),
+            Err(e) => mirror_err = e,
+        }
+    }
+    let attempt = match release_from_github(client).await {
+        Ok(release) => fetch_release(client, release, installed).await,
+        Err(e) => Err(e),
+    };
+    attempt.map_err(|gh_err| {
+        format!("Не удалось скачать authlib-injector (зеркала: {mirror_err}; GitHub: {gh_err})")
+    })
 }
 
 static OAUTH_STATE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
@@ -310,21 +362,63 @@ pub async fn ensure_authlib_injector() -> Result<std::path::PathBuf, String> {
     let base = launcher_data_dir()?;
     let dir = base.join("authlib");
     let jar_path = dir.join("authlib-injector.jar");
+    let version_path = dir.join("authlib-injector.version");
 
-    if jar_path.exists() {
-        let ok = std::fs::File::open(&jar_path)
-            .and_then(|mut f| { let mut sig = [0u8; 2]; f.read_exact(&mut sig)?; Ok(sig == *b"PK") })
-            .unwrap_or(false);
-        if ok { return Ok(jar_path); }
+    let has_jar = std::fs::File::open(&jar_path)
+        .and_then(|mut f| { let mut sig = [0u8; 2]; f.read_exact(&mut sig)?; Ok(sig == *b"PK") })
+        .unwrap_or(false);
+    if !has_jar && jar_path.exists() {
         let _ = std::fs::remove_file(&jar_path);
+    }
+    let installed = has_jar
+        .then(|| std::fs::read_to_string(&version_path).ok())
+        .flatten()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let checked_recently = installed.is_some()
+        && std::fs::metadata(&version_path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age < AUTHLIB_INJECTOR_UPDATE_INTERVAL);
+    if has_jar && (AUTHLIB_INJECTOR_CHECKED.load(Ordering::Relaxed) || checked_recently) {
+        return Ok(jar_path);
     }
 
     tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
-    let bytes = download_authlib_injector_jar_bytes().await?;
-    if bytes.len() < 2 || &bytes[..2] != b"PK" {
-        return Err("Скачанный файл не является корректным JAR.".into());
+    let client = if has_jar {
+        Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(5))
+            .user_agent("16Launcher/1.0")
+            .build()
+            .unwrap_or_else(|_| http_client())
+    } else {
+        http_client()
+    };
+    match fetch_authlib_injector_update(&client, installed.as_deref()).await {
+        Ok(None) => {
+            if let Some(version) = &installed {
+                let _ = std::fs::write(&version_path, version);
+            }
+        }
+        Ok(Some((version, bytes))) => match write_atomic(&jar_path, &bytes) {
+            Ok(()) => {
+                let _ = std::fs::write(&version_path, &version);
+                eprintln!("[ElyAuth] authlib-injector обновлён до {version}");
+            }
+
+            Err(e) if has_jar => {
+                eprintln!("[ElyAuth] Не удалось заменить authlib-injector, остаётся прежняя версия: {e}");
+            }
+            Err(e) => return Err(e),
+        },
+        Err(e) if has_jar => {
+            eprintln!("[ElyAuth] Не удалось проверить обновление authlib-injector: {e}");
+        }
+        Err(e) => return Err(e),
     }
-    tokio::fs::write(&jar_path, &bytes).await.map_err(|e| e.to_string())?;
+    AUTHLIB_INJECTOR_CHECKED.store(true, Ordering::Relaxed);
     Ok(jar_path)
 }
 

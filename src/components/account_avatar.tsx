@@ -4,9 +4,11 @@ import {
   buildInitialAvatarDataUrl,
   getAvatarSrc,
   getElyAvatarByUsername,
+  peekElyAvatar,
   STEVE_SKIN_URL,
   type ProfileAvatarInput,
 } from "../lib/avatar";
+import { useElySkinRefreshTick } from "../hooks/useElySkinRefreshTick";
 
 export function accountKindAvatarRingClass(kind: string): string {
   if (kind === "microsoft") return "ring-1 ring-sky-400/25";
@@ -32,11 +34,13 @@ export function AccountAvatar({
   const trimmed = username.trim();
   const fallback = buildInitialAvatarDataUrl(trimmed || "?");
   const [src, setSrc] = useState(fallback);
+  const elyUsername = kind === "offline" ? "" : profile ? profile.ely_username?.trim() ?? "" : trimmed;
+  const elyRefreshTick = useElySkinRefreshTick(!!elyUsername);
 
   useEffect(() => {
     let cancelled = false;
     const placeholder = buildInitialAvatarDataUrl(trimmed || "?");
-    setSrc(placeholder);
+    setSrc((elyUsername && peekElyAvatar(elyUsername)) || placeholder);
 
     const load = async () => {
       try {
@@ -67,6 +71,8 @@ export function AccountAvatar({
     profile?.ely_username,
     profile?.ely_uuid,
     profile?.mc_uuid,
+    elyUsername,
+    elyRefreshTick,
   ]);
 
   const ring = kind ? accountKindAvatarRingClass(kind) : "";

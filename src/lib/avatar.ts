@@ -25,13 +25,21 @@ export function buildInitialAvatarDataUrl(label: string): string {
 type AvatarCacheEntry = {
   src: string;
   expiresAt: number;
+  fetchedAt: number;
 };
 
 type ElyAvatarCommandResponse = string | null;
 
 const AVATAR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const ELY_AVATAR_FRESH_MS = 10 * 60 * 1000;
 const ELY_AVATAR_CACHE_PREFIX = "ely_avatar_cache_v1:";
 const memoryCache = new Map<string, AvatarCacheEntry>();
+const elyAvatarRequests = new Map<string, Promise<string | null>>();
+let elyAvatarsStaleBefore = 0;
+
+export function markElyAvatarsStale(): void {
+  elyAvatarsStaleBefore = Date.now();
+}
 
 function normalizeCacheKey(raw: string): string {
   return raw.trim().toLowerCase();
@@ -50,7 +58,11 @@ function getDiskCache(cacheKey: string): AvatarCacheEntry | null {
       window.localStorage.removeItem(`${ELY_AVATAR_CACHE_PREFIX}${cacheKey}`);
       return null;
     }
-    return { src: entry.src, expiresAt: entry.expiresAt };
+    return {
+      src: entry.src,
+      expiresAt: entry.expiresAt,
+      fetchedAt: typeof entry.fetchedAt === "number" ? entry.fetchedAt : 0,
+    };
   } catch (error) {
     console.debug("[avatar] failed to read Ely disk cache", error);
     return null;
@@ -77,7 +89,8 @@ export function clearLauncherAvatarCache(): void {
 }
 
 function putCache(cacheKey: string, src: string): void {
-  const entry: AvatarCacheEntry = { src, expiresAt: Date.now() + AVATAR_CACHE_TTL_MS };
+  const now = Date.now();
+  const entry: AvatarCacheEntry = { src, expiresAt: now + AVATAR_CACHE_TTL_MS, fetchedAt: now };
   memoryCache.set(cacheKey, entry);
   if (typeof window === "undefined") return;
   try {
@@ -87,15 +100,23 @@ function putCache(cacheKey: string, src: string): void {
   }
 }
 
-function getCachedAvatarSrc(cacheKey: string): string | null {
+function getCachedAvatarEntry(cacheKey: string): AvatarCacheEntry | null {
   const inMemory = memoryCache.get(cacheKey);
-  if (inMemory && inMemory.expiresAt > Date.now()) return inMemory.src;
+  if (inMemory && inMemory.expiresAt > Date.now()) return inMemory;
   if (inMemory) memoryCache.delete(cacheKey);
 
   const diskEntry = getDiskCache(cacheKey);
   if (!diskEntry) return null;
   memoryCache.set(cacheKey, diskEntry);
-  return diskEntry.src;
+  return diskEntry;
+}
+
+function getCachedAvatarSrc(cacheKey: string): string | null {
+  return getCachedAvatarEntry(cacheKey)?.src ?? null;
+}
+
+export function peekElyAvatar(username: string): string | null {
+  return getCachedAvatarSrc(normalizeCacheKey(username));
 }
 
 function createNearestNeighborCanvas(size: number): HTMLCanvasElement {
@@ -232,30 +253,47 @@ export async function getElyAvatarByUsername(
   if (!normalizedUsername) return fallbackSrc;
 
   const cacheKey = normalizeCacheKey(normalizedUsername);
-  const cached = getCachedAvatarSrc(cacheKey);
-  if (cached) return cached;
+  const cached = getCachedAvatarEntry(cacheKey);
+  if (
+    cached &&
+    cached.fetchedAt >= elyAvatarsStaleBefore &&
+    Date.now() - cached.fetchedAt < ELY_AVATAR_FRESH_MS
+  ) {
+    return cached.src;
+  }
 
+  let request = elyAvatarRequests.get(cacheKey);
+  if (!request) {
+    request = fetchElyAvatar(normalizedUsername, cacheKey, size).finally(() => {
+      elyAvatarRequests.delete(cacheKey);
+    });
+    elyAvatarRequests.set(cacheKey, request);
+  }
+  return (await request) ?? cached?.src ?? fallbackSrc;
+}
+
+async function fetchElyAvatar(
+  username: string,
+  cacheKey: string,
+  size: number,
+): Promise<string | null> {
   try {
     let avatarSrc: string | null = null;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      avatarSrc = await invoke<ElyAvatarCommandResponse>("get_ely_avatar", {
-        username: normalizedUsername,
-      });
+      avatarSrc = await invoke<ElyAvatarCommandResponse>("get_ely_avatar", { username });
     } catch (error) {
       console.debug("[avatar] Rust Ely avatar command unavailable, using frontend crop", error);
     }
 
     if (!avatarSrc) {
-      avatarSrc = await buildAvatarFromSkin(buildElySkinUrl(normalizedUsername), size);
+      avatarSrc = await buildAvatarFromSkin(buildElySkinUrl(username), size);
     }
-    if (!avatarSrc) return fallbackSrc;
-
-    putCache(cacheKey, avatarSrc);
+    if (avatarSrc) putCache(cacheKey, avatarSrc);
     return avatarSrc;
   } catch (error) {
     console.debug("[avatar] Ely skin avatar failed, falling back", error);
-    return fallbackSrc;
+    return null;
   }
 }
 

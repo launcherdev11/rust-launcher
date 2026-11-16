@@ -7,6 +7,7 @@ import {
   openScreenshot,
   openScreenshotsFolder,
 } from "./api";
+import { dataUrlToBlob } from "../../lib/dataUrl";
 import type { ScreenshotInfo } from "./types";
 
 const THUMB_MAX_PX = 256;
@@ -15,7 +16,7 @@ const THUMB_CACHE_LIMIT = 48;
 const LOAD_CONCURRENCY = 3;
 
 async function dataUriToPngBlob(uri: string): Promise<Blob> {
-  const blob = await (await fetch(uri)).blob();
+  const blob = dataUrlToBlob(uri);
   if (blob.type === "image/png") return blob;
   const bitmap = await createImageBitmap(blob);
   try {

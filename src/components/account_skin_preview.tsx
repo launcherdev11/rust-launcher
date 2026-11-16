@@ -17,6 +17,7 @@ import {
   type ProfileAvatarInput,
 } from "../lib/avatar";
 import { applySkinLayer3D, removeSkinLayer3D } from "../lib/skin_layer_3d";
+import { useElySkinRefreshTick } from "../hooks/useElySkinRefreshTick";
 
 const HEAD_LOOK_YAW_MAX = 0.75;
 const HEAD_LOOK_PITCH_MAX = 0.45;
@@ -63,6 +64,8 @@ export function AccountSkinPreview({
   const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
+  const loadedSkinSourceRef = useRef<string | null>(null);
+  const elySkinRefreshTick = useElySkinRefreshTick(!skinUrl && !!profile.ely_username?.trim());
 
   useEffect(() => {
     const container = containerRef.current;
@@ -177,13 +180,16 @@ export function AccountSkinPreview({
           if (cancelled || viewer.disposed) return;
           if (source.startsWith("blob:")) blobUrl = source;
         }
+        if (source === loadedSkinSourceRef.current) return;
 
         await viewer.loadSkin(source, { ears: false, model: "auto-detect" });
         if (cancelled || viewer.disposed) return;
         viewer.playerObject.ears.visible = false;
         applySkinLayer3D(viewer);
+        loadedSkinSourceRef.current = source;
       } catch (error) {
         console.debug("[skin] failed to load skin preview", error);
+        loadedSkinSourceRef.current = null;
         if (!cancelled && !viewer.disposed) {
           await viewer.loadSkin(DEFAULT_SKIN_URL, { ears: false, model: "auto-detect" });
           if (cancelled || viewer.disposed) return;
@@ -206,6 +212,7 @@ export function AccountSkinPreview({
     profile.mc_uuid,
     username,
     skinUrl,
+    elySkinRefreshTick,
   ]);
 
   useEffect(() => {
