@@ -1,3 +1,5 @@
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,11 +16,13 @@ use crate::models::events::{
 use crate::services::game::profiles::{
     finish_playtime_session, flush_active_playtime, start_playtime_session,
 };
+use crate::services::game::runtime::{clear_game_lan_port, observe_game_log_line};
 use crate::services::game::state::{GAME_PROCESS_MAX_HEAP_BYTES, GAME_PROCESS_PID};
 
 const SESSION_FILE: &str = "running_game.json";
 const START_TIME_TOLERANCE_SECS: u64 = 2;
 const PLAYTIME_FLUSH_INTERVAL: Duration = Duration::from_secs(30);
+const LOG_WATCH_INTERVAL: Duration = Duration::from_secs(1);
 
 static WATCHER_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -30,6 +34,8 @@ struct StoredSession {
     started_at_ms: u64,
     #[serde(default)]
     max_heap_bytes: u64,
+    #[serde(default)]
+    game_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -50,7 +56,7 @@ fn is_java_name(name: &str) -> bool {
     name.contains("java")
 }
 
-pub(crate) fn remember_game_session(pid: u32, profile_id: Option<String>) {
+pub(crate) fn remember_game_session(pid: u32, profile_id: Option<String>, game_dir: &Path) {
     let Some(path) = session_path() else { return };
     let Some((_, process_start_time)) = probe_process(pid) else {
         return;
@@ -65,6 +71,7 @@ pub(crate) fn remember_game_session(pid: u32, profile_id: Option<String>) {
         profile_id,
         started_at_ms,
         max_heap_bytes: GAME_PROCESS_MAX_HEAP_BYTES.load(Ordering::SeqCst),
+        game_dir: Some(game_dir.to_path_buf()),
     };
     match serde_json::to_vec(&session) {
         Ok(bytes) => {
@@ -105,6 +112,28 @@ fn load_alive_session() -> Option<StoredSession> {
     }
 }
 
+fn spawn_game_log_watcher(app: AppHandle, pid: u32, game_dir: PathBuf) {
+    std::thread::spawn(move || {
+        let log_path = game_dir.join("logs").join("latest.log");
+        let Ok(file) = std::fs::File::open(&log_path) else {
+            eprintln!("[Launch] Не удалось открыть {}", log_path.display());
+            return;
+        };
+        let mut reader = BufReader::new(file);
+        let mut line = Vec::new();
+        while process_probe::is_alive(pid) {
+            match reader.read_until(b'\n', &mut line) {
+                Ok(0) | Err(_) => std::thread::sleep(LOG_WATCH_INTERVAL),
+                Ok(_) if line.ends_with(b"\n") => {
+                    observe_game_log_line(&app, &String::from_utf8_lossy(&line));
+                    line.clear();
+                }
+                Ok(_) => {}
+            }
+        }
+    });
+}
+
 fn spawn_session_watcher(app: AppHandle, pid: u32) {
     if WATCHER_ACTIVE.swap(true, Ordering::SeqCst) {
         return;
@@ -130,6 +159,7 @@ fn spawn_session_watcher(app: AppHandle, pid: u32) {
 
         forget_game_session();
         let _ = GAME_PROCESS_PID.compare_exchange(pid as u64, 0, Ordering::SeqCst, Ordering::SeqCst);
+        clear_game_lan_port(&app);
         crate::infra::window_idle::sync(&app);
         let _ = app.emit(
             EVENT_GAME_PROCESS_EXITED,
@@ -162,6 +192,9 @@ pub fn get_running_game_session(app: AppHandle) -> Option<RunningGameSession> {
         crate::infra::window_idle::sync(&app);
         if let Some(profile_id) = session.profile_id.as_deref() {
             start_playtime_session(profile_id);
+        }
+        if let Some(game_dir) = session.game_dir.clone() {
+            spawn_game_log_watcher(app.clone(), session.pid, game_dir);
         }
         spawn_session_watcher(app, session.pid);
     } else if current != pid {

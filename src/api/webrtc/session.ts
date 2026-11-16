@@ -20,6 +20,11 @@ export type PeerSessionCallbacks = {
 
 export const LAN_TUNNEL_CAPABILITY = "mux:1";
 
+const RTT_PING_PREFIX = "rtt:";
+const RTT_PONG_PREFIX = "rtt-ack:";
+const RTT_TIMEOUT_MS = 8_000;
+const ROOM_STATE_PREFIX = "room-state:";
+
 const ICE_RESTART_DELAY_MS = 3_000;
 const ICE_RESTART_MAX_ATTEMPTS = 3;
 const ICE_RECOVERY_TIMEOUT_MS = 18_000;
@@ -177,6 +182,10 @@ export class RoomPeerSession {
   private iceRestartTimer: ReturnType<typeof setTimeout> | null = null;
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private iceRestartAttempts = 0;
+  private latestRttMs: number | null = null;
+  private pendingRtt: { id: string; sentAt: number } | null = null;
+  private rttSeq = 0;
+  private roomStateHandlers = new Set<(json: string) => void>();
 
   constructor(opts: {
     roomId: string;
@@ -208,6 +217,66 @@ export class RoomPeerSession {
 
   get supportsLanTunnel(): boolean {
     return this.remoteTunnelCapable;
+  }
+
+  get rttMs(): number | null {
+    return this.latestRttMs;
+  }
+
+  probeRtt(): void {
+    if (this.channel?.readyState !== "open") {
+      this.latestRttMs = null;
+      this.pendingRtt = null;
+      return;
+    }
+    const now = performance.now();
+    if (this.pendingRtt) {
+      if (now - this.pendingRtt.sentAt < RTT_TIMEOUT_MS) return;
+      this.latestRttMs = null;
+    }
+    this.rttSeq += 1;
+    const id = String(this.rttSeq);
+    this.pendingRtt = { id, sentAt: now };
+    try {
+      this.channel.send(`${RTT_PING_PREFIX}${id}`);
+    } catch {
+      this.pendingRtt = null;
+    }
+  }
+
+  sendRoomState(json: string): void {
+    if (this.channel?.readyState !== "open") return;
+    try {
+      this.channel.send(`${ROOM_STATE_PREFIX}${json}`);
+    } catch {
+    }
+  }
+
+  onRoomState(handler: (json: string) => void): () => void {
+    this.roomStateHandlers.add(handler);
+    return () => {
+      this.roomStateHandlers.delete(handler);
+    };
+  }
+
+  private handleControlMessage(channel: RTCDataChannel, message: string): void {
+    if (message === LAN_TUNNEL_CAPABILITY) {
+      this.remoteTunnelCapable = true;
+    } else if (message.startsWith(RTT_PING_PREFIX)) {
+      try {
+        channel.send(`${RTT_PONG_PREFIX}${message.slice(RTT_PING_PREFIX.length)}`);
+      } catch {
+      }
+    } else if (message.startsWith(RTT_PONG_PREFIX)) {
+      const pending = this.pendingRtt;
+      if (pending && pending.id === message.slice(RTT_PONG_PREFIX.length)) {
+        this.latestRttMs = performance.now() - pending.sentAt;
+        this.pendingRtt = null;
+      }
+    } else if (message.startsWith(ROOM_STATE_PREFIX)) {
+      const json = message.slice(ROOM_STATE_PREFIX.length);
+      for (const h of this.roomStateHandlers) h(json);
+    }
   }
 
   async start(): Promise<void> {
@@ -417,7 +486,7 @@ export class RoomPeerSession {
     };
     channel.onmessage = (ev) => {
       if (typeof ev.data === "string") {
-        if (ev.data === LAN_TUNNEL_CAPABILITY) this.remoteTunnelCapable = true;
+        this.handleControlMessage(channel, ev.data);
         return;
       }
       if (!this.remoteTunnelCapable) return;
@@ -530,6 +599,9 @@ export class RoomPeerSession {
     this.closed = true;
     this.clearRecoveryTimers();
     this.remoteBinaryHandlers.clear();
+    this.roomStateHandlers.clear();
+    this.latestRttMs = null;
+    this.pendingRtt = null;
     try {
       this.channel?.close();
     } catch {

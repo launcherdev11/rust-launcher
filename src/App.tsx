@@ -1142,7 +1142,9 @@ function App() {
                   language={language}
                   minecraftAccountKind={activeAccountKind}
                   gameStatus={gameStatus}
+                  isLaunching={isLaunching}
                   tabActive={activeItem === "rooms"}
+                  onLaunchGame={() => void handlePrimaryClick()}
                   onLaunchToServer={handleLaunchToServer}
                   onPresenceContextChange={setRoomPresenceContext}
                   onRoomLaunchContextChange={setLaunchPresenceContext}

@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, ErrorKind};
+use std::io::ErrorKind;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
@@ -13,6 +13,7 @@ use crate::models::events::{
     PlaytimeUpdatedPayload, EVENT_ACTIVE_ACCOUNT_CHANGED, EVENT_GAME_CONSOLE_LINE,
     EVENT_GAME_PROCESS_EXITED, EVENT_LAST_PLAYED_UPDATED, EVENT_LAUNCH_STAGE, EVENT_PLAYTIME_UPDATED,
 };
+use crate::services::game::console::for_each_output_line;
 use crate::services::game::console_filter::is_game_console_line_important;
 use crate::services::auth::ely::{ensure_authlib_injector, refresh_ely_session_internal, ELY_CLIENT_ID};
 use crate::services::auth::microsoft::MS_CLIENT_ID;
@@ -47,6 +48,7 @@ use crate::services::game::runtime::{
 };
 use crate::services::game::launcher::process::{is_our_game_process_alive, max_heap_from_args};
 use crate::services::game::launcher::session::{forget_game_session, remember_game_session};
+use crate::services::game::runtime::{clear_game_lan_port, observe_game_log_line};
 use crate::services::game::run_history::RunRecorder;
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{
@@ -1406,7 +1408,7 @@ pub async fn launch_game(
     GAME_PROCESS_PID.store(spawned_pid as u64, Ordering::SeqCst);
     crate::infra::window_idle::sync(&app);
     eprintln!("[Launch] PID: {spawned_pid}");
-    remember_game_session(spawned_pid, playtime_profile_id.clone());
+    remember_game_session(spawned_pid, playtime_profile_id.clone(), &game_dir);
     let run_recorder = RunRecorder::start(
         playtime_profile_id.clone(),
         &version_id,
@@ -1430,25 +1432,20 @@ pub async fn launch_game(
         let app_clone = app.clone();
         let recorder = run_recorder.clone();
         std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(text) => {
-                        if let Some(r) = recorder.as_ref() {
-                            r.push(&text, false);
-                        }
-                        if !is_game_console_line_important(&text, "stdout") {
-                            continue;
-                        }
-                        let payload = GameConsoleLinePayload {
-                            line: text,
-                            source: "stdout".to_string(),
-                        };
-                        let _ = app_clone.emit(EVENT_GAME_CONSOLE_LINE, payload);
-                    }
-                    Err(_) => break,
+            for_each_output_line(stdout, |text| {
+                if let Some(r) = recorder.as_ref() {
+                    r.push(&text, false);
                 }
-            }
+                observe_game_log_line(&app_clone, &text);
+                if !is_game_console_line_important(&text, "stdout") {
+                    return;
+                }
+                let payload = GameConsoleLinePayload {
+                    line: text,
+                    source: "stdout".to_string(),
+                };
+                let _ = app_clone.emit(EVENT_GAME_CONSOLE_LINE, payload);
+            });
         });
     }
 
@@ -1456,25 +1453,19 @@ pub async fn launch_game(
         let app_clone = app.clone();
         let recorder = run_recorder.clone();
         std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                match line {
-                    Ok(text) => {
-                        if let Some(r) = recorder.as_ref() {
-                            r.push(&text, true);
-                        }
-                        if !is_game_console_line_important(&text, "stderr") {
-                            continue;
-                        }
-                        let payload = GameConsoleLinePayload {
-                            line: text,
-                            source: "stderr".to_string(),
-                        };
-                        let _ = app_clone.emit(EVENT_GAME_CONSOLE_LINE, payload);
-                    }
-                    Err(_) => break,
+            for_each_output_line(stderr, |text| {
+                if let Some(r) = recorder.as_ref() {
+                    r.push(&text, true);
                 }
-            }
+                if !is_game_console_line_important(&text, "stderr") {
+                    return;
+                }
+                let payload = GameConsoleLinePayload {
+                    line: text,
+                    source: "stderr".to_string(),
+                };
+                let _ = app_clone.emit(EVENT_GAME_CONSOLE_LINE, payload);
+            });
         });
     }
 
@@ -1520,6 +1511,7 @@ pub async fn launch_game(
 
         forget_game_session();
         GAME_PROCESS_PID.store(0, Ordering::SeqCst);
+        clear_game_lan_port(&app_clone_for_playtime);
         crate::infra::window_idle::sync(&app_clone_for_playtime);
         if let Some(r) = run_recorder.as_ref() {
             std::thread::sleep(Duration::from_millis(300));

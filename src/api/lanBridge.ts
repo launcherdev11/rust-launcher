@@ -2,6 +2,15 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export const LAN_BRIDGE_STATUS = "lan-bridge-status";
+export const GAME_LAN_PORT_EVENT = "game-lan-port";
+
+export type LanWorldInfo = {
+  motd: string | null;
+  version: string | null;
+  playersOnline: number | null;
+  playersMax: number | null;
+  players: string[];
+};
 
 export type LanBridgeStatus = {
   session_id?: string;
@@ -24,8 +33,12 @@ export async function setHostLanPort(port: number | null): Promise<void> {
   await invoke("lan_bridge_set_host_port", { port });
 }
 
-export async function probeLanPort(port: number): Promise<boolean> {
-  return invoke<boolean>("lan_bridge_probe_port", { port });
+export async function getGameLanPort(): Promise<number | null> {
+  return invoke<number | null>("lan_bridge_game_port");
+}
+
+export async function queryLanWorld(port: number): Promise<LanWorldInfo | null> {
+  return invoke<LanWorldInfo | null>("lan_bridge_query_world", { port });
 }
 
 export async function stopBridge(sessionId?: string | null): Promise<void> {

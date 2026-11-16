@@ -13,6 +13,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, watch};
 
 pub const EVENT_LAN_BRIDGE_STATUS: &str = "lan-bridge-status";
+pub const EVENT_GAME_LAN_PORT: &str = "game-lan-port";
 const SESSION_HEADER: &str = "x-lan-session";
 
 const FRAME_OPEN: u8 = 1;
@@ -448,6 +449,226 @@ async fn run_conn(
     tunnel.report_connections();
 }
 
+const GAME_LAN_PORT_NONE: u32 = 0;
+const WORLD_QUERY_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_STATUS_PACKET: usize = 4 * 1024 * 1024;
+const MAX_LISTED_PLAYERS: usize = 20;
+
+static GAME_LAN_PORT: AtomicU32 = AtomicU32::new(GAME_LAN_PORT_NONE);
+
+#[derive(Debug, PartialEq, Eq)]
+enum LanLogEvent {
+    Opened(u16),
+    Closed,
+}
+
+fn is_log_prefix(head: &str) -> bool {
+    !head.contains("[CHAT]") && (head.is_empty() || head.ends_with(": ") || head.ends_with(") "))
+}
+
+fn lan_log_event(line: &str) -> Option<LanLogEvent> {
+    let line = line.trim_end();
+    if let Some(head) = line.strip_suffix("Stopping server") {
+        return is_log_prefix(head).then_some(LanLogEvent::Closed);
+    }
+    for marker in ["Started serving on ", "Started on "] {
+        let Some(idx) = line.rfind(marker) else { continue };
+        if !is_log_prefix(&line[..idx]) {
+            continue;
+        }
+        let port = line[idx + marker.len()..].parse::<u16>().ok().filter(|p| *p != 0)?;
+        return Some(LanLogEvent::Opened(port));
+    }
+    None
+}
+
+fn publish_game_lan_port(app: &AppHandle, port: Option<u16>) {
+    let next = port.map_or(GAME_LAN_PORT_NONE, u32::from);
+    if GAME_LAN_PORT.swap(next, Ordering::SeqCst) != next {
+        eprintln!("[LanBridge] game LAN port = {port:?}");
+        let _ = app.emit(EVENT_GAME_LAN_PORT, port);
+    }
+}
+
+pub(crate) fn observe_game_log_line(app: &AppHandle, line: &str) {
+    match lan_log_event(line) {
+        Some(LanLogEvent::Opened(port)) => publish_game_lan_port(app, Some(port)),
+        Some(LanLogEvent::Closed) => publish_game_lan_port(app, None),
+        None => {}
+    }
+}
+
+pub(crate) fn clear_game_lan_port(app: &AppHandle) {
+    publish_game_lan_port(app, None);
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LanWorldInfo {
+    motd: Option<String>,
+    version: Option<String>,
+    players_online: Option<u32>,
+    players_max: Option<u32>,
+    players: Vec<String>,
+}
+
+fn put_varint(out: &mut Vec<u8>, value: i32) {
+    let mut rest = value as u32;
+    loop {
+        let byte = (rest & 0x7f) as u8;
+        rest >>= 7;
+        if rest == 0 {
+            out.push(byte);
+            return;
+        }
+        out.push(byte | 0x80);
+    }
+}
+
+fn take_varint(buf: &[u8]) -> Option<(i32, usize)> {
+    let mut value = 0u32;
+    for (i, byte) in buf.iter().take(5).enumerate() {
+        value |= u32::from(byte & 0x7f) << (7 * i);
+        if byte & 0x80 == 0 {
+            return Some((value as i32, i + 1));
+        }
+    }
+    None
+}
+
+async fn read_varint(stream: &mut TcpStream) -> std::io::Result<i32> {
+    let mut value = 0u32;
+    for i in 0..5 {
+        let byte = stream.read_u8().await?;
+        value |= u32::from(byte & 0x7f) << (7 * i);
+        if byte & 0x80 == 0 {
+            return Ok(value as i32);
+        }
+    }
+    Err(std::io::ErrorKind::InvalidData.into())
+}
+
+fn status_request(port: u16) -> Vec<u8> {
+    const HOST: &[u8] = b"127.0.0.1";
+    let mut handshake = Vec::with_capacity(HOST.len() + 8);
+    put_varint(&mut handshake, 0);
+    put_varint(&mut handshake, -1);
+    put_varint(&mut handshake, HOST.len() as i32);
+    handshake.extend_from_slice(HOST);
+    handshake.extend_from_slice(&port.to_be_bytes());
+    put_varint(&mut handshake, 1);
+
+    let mut out = Vec::with_capacity(handshake.len() + 4);
+    put_varint(&mut out, handshake.len() as i32);
+    out.extend_from_slice(&handshake);
+    out.extend_from_slice(&[1, 0]);
+    out
+}
+
+fn status_json(packet: &[u8]) -> Option<&[u8]> {
+    let (packet_id, id_len) = take_varint(packet)?;
+    if packet_id != 0 {
+        return None;
+    }
+    let rest = &packet[id_len..];
+    let (json_len, len_len) = take_varint(rest)?;
+    rest.get(len_len..len_len + usize::try_from(json_len).ok()?)
+}
+
+fn collect_chat_text(value: &serde_json::Value, out: &mut String) {
+    match value {
+        serde_json::Value::String(text) => out.push_str(text),
+        serde_json::Value::Array(parts) => parts.iter().for_each(|part| collect_chat_text(part, out)),
+        serde_json::Value::Object(map) => {
+            if let Some(text) = map.get("text") {
+                collect_chat_text(text, out);
+            }
+            if let Some(extra) = map.get("extra") {
+                collect_chat_text(extra, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn strip_format_codes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{a7}' {
+            chars.next();
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn parse_world_status(json: &[u8]) -> Option<LanWorldInfo> {
+    let root: serde_json::Value = serde_json::from_slice(json).ok()?;
+    let mut motd = String::new();
+    if let Some(description) = root.get("description") {
+        collect_chat_text(description, &mut motd);
+    }
+    let motd = strip_format_codes(&motd).trim().to_string();
+    let players = root.get("players");
+    let count = |key: &str| {
+        players
+            .and_then(|p| p.get(key))
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok())
+    };
+    Some(LanWorldInfo {
+        motd: (!motd.is_empty()).then_some(motd),
+        version: root
+            .pointer("/version/name")
+            .and_then(serde_json::Value::as_str)
+            .map(strip_format_codes),
+        players_online: count("online"),
+        players_max: count("max"),
+        players: players
+            .and_then(|p| p.get("sample"))
+            .and_then(serde_json::Value::as_array)
+            .map(|sample| {
+                sample
+                    .iter()
+                    .filter_map(|entry| entry.get("name")?.as_str())
+                    .take(MAX_LISTED_PLAYERS)
+                    .map(strip_format_codes)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    })
+}
+
+async fn query_world(port: u16) -> Option<LanWorldInfo> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.ok()?;
+    stream.write_all(&status_request(port)).await.ok()?;
+    let len = usize::try_from(read_varint(&mut stream).await.ok()?).ok()?;
+    if len == 0 || len > MAX_STATUS_PACKET {
+        return None;
+    }
+    let mut packet = vec![0u8; len];
+    stream.read_exact(&mut packet).await.ok()?;
+    parse_world_status(status_json(&packet)?)
+}
+
+#[tauri::command]
+pub fn lan_bridge_game_port() -> Option<u16> {
+    match GAME_LAN_PORT.load(Ordering::SeqCst) {
+        GAME_LAN_PORT_NONE => None,
+        port => u16::try_from(port).ok(),
+    }
+}
+
+#[tauri::command]
+pub async fn lan_bridge_query_world(port: u16) -> Result<Option<LanWorldInfo>, String> {
+    Ok(tokio::time::timeout(WORLD_QUERY_TIMEOUT, query_world(port))
+        .await
+        .ok()
+        .flatten())
+}
+
 static TUNNELS: Lazy<Mutex<HashMap<String, Arc<Tunnel>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static HOST_LAN_PORT: Lazy<Arc<AtomicU32>> = Lazy::new(|| Arc::new(AtomicU32::new(0)));
 static LAST_GUEST_PORTS: Lazy<Mutex<HashMap<String, u16>>> = Lazy::new(|| Mutex::new(HashMap::new()));
@@ -585,20 +806,6 @@ pub async fn lan_bridge_set_host_port(port: Option<u16>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn lan_bridge_probe_port(port: u16) -> Result<bool, String> {
-    if port == 0 {
-        return Ok(false);
-    }
-    for host in ["127.0.0.1", "::1"] {
-        let attempt = tokio::time::timeout(Duration::from_millis(1500), TcpStream::connect((host, port)));
-        if let Ok(Ok(_)) = attempt.await {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-#[tauri::command]
 pub async fn lan_bridge_detach(session_id: String, generation: Option<u64>) -> Result<(), String> {
     let sid = normalize_session_id(&session_id);
     if let Some(tunnel) = existing_tunnel(&sid) {
@@ -686,6 +893,85 @@ mod tests {
             .unwrap();
         assert_eq!(got, msg);
         client
+    }
+
+    #[test]
+    fn lan_port_is_read_from_game_log_formats() {
+        for line in [
+            "[12:00:00] [Render thread/INFO]: Started serving on 51234",
+            "[14Jan2024 12:00:00.000] [Render thread/INFO] [net.minecraft.client.server.IntegratedServer/]: Started serving on 51234",
+            "[12:00:00] [Render thread/INFO] (Minecraft) Started serving on 51234",
+            "[12:00:00] [Client thread/INFO]: Started on 51234",
+            "Started on 51234\r",
+        ] {
+            assert_eq!(lan_log_event(line), Some(LanLogEvent::Opened(51234)), "{line}");
+        }
+        assert_eq!(
+            lan_log_event("[12:00:00] [Server thread/INFO]: Stopping server"),
+            Some(LanLogEvent::Closed)
+        );
+    }
+
+    #[test]
+    fn chat_and_foreign_log_lines_do_not_change_lan_port() {
+        for line in [
+            "[12:00:00] [Render thread/INFO]: [CHAT] <Steve> Started on 1234",
+            "[12:00:00] [Render thread/INFO]: [System] [CHAT] Started serving on 1234",
+            "[12:00:00] [Render thread/INFO]: [CHAT] Steve: Stopping server",
+            "[12:00:00] [main/INFO]: Web server Started on 8080",
+            "[12:00:00] [Render thread/INFO]: Started serving on 99999",
+            "[12:00:00] [Render thread/INFO]: Started serving on 0",
+        ] {
+            assert_eq!(lan_log_event(line), None, "{line}");
+        }
+    }
+
+    #[test]
+    fn world_status_flattens_chat_and_format_codes() {
+        let json = br#"{
+            "description": {"text": "\u00a7aSteve", "extra": [{"text": " - "}, "New World"]},
+            "version": {"name": "1.20.1", "protocol": 763},
+            "players": {"online": 2, "max": 8, "sample": [{"name": "Steve"}, {"name": "Alex"}]}
+        }"#;
+        let info = parse_world_status(json).unwrap();
+        assert_eq!(info.motd.as_deref(), Some("Steve - New World"));
+        assert_eq!(info.version.as_deref(), Some("1.20.1"));
+        assert_eq!((info.players_online, info.players_max), (Some(2), Some(8)));
+        assert_eq!(info.players, ["Steve", "Alex"]);
+    }
+
+    #[tokio::test]
+    async fn world_query_reads_status_packet() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let expected = status_request(port);
+            let mut got = vec![0u8; expected.len()];
+            stream.read_exact(&mut got).await.unwrap();
+            assert_eq!(got, expected);
+
+            let json = br#"{"description":"World","players":{"online":1,"max":8}}"#;
+            let mut body = Vec::new();
+            put_varint(&mut body, 0);
+            put_varint(&mut body, json.len() as i32);
+            body.extend_from_slice(json);
+            let mut packet = Vec::new();
+            put_varint(&mut packet, body.len() as i32);
+            packet.extend_from_slice(&body);
+            stream.write_all(&packet).await.unwrap();
+        });
+        let info = query_world(port).await.unwrap();
+        assert_eq!(info.motd.as_deref(), Some("World"));
+        assert_eq!(info.players_online, Some(1));
+    }
+
+    #[tokio::test]
+    async fn world_query_is_none_when_nothing_listens() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        assert_eq!(query_world(port).await, None);
     }
 
     #[test]
