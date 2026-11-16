@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "../onboarding";
-import { isLanguage, readStoredLanguage, type Language } from "../i18n";
+import { ensureLanguageLoaded, isLanguage, readStoredLanguage, type Language } from "../i18n";
 import { DEFAULT_SETTINGS } from "../app/defaultSettings";
 import { DEFAULT_ACCENT_COLOR } from "../tabs/settings/accentColor";
 import type { NotificationKind } from "../app/notifications";
@@ -199,7 +199,8 @@ export function useLauncherSettings({
   );
 
   const persistInterfaceLanguage = useCallback(
-    (lang: Language) => {
+    async (lang: Language) => {
+      await ensureLanguageLoaded(lang);
       setLanguage(lang);
       try {
         window.localStorage.setItem("launcher_language", lang);

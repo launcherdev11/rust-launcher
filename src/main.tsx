@@ -1,11 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import { ConsoleApp } from "./ConsoleApp";
-import { DownloadsApp } from "./DownloadsApp";
 import { isDownloadsWindowView } from "./lib/downloadsWindow";
 import { isGameConsoleWindowView } from "./lib/gameConsoleWindow";
-import { TRAY_MENU_WINDOW_LABEL, TrayMenuApp } from "./features/tray-menu/TrayMenuApp";
+import { ensureLanguageLoaded, guessInitialLanguage } from "./i18n";
+import { TRAY_MENU_WINDOW_LABEL } from "./features/tray-menu/constants";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@fontsource-variable/onest";
 import "./index.css";
@@ -28,16 +26,18 @@ function isTrayMenuWindow(): boolean {
 const isTrayMenu = isTrayMenuWindow();
 document.documentElement.classList.toggle("tray-menu-view", isTrayMenu);
 
-const Root = isTrayMenu
-  ? TrayMenuApp
+const loadRoot = isTrayMenu
+  ? () => import("./features/tray-menu/TrayMenuApp").then((m) => m.TrayMenuApp)
   : isGameConsoleWindowView()
-    ? ConsoleApp
+    ? () => import("./ConsoleApp").then((m) => m.ConsoleApp)
     : isDownloadsWindowView()
-      ? DownloadsApp
-      : App;
+      ? () => import("./DownloadsApp").then((m) => m.DownloadsApp)
+      : () => import("./App").then((m) => m.default);
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <Root />
-  </React.StrictMode>,
-);
+void Promise.all([loadRoot(), ensureLanguageLoaded(guessInitialLanguage())]).then(([Root]) => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <Root />
+    </React.StrictMode>,
+  );
+});

@@ -7,7 +7,7 @@ import { useT, type Language } from "../../i18n";
 import { loaderLabels } from "../../tabs/modpack/helpers";
 import type { LoaderId } from "../../tabs/modpack/types";
 
-export const TRAY_MENU_WINDOW_LABEL = "tray-menu";
+export { TRAY_MENU_WINDOW_LABEL } from "./constants";
 
 const PANEL_WIDTH = 288;
 const WINDOW_GUTTER = 14;

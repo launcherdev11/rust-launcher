@@ -13,14 +13,9 @@ import "./App.css";
 import { playTabSwitchSound } from "./uiSounds";
 import { useT, readStoredLanguage, type Language } from "./i18n";
 import { isSplittableTab, type SplittableTabId } from "./splitView";
-import { OnboardingFlow, ONBOARDING_COMPLETED_STORAGE_KEY, ONBOARDING_FORCE_STORAGE_KEY } from "./onboarding";
-import { ProductTour } from "./product-tour";
+import { ONBOARDING_COMPLETED_STORAGE_KEY, ONBOARDING_FORCE_STORAGE_KEY } from "./onboarding/constants";
 import type { TourTabId } from "./product-tour/types";
-import { ModsTab } from "./tabs/ModsTab";
 import { PlayTab } from "./tabs/PlayTab";
-import { FriendsTab } from "./tabs/FriendsTab";
-import { RoomsTab } from "./tabs/RoomsTab";
-import { AccountsTab } from "./tabs/AccountsTab";
 import { DEFAULT_ACCENT_COLOR } from "./tabs/settings/accentColor";
 import { ActiveDownloadsPanel } from "./components/ActiveDownloadsPanel";
 import { HotkeysModal } from "./components/HotkeysModal";
@@ -28,11 +23,9 @@ import { CommandPalette } from "./features/command-palette/CommandPalette";
 import { usePaletteCommands } from "./features/command-palette/usePaletteCommands";
 import { SessionNotificationsBell } from "./components/SessionNotificationsBell";
 import { TabSplitDropOverlay } from "./components/tab_split_drop_overlay";
-import { UpdatePopupModal } from "./components/UpdatePopupModal";
 import { ProfileInfoModal, type ProfileInfoData } from "./components/profile_info_modal";
 import { AccountSwitcher } from "./app/components/AccountSwitcher";
 import { AppSidebar } from "./app/components/AppSidebar";
-import { HelpModal } from "./app/components/HelpModal";
 import { LauncherAnimationScope } from "./app/components/LauncherAnimationScope";
 import { LauncherBackdrop } from "./app/components/LauncherBackdrop";
 import { NotificationToasts } from "./app/components/NotificationToasts";
@@ -95,6 +88,22 @@ const ModpackTab = lazy(() =>
 );
 const SettingsTab = lazy(() =>
   import("./tabs/SettingsTab").then((m) => ({ default: m.SettingsTab })),
+);
+const ModsTab = lazy(() => import("./tabs/ModsTab").then((m) => ({ default: m.ModsTab })));
+const FriendsTab = lazy(() => import("./tabs/FriendsTab").then((m) => ({ default: m.FriendsTab })));
+const RoomsTab = lazy(() => import("./tabs/RoomsTab").then((m) => ({ default: m.RoomsTab })));
+const AccountsTab = lazy(() => import("./tabs/AccountsTab").then((m) => ({ default: m.AccountsTab })));
+const OnboardingFlow = lazy(() =>
+  import("./onboarding/OnboardingFlow").then((m) => ({ default: m.OnboardingFlow })),
+);
+const ProductTour = lazy(() =>
+  import("./product-tour/ProductTour").then((m) => ({ default: m.ProductTour })),
+);
+const HelpModal = lazy(() =>
+  import("./app/components/HelpModal").then((m) => ({ default: m.HelpModal })),
+);
+const UpdatePopupModal = lazy(() =>
+  import("./components/UpdatePopupModal").then((m) => ({ default: m.UpdatePopupModal })),
 );
 
 
@@ -627,6 +636,7 @@ function App() {
                   : "flex w-full flex-1 flex-col gap-4 overflow-auto py-4 items-stretch"
               }
             >
+              <Suspense fallback={<TabPaneLoading />}>
               <ModsTab
                 fillPane={inSplitPane}
                 showNotification={showNotification}
@@ -641,6 +651,7 @@ function App() {
                 finishDownloadJob={finishDownloadJob}
                 makeDownloadJobId={makeDownloadJobId}
               />
+              </Suspense>
             </div>
           );
         case "modpacks":
@@ -907,6 +918,7 @@ function App() {
   if (onboardingVisible) {
     return (
       <LauncherAnimationScope animationsDisabled={animationsDisabled}>
+        <Suspense fallback={null}>
         <OnboardingFlow
           language={language}
           accentColor={settings?.background_accent_color ?? DEFAULT_ACCENT_COLOR}
@@ -925,6 +937,7 @@ function App() {
             setOnboardingVisible(false);
           }}
         />
+        </Suspense>
       </LauncherAnimationScope>
     );
   }
@@ -954,6 +967,7 @@ function App() {
         />
 
         {updatePopupBanner && (
+          <Suspense fallback={null}>
           <UpdatePopupModal
             language={language}
             banner={updatePopupBanner}
@@ -968,6 +982,7 @@ function App() {
               void installUpdate();
             }}
           />
+          </Suspense>
         )}
 
         <HotkeysModal
@@ -983,11 +998,13 @@ function App() {
           tt={tt}
         />
         {showHelpModal && (
-          <HelpModal
-            tt={tt}
-            onClose={() => setShowHelpModal(false)}
-            onReplayTour={startProductTour}
-          />
+          <Suspense fallback={null}>
+            <HelpModal
+              tt={tt}
+              onClose={() => setShowHelpModal(false)}
+              onReplayTour={startProductTour}
+            />
+          </Suspense>
         )}
 
         {pendingRemoveAccountId !== null && (
@@ -1144,6 +1161,7 @@ function App() {
               aria-hidden={activeItem !== "rooms"}
             >
               <TabErrorBoundary language={language} tabName="rooms">
+                <Suspense fallback={activeItem === "rooms" ? <TabPaneLoading /> : null}>
                 <RoomsTab
                   showNotification={showNotification}
                   language={language}
@@ -1159,22 +1177,26 @@ function App() {
                   onApplyRoomGameSettings={applyRoomGameSettings}
                   currentGame={roomCurrentGame}
                 />
+                </Suspense>
               </TabErrorBoundary>
             </div>
             {activeItem === "friends" ? (
               <div className="tab-animate flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto py-4">
                 <TabErrorBoundary language={language} tabName="friends">
+                  <Suspense fallback={<TabPaneLoading />}>
                   <FriendsTab
                     showNotification={showNotification}
                     language={language}
                     onOpenRooms={() => setActiveItemWithSound("rooms")}
                     onOpenAccounts={() => setActiveItemWithSound("accounts")}
                   />
+                  </Suspense>
                 </TabErrorBoundary>
               </div>
             ) : activeItem === "rooms" ? null : activeItem === "accounts" ? (
               <div className="tab-animate flex min-h-0 w-full flex-1 flex-col">
               <TabErrorBoundary language={language} tabName="accounts">
+              <Suspense fallback={<TabPaneLoading />}>
               <AccountsTab
                 showNotification={showNotification}
                 language={language}
@@ -1205,6 +1227,7 @@ function App() {
                 onRemoveAccount={removeLauncherAccount}
                 onAddAccount={handleAddLauncherAccount}
               />
+              </Suspense>
               </TabErrorBoundary>
               </div>
             ) : effectiveTabSplit ? (
@@ -1240,6 +1263,8 @@ function App() {
           )}
         </div>
 
+        {productTourActive && (
+        <Suspense fallback={null}>
         <ProductTour
           language={language}
           accentColor={accentColor}
@@ -1249,6 +1274,8 @@ function App() {
           onComplete={completeProductTour}
           onSkip={completeProductTour}
         />
+        </Suspense>
+        )}
       </div>
     </LauncherAnimationScope>
   );

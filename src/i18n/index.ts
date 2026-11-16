@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type Language = "ru" | "en" | "de" | "es";
 
@@ -20,16 +20,56 @@ export function readStoredLanguage(): Language | null {
 type Dict = Record<string, unknown>;
 
 import ru from "../locales/ru.json";
-import en from "../locales/en.json";
-import de from "../locales/de.json";
-import es from "../locales/es.json";
 
-const dictionaries: Record<Language, Dict> = {
-  ru: ru as Dict,
-  en: en as Dict,
-  de: de as Dict,
-  es: es as Dict,
+const dictionaries: Partial<Record<Language, Dict>> = { ru: ru as Dict };
+
+const dictionaryLoaders: Record<Exclude<Language, "ru">, () => Promise<{ default: unknown }>> = {
+  en: () => import("../locales/en.json"),
+  de: () => import("../locales/de.json"),
+  es: () => import("../locales/es.json"),
 };
+
+const pendingDictionaries = new Map<Language, Promise<void>>();
+const dictionaryListeners = new Set<() => void>();
+let dictionaryVersion = 0;
+
+export function ensureLanguageLoaded(lang: Language): Promise<void> {
+  if (lang === "ru" || dictionaries[lang]) return Promise.resolve();
+  let pending = pendingDictionaries.get(lang);
+  if (!pending) {
+    pending = dictionaryLoaders[lang]()
+      .then((mod) => {
+        dictionaries[lang] = mod.default as Dict;
+        dictionaryVersion += 1;
+        dictionaryListeners.forEach((listener) => listener());
+      })
+      .catch((e) => {
+        pendingDictionaries.delete(lang);
+        console.error(e);
+      });
+    pendingDictionaries.set(lang, pending);
+  }
+  return pending;
+}
+
+export function guessInitialLanguage(): Language {
+  const stored = readStoredLanguage();
+  if (stored) return stored;
+  const browserLang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "ru";
+  if (browserLang.startsWith("de")) return "de";
+  if (browserLang.startsWith("es")) return "es";
+  if (browserLang.startsWith("en")) return "en";
+  return "ru";
+}
+
+function subscribeDictionaries(listener: () => void) {
+  dictionaryListeners.add(listener);
+  return () => {
+    dictionaryListeners.delete(listener);
+  };
+}
+
+const getDictionaryVersion = () => dictionaryVersion;
 
 function getByPath(dict: Dict, path: string): string | null {
   const parts = path.split(".");
@@ -54,17 +94,19 @@ export function t(
   key: string,
   vars?: Record<string, string | number>,
 ): string {
-  const dict = dictionaries[lang] ?? dictionaries.ru;
-  const fallbackDict = dictionaries.ru;
+  const fallbackDict = ru as Dict;
+  const dict = dictionaries[lang] ?? fallbackDict;
+  if (!dictionaries[lang]) void ensureLanguageLoaded(lang);
 
   const raw = getByPath(dict, key) ?? getByPath(fallbackDict, key) ?? key;
   return interpolate(raw, vars);
 }
 
 export function useT(lang: Language) {
+  const version = useSyncExternalStore(subscribeDictionaries, getDictionaryVersion);
   return useCallback(
     (key: string, vars?: Record<string, string | number>) => t(lang, key, vars),
-    [lang],
+    [lang, version],
   );
 }
 
