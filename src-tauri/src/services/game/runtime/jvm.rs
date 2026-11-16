@@ -11,6 +11,14 @@ pub(crate) use crate::services::game::arguments::{
     filter_forge_problematic_jvm_args, filter_launcher_owned_jvm_args, remove_add_opens_for_java_under_9,
 };
 
+const SYSTEM_MEMORY_RESERVE_MB: u64 = 2048;
+const MIN_HEAP_LIMIT_MB: u64 = 1024;
+
+pub(crate) fn heap_limit_mb(total_memory_bytes: u64) -> Option<u64> {
+    let total_mb = total_memory_bytes / (1024 * 1024);
+    (total_mb > 0).then(|| total_mb.saturating_sub(SYSTEM_MEMORY_RESERVE_MB).max(MIN_HEAP_LIMIT_MB))
+}
+
 pub(crate) fn build_java_command(
     default_java_path: PathBuf,
     settings: &Settings,
@@ -109,12 +117,9 @@ pub(crate) fn build_java_command(
         std::mem::swap(&mut xms_mb, &mut xmx_mb);
     }
 
-    let total_mb: u64 = crate::infra::process_probe::total_memory_bytes() / 1024;
-    if total_mb > 0 {
-        let reserve_mb: u64 = 2048;
-        let hard_max = total_mb.saturating_sub(reserve_mb).max(1024);
-        if (xmx_mb as u64) > hard_max {
-            xmx_mb = hard_max as u32;
+    if let Some(limit_mb) = heap_limit_mb(crate::infra::process_probe::total_memory_bytes()) {
+        if u64::from(xmx_mb) > limit_mb {
+            xmx_mb = limit_mb as u32;
             if xms_mb > xmx_mb {
                 xms_mb = xmx_mb;
             }
@@ -236,6 +241,15 @@ fn apply_default_gc_flags(jvm_args: &mut Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heap_limit_leaves_memory_for_the_system() {
+        const GB: u64 = 1024 * 1024 * 1024;
+        assert_eq!(heap_limit_mb(16 * GB), Some(14 * 1024));
+        assert_eq!(heap_limit_mb(8 * GB), Some(6 * 1024));
+        assert_eq!(heap_limit_mb(2 * GB), Some(1024));
+        assert_eq!(heap_limit_mb(0), None);
+    }
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| s.to_string()).collect()
