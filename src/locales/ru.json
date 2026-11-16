@@ -1256,6 +1256,8 @@
       "versionNotInstalled": "Версия {{version}} не установлена. Начинаю загрузку…",
       "versionInstalled": "Версия {{version}} установлена.",
       "installingFabric": "Устанавливаю Fabric {{version}}…",
+      "installingFabricApi": "Устанавливаю Fabric API…",
+      "fabricApiInstallFailed": "Сборка создана, но Fabric API установить не удалось: {{msg}}",
       "installingQuilt": "Устанавливаю Quilt {{version}}…",
       "installingForge": "Устанавливаю Forge {{version}}…",
       "installingNeoForge": "Устанавливаю NeoForge {{version}}…",

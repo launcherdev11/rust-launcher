@@ -1256,6 +1256,8 @@
       "versionNotInstalled": "Version {{version}} is not installed. Starting download…",
       "versionInstalled": "Version {{version}} installed.",
       "installingFabric": "Installing Fabric {{version}}…",
+      "installingFabricApi": "Installing Fabric API…",
+      "fabricApiInstallFailed": "Profile created, but Fabric API could not be installed: {{msg}}",
       "installingQuilt": "Installing Quilt {{version}}…",
       "installingForge": "Installing Forge {{version}}…",
       "installingNeoForge": "Installing NeoForge {{version}}…",

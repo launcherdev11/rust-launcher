@@ -269,6 +269,29 @@ export function useProfileActions(deps: ProfileActionsDeps) {
         showNotification("warning", t(language, "modpacks.toast.profileCreatedInstallFailed", { msg }));
       }
 
+      if (createLoader === "fabric") {
+        const fabricApiJobId = `fabric-api:${profile.id}`;
+        registerDownloadJob?.({
+          id: fabricApiJobId,
+          label: "Fabric API",
+          kind: "mod",
+        });
+        try {
+          showNotification("info", t(language, "modpacks.toast.installingFabricApi"));
+          await invoke("install_missing_mod_dependency", {
+            profileId: profile.id,
+            modRef: "fabric-api",
+          });
+        } catch (e) {
+          console.error(e);
+          const msg =
+            e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+          showNotification("warning", t(language, "modpacks.toast.fabricApiInstallFailed", { msg }));
+        } finally {
+          finishDownloadJob?.(fabricApiJobId);
+        }
+      }
+
       if (lazy.createSelectedIds.length > 0) {
         const lazyJobId = `lazy:${profile.id}`;
         registerDownloadJob?.({
