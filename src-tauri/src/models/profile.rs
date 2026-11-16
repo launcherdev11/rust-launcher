@@ -36,6 +36,22 @@ pub struct InstanceSettings {
     pub backup_before_update: Option<String>,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(default)]
+pub struct LaunchEnvVar {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProfileLaunchHooks {
+    pub pre_launch_command: Option<String>,
+    pub post_exit_command: Option<String>,
+    pub wrapper_command: Option<String>,
+    pub env_vars: Vec<LaunchEnvVar>,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct InstanceProfileSummary {
     pub id: String,

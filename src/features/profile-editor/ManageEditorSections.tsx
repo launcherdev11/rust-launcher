@@ -9,6 +9,7 @@ import {
 import type { LauncherAccountSummary } from "../../app/types";
 import { JavaSettingsTab } from "../../tabs/JavaSettings";
 import { formatByteSize, localeTag, type Language } from "../../i18n";
+import { LaunchHooksCard } from "./LaunchHooksCard";
 
 export type EditorSection =
   | "content"
@@ -291,7 +292,7 @@ export function LaunchSettingsPanel({
             onKeyDown={(e) => {
               if (e.key === "Enter") onCommitResolution();
             }}
-            className="no-number-spin h-10 w-32 rounded-xl border border-white/15 bg-black/40 px-3 text-sm font-semibold text-white/90 outline-none focus:border-white/35"
+            className="glass-control no-number-spin h-10 w-32 px-3 text-sm font-semibold text-white/90 outline-none"
           />
           <span className="text-sm text-white/50">×</span>
           <input
@@ -306,7 +307,7 @@ export function LaunchSettingsPanel({
             onKeyDown={(e) => {
               if (e.key === "Enter") onCommitResolution();
             }}
-            className="no-number-spin h-10 w-32 rounded-xl border border-white/15 bg-black/40 px-3 text-sm font-semibold text-white/90 outline-none focus:border-white/35"
+            className="glass-control no-number-spin h-10 w-32 px-3 text-sm font-semibold text-white/90 outline-none"
           />
         </div>
       </div>
@@ -328,6 +329,13 @@ export function LaunchSettingsPanel({
           }
         />
       </div>
+
+      <LaunchHooksCard
+        key={profileId}
+        profileId={profileId}
+        showNotification={showNotification}
+        tt={tt}
+      />
 
       {javaSlot ?? (
         <JavaSettingsTab

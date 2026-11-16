@@ -1438,6 +1438,38 @@
       "bulkPrompt": "Ausgewählte Profile ({{count}}) löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
       "title": "Bestätigung löschen"
     },
+    "launchHooks": {
+      "title": "Startbefehle",
+      "hint": "Befehle laufen mit den Rechten deines Benutzerkontos im Profilordner. Verfügbar sind INST_ID, INST_DIR, INST_VERSION und INST_JAVA, nach dem Beenden des Spiels auch INST_EXIT_CODE. Füge keine Befehle ein, denen du nicht vertraust.",
+      "loadFailed": "Startbefehle konnten nicht geladen werden",
+      "preLaunch": {
+        "label": "Vor dem Start",
+        "hint": "Der Launcher wartet, bis der Befehl beendet ist. Schlägt er fehl, startet das Spiel nicht."
+      },
+      "wrapper": {
+        "label": "Wrapper-Befehl",
+        "hint": "Das Spiel wird über dieses Programm gestartet. Erstellt der Wrapper einen eigenen Prozess, wirken Stopp-Taste und Ressourcenmonitor möglicherweise nur auf ihn."
+      },
+      "postExit": {
+        "label": "Nach dem Beenden des Spiels",
+        "hint": "Läuft, sobald das Spiel geschlossen wird. Läuft nicht, wenn der Launcher bis dahin geschlossen wurde."
+      },
+      "env": {
+        "label": "Umgebungsvariablen",
+        "hint": "Werden an das Spiel und die Befehle dieses Profils übergeben.",
+        "name": "Name",
+        "value": "Wert",
+        "add": "Variable hinzufügen",
+        "remove": "Variable entfernen"
+      },
+      "errors": {
+        "invalidEnvName": "Ein Variablenname darf nicht leer sein und weder Leerzeichen noch = enthalten",
+        "invalidWrapper": "Im Wrapper-Befehl fehlt ein schließendes Anführungszeichen",
+        "preLaunchFailed": "Der Befehl vor dem Start ist fehlgeschlagen ({{detail}}). Die Ausgabe steht in der Spielkonsole.",
+        "preLaunchTimeout": "Der Befehl vor dem Start wurde nicht innerhalb von 10 Minuten beendet und daher gestoppt",
+        "wrapperFailed": "Der Wrapper-Befehl konnte nicht gestartet werden ({{detail}})"
+      }
+    },
     "profileSettingsModal": {
       "title": "Profileinstellungen",
       "general": "Allgemein",

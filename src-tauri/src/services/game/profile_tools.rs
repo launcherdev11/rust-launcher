@@ -170,6 +170,7 @@ pub fn duplicate_profile(profile_id: String) -> Result<InstanceProfileSummary, S
         dest_cfg.icon_path = dest.join("icon.png").to_str().map(|s| s.to_string());
     }
     write_instance_config(&dest_cfg_path, &dest_cfg)?;
+    crate::services::game::launch_hooks::copy_profile_hooks(&profile_id, &summary.id);
 
     instance_profile_summary_for_dir(&dest_cfg, &dest)
 }

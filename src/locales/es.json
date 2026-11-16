@@ -1438,6 +1438,38 @@
       "bulkPrompt": "¿Eliminar los perfiles seleccionados ({{count}})? Esta acción no se puede deshacer.",
       "title": "Eliminar confirmación"
     },
+    "launchHooks": {
+      "title": "Comandos de inicio",
+      "hint": "Los comandos se ejecutan con los permisos de tu cuenta de usuario, en la carpeta del perfil. Están disponibles INST_ID, INST_DIR, INST_VERSION e INST_JAVA, y también INST_EXIT_CODE al salir del juego. No pegues comandos en los que no confíes.",
+      "loadFailed": "No se pudieron cargar los comandos de inicio",
+      "preLaunch": {
+        "label": "Antes de iniciar",
+        "hint": "El launcher espera a que termine el comando. Si falla, el juego no se inicia."
+      },
+      "wrapper": {
+        "label": "Comando envoltorio",
+        "hint": "El juego se inicia a través de este programa. Si el envoltorio crea un proceso aparte, el botón de detener y el monitor de recursos pueden afectar solo a él."
+      },
+      "postExit": {
+        "label": "Al salir del juego",
+        "hint": "Se ejecuta cuando se cierra el juego. No se ejecuta si para entonces el launcher está cerrado."
+      },
+      "env": {
+        "label": "Variables de entorno",
+        "hint": "Se pasan al juego y a los comandos de este perfil.",
+        "name": "Nombre",
+        "value": "Valor",
+        "add": "Añadir variable",
+        "remove": "Eliminar variable"
+      },
+      "errors": {
+        "invalidEnvName": "El nombre de una variable no puede estar vacío ni contener espacios o =",
+        "invalidWrapper": "Falta cerrar una comilla en el comando envoltorio",
+        "preLaunchFailed": "el comando previo al inicio falló ({{detail}}). Consulta la salida en la consola del juego.",
+        "preLaunchTimeout": "el comando previo al inicio no terminó en 10 minutos y se detuvo",
+        "wrapperFailed": "no se pudo iniciar el comando envoltorio ({{detail}})"
+      }
+    },
     "profileSettingsModal": {
       "title": "Configuración de perfil",
       "general": "General",

@@ -163,6 +163,10 @@ pub fn build_presets_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("build_presets.json"))
 }
 
+pub fn launch_hooks_path() -> Result<PathBuf, String> {
+    Ok(launcher_data_dir()?.join("launch_hooks.json"))
+}
+
 pub fn lazy_mods_path() -> Result<PathBuf, String> {
     Ok(launcher_data_dir()?.join("lazy_mods.json"))
 }

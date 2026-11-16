@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { reportStats } from "../api/stats";
+import { launchErrorMessage } from "../lib/launchErrors";
 import type { LaunchPresenceContext } from "../lib/socialActivity";
 import type { NotificationKind, ShowNotificationOptions } from "../app/notifications";
 import { isForgeVersion, isNeoForgeVersion } from "../app/versions";
@@ -173,7 +174,7 @@ export function useGameLaunch({
       }
     } catch (error) {
       setRunningConsoleProfile(null);
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = launchErrorMessage(error, tt);
       showNotification("error", tt("app.errors.launchError", { msg }), {
         action: {
           label: tt("app.launchActions.retry"),
@@ -389,7 +390,7 @@ export function useGameLaunch({
         }
       } catch (error) {
         setRunningConsoleProfile(null);
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = launchErrorMessage(error, tt);
         console.error("Ошибка запуска игры:", error);
         showNotification("error", tt("app.errors.launchError", { msg }), {
           action: {
@@ -480,7 +481,7 @@ export function useGameLaunch({
         void reportStats({ launched: true }).catch(() => {});
       } catch (error) {
         setRunningConsoleProfile(null);
-        throw error;
+        throw launchErrorMessage(error, tt);
       } finally {
         setIsLaunching(false);
       }

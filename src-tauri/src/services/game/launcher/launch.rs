@@ -46,6 +46,7 @@ use crate::services::game::runtime::{
     forge_java_runtime_for_mc_version, uses_natives_subdirectories, download_file_checked,
     ensure_assets_for_launch,
 };
+use crate::services::game::launch_hooks;
 use crate::services::game::launcher::process::{is_our_game_process_alive, max_heap_from_args};
 use crate::services::game::launcher::session::{forget_game_session, remember_game_session};
 use crate::services::game::runtime::{clear_game_lan_port, observe_game_log_line};
@@ -1373,7 +1374,14 @@ pub async fn launch_game(
         Ordering::SeqCst,
     );
 
-    let mut cmd = std::process::Command::new(&java_path);
+    let launch_hooks = launch_hooks::hooks_for_launch(playtime_profile_id.as_deref());
+    let hook_env: Vec<(String, String)> = launch_hooks
+        .env_vars
+        .iter()
+        .map(|var| (var.name.clone(), var.value.clone()))
+        .collect();
+    let (mut cmd, wrapper_program) =
+        launch_hooks::game_command(&java_path, launch_hooks.wrapper_command.as_deref())?;
     cmd.args(&jvm_args)
         .arg(&detail.main_class)
         .args(&game_args)
@@ -1387,13 +1395,31 @@ pub async fn launch_game(
         &java_path,
         settings.graphics_adapter.as_deref(),
     );
+    cmd.envs(hook_env.iter().map(|(k, v)| (k, v)));
     hide_console(&mut cmd);
+
+    let hook_context = playtime_profile_id.as_ref().map(|profile_id| launch_hooks::HookContext {
+        profile_id: profile_id.clone(),
+        game_dir: game_dir.clone(),
+        version_id: version_id.clone(),
+        java_path: java_path.clone(),
+        env_vars: hook_env,
+    });
+
+    emit_launch_stage(&app, "starting");
+    if let (Some(line), Some(ctx)) = (launch_hooks.pre_launch_command.clone(), hook_context.clone()) {
+        let hook_app = app.clone();
+        tokio::task::spawn_blocking(move || launch_hooks::run_pre_launch(&hook_app, &line, &ctx))
+            .await
+            .map_err(|e| format!("{}{e}", launch_hooks::HOOK_FAILED_PREFIX))??;
+    }
 
     crate::services::game::world_stats::begin_session(&app, &game_dir, &auth_uuid);
 
-    emit_launch_stage(&app, "starting");
     let mut child = cmd.spawn().map_err(|e| {
-
+        if let Some(program) = wrapper_program.as_deref() {
+            return format!("{}{program}: {e}", launch_hooks::WRAPPER_FAILED_PREFIX);
+        }
         if e.kind() == ErrorKind::PermissionDenied {
             format!(
                 "Отказано в доступе (os error 13). Java: {}, рабочая папка: {}",
@@ -1478,6 +1504,7 @@ pub async fn launch_game(
         .clone()
         .filter(|_| settings.world_auto_backup);
     let scheduled_backup_profile = playtime_profile_id.clone();
+    let post_exit_command = launch_hooks.post_exit_command.clone();
     let session_started_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -1549,6 +1576,10 @@ pub async fn launch_game(
                 &app_clone_for_playtime,
                 profile_id,
             );
+        }
+
+        if let (Some(line), Some(ctx)) = (post_exit_command.as_deref(), hook_context.as_ref()) {
+            launch_hooks::run_post_exit(&app_clone_for_playtime, line, ctx, exit_code);
         }
     });
 

@@ -1410,6 +1410,38 @@
       "bulkPrompt": "Delete the selected profiles ({{count}})? This action cannot be undone.",
       "title": "Delete confirmation"
     },
+    "launchHooks": {
+      "title": "Launch commands",
+      "hint": "Commands run with your user account's permissions, inside the profile folder. INST_ID, INST_DIR, INST_VERSION and INST_JAVA are available, plus INST_EXIT_CODE after the game exits. Don't paste commands you don't trust.",
+      "loadFailed": "Couldn't load launch commands",
+      "preLaunch": {
+        "label": "Before launch",
+        "hint": "The launcher waits for the command to finish. If it fails, the game won't start."
+      },
+      "wrapper": {
+        "label": "Wrapper command",
+        "hint": "The game starts through this program. If the wrapper creates a separate process, the stop button and resource monitor may only affect the wrapper."
+      },
+      "postExit": {
+        "label": "After the game exits",
+        "hint": "Runs once the game closes. It won't run if the launcher has been closed by then."
+      },
+      "env": {
+        "label": "Environment variables",
+        "hint": "Passed to the game and this profile's commands.",
+        "name": "Name",
+        "value": "Value",
+        "add": "Add variable",
+        "remove": "Remove variable"
+      },
+      "errors": {
+        "invalidEnvName": "A variable name can't be empty or contain spaces or =",
+        "invalidWrapper": "The wrapper command has an unclosed quote",
+        "preLaunchFailed": "the pre-launch command failed ({{detail}}). See the game console for its output.",
+        "preLaunchTimeout": "the pre-launch command didn't finish within 10 minutes and was stopped",
+        "wrapperFailed": "couldn't start the wrapper command ({{detail}})"
+      }
+    },
     "profileSettingsModal": {
       "title": "Profile settings",
       "general": "General",

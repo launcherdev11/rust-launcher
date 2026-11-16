@@ -741,6 +741,7 @@ pub fn delete_profile(id: String) -> Result<(), String> {
     }
 
     std::fs::remove_dir_all(&dir).map_err(|e| format!("Не удалось удалить папку сборки {:?}: {e}", dir))?;
+    crate::services::game::launch_hooks::forget_profile_hooks(&id);
     Ok(())
 }
 
