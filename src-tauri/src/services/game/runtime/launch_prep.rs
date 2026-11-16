@@ -8,7 +8,7 @@ use crate::infra::network::is_online;
 use crate::services::game::core::{library_applies, sha1_hex_of_file};
 use crate::services::game::console::log_to_console;
 use crate::services::game::runtime::downloads::download_file_checked;
-use crate::services::game::state::{BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES};
+use crate::services::game::state::{DEFAULT_DOWNLOAD_RETRIES, LIBRARIES_BASE};
 use crate::services::game::version_types::Library;
 
 fn lwjgl_native_classifier(os_name: &str) -> &'static str {
@@ -133,7 +133,7 @@ pub(crate) async fn ensure_library_artifacts_present_for_launch(
         let url = if !a.url.trim().is_empty() {
             a.url.clone()
         } else {
-            format!("{}/{}", BMCL_MAVEN_BASE, a.path)
+            format!("{}/{}", LIBRARIES_BASE, a.path)
         };
 
         if !is_online().await {
@@ -272,6 +272,14 @@ pub(crate) fn lwjgl_fallback_modules() -> &'static [&'static str] {
     ]
 }
 
+fn classpath_has_lwjgl_windowing(classpath: &[PathBuf]) -> bool {
+    classpath.iter().any(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|s| s.starts_with("lwjgl-glfw-") || s.starts_with("lwjgl-sdl-"))
+    })
+}
+
 pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
     app: &AppHandle,
     version_id: &str,
@@ -283,13 +291,7 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
     if !is_release_1_17_or_newer(version_id) {
         return Ok(());
     }
-    let has_lwjgl_glfw = classpath.iter().any(|p| {
-        p.file_name()
-            .and_then(|n| n.to_str())
-            .map(|s| s.starts_with("lwjgl-glfw-"))
-            .unwrap_or(false)
-    });
-    if has_lwjgl_glfw {
+    if classpath_has_lwjgl_windowing(classpath) {
         return Ok(());
     }
     let lwjgl_version = "3.3.3";
@@ -312,7 +314,7 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
             }
         }
         if !path.exists() {
-            let url = format!("{BMCL_MAVEN_BASE}/{rel}");
+            let url = format!("{LIBRARIES_BASE}/{rel}");
             download_file_checked(
                 &client,
                 &url,
@@ -345,7 +347,7 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
             }
         }
         if !native_path.exists() {
-            let url = format!("{BMCL_MAVEN_BASE}/{native_rel}");
+            let url = format!("{LIBRARIES_BASE}/{native_rel}");
             download_file_checked(
                 &client,
                 &url,
@@ -361,4 +363,24 @@ pub(crate) async fn ensure_lwjgl_fallback_for_modern_versions(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod lwjgl_windowing_tests {
+    use super::*;
+
+    #[test]
+    fn sdl_and_glfw_builds_need_no_fallback() {
+        let sdl = vec![PathBuf::from("libraries/org/lwjgl/lwjgl-sdl/3.4.3/lwjgl-sdl-3.4.3.jar")];
+        let glfw = vec![PathBuf::from("libraries/org/lwjgl/lwjgl-glfw/3.3.3/lwjgl-glfw-3.3.3.jar")];
+        assert!(classpath_has_lwjgl_windowing(&sdl));
+        assert!(classpath_has_lwjgl_windowing(&glfw));
+    }
+
+    #[test]
+    fn missing_window_library_needs_fallback() {
+        let core_only = vec![PathBuf::from("libraries/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar")];
+        assert!(!classpath_has_lwjgl_windowing(&core_only));
+        assert!(!classpath_has_lwjgl_windowing(&[]));
+    }
 }

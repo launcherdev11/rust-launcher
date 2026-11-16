@@ -2,7 +2,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub(crate) static CANCEL_DOWNLOAD: AtomicBool = AtomicBool::new(false);
 pub(crate) static GAME_PROCESS_PID: AtomicU64 = AtomicU64::new(0);
-// -Xmx запущенной игры в байтах, 0 — неизвестно
 pub(crate) static GAME_PROCESS_MAX_HEAP_BYTES: AtomicU64 = AtomicU64::new(0);
 pub(crate) static REOPEN_LAUNCHER_ON_GAME_EXIT: AtomicBool = AtomicBool::new(false);
 
@@ -25,7 +24,7 @@ pub const NEOFORGE_MAVEN_METADATA_URL: &str =
     "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
 pub const NEOFORGE_MAVEN_BASE: &str = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
 pub const FORGE_INSTALLER_MIN_BYTES: u64 = 1_000_000;
-pub const BMCL_MAVEN_BASE: &str = "https://bmclapi2.bangbang93.com/maven";
+pub const LIBRARIES_BASE: &str = "https://libraries.minecraft.net";
 pub const FABRIC_META_GAME: &str = "https://meta.fabricmc.net/v2/versions/game";
 pub const FABRIC_META_LOADERS: &str = "https://meta.fabricmc.net/v2/versions/loader";
 pub const FABRIC_META_PROFILE: &str = "https://meta.fabricmc.net/v2/versions/loader";

@@ -50,7 +50,7 @@ use crate::services::game::launcher::session::{forget_game_session, remember_gam
 use crate::services::game::run_history::RunRecorder;
 use crate::services::game::settings as settings_service;
 use crate::services::game::state::{
-    BMCL_MAVEN_BASE, DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_MAX_HEAP_BYTES, GAME_PROCESS_PID, REOPEN_LAUNCHER_ON_GAME_EXIT,
+    DEFAULT_DOWNLOAD_RETRIES, GAME_PROCESS_MAX_HEAP_BYTES, GAME_PROCESS_PID, LIBRARIES_BASE, REOPEN_LAUNCHER_ON_GAME_EXIT,
 };
 use crate::services::game::version_types::*;
 use crate::services::game::versions::get_mojang_version_url;
@@ -576,7 +576,7 @@ pub async fn launch_game(
                     let nat_url = if !nat.url.trim().is_empty() {
                         nat.url.clone()
                     } else {
-                        format!("{}/{}", BMCL_MAVEN_BASE, nat.path)
+                        format!("{}/{}", LIBRARIES_BASE, nat.path)
                     };
                     let total_done = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
                     download_file_checked(
