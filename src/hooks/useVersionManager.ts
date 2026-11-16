@@ -591,6 +591,7 @@ export function useVersionManager({
         loaderVersion: activeInstanceProfile.loader_version ?? null,
         source: "profile",
         label: activeInstanceProfile.name,
+        profileId: activeInstanceProfile.id,
       };
     }
     if (selectedVersion) {

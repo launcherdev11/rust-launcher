@@ -152,6 +152,10 @@ fn history_dir(profile_id: &str, rel: &str) -> Result<PathBuf, String> {
         .join(format!("{file_name}-{:016x}", h.finish())))
 }
 
+pub(crate) fn snapshot_config_version(profile_id: &str, rel: &str, path: &Path) -> Result<(), String> {
+    snapshot_current(profile_id, &normalize_rel(rel), path)
+}
+
 fn snapshot_current(profile_id: &str, rel: &str, path: &Path) -> Result<(), String> {
     let Ok(bytes) = fs::read(path) else {
         return Ok(());

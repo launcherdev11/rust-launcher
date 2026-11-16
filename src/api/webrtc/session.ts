@@ -19,6 +19,8 @@ export type PeerSessionCallbacks = {
 };
 
 export const LAN_TUNNEL_CAPABILITY = "mux:1";
+export const ROOM_FILES_CAPABILITY = "files:1";
+const FILES_CHANNEL_ID = 100;
 
 const RTT_PING_PREFIX = "rtt:";
 const RTT_PONG_PREFIX = "rtt-ack:";
@@ -134,6 +136,37 @@ async function buildIceServers(): Promise<{ servers: RTCIceServer[]; turnOk: boo
   return { servers, turnOk };
 }
 
+async function selectedPairIsRelayed(pc: RTCPeerConnection): Promise<boolean> {
+  try {
+    const stats = await pc.getStats();
+    let pairId: string | null = null;
+    const pairs = new Map<string, RTCStats>();
+    const candidates = new Map<string, RTCStats>();
+    stats.forEach((report) => {
+      if (report.type === "transport") {
+        const t = report as RTCStats & { selectedCandidatePairId?: string };
+        if (t.selectedCandidatePairId) pairId = t.selectedCandidatePairId;
+      }
+      if (report.type === "candidate-pair") pairs.set(report.id, report);
+      if (report.type === "local-candidate" || report.type === "remote-candidate") {
+        candidates.set(report.id, report);
+      }
+    });
+    const pair = (pairId ? pairs.get(pairId) : undefined) ??
+      [...pairs.values()].find((p) => (p as { state?: string; nominated?: boolean }).state === "succeeded");
+    if (!pair) return true;
+    const { localCandidateId, remoteCandidateId } = pair as {
+      localCandidateId?: string;
+      remoteCandidateId?: string;
+    };
+    return [localCandidateId, remoteCandidateId].some(
+      (id) => (candidates.get(id ?? "") as { candidateType?: string } | undefined)?.candidateType === "relay",
+    );
+  } catch {
+    return true;
+  }
+}
+
 async function detectConnectionType(pc: RTCPeerConnection): Promise<ConnectionType> {
   try {
     const stats = await pc.getStats();
@@ -186,6 +219,9 @@ export class RoomPeerSession {
   private pendingRtt: { id: string; sentAt: number } | null = null;
   private rttSeq = 0;
   private roomStateHandlers = new Set<(json: string) => void>();
+  private filesChannel: RTCDataChannel | null = null;
+  private remoteFilesCapable = false;
+  private filesHandlers = new Set<(data: string | ArrayBuffer) => void>();
 
   constructor(opts: {
     roomId: string;
@@ -244,6 +280,45 @@ export class RoomPeerSession {
     }
   }
 
+  get supportsRoomFiles(): boolean {
+    return this.remoteFilesCapable && this.filesChannel?.readyState === "open";
+  }
+
+  get filesBufferedAmount(): number {
+    return this.filesChannel?.bufferedAmount ?? Number.MAX_SAFE_INTEGER;
+  }
+
+  sendFiles(data: string | ArrayBuffer): boolean {
+    if (this.filesChannel?.readyState !== "open") return false;
+    try {
+      if (typeof data === "string") this.filesChannel.send(data);
+      else this.filesChannel.send(data);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  onFiles(handler: (data: string | ArrayBuffer) => void): () => void {
+    this.filesHandlers.add(handler);
+    return () => {
+      this.filesHandlers.delete(handler);
+    };
+  }
+
+  async isRelayed(): Promise<boolean> {
+    return this.pc ? selectedPairIsRelayed(this.pc) : true;
+  }
+
+  private wireFilesChannel(channel: RTCDataChannel) {
+    channel.binaryType = "arraybuffer";
+    channel.onmessage = (ev) => {
+      const data = typeof ev.data === "string" || ev.data instanceof ArrayBuffer ? ev.data : null;
+      if (data == null) return;
+      for (const h of this.filesHandlers) h(data);
+    };
+  }
+
   sendRoomState(json: string): void {
     if (this.channel?.readyState !== "open") return;
     try {
@@ -262,6 +337,8 @@ export class RoomPeerSession {
   private handleControlMessage(channel: RTCDataChannel, message: string): void {
     if (message === LAN_TUNNEL_CAPABILITY) {
       this.remoteTunnelCapable = true;
+    } else if (message === ROOM_FILES_CAPABILITY) {
+      this.remoteFilesCapable = true;
     } else if (message.startsWith(RTT_PING_PREFIX)) {
       try {
         channel.send(`${RTT_PONG_PREFIX}${message.slice(RTT_PING_PREFIX.length)}`);
@@ -300,6 +377,12 @@ export class RoomPeerSession {
       iceCandidatePoolSize: turnOk ? 1 : 0,
     });
     this.pc = pc;
+    this.filesChannel = pc.createDataChannel("mc16-files", {
+      negotiated: true,
+      id: FILES_CHANNEL_ID,
+      ordered: true,
+    });
+    this.wireFilesChannel(this.filesChannel);
 
     pc.onicecandidate = (ev) => {
       if (!ev.candidate) {
@@ -459,6 +542,7 @@ export class RoomPeerSession {
     this.clearRecoveryTimers();
     try {
       this.channel?.close();
+      this.filesChannel?.close();
     } catch {
     }
     try {
@@ -475,6 +559,7 @@ export class RoomPeerSession {
       try {
         channel.send(`ping:${this.localUserId}`);
         channel.send(LAN_TUNNEL_CAPABILITY);
+        channel.send(ROOM_FILES_CAPABILITY);
       } catch {
       }
       this.callbacks.onChannelOpen?.();
@@ -600,6 +685,7 @@ export class RoomPeerSession {
     this.clearRecoveryTimers();
     this.remoteBinaryHandlers.clear();
     this.roomStateHandlers.clear();
+    this.filesHandlers.clear();
     this.latestRttMs = null;
     this.pendingRtt = null;
     try {
@@ -610,8 +696,13 @@ export class RoomPeerSession {
       this.pc?.close();
     } catch {
     }
+    try {
+      this.filesChannel?.close();
+    } catch {
+    }
     this.pc = null;
     this.channel = null;
+    this.filesChannel = null;
     this.callbacks.onStatus("closed");
   }
 }

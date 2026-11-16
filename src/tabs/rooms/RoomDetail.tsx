@@ -57,6 +57,7 @@ type Props = {
   expectedPeers: number;
   connectedPeers: number;
   offlinePeerIds: string[];
+  syncPanel?: ReactNode;
   onBack: () => void;
   onClose: () => void;
   onLeave: () => void;
@@ -136,6 +137,7 @@ export function RoomDetail({
   expectedPeers,
   connectedPeers,
   offlinePeerIds,
+  syncPanel,
   onBack,
   onClose,
   onLeave,
@@ -390,6 +392,8 @@ export function RoomDetail({
               </Fact>
             </dl>
           </Panel>
+
+          {syncPanel}
 
           {isOwner ? (
             <RoomSettingsPanel

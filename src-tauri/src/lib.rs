@@ -66,8 +66,13 @@ use services::curseforge::{
 use services::modrinth::{
     apply_profile_content_updates, check_profile_content_updates,
     check_profile_incompatible_content, download_modrinth_with_dependencies,
-    install_missing_mod_dependency, list_installed_content_index, resolve_profile_item_metadata,
-    scan_profile_mod_jars,
+    install_missing_mod_dependency, list_installed_content_index, preview_profile_version_change,
+    resolve_profile_item_metadata, scan_profile_mod_jars,
+};
+use services::room_sync::{
+    room_sync_apply, room_sync_discard, room_sync_fetch_platform, room_sync_inspect,
+    room_sync_manifest, room_sync_plan, room_sync_read_file, room_sync_stage_chunk,
+    room_sync_stage_finish,
 };
 use services::rpc::{
     discord_presence_clear, discord_presence_update, shutdown as discord_presence_shutdown,
@@ -296,6 +301,15 @@ pub fn run() {
             get_profile_launch_hooks,
             set_profile_launch_hooks,
             run_launch_preflight,
+            room_sync_manifest,
+            room_sync_read_file,
+            room_sync_plan,
+            room_sync_fetch_platform,
+            room_sync_stage_chunk,
+            room_sync_stage_finish,
+            room_sync_inspect,
+            room_sync_apply,
+            room_sync_discard,
             set_profile_item_pinned,
             preview_profile_version_change,
             delete_item,

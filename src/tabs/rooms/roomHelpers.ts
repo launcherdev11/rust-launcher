@@ -20,6 +20,7 @@ export type RoomCurrentGame = {
   loaderVersion?: string | null;
   source: "profile" | "menu";
   label: string;
+  profileId?: string | null;
 };
 
 export const ROOM_LOADERS: RoomLoaderId[] = ["vanilla", "fabric", "quilt", "forge", "neoforge"];

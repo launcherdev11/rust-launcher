@@ -224,7 +224,7 @@ fn is_ignored_in_curseforge_fingerprint(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r')
 }
 
-pub(super) fn curseforge_file_fingerprint(buf: &[u8]) -> u32 {
+pub(crate) fn curseforge_file_fingerprint(buf: &[u8]) -> u32 {
     const MULTIPLEX: u32 = 1540483477;
 
     let mut normalized_len: u32 = 0;

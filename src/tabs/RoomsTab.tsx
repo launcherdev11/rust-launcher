@@ -23,6 +23,8 @@ import { ApiError, getStoredAccessToken } from "../api/client";
 import { UserProfileModal, type UserProfileSeed } from "../components/UserProfileModal";
 import { WS_EVENT, type WsEvent } from "../api/ws";
 import { useRoomPeerSession } from "../hooks/useRoomPeerSession";
+import { RoomSyncPanel } from "../features/room-sync/RoomSyncPanel";
+import { useRoomSyncHost } from "../features/room-sync/useRoomSyncHost";
 import { useT, type Language } from "../i18n";
 import { buildInitialAvatarDataUrl, getUserListAvatarSrc, userListAvatarCacheKey } from "../lib/avatar";
 import type { LaunchPresenceContext, RoomPresenceContext } from "../lib/socialActivity";
@@ -383,6 +385,19 @@ export function RoomsTab({
   });
 
   const hostSharing = isOwner && gameLanPort != null;
+  const syncProfileId = currentGame?.source === "profile" ? currentGame.profileId ?? null : null;
+  // Хозяин раздаёт сборку, выбранную при создании комнаты, даже если сейчас выбрана другая.
+  const pinnedHostProfileId = isOwner && selectedRoom ? getHostRoomProfile(selectedRoom.id) : null;
+  const hostProfileId =
+    pinnedHostProfileId && profiles.some((p) => p.id === pinnedHostProfileId)
+      ? pinnedHostProfileId
+      : syncProfileId;
+  useRoomSyncHost({
+    isOwner,
+    sessions,
+    profileId: hostProfileId,
+    forceShare: Boolean(selectedRoom?.modpack_name),
+  });
 
   useEffect(() => {
     if (!onRoomLaunchContextChange) return;
@@ -785,6 +800,14 @@ export function RoomsTab({
           expectedPeers={expectedPeerIds.length}
           connectedPeers={connectedPeerIds.length}
           offlinePeerIds={offlinePeerIds}
+          syncPanel={
+            <RoomSyncPanel
+              isOwner={isOwner}
+              tt={tt}
+              session={isOwner ? null : sessions[selectedRoom.owner_user_id] ?? null}
+              profileId={syncProfileId}
+            />
+          }
           onBack={() => {
             setViewingProfile(null);
             setManaging(false);
