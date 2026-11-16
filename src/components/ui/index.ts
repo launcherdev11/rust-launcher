@@ -19,3 +19,4 @@ export { ErrorState, LoadingState, StateFrame } from "./StateView";
 export { TabErrorBoundary } from "./TabErrorBoundary";
 export { InputClearButton, clearInputValue } from "./InputClearButton";
 export { TextField } from "./TextField";
+export { TooltipHost } from "./TooltipHost";

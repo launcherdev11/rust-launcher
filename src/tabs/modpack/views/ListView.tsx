@@ -371,7 +371,7 @@ export function ListView({ ctx }: Props) {
       onContextMenuCapture={handleListAreaContextMenuCapture}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="glass-toolbar flex min-w-0 flex-1 basis-[22rem] items-center gap-3 px-4 py-2.5">
+        <div className="glass-toolbar field-shell flex min-w-0 flex-1 basis-[22rem] items-center gap-3 px-4 py-2.5">
           <SearchIcon className="h-4 w-4" />
           <input
             type="text"

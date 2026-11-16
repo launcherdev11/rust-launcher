@@ -313,7 +313,6 @@ pub fn get_graphics_adapters() -> Result<Vec<String>, String> {
         let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }
             .map_err(|e| format!("Не удалось получить список видеокарт: {e}"))?;
         let mut adapters = Vec::new();
-        // EnumAdapters1 возвращает DXGI_ERROR_NOT_FOUND после последнего адаптера
         for index in 0.. {
             let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else {
                 break;

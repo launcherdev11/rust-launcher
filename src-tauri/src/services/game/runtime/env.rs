@@ -46,7 +46,6 @@ pub(crate) fn apply_windows_graphics_preference(
     }
 
     let exists = || unsafe { RegQueryValueExW(key, &value_name, None, None, None, None) }.is_ok();
-    // без явного выбора не трогаем то, что пользователь задал в настройках Windows
     let preference = match preference {
         Some(p) => Some(p),
         None if exists() => None,

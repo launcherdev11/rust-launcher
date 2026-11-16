@@ -34,7 +34,7 @@ import { RemoveAccountDialog } from "./app/components/RemoveAccountDialog";
 import { SocialPromptCards } from "./app/components/SocialPromptCards";
 import { TabDragGhost } from "./app/components/TabDragGhost";
 import { TabPaneLoading } from "./app/components/TabPaneLoading";
-import { ConfirmHost, PromptHost, TabErrorBoundary } from "./components/ui";
+import { ConfirmHost, PromptHost, TabErrorBoundary, TooltipHost } from "./components/ui";
 import { TabSplitPanes } from "./app/components/TabSplitPanes";
 import { TitleBar } from "./app/components/TitleBar";
 import { toInstanceProfileCard } from "./app/profiles";
@@ -953,6 +953,7 @@ function App() {
 
         <ConfirmHost language={language} />
         <PromptHost language={language} />
+        <TooltipHost />
 
         <NotificationToasts
           notifications={notifications}

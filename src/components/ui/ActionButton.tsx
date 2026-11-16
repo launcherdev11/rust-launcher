@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { Spinner } from "./Spinner";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "sky" | "emerald";
+type Variant = "primary" | "secondary" | "tint" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -12,7 +12,6 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   loadingLabel?: ReactNode;
   children: ReactNode;
   fullWidth?: boolean;
-  pill?: boolean;
   disabledReason?: string;
 };
 
@@ -20,9 +19,8 @@ const variantClasses: Record<Variant, string> = {
   primary: "btn-accent",
   secondary: "btn-soft",
   ghost: "btn-ghost",
+  tint: "btn-tint",
   danger: "btn-danger",
-  sky: "btn-soft",
-  emerald: "btn-tint",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -38,7 +36,6 @@ export function ActionButton({
   loadingLabel,
   children,
   fullWidth = false,
-  pill: _pill,
   className = "",
   disabled,
   disabledReason,

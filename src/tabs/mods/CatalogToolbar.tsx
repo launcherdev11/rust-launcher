@@ -192,7 +192,7 @@ export function CatalogToolbar({
             {tt("mods.recent.clear")}
           </button>
         )}
-        <div className="glass-toolbar flex h-10 min-w-0 flex-1 items-center gap-2 px-3">
+        <div className="glass-toolbar field-shell flex h-10 min-w-0 flex-1 items-center gap-2 px-3">
           <img
             src="/launcher-assets/search.png"
             alt=""

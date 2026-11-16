@@ -96,7 +96,6 @@ fn create_windows_shortcut(
     let link_path = shortcut_path.to_path_buf();
     let arguments = format!("{LAUNCH_PROFILE_ARG} {profile_id}");
 
-    // COM в отдельном STA-потоке, чтобы не зависеть от модели потока вызывающего
     std::thread::spawn(move || -> Result<(), String> {
         let fail = |e: windows::core::Error| format!("Не удалось создать ярлык: {e}");
         unsafe {

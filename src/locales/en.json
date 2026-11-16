@@ -189,7 +189,7 @@
       "discord": "Discord",
       "prevImage": "Previous image",
       "nextImage": "Next image",
-      "showAll": "Full gallery · {{count}}",
+      "showAll": "Full gallery ({{count}})",
       "details": "Details",
       "links": "Links",
       "type": "Type",
@@ -1228,6 +1228,7 @@
       "started": "Import started…",
       "finishedWithVersion": "Import finished. Profile created with pack's game version.",
       "failed": "Could not import the modpack: {{msg}}",
+      "finishedWithMissing": "Profile created, but {{count}} files could not be downloaded. Add them manually.",
       "cancelledKeyword": "cancelled"
     },
     "header": {
@@ -1702,7 +1703,7 @@
     "refresh": "Refresh",
     "requests": "Requests",
     "incomingTitle": "Requests",
-    "incomingCount": "Requests · {{count}}",
+    "incomingCount": "Requests ({{count}})",
     "signInFirst": "Sign in first in the Accounts tab.",
     "authGateTitle": "Sign in",
     "authGateBody": "Friends and online status need a sign-in from the Accounts tab.",
@@ -1849,8 +1850,8 @@
     "p2pReconnectToast": "Reconnecting…",
     "memberOffline": "not in launcher",
     "joinWorld": "Join world",
-    "joinWorldLaunching": "Tunnel {{address}} - launching game…",
-    "joinWorldLaunched": "Game → {{address}}. Keep the launcher open - the tunnel runs inside it.",
+    "joinWorldLaunching": "Tunnel {{address}} is ready, launching the game…",
+    "joinWorldLaunched": "The game is connecting to {{address}}. Keep the launcher open: the tunnel runs inside it.",
     "joinWorldInGameCopied": "Address {{address}} copied. In-game: Multiplayer → Direct Connect.",
     "joinWorldInGame": "Tunnel ready: {{address}}. In-game: Multiplayer → Direct Connect.",
     "waitForPeer": "Invite a friend - the link appears when they join.",
@@ -2375,7 +2376,7 @@
       "linkedTitle": "Linked accounts",
       "linkedHint": "Linking confirms the game account belongs to you.",
       "notLinked": "Not linked",
-      "linkedAs": "Linked · {{name}}",
+      "linkedAs": "Linked: {{name}}",
       "sessionTitle": "Session",
       "sessionHint": "Sign out of 16Launcher on this device. Your Minecraft accounts stay in the launcher."
     }
@@ -2734,7 +2735,7 @@
       "elyDesc": "For Ely profile and Ely.by skins",
       "microsoftTitle": "Microsoft",
       "microsoftDesc": "Official Minecraft / Microsoft account",
-      "skip": "Skip · sign in later"
+      "skip": "Skip and sign in later"
     },
     "ely": {
       "title": "Sign in with Ely.by",
@@ -2764,7 +2765,7 @@
       "title": "Move your instances",
       "subtitle": "Looking for instances in Prism, MultiMC, CurseForge, ATLauncher and GDLauncher.",
       "launcher": "Launcher",
-      "launcherAuto": "Auto · all launchers",
+      "launcherAuto": "Auto (all launchers)",
       "path": "Launcher path",
       "pathPlaceholder": "e.g. …\\AppData\\Roaming\\PrismLauncher",
       "pathHint": "Launcher root or the instances / Instances folder",
@@ -2773,7 +2774,7 @@
       "scanning": "Searching…",
       "emptyTitle": "No instances found",
       "emptyHint": "If your instances are in a custom folder, choose it manually. You can also do this later in Builds → Import.",
-      "cta": "Move · {{count}}",
+      "cta": "Move ({{count}})",
       "skip": "Skip",
       "continue": "Continue",
       "progress": "{{current}}/{{total}} · {{name}}",
@@ -3195,7 +3196,7 @@
   },
   "jumpList": {
     "category": "Instances",
-    "description": "Launch · {{version}}"
+    "description": "Launch {{version}}"
   },
   "gameMonitor": {
     "chip": "{{used}} GB · {{cpu}}%",

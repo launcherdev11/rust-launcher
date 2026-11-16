@@ -71,7 +71,7 @@ export function SettingsHeader({ ctx }: Props) {
             );
           })}
         </div>
-        <label className="glass-toolbar flex min-w-[14rem] flex-1 items-center gap-3 px-3.5 py-2 sm:ml-auto sm:max-w-sm">
+        <label className="glass-toolbar field-shell flex min-w-[14rem] flex-1 items-center gap-3 px-3.5 py-2 sm:ml-auto sm:max-w-sm">
           <Search className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
           <input
             type="search"

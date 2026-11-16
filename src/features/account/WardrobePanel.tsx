@@ -595,7 +595,7 @@ function TextureThumb({
   }, deps);
 
   if (!src) {
-    return <div className="h-full w-full animate-pulse bg-white/10" aria-hidden />;
+    return <div className="skeleton h-full w-full" aria-hidden />;
   }
   return <img src={src} alt="" className={imgClassName} style={{ imageRendering: "pixelated" }} draggable={false} />;
 }

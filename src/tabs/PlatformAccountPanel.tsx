@@ -798,7 +798,7 @@ export function PlatformAccountPanel({
                       autoComplete="one-time-code"
                       value={resetCode}
                       onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      className="h-14 w-full rounded-2xl border border-accent-to/30 bg-ink-950/70 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:bg-black/55"
+                      className="glass-control h-14 w-full px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none"
                       placeholder="••••••"
                       maxLength={6}
                     />
@@ -885,7 +885,7 @@ export function PlatformAccountPanel({
                         void handleAuth();
                       }
                     }}
-                    className={`h-14 w-full rounded-2xl border border-accent-to/30 bg-ink-950/70 px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none transition focus:bg-black/55 ${
+                    className={`glass-control h-14 w-full px-3 text-center text-2xl font-semibold tracking-[0.55em] text-white outline-none ${
                       verificationCode ? "pr-10" : ""
                     }`}
                     placeholder="••••••"
@@ -1186,7 +1186,7 @@ export function PlatformAccountPanel({
               <>
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-white/10" />
-                  <span className="text-xs font-medium lowercase tracking-wide text-white/40">
+                  <span className="text-xs font-medium lowercase text-white/40">
                     {tt("platform.orDivider")}
                   </span>
                   <div className="h-px flex-1 bg-white/10" />
@@ -1432,7 +1432,7 @@ export function PlatformAccountPanel({
                   autoFocus
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
-                  className={`h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none focus:border-danger-line/40 ${
+                  className={`glass-control h-10 w-full px-3 text-sm text-white outline-none ${
                     deletePassword ? "pr-[4.5rem]" : "pr-11"
                   }`}
                   placeholder={tt("platform.passwordPlaceholder")}

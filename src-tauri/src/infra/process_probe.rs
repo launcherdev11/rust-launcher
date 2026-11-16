@@ -2,11 +2,8 @@ use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct ProcessSnapshot {
-    // имя исполняемого файла в нижнем регистре, например "javaw.exe"
     pub name: String,
-    // время запуска в секундах от UNIX epoch
     pub start_time: u64,
-    // суммарное процессорное время по всем ядрам
     pub cpu_time: Duration,
     pub memory_bytes: u64,
 }
@@ -33,7 +30,6 @@ mod imp {
     use super::ProcessSnapshot;
 
     const STILL_ACTIVE: u32 = 259;
-    // секунды между 1601-01-01 и 1970-01-01
     const WINDOWS_TO_UNIX_EPOCH_SECS: u64 = 11_644_473_600;
 
     struct Handle(HANDLE);
@@ -153,7 +149,6 @@ mod imp {
             .ok()?;
         let start_time = (filetime_to_u64(creation) / 10_000_000)
             .saturating_sub(WINDOWS_TO_UNIX_EPOCH_SECS);
-        // FILETIME в интервалах по 100 нс
         let cpu_time =
             Duration::from_nanos((filetime_to_u64(kernel) + filetime_to_u64(user)) * 100);
 

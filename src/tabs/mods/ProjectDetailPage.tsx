@@ -111,19 +111,19 @@ export function ProjectDetailPage({
   if (loading && !detail) {
     return (
       <div className="glass-panel flex min-h-0 flex-1 flex-col gap-5 p-5" aria-busy="true">
-        <div className="h-8 w-28 animate-pulse rounded-lg bg-white/[0.06]" />
+        <div className="skeleton h-8 w-28 rounded-lg" />
         <div className="flex items-end gap-4">
-          <div className="h-24 w-24 animate-pulse rounded-2xl bg-white/10" />
+          <div className="skeleton h-24 w-24 rounded-2xl" />
           <div className="min-w-0 flex-1 space-y-2.5">
-            <div className="h-7 w-64 max-w-full animate-pulse rounded-lg bg-white/10" />
-            <div className="h-3.5 w-32 animate-pulse rounded-lg bg-white/[0.07]" />
-            <div className="h-3.5 w-96 max-w-full animate-pulse rounded-lg bg-white/[0.07]" />
+            <div className="skeleton h-7 w-64 max-w-full rounded-lg" />
+            <div className="skeleton h-3.5 w-32 rounded-lg" />
+            <div className="skeleton h-3.5 w-96 max-w-full rounded-lg" />
           </div>
         </div>
-        <div className="h-9 w-72 animate-pulse rounded-xl bg-white/[0.06]" />
+        <div className="skeleton h-9 w-72 rounded-xl" />
         <div className="flex gap-5">
-          <div className="h-64 flex-1 animate-pulse rounded-2xl bg-white/5" />
-          <div className="hidden h-64 w-72 animate-pulse rounded-2xl bg-white/5 lg:block" />
+          <div className="skeleton h-64 flex-1 rounded-2xl" />
+          <div className="skeleton hidden h-64 w-72 rounded-2xl lg:block" />
         </div>
       </div>
     );

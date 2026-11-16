@@ -189,7 +189,7 @@
       "discord": "Discord",
       "prevImage": "Предыдущее изображение",
       "nextImage": "Следующее изображение",
-      "showAll": "Вся галерея · {{count}}",
+      "showAll": "Вся галерея ({{count}})",
       "details": "Подробности",
       "links": "Ссылки",
       "type": "Тип",
@@ -838,7 +838,7 @@
         "nothing": "Нет строк под выбранные фильтры."
       },
       "analyzer": {
-        "readingDisk": "Читаю логи…",
+        "readingDisk": "Чтение логов…",
         "okBadge": "Без ошибок",
         "refresh": "Перечитать логи",
         "sourcesLabel": "Проверено",
@@ -1228,6 +1228,7 @@
       "started": "Импорт начат…",
       "finishedWithVersion": "Импорт завершён. Сборка создана с версией игры из пакета.",
       "failed": "Не удалось импортировать сборку: {{msg}}",
+      "finishedWithMissing": "Сборка создана, но не удалось скачать файлов: {{count}}. Добавьте их вручную.",
       "cancelledKeyword": "отменена"
     },
     "header": {
@@ -1255,14 +1256,14 @@
       "enterProfileName": "Введите название сборки.",
       "selectLoaderVersion": "Выберите версию загрузчика.",
       "manifestUrlFailed": "Не удалось определить URL манифеста версии {{version}}.",
-      "versionNotInstalled": "Версия {{version}} не установлена. Начинаю загрузку…",
+      "versionNotInstalled": "Версия {{version}} не установлена. Начинается загрузка…",
       "versionInstalled": "Версия {{version}} установлена.",
-      "installingFabric": "Устанавливаю Fabric {{version}}…",
-      "installingFabricApi": "Устанавливаю Fabric API…",
+      "installingFabric": "Установка Fabric {{version}}…",
+      "installingFabricApi": "Установка Fabric API…",
       "fabricApiInstallFailed": "Сборка создана, но Fabric API установить не удалось: {{msg}}",
-      "installingQuilt": "Устанавливаю Quilt {{version}}…",
-      "installingForge": "Устанавливаю Forge {{version}}…",
-      "installingNeoForge": "Устанавливаю NeoForge {{version}}…",
+      "installingQuilt": "Установка Quilt {{version}}…",
+      "installingForge": "Установка Forge {{version}}…",
+      "installingNeoForge": "Установка NeoForge {{version}}…",
       "profileCreatedInstallFailed": "Сборка создана, но не удалось установить версию: {{msg}}",
       "profileCreated": "Сборка создана.",
       "createProfileFailed": "Не удалось создать сборку: {{msg}}",
@@ -1337,7 +1338,7 @@
       "copying": "Копирование файлов…",
       "importing": "Импорт…",
       "launcher": "Лаунчер",
-      "auto": "Auto",
+      "auto": "Авто",
       "path": "Путь",
       "pathPlaceholder": "Например: C:\\Users\\…\\AppData\\Roaming\\PrismLauncher",
       "scanning": "Поиск…",
@@ -1686,7 +1687,7 @@
 
       "title": "Похожие никнеймы",
 
-      "searching": "Ищем…",
+      "searching": "Поиск…",
 
       "empty": "Никого с похожим ником",
 
@@ -1702,7 +1703,7 @@
     "refresh": "Обновить",
     "requests": "Заявки",
     "incomingTitle": "Заявки",
-    "incomingCount": "Заявки · {{count}}",
+    "incomingCount": "Заявки ({{count}})",
     "signInFirst": "Сначала войдите во вкладке «Аккаунты».",
     "authGateTitle": "Войдите в аккаунт",
     "authGateBody": "Друзья и онлайн-статус доступны после входа во вкладке «Аккаунты».",
@@ -1843,14 +1844,14 @@
     "p2pReady": "готово",
     "p2pConnecting": "подключение…",
     "p2pReconnecting": "переподключение…",
-    "p2pWaiting": "ждём игрока",
+    "p2pWaiting": "ожидание игрока",
     "p2pPeerOffline": "друг не в лаунчере",
     "p2pReconnect": "Переподключить",
-    "p2pReconnectToast": "Переподключаем связь…",
+    "p2pReconnectToast": "Переподключение…",
     "memberOffline": "не в лаунчере",
     "joinWorld": "Войти в мир",
-    "joinWorldLaunching": "Туннель {{address}} - запускаю игру…",
-    "joinWorldLaunched": "Игра → {{address}}. Не закрывайте лаунчер - туннель внутри него.",
+    "joinWorldLaunching": "Туннель {{address}} готов, игра запускается…",
+    "joinWorldLaunched": "Игра подключается к {{address}}. Не закрывайте лаунчер: туннель работает внутри него.",
     "joinWorldInGameCopied": "Адрес {{address}} скопирован. В игре: Сеть → Прямое подключение.",
     "joinWorldInGame": "Туннель готов: {{address}}. В игре: Сеть → Прямое подключение.",
     "waitForPeer": "Пригласите друга - связь появится, когда он зайдёт.",
@@ -1908,7 +1909,7 @@
       "noGameBody": "Запустите игру и откройте мир для сети. Порт лаунчер определит сам.",
       "waitLanTitle": "Откройте мир для сети",
       "waitLanBody": "В игре нажмите Esc, затем «Открыть для сети» и «Открыть мир». Лаунчер сразу найдёт порт.",
-      "connectingTitle": "Подключаемся к хосту",
+      "connectingTitle": "Подключение к хосту",
       "connectingBody": "Обычно это занимает несколько секунд.",
       "hostOfflineTitle": "Хост не в лаунчере",
       "hostOfflineBody": "Мир станет доступен, когда хост снова откроет лаунчер.",
@@ -2375,19 +2376,19 @@
       "linkedTitle": "Привязанные аккаунты",
       "linkedHint": "Привязка подтверждает, что игровой аккаунт принадлежит вам.",
       "notLinked": "Не привязан",
-      "linkedAs": "Привязан · {{name}}",
+      "linkedAs": "Привязан: {{name}}",
       "sessionTitle": "Сессия",
       "sessionHint": "Выход из аккаунта 16Launcher на этом устройстве. Аккаунты Minecraft останутся в лаунчере."
     }
   },
   "app": {
     "launchStage": {
-      "version": "Проверяем версию…",
-      "libraries": "Проверяем библиотеки…",
-      "assets": "Проверяем ресурсы игры…",
-      "account": "Проверяем аккаунт…",
-      "java": "Подготавливаем Java…",
-      "starting": "Запускаем игру…"
+      "version": "Проверка версии…",
+      "libraries": "Проверка библиотек…",
+      "assets": "Проверка ресурсов игры…",
+      "account": "Проверка аккаунта…",
+      "java": "Подготовка Java…",
+      "starting": "Запуск игры…"
     },
     "launchActions": {
       "retry": "Повторить"
@@ -2647,7 +2648,7 @@
       "mainInfo": "16Launcher - бесплатный лаунчер для Minecraft с поддержкой Fabric, Forge, Quilt, NeoForge.",
       "icons": "Иконки взяты с сайта",
       "mojangDisclaimer": "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\n\n16Launcher is in no way affiliated with Mojang Studios, nor should it be considered a project endorsed by Mojang Studios.",
-      "apis": "Используем API Modrinth, CurseForge и Ely.by",
+      "apis": "Используются API Modrinth, CurseForge и Ely.by",
       "reportBug": "Нашли ошибку?",
       "close": "Закрыть"
     },
@@ -2734,7 +2735,7 @@
       "elyDesc": "Для игры с Ely-профилем и скинами Ely.by",
       "microsoftTitle": "Microsoft",
       "microsoftDesc": "Официальный аккаунт Minecraft / Microsoft",
-      "skip": "Пропустить · войти позже"
+      "skip": "Пропустить и войти позже"
     },
     "ely": {
       "title": "Вход через Ely.by",
@@ -2762,9 +2763,9 @@
     },
     "import": {
       "title": "Перенос сборок",
-      "subtitle": "Ищем сборки в Prism, MultiMC, CurseForge, ATLauncher и GDLauncher.",
+      "subtitle": "Поиск сборок в Prism, MultiMC, CurseForge, ATLauncher и GDLauncher.",
       "launcher": "Лаунчер",
-      "launcherAuto": "Авто · все лаунчеры",
+      "launcherAuto": "Авто (все лаунчеры)",
       "path": "Путь к лаунчеру",
       "pathPlaceholder": "Например: …\\AppData\\Roaming\\PrismLauncher",
       "pathHint": "Корень лаунчера или папка instances / Instances",
@@ -2773,7 +2774,7 @@
       "scanning": "Поиск сборок…",
       "emptyTitle": "Сборок не нашли",
       "emptyHint": "Если сборки лежат в нестандартной папке, укажите её вручную. Позже это можно сделать во вкладке «Сборки» → «Импорт».",
-      "cta": "Перенести · {{count}}",
+      "cta": "Перенести ({{count}})",
       "skip": "Пропустить",
       "continue": "Продолжить",
       "progress": "{{current}}/{{total}} · {{name}}",
@@ -2943,8 +2944,8 @@
     "discoverHint": "Нажмите {{keys}}, чтобы быстро найти сборку, мод, настройку или действие",
     "tryIt": "Попробовать",
     "contentDisabled": "отключён",
-    "searching": "Ищем…",
-    "searchingCatalog": "Ищем в Modrinth и CurseForge…",
+    "searching": "Поиск…",
+    "searchingCatalog": "Поиск в Modrinth и CurseForge…",
     "title": "Палитра команд",
     "hotkey": "Палитра команд",
     "placeholder": "Сборка, мод, вкладка, настройка или действие…",
@@ -3169,7 +3170,7 @@
       "hint": "Клиентские моды определяются автоматически и не попадают на сервер. Отметьте вручную, если определение ошиблось.",
       "count": "{{included}} из {{total}}",
       "clientOnly": "Клиентский",
-      "loading": "Читаю моды…",
+      "loading": "Чтение модов…",
       "empty": "В сборке нет модов.",
       "configs": "Добавить конфиги (config, defaultconfigs, kubejs, scripts)"
     },
@@ -3184,7 +3185,7 @@
     "save": "Сохранить",
     "saved": "Настройки сервера сохранены",
     "build": "Собрать архив",
-    "building": "Собираю архив…",
+    "building": "Сборка архива…",
     "built": "Архив сервера сохранён. Модов: {{mods}}, пропущено: {{skipped}}"
   },
   "trayMenu": {
@@ -3195,7 +3196,7 @@
   },
   "jumpList": {
     "category": "Сборки",
-    "description": "Запустить · {{version}}"
+    "description": "Запустить {{version}}"
   },
   "gameMonitor": {
     "chip": "{{used}} ГБ · {{cpu}}%",

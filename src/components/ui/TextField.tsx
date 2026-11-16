@@ -3,7 +3,6 @@ import { forwardRef } from "react";
 import { InputClearButton, clearInputValue } from "./InputClearButton";
 
 type Props = InputHTMLAttributes<HTMLInputElement> & {
-  pill?: boolean;
   clearable?: boolean;
 };
 
@@ -21,7 +20,7 @@ const NON_CLEARABLE_TYPES = new Set([
 ]);
 
 export const TextField = forwardRef<HTMLInputElement, Props>(function TextField(
-  { className = "", pill = false, disabled, clearable, type = "text", value, onChange, readOnly, ...rest },
+  { className = "", disabled, clearable, type = "text", value, onChange, readOnly, ...rest },
   ref,
 ) {
   const canClear =
@@ -44,7 +43,7 @@ export const TextField = forwardRef<HTMLInputElement, Props>(function TextField(
           "glass-control ui-body w-full text-white outline-none transition-colors",
           "placeholder:text-white/35",
           "disabled:cursor-not-allowed disabled:opacity-60",
-          pill ? "px-3.5 py-2" : "px-3 py-2",
+          "px-3 py-2",
           showClear ? "pr-9" : "",
           className,
         ]

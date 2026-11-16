@@ -715,7 +715,7 @@ export function FriendsTab({
           {canJoinRoom && room ? (
             <ActionButton
               size="sm"
-              variant="sky"
+              variant="secondary"
               loading={busyAction === `join:${room.id}`}
               loadingLabel={tt("rooms.joining")}
               disabled={loading && busyAction !== `join:${room.id}`}
@@ -799,7 +799,7 @@ export function FriendsTab({
           </div>
           <div className="flex flex-wrap gap-2">
             <ActionButton
-              variant="emerald"
+              variant="tint"
               size="md"
               loading={busyAction === "add"}
               loadingLabel={tt("common.sending")}
@@ -1035,7 +1035,7 @@ export function FriendsTab({
                       <div className="flex items-center gap-2">
                         <ActionButton
                           size="sm"
-                          variant="emerald"
+                          variant="tint"
                           className="flex-1"
                           loading={busyAction === `accept:${r.request_id}`}
                           disabled={requestsLoading && busyAction !== `accept:${r.request_id}`}
@@ -1140,7 +1140,7 @@ export function FriendsTab({
                         </div>
                         <ActionButton
                           size="sm"
-                          variant="sky"
+                          variant="secondary"
                           fullWidth
                           loading={busyAction === `join:${room.id}`}
                           loadingLabel={tt("rooms.joining")}

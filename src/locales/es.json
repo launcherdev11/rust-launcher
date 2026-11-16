@@ -67,8 +67,8 @@
       "tryProvider": "Buscar en {{provider}}"
     },
     "provider": {
-      "modrinth": "modrinth",
-      "curseforge": "Forja maldita"
+      "modrinth": "Modrinth",
+      "curseforge": "CurseForge"
     },
     "unlockTitle": "Versión fijada por el perfil",
     "unlockConfirm": "¿Cambiar versión y cargador? El contenido que instales puede ser incompatible con el perfil.",
@@ -189,7 +189,7 @@
       "discord": "Discord",
       "prevImage": "Imagen anterior",
       "nextImage": "Imagen siguiente",
-      "showAll": "Galería completa · {{count}}",
+      "showAll": "Galería completa ({{count}})",
       "details": "Detalles",
       "links": "Enlaces",
       "type": "Tipo",
@@ -316,11 +316,11 @@
         "noneFound": "No se encontró nada."
       },
       "loader": {
-        "vanilla": "Vainilla",
-        "fabric": "Tela",
-        "quilt": "Colcha",
-        "forge": "Fragua",
-        "neoforge": "neoforja"
+        "vanilla": "Vanilla",
+        "fabric": "Fabric",
+        "quilt": "Quilt",
+        "forge": "Forge",
+        "neoforge": "NeoForge"
       },
       "forgeProxyFallback": {
         "label": "Utilice el respaldo de proxy:"
@@ -1256,6 +1256,7 @@
       "started": "Importación iniciada...",
       "finishedWithVersion": "Importación finalizada. Perfil creado con la versión del juego del paquete.",
       "failed": "No se pudo importar el modpack: {{msg}}",
+      "finishedWithMissing": "Perfil creado, pero no se pudieron descargar {{count}} archivos. Añádelos manualmente.",
       "cancelledKeyword": "cancelado"
     },
     "header": {
@@ -1285,10 +1286,10 @@
       "manifestUrlFailed": "No se pudo resolver la URL del manifiesto para la versión {{version}}.",
       "versionNotInstalled": "La versión {{version}} no está instalada. Iniciando descarga…",
       "versionInstalled": "Versión {{version}} instalada.",
-      "installingFabric": "Instalación de tela {{version}}…",
+      "installingFabric": "Instalando Fabric {{version}}…",
       "installingFabricApi": "Instalando Fabric API…",
       "fabricApiInstallFailed": "Perfil creado, pero no se pudo instalar Fabric API: {{msg}}",
-      "installingQuilt": "Instalación de la colcha {{version}}…",
+      "installingQuilt": "Instalando Quilt {{version}}…",
       "installingForge": "Instalando Forge {{version}}…",
       "installingNeoForge": "Instalando NeoForge {{version}}…",
       "profileCreatedInstallFailed": "Perfil creado, pero no se pudo instalar la versión: {{msg}}",
@@ -1730,7 +1731,7 @@
     "refresh": "Actualizar",
     "requests": "Solicitudes",
     "incomingTitle": "Solicitudes",
-    "incomingCount": "Solicitudes · {{count}}",
+    "incomingCount": "Solicitudes ({{count}})",
     "signInFirst": "Inicia sesión primero en la pestaña Cuentas.",
     "authGateTitle": "Se necesita una cuenta 16Launcher",
     "authGateBody": "Amigos, estado en línea y salas están disponibles tras iniciar sesión en la cuenta de plataforma.",
@@ -1877,8 +1878,8 @@
     "p2pReconnectToast": "Reconectando…",
     "memberOffline": "no en el launcher",
     "joinWorld": "Entrar al mundo",
-    "joinWorldLaunching": "Túnel {{address}} - iniciando el juego…",
-    "joinWorldLaunched": "Juego → {{address}}. No cierres el launcher - el túnel funciona dentro de él.",
+    "joinWorldLaunching": "Túnel {{address}} listo, iniciando el juego…",
+    "joinWorldLaunched": "El juego se conecta a {{address}}. No cierres el launcher: el túnel funciona dentro de él.",
     "joinWorldInGameCopied": "Dirección {{address}} copiada. En el juego: Multijugador → Conexión directa.",
     "joinWorldInGame": "Túnel listo: {{address}}. En el juego: Multijugador → Conexión directa.",
     "waitForPeer": "Invita a un amigo: el enlace aparece cuando se una.",
@@ -2403,7 +2404,7 @@
       "linkedTitle": "Cuentas vinculadas",
       "linkedHint": "La vinculación confirma que la cuenta de juego es tuya.",
       "notLinked": "Sin vincular",
-      "linkedAs": "Vinculada · {{name}}",
+      "linkedAs": "Vinculada: {{name}}",
       "sessionTitle": "Sesión",
       "sessionHint": "Cierra la sesión de 16Launcher en este dispositivo. Tus cuentas de Minecraft siguen en el launcher."
     }
@@ -2714,8 +2715,8 @@
       "forgeNotInstalled": "Forge no está instalado para esta versión.",
       "neoforgeNotInstalled": "NeoForge no está instalado para esta versión.",
       "pinLimit": "Puedes fijar hasta 3 perfiles.",
-      "fabricNotInstalled": "El perfil de tela no está instalado para esta versión.",
-      "quiltNotInstalled": "El perfil de tejido no está instalado para esta versión."
+      "fabricNotInstalled": "El perfil de Fabric no está instalado para esta versión.",
+      "quiltNotInstalled": "El perfil de Quilt no está instalado para esta versión."
     },
     "window": {
       "minimize": "Minimizar",
@@ -2734,7 +2735,7 @@
       "windowTitle": "Consola \"{{name}}\""
     },
     "install": {
-      "noFabricLoader": "No hay un cargador de tela adecuado para esta versión",
+      "noFabricLoader": "No hay un Fabric Loader adecuado para esta versión",
       "noNeoForgeLoader": "No hay una compilación NeoForge adecuada para esta versión",
       "unknownVersionType": "Tipo de versión desconocida"
     }
@@ -2762,7 +2763,7 @@
       "elyDesc": "Para perfil de Ely y máscaras de Ely.by",
       "microsoftTitle": "microsoft",
       "microsoftDesc": "Cuenta oficial de Minecraft/Microsoft",
-      "skip": "Saltar · iniciar sesión más tarde"
+      "skip": "Saltar e iniciar sesión más tarde"
     },
     "ely": {
       "title": "Iniciar sesión con Ely.by",
@@ -2792,7 +2793,7 @@
       "title": "Traer tus instancias",
       "subtitle": "Buscando instancias en Prism, MultiMC, CurseForge, ATLauncher y GDLauncher.",
       "launcher": "Launcher",
-      "launcherAuto": "Auto · todos los launchers",
+      "launcherAuto": "Auto (todos los launchers)",
       "path": "Ruta del launcher",
       "pathPlaceholder": "p. ej. …\\AppData\\Roaming\\PrismLauncher",
       "pathHint": "Raíz del launcher o carpeta instances / Instances",
@@ -2801,7 +2802,7 @@
       "scanning": "Buscando…",
       "emptyTitle": "No hay instancias",
       "emptyHint": "Si tus instancias están en otra carpeta, elígela manualmente. También puedes hacerlo luego en Builds → Importar.",
-      "cta": "Traer · {{count}}",
+      "cta": "Traer ({{count}})",
       "skip": "Omitir",
       "continue": "Continuar",
       "progress": "{{current}}/{{total}} · {{name}}",
@@ -3223,7 +3224,7 @@
   },
   "jumpList": {
     "category": "Instancias",
-    "description": "Iniciar · {{version}}"
+    "description": "Iniciar {{version}}"
   },
   "gameMonitor": {
     "chip": "{{used}} GB · {{cpu}} %",

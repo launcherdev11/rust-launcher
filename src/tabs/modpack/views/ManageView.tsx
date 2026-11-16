@@ -288,7 +288,7 @@ export function ManageView({ ctx }: Props) {
                     setIsRenaming(false);
                   }
                 }}
-                className={`min-w-0 w-full rounded-xl border border-white/20 bg-black/60 px-2 py-1 text-sm text-white focus:outline-none ${
+                className={`glass-control min-w-0 w-full px-2.5 py-1.5 text-sm text-white outline-none ${
                   renameValue ? "pr-9" : ""
                 }`}
               />
@@ -302,16 +302,20 @@ export function ManageView({ ctx }: Props) {
             <button
               type="button"
               onClick={() => void handleRenameConfirm()}
-              className="interactive-press rounded-lg accent-bg p-1 text-white hover:opacity-90"
+              aria-label={tt("common.save")}
+              title={tt("common.save")}
+              className="btn btn-accent btn-sm w-8 !px-0"
             >
-              ✓
+              <img src="/launcher-assets/success.png" alt="" className="h-4 w-4 object-contain" draggable={false} />
             </button>
             <button
               type="button"
               onClick={() => setIsRenaming(false)}
-              className="interactive-press rounded-lg bg-white/10 p-1 text-white hover:bg-white/20"
+              aria-label={tt("common.cancel")}
+              title={tt("common.cancel")}
+              className="icon-btn"
             >
-              ✕
+              <img src="/launcher-assets/toggle_close.png" alt="" className="h-3.5 w-3.5 object-contain" draggable={false} />
             </button>
           </div>
         ) : (
@@ -740,7 +744,7 @@ export function ManageView({ ctx }: Props) {
           }`}
         >
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <label className="glass-control flex h-9 min-w-0 flex-1 basis-[14rem] cursor-text items-center gap-2.5 px-3 focus-within:!border-[color:var(--accent-line)]">
+          <label className="glass-control field-shell flex h-9 min-w-0 flex-1 basis-[14rem] cursor-text items-center gap-2.5 px-3">
             <SearchIcon className="h-4 w-4 shrink-0 opacity-60" />
             <input
               type="text"

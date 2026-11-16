@@ -8,6 +8,7 @@ import {
   type GameConsoleSyncPayload,
   type GameStatus,
 } from "./lib/gameConsoleWindow";
+import { TooltipHost } from "./components/ui/TooltipHost";
 
 const EMPTY_SYNC: GameConsoleSyncPayload = {
   lines: [],
@@ -63,6 +64,7 @@ export function ConsoleApp() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[#0c0c0c] p-3">
+      <TooltipHost />
       <GameConsolePanel
         className="min-h-0 flex-1 border-white/10"
         consoleLines={sync.lines}

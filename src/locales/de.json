@@ -189,7 +189,7 @@
       "discord": "Discord",
       "prevImage": "Vorheriges Bild",
       "nextImage": "Nächstes Bild",
-      "showAll": "Ganze Galerie · {{count}}",
+      "showAll": "Ganze Galerie ({{count}})",
       "details": "Details",
       "links": "Links",
       "type": "Typ",
@@ -316,10 +316,10 @@
         "noneFound": "Nichts gefunden."
       },
       "loader": {
-        "vanilla": "Vanille",
-        "fabric": "Stoff",
-        "quilt": "Decke",
-        "forge": "Schmiede",
+        "vanilla": "Vanilla",
+        "fabric": "Fabric",
+        "quilt": "Quilt",
+        "forge": "Forge",
         "neoforge": "NeoForge"
       },
       "forgeProxyFallback": {
@@ -1256,6 +1256,7 @@
       "started": "Import gestartet…",
       "finishedWithVersion": "Import abgeschlossen. Profil erstellt mit der Spielversion des Packs.",
       "failed": "Modpack konnte nicht importiert werden: {{msg}}",
+      "finishedWithMissing": "Profil erstellt, aber {{count}} Dateien konnten nicht heruntergeladen werden. Füge sie manuell hinzu.",
       "cancelledKeyword": "abgesagt"
     },
     "header": {
@@ -1288,7 +1289,7 @@
       "installingFabric": "Fabric {{version}} wird installiert…",
       "installingFabricApi": "Fabric API wird installiert…",
       "fabricApiInstallFailed": "Profil erstellt, aber Fabric API konnte nicht installiert werden: {{msg}}",
-      "installingQuilt": "Quilt {{version}} installieren…",
+      "installingQuilt": "Quilt {{version}} wird installiert…",
       "installingForge": "Forge {{version}} wird installiert…",
       "installingNeoForge": "NeoForge {{version}} wird installiert…",
       "profileCreatedInstallFailed": "Profil erstellt, aber Version konnte nicht installiert werden: {{msg}}",
@@ -1730,7 +1731,7 @@
     "refresh": "Aktualisieren",
     "requests": "Anfragen",
     "incomingTitle": "Anfragen",
-    "incomingCount": "Anfragen · {{count}}",
+    "incomingCount": "Anfragen ({{count}})",
     "signInFirst": "Melde dich zuerst auf der Registerkarte „Konten“ an.",
     "authGateTitle": "16Launcher-Konto erforderlich",
     "authGateBody": "Freunde, Online-Status und Räume sind nach der Anmeldung am Plattformkonto verfügbar.",
@@ -1877,8 +1878,8 @@
     "p2pReconnectToast": "Verbindung wird neu aufgebaut…",
     "memberOffline": "nicht im Launcher",
     "joinWorld": "Welt beitreten",
-    "joinWorldLaunching": "Tunnel {{address}} - Spiel wird gestartet…",
-    "joinWorldLaunched": "Spiel → {{address}}. Lass den Launcher offen - der Tunnel läuft darin.",
+    "joinWorldLaunching": "Tunnel {{address}} ist bereit, das Spiel wird gestartet…",
+    "joinWorldLaunched": "Das Spiel verbindet sich mit {{address}}. Lass den Launcher offen: Der Tunnel läuft darin.",
     "joinWorldInGameCopied": "Adresse {{address}} kopiert. Im Spiel: Mehrspieler → Direktverbindung.",
     "joinWorldInGame": "Tunnel bereit: {{address}}. Im Spiel: Mehrspieler → Direktverbindung.",
     "waitForPeer": "Lade einen Freund ein - die Verbindung erscheint, wenn er beitritt.",
@@ -2403,7 +2404,7 @@
       "linkedTitle": "Verknüpfte Konten",
       "linkedHint": "Die Verknüpfung bestätigt, dass das Spielkonto dir gehört.",
       "notLinked": "Nicht verknüpft",
-      "linkedAs": "Verknüpft · {{name}}",
+      "linkedAs": "Verknüpft: {{name}}",
       "sessionTitle": "Sitzung",
       "sessionHint": "Auf diesem Gerät von 16Launcher abmelden. Deine Minecraft-Konten bleiben im Launcher."
     }
@@ -2762,7 +2763,7 @@
       "elyDesc": "Für Ely-Profile und Ely.by-Skins",
       "microsoftTitle": "Microsoft",
       "microsoftDesc": "Offizielles Minecraft-/Microsoft-Konto",
-      "skip": "Überspringen · Später anmelden"
+      "skip": "Überspringen und später anmelden"
     },
     "ely": {
       "title": "Melden Sie sich mit Ely.by an",
@@ -2792,7 +2793,7 @@
       "title": "Instanzen übernehmen",
       "subtitle": "Wir suchen Instanzen in Prism, MultiMC, CurseForge, ATLauncher und GDLauncher.",
       "launcher": "Launcher",
-      "launcherAuto": "Auto · alle Launcher",
+      "launcherAuto": "Auto (alle Launcher)",
       "path": "Launcher-Pfad",
       "pathPlaceholder": "z. B. …\\AppData\\Roaming\\PrismLauncher",
       "pathHint": "Launcher-Root oder Ordner instances / Instances",
@@ -2801,7 +2802,7 @@
       "scanning": "Suche…",
       "emptyTitle": "Keine Instanzen gefunden",
       "emptyHint": "Liegen deine Instanzen in einem eigenen Ordner, wähle ihn manuell. Das geht auch später unter Modpacks → Import.",
-      "cta": "Übernehmen · {{count}}",
+      "cta": "Übernehmen ({{count}})",
       "skip": "Überspringen",
       "continue": "Weiter",
       "progress": "{{current}}/{{total}} · {{name}}",
@@ -3223,7 +3224,7 @@
   },
   "jumpList": {
     "category": "Instanzen",
-    "description": "Starten · {{version}}"
+    "description": "{{version}} starten"
   },
   "gameMonitor": {
     "chip": "{{used}} GB · {{cpu}} %",

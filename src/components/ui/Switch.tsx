@@ -32,12 +32,12 @@ export function Switch({
       title={title}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`interactive-press relative shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${s.track} ${
+      className={`group relative shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${s.track} ${
         checked ? "accent-bg" : "bg-white/[0.12] hover:bg-white/[0.18]"
       } ${className}`}
     >
       <span
-        className={`absolute left-0.5 top-0.5 rounded-full shadow transition-[transform,background-color] duration-200 ease-out ${s.knob} ${
+        className={`absolute left-0.5 top-0.5 rounded-full shadow transition-[transform,background-color] duration-200 ease-out group-enabled:group-active:scale-x-[1.18] ${s.knob} ${
           checked
             ? "translate-x-5 bg-[var(--on-accent,#fff)]"
             : "translate-x-0 bg-[color:var(--fg)]"

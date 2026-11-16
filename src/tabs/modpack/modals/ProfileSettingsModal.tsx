@@ -147,8 +147,8 @@ export function ProfileSettingsModal({ ctx }: Props) {
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs font-medium text-white/70">
                       <span>{tt("modpacks.conflicts.title")}</span>
-                      <span className="rounded-md border border-warn-hi/40 bg-warn/15 px-2 py-0.5 text-[0.6875rem] font-semibold tracking-[0.14em] text-warn-fg">
-                        BETA
+                      <span className="rounded-md border border-warn-hi/40 bg-warn/15 px-2 py-0.5 text-[0.6875rem] font-semibold text-warn-fg">
+                        Beta
                       </span>
                     </div>
                     <div className="shrink-0 rounded-md bg-white/10 px-2 py-0.5 text-[0.75rem] font-semibold text-white/70">

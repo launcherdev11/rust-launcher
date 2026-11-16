@@ -285,7 +285,7 @@ export function ExportModal({ ctx }: Props) {
                   </div>
                 </div>
 
-                <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-3 py-2">
+                <div className="glass-control field-shell mb-2 flex items-center gap-2 px-3 py-2">
                   <SearchIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                   <input
                     type="search"

@@ -54,7 +54,7 @@ export function UpdatePopupModal({
           <div className="relative z-10 flex h-full min-h-[220px] flex-col justify-end px-6 py-5 sm:min-h-[300px] sm:px-8 sm:py-7">
             <h2
               id="update-popup-title"
-              className="text-2xl font-semibold tracking-wide text-white sm:text-3xl"
+              className="text-2xl font-semibold tracking-tight text-white sm:text-3xl"
             >
               {title}
             </h2>

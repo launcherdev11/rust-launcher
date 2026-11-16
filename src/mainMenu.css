@@ -119,38 +119,6 @@
   color: #fff;
 }
 
-.brand-badge::after {
-  content: attr(data-tip);
-  pointer-events: none;
-  position: absolute;
-  left: 0;
-  top: calc(100% + 0.4rem);
-  z-index: 100;
-  max-width: 12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0.3rem 0.55rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--seam-strong, rgba(255, 255, 255, 0.16));
-  background: var(--ink-3, #222226);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--fg, #f1f1f3);
-  opacity: 0;
-  transform: translateY(-3px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
-}
-
-.brand-badge:hover::after,
-.brand-badge:focus-visible::after {
-  opacity: 1;
-  transform: none;
-}
-
 .acct-offline {
   padding: 0 0.125rem;
   font-size: 0.75rem;
@@ -215,6 +183,11 @@
   opacity: 0.9;
 }
 
+.nav-item:active:not(.nav-item-active) {
+  background: rgba(255, 255, 255, 0.08);
+  transition-duration: 50ms;
+}
+
 .nav-item-active,
 .nav-item-active:hover {
   color: #fff;
@@ -269,11 +242,25 @@
   border-radius: var(--r-control, 0.625rem);
   border: 1px solid var(--shell-line);
   background: var(--ink-2, #19191c);
-  transition: border-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s var(--shell-ease);
 }
 
 .pin-btn:hover {
   border-color: var(--accent-line, rgba(255, 255, 255, 0.45));
+  background: var(--ink-3, #222226);
+}
+
+.pin-btn:active {
+  transform: scale(0.94);
+  transition-duration: 50ms;
+}
+
+.pin-btn:focus-visible {
+  outline: 2px solid var(--shell-edge);
+  outline-offset: 2px;
 }
 
 
@@ -300,7 +287,8 @@
   background: var(--shell-surface);
   transition:
     border-color 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease,
+    transform 0.15s var(--shell-ease);
 }
 
 .home-card:hover {
@@ -309,7 +297,9 @@
 }
 
 .home-card:active {
-  transform: scale(0.995);
+  transform: scale(0.99);
+  background: var(--ink-3, #222226);
+  transition-duration: 50ms;
 }
 
 .home-card-selected,
@@ -440,6 +430,11 @@ html.launcher-linux .dock-backdrop img {
   border-color: var(--seam-strong, rgba(255, 255, 255, 0.16));
 }
 
+.dock-chip:active:not(:disabled) {
+  background: var(--ink-4, #2b2b30);
+  transition-duration: 50ms;
+}
+
 .dock-chip:disabled {
   cursor: not-allowed;
   color: var(--fg-faint, #71717a);
@@ -480,6 +475,18 @@ html.launcher-linux .dock-backdrop img {
 .dock-btn:active,
 .play-btn:active:not(:disabled) {
   transform: scale(0.97);
+  transition-duration: 50ms;
+}
+
+.play-btn:active:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.dock-btn:focus-visible,
+.play-btn:focus-visible,
+.dock-chip:focus-visible {
+  outline: 2px solid var(--shell-edge);
+  outline-offset: 2px;
 }
 
 .play-btn {
