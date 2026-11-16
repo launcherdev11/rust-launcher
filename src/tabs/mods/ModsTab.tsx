@@ -24,6 +24,7 @@ import { CursorHint, useCursorHint } from "../../components/CursorHint";
 import { CatalogFilters } from "./CatalogFilters";
 import { CatalogGrid } from "./CatalogGrid";
 import { CatalogToolbar } from "./CatalogToolbar";
+import { patchCatalogSession, readCatalogSession } from "./catalogSession";
 import {
   clearRecent,
   loadRecent,
@@ -129,21 +130,31 @@ export function ModsTab({
       return "modrinth";
     }
   });
-  const [contentType, setContentType] = useState<ModrinthContentType>("mod");
-  const [search, setSearch] = useState("");
+  const [contentType, setContentType] = useState<ModrinthContentType>(
+    () => readCatalogSession().contentType ?? "mod",
+  );
+  const [search, setSearch] = useState(() => readCatalogSession().search ?? "");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [gameVersion, setGameVersion] = useState("");
+  const [gameVersion, setGameVersion] = useState(
+    () => activeProfileGameVersion || readCatalogSession().gameVersion || "",
+  );
   const [gameVersions, setGameVersions] = useState<string[]>([]);
-  const [loader, setLoader] = useState<LoaderFilter>("any");
+  const [loader, setLoader] = useState<LoaderFilter>(
+    () => profileLoaderFilter(activeProfileLoader) ?? readCatalogSession().loader ?? "any",
+  );
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
   const [isLoaderDropdownOpen, setIsLoaderDropdownOpen] = useState(false);
   const [sort, setSort] = useState<CatalogSort>(readInitialSort);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    () => readCatalogSession().selectedCategories ?? [],
+  );
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
-  const [clientSide, setClientSide] = useState<SideSupport>("any");
-  const [serverSide, setServerSide] = useState<SideSupport>("any");
-  const [installedOnly, setInstalledOnly] = useState(false);
-  const [sourceTab, setSourceTab] = useState<CatalogSourceTab>("catalog");
+  const [clientSide, setClientSide] = useState<SideSupport>(() => readCatalogSession().clientSide ?? "any");
+  const [serverSide, setServerSide] = useState<SideSupport>(() => readCatalogSession().serverSide ?? "any");
+  const [installedOnly, setInstalledOnly] = useState(() => readCatalogSession().installedOnly ?? false);
+  const [sourceTab, setSourceTab] = useState<CatalogSourceTab>(
+    () => readCatalogSession().sourceTab ?? "catalog",
+  );
 
   const [modrinthProjects, setModrinthProjects] = useState<ModrinthProject[]>(
     [],
@@ -153,7 +164,7 @@ export function ModsTab({
   >([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(() => readCatalogSession().page ?? 0);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [totalHits, setTotalHits] = useState(0);
 
@@ -472,9 +483,7 @@ export function ModsTab({
     return () => window.removeEventListener(HOTKEY_REFRESH_EVENT, onRefresh);
   }, []);
 
-  useEffect(() => {
-    setPage(0);
-  }, [
+  const queryKey = JSON.stringify([
     contentType,
     gameVersion,
     loader,
@@ -486,13 +495,51 @@ export function ModsTab({
     debouncedSearch,
     sourceTab,
   ]);
-
+  const lastQueryKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const previous = lastQueryKeyRef.current;
+    lastQueryKeyRef.current = queryKey;
+    if (previous === null || previous === queryKey) return;
+    setPage(0);
+    patchCatalogSession({ scrollTop: 0 });
+  }, [queryKey]);
+
+  const scopeKey = `${contentType}|${contentProvider}`;
+  const lastScopeKeyRef = useRef(scopeKey);
+  useEffect(() => {
+    if (lastScopeKeyRef.current === scopeKey) return;
+    lastScopeKeyRef.current = scopeKey;
     setSelectedCategories([]);
     setClientSide("any");
     setServerSide("any");
     setInstalledOnly(false);
-  }, [contentType, contentProvider]);
+  }, [scopeKey]);
+
+  useEffect(() => {
+    patchCatalogSession({
+      contentType,
+      search,
+      selectedCategories,
+      clientSide,
+      serverSide,
+      installedOnly,
+      sourceTab,
+      page,
+      gameVersion,
+      loader,
+    });
+  }, [
+    contentType,
+    search,
+    selectedCategories,
+    clientSide,
+    serverSide,
+    installedOnly,
+    sourceTab,
+    page,
+    gameVersion,
+    loader,
+  ]);
 
   useLayoutEffect(() => {
     let raf = 0;
@@ -1252,7 +1299,7 @@ export function ModsTab({
 
       {activeProfileId && contentType !== "modpack" && !versionLoaderLocked && (
         <div className="relative z-10 mb-3">
-          <div className="locked-hint w-full justify-between border-sky-300/25 bg-gradient-to-br from-sky-400/15 to-sky-400/5 text-sky-100">
+          <div className="locked-hint locked-hint-info w-full justify-between">
             <span className="truncate">{tt("mods.unlockedBanner")}</span>
             <button
               type="button"
@@ -1417,6 +1464,8 @@ export function ModsTab({
             }
             pageSize={CATALOG_PAGE_SIZE}
             onPageChange={setPage}
+            initialScrollTop={readCatalogSession().scrollTop ?? 0}
+            onScrollTopChange={(scrollTop) => patchCatalogSession({ scrollTop })}
             emptyMessage={emptyMessage}
             emptyDescription={emptyHint ?? undefined}
             emptyActions={emptyActions}

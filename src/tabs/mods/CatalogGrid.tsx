@@ -209,6 +209,8 @@ type CatalogGridProps = {
   totalHits: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  initialScrollTop?: number;
+  onScrollTopChange?: (scrollTop: number) => void;
   emptyMessage: string;
   emptyDescription?: string;
   emptyActions?: ReactNode;
@@ -241,6 +243,8 @@ export function CatalogGrid({
   totalHits,
   pageSize,
   onPageChange,
+  initialScrollTop = 0,
+  onScrollTopChange,
   emptyMessage,
   emptyDescription,
   emptyActions,
@@ -259,9 +263,23 @@ export function CatalogGrid({
     batchSelectedProjects ?? projects.filter((p) => batchSelectedKeys.has(p.key));
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  const lastPageRef = useRef(page);
+  const pendingScrollRef = useRef<number | null>(initialScrollTop > 0 ? initialScrollTop : null);
+
   useLayoutEffect(() => {
+    if (lastPageRef.current === page) return;
+    lastPageRef.current = page;
+    pendingScrollRef.current = null;
     scrollRef.current?.scrollTo({ top: 0 });
   }, [page]);
+
+  useLayoutEffect(() => {
+    const top = pendingScrollRef.current;
+    const el = scrollRef.current;
+    if (top == null || !el || loading || projects.length === 0) return;
+    pendingScrollRef.current = null;
+    el.scrollTop = top;
+  }, [loading, projects]);
   const handleMarqueePointerDown = useMarqueeSelection({
     containerRef: scrollRef,
     selected: batchSelectedKeys,
@@ -281,6 +299,9 @@ export function CatalogGrid({
       </div>
       <div
         ref={scrollRef}
+        onScroll={(e) => {
+          if (pendingScrollRef.current == null) onScrollTopChange?.(e.currentTarget.scrollTop);
+        }}
         onPointerDown={handleMarqueePointerDown}
         className="custom-scrollbar -mr-2 min-h-0 flex-1 overflow-y-auto pr-2"
       >
