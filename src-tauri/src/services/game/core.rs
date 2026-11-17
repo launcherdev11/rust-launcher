@@ -83,8 +83,16 @@ pub(crate) async fn download_text_with_retries(client: &Client, url: &str, retri
     let mut errors: Vec<String> = Vec::new();
     for (idx, candidate) in urls.iter().enumerate() {
         let is_last = idx + 1 == urls.len();
-        let attempts = if has_fallback && !is_last { retries.min(2) } else { retries };
-        match fetch_text_once_with_retries(client, candidate, attempts).await {
+        let fail_fast = has_fallback && !is_last;
+        let attempts = if fail_fast { retries.min(2) } else { retries };
+        let fast_client;
+        let attempt_client = if fail_fast {
+            fast_client = crate::infra::http::http_client_fail_fast();
+            &fast_client
+        } else {
+            client
+        };
+        match fetch_text_once_with_retries(attempt_client, candidate, attempts, fail_fast).await {
             Ok(text) => {
                 crate::services::game::mirrors::note_success(candidate);
                 return Ok(text);
@@ -107,6 +115,7 @@ async fn fetch_text_once_with_retries(
     client: &Client,
     url: &str,
     retries: usize,
+    fail_fast: bool,
 ) -> Result<String, (String, Option<u16>)> {
     let retries = retries.max(1);
     let mut attempt: usize = 0;
@@ -131,7 +140,7 @@ async fn fetch_text_once_with_retries(
                 }
             }
             Err(e) => {
-                if attempt + 1 >= retries {
+                if attempt + 1 >= retries || (fail_fast && e.is_timeout()) {
                     return Err((format!("Ошибка запроса {url}: {e}"), None));
                 }
                 if e.is_connect() && !is_online().await {

@@ -173,37 +173,64 @@ fn parse_maven_metadata_versions(metadata: &str) -> Vec<String> {
     out
 }
 
-async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
+async fn fetch_loader_meta(label: &str, direct: &[&str], official: &str) -> Result<String, String> {
     use crate::infra::api_base::platform_proxy_fetch_url;
 
-    let direct_client = http_client(false);
-    let fetched = match download_text_with_retries(
-        &direct_client,
-        NEOFORGE_MAVEN_METADATA_URL,
-        DEFAULT_DOWNLOAD_RETRIES,
-    )
-    .await
-    {
-        Ok(text) => Ok(text),
-        Err(direct_err) if is_online().await => {
-            let proxy_url = platform_proxy_fetch_url(NEOFORGE_MAVEN_METADATA_URL);
-            download_text_with_retries(&direct_client, &proxy_url, DEFAULT_DOWNLOAD_RETRIES)
-            .await
-            .map_err(|proxy_err| {
-                format!(
-                    "Ошибка загрузки NeoForge metadata: {direct_err}; через серверный прокси: {proxy_err}"
-                )
-            })
+    let client = http_client(false);
+    let mut errors: Vec<String> = Vec::new();
+    for url in direct {
+        match download_text_with_retries(&client, url, DEFAULT_DOWNLOAD_RETRIES).await {
+            Ok(text) => {
+                store_meta_cache(official, &text);
+                return Ok(text);
+            }
+            Err(e) => errors.push(e),
         }
-        Err(direct_err) => Err(format!("Ошибка загрузки NeoForge metadata: {direct_err}")),
-    };
-    match fetched {
-        Ok(text) => {
-            store_meta_cache(NEOFORGE_MAVEN_METADATA_URL, &text);
+        if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+            break;
+        }
+    }
+    if !CANCEL_DOWNLOAD.load(Ordering::SeqCst) && is_online().await {
+        let proxy_url = platform_proxy_fetch_url(official);
+        match download_text_with_retries(&client, &proxy_url, DEFAULT_DOWNLOAD_RETRIES).await {
+            Ok(text) => {
+                store_meta_cache(official, &text);
+                return Ok(text);
+            }
+            Err(e) => errors.push(format!("через серверный прокси: {e}")),
+        }
+    }
+    let err = format!("Ошибка загрузки {label}: {}", errors.join("; "));
+    match read_meta_cache(official) {
+        Some(text) => {
+            eprintln!("[Meta] {err}. Берём из кэша");
             Ok(text)
         }
-        Err(e) => read_meta_cache(NEOFORGE_MAVEN_METADATA_URL).ok_or(e),
+        None => Err(err),
     }
+}
+
+async fn fetch_neoforge_maven_metadata() -> Result<String, String> {
+    fetch_loader_meta(
+        "NeoForge metadata",
+        &[NEOFORGE_MAVEN_METADATA_URL],
+        NEOFORGE_MAVEN_METADATA_URL,
+    )
+    .await
+}
+
+async fn fetch_forge_maven_metadata() -> Result<String, String> {
+    let settings = load_settings_from_disk();
+    let direct: &[&str] = if settings.forge_proxy_fallback {
+        &[FORGE_MAVEN_METADATA_URL, FORGE_MAVEN_OFFICIAL_METADATA_URL]
+    } else {
+        &[FORGE_MAVEN_METADATA_URL]
+    };
+    fetch_loader_meta("Forge metadata", direct, FORGE_MAVEN_OFFICIAL_METADATA_URL).await
+}
+
+async fn fetch_forge_promotions() -> Result<String, String> {
+    fetch_loader_meta("Forge promotions", &[FORGE_PROMOTIONS_URL], FORGE_PROMOTIONS_URL).await
 }
 
 fn dedupe_sort_versions(mut versions: Vec<String>) -> Vec<String> {
@@ -240,10 +267,7 @@ fn quilt_loader_channel(version: &str) -> Option<LoaderVersionChannel> {
 }
 
 async fn forge_promo_builds_for_mc(mc_version: &str) -> Result<(Option<String>, Option<String>), String> {
-    let direct_client = http_client(false);
-    let text = download_meta_text(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES)
-        .await
-        .map_err(|e| format!("Ошибка загрузки Forge promotions: {e}"))?;
+    let text = fetch_forge_promotions().await?;
 
     let parsed: ForgePromotionsSlim = serde_json::from_str(&text)
         .map_err(|e| format!("Ошибка разбора Forge promotions JSON: {e}"))?;
@@ -654,13 +678,12 @@ pub async fn fetch_forge_versions() -> Result<Vec<ForgeVersionSummary>, String> 
         return Ok(installed_forge_versions());
     }
 
-    let direct_client = http_client(false);
-    let text = match download_meta_text(&direct_client, FORGE_PROMOTIONS_URL, DEFAULT_DOWNLOAD_RETRIES).await {
+    let text = match fetch_forge_promotions().await {
         Ok(text) => text,
         Err(e) => {
             let local = installed_forge_versions();
             if local.is_empty() {
-                return Err(format!("Ошибка загрузки Forge promotions: {e}"));
+                return Err(e);
             }
             return Ok(local);
         }
@@ -850,16 +873,14 @@ pub(crate) async fn resolve_forge_installer_url(
         return installer_url.to_string();
     }
 
-    let client = http_client(false);
-    let mut metadata = None;
-    for url in [FORGE_MAVEN_METADATA_URL, FORGE_MAVEN_OFFICIAL_METADATA_URL] {
-        if let Ok(text) = download_text_with_retries(&client, url, 2).await {
-            metadata = Some(text);
-            break;
-        }
-    }
-    let Some(metadata) = metadata else {
-        return installer_url.to_string();
+    let metadata = match read_meta_cache(FORGE_MAVEN_OFFICIAL_METADATA_URL)
+        .filter(|text| text.contains(&format!("<version>{plain}")))
+    {
+        Some(text) => text,
+        None => match fetch_forge_maven_metadata().await {
+            Ok(text) => text,
+            Err(_) => return installer_url.to_string(),
+        },
     };
 
     let versions = parse_maven_metadata_versions(&metadata);
@@ -882,34 +903,9 @@ pub(crate) async fn resolve_forge_installer_url(
 pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<LoaderVersionOption>, String> {
     let prefix = format!("{game_version}-");
     let mc_suffix = format!("-{game_version}");
-    let settings = load_settings_from_disk();
-    let direct_client = http_client(false);
-    let metadata = match download_text_with_retries(
-        &direct_client,
-        FORGE_MAVEN_METADATA_URL,
-        DEFAULT_DOWNLOAD_RETRIES,
-    )
-    .await
-    {
-        Ok(text) => text,
-        Err(direct_err) => {
-            if settings.forge_proxy_fallback {
-                download_text_with_retries(
-                    &direct_client,
-                    FORGE_MAVEN_OFFICIAL_METADATA_URL,
-                    DEFAULT_DOWNLOAD_RETRIES,
-                )
-                .await
-                .map_err(|fallback_err| {
-                    format!(
-                        "Ошибка загрузки Forge metadata с зеркала: {direct_err}; официальный Maven: {fallback_err}"
-                    )
-                })?
-            } else {
-                return Err(format!("Ошибка загрузки Forge metadata: {direct_err}"));
-            }
-        }
-    };
+    let (metadata, promos) =
+        tokio::join!(fetch_forge_maven_metadata(), forge_promo_builds_for_mc(&game_version));
+    let metadata = metadata?;
 
     let builds: Vec<String> = parse_maven_metadata_versions(&metadata)
         .into_iter()
@@ -923,7 +919,7 @@ pub async fn fetch_forge_builds_for_game(game_version: String) -> Result<Vec<Loa
         })
         .collect();
 
-    let (recommended, latest) = forge_promo_builds_for_mc(&game_version).await.unwrap_or((None, None));
+    let (recommended, latest) = promos.unwrap_or((None, None));
     let sorted = dedupe_sort_versions(builds);
     Ok(sorted
         .into_iter()

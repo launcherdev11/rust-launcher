@@ -17,8 +17,9 @@ use crate::services::game::core::{
 };
 use crate::services::game::console::log_to_console;
 use crate::services::game::forge_legacy::{install_legacy_forge, read_legacy_install_profile};
+use crate::services::game::forge_prefetch::prefetch_installer_libraries;
 use crate::services::game::runtime::{
-    download_assets, download_file_checked, download_forge_installer_once,
+    download_assets, download_file_checked, download_forge_installer,
     ensure_launcher_profiles_json, extract_natives_jar, file_starts_with_pk,
     forge_installer_url_with_official_maven, forge_java_runtime_for_mc_version,
     parse_forge_id, parse_neoforge_id, resolve_natives_extract_dir, select_latest_quilt_loader,
@@ -667,7 +668,7 @@ pub async fn install_forge(
 
     let total_done = Arc::new(AtomicU64::new(0));
     if need_download {
-        let mut download_error = match download_forge_installer_once(
+        let mut download_error = match download_forge_installer(
             &installer_client,
             &installer_url,
             &installer_path,
@@ -693,7 +694,7 @@ pub async fn install_forge(
                         "[Forge] Загрузка installer с зеркала не удалась: {primary_error}. Пробуем официальный Maven."
                     ),
                 );
-                match download_forge_installer_once(
+                match download_forge_installer(
                     &installer_client,
                     &official_url,
                     &installer_path,
@@ -780,6 +781,11 @@ pub async fn install_forge(
                 return Err(e);
             }
         }
+    }
+
+    prefetch_installer_libraries(&app, &installer_path, &libs_root, &version_id).await;
+    if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+        return Err("Загрузка отменена пользователем".to_string());
     }
 
     let game_dir = root.clone();

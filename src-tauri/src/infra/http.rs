@@ -26,8 +26,27 @@ static BINARY_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .unwrap_or_else(|_| reqwest::Client::new())
 });
 
+static FAIL_FAST_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .read_timeout(Duration::from_secs(15))
+        .tcp_keepalive(Duration::from_secs(30))
+        .pool_idle_timeout(Duration::from_secs(30))
+        .user_agent(USER_AGENT)
+        .http1_only()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+});
+
 pub fn http_client(_use_proxy: bool) -> reqwest::Client {
     SHARED_CLIENT.clone()
+}
+
+pub fn http_client_fail_fast() -> reqwest::Client {
+    FAIL_FAST_CLIENT.clone()
 }
 
 pub fn http_client_for_binary_download_with_preferred_proxy_host(

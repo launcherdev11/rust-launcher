@@ -11,7 +11,7 @@ use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE, RANGE};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 
-use crate::infra::http::http_client;
+use crate::infra::http::{http_client, http_client_fail_fast};
 use crate::models::events::{DownloadProgressPayload, EVENT_DOWNLOAD_PROGRESS};
 use crate::services::game::core::{
     download_text_with_retries, file_len_matches, is_retryable_status, retry_delay, sha1_hex_of_file,
@@ -164,7 +164,7 @@ enum AttemptError {
     Retry(String),
 }
 
-pub(crate) async fn download_forge_installer_once(
+pub(crate) async fn download_forge_installer(
     client: &Client,
     url: &str,
     path: &Path,
@@ -172,7 +172,57 @@ pub(crate) async fn download_forge_installer_once(
     version_id: &str,
     total_done: Arc<AtomicU64>,
 ) -> Result<u64, String> {
-    const ATTEMPTS: usize = 6;
+    let urls = crate::services::game::mirrors::candidates(url);
+    let has_fallback = urls.len() > 1;
+    let mut errors: Vec<String> = Vec::new();
+    for (idx, candidate) in urls.iter().enumerate() {
+        let is_last = idx + 1 == urls.len();
+        let fail_fast = has_fallback && !is_last;
+        let attempt_client = if fail_fast { http_client_fail_fast() } else { client.clone() };
+        let attempts = if fail_fast { 2 } else { 6 };
+        match download_forge_installer_once(
+            &attempt_client,
+            candidate,
+            path,
+            app,
+            version_id,
+            total_done.clone(),
+            attempts,
+        )
+        .await
+        {
+            Ok(n) => {
+                crate::services::game::mirrors::note_success(candidate);
+                return Ok(n);
+            }
+            Err(e) => {
+                errors.push(e);
+                if CANCEL_DOWNLOAD.load(Ordering::SeqCst) {
+                    break;
+                }
+                crate::services::game::mirrors::note_failure(candidate);
+                if !is_last {
+                    log_to_console(
+                        app,
+                        &format!("[Forge] {candidate} недоступен, пробуем другой источник"),
+                    );
+                }
+            }
+        }
+    }
+    Err(errors.join("; "))
+}
+
+async fn download_forge_installer_once(
+    client: &Client,
+    url: &str,
+    path: &Path,
+    app: &AppHandle,
+    version_id: &str,
+    total_done: Arc<AtomicU64>,
+    attempts: usize,
+) -> Result<u64, String> {
+    let attempts = attempts.max(1);
     let mut attempt = 0usize;
     let mut buf: Vec<u8> = Vec::new();
     loop {
@@ -181,12 +231,12 @@ pub(crate) async fn download_forge_installer_once(
             Err(AttemptError::Fatal(e)) | Err(AttemptError::FatalStatus(_, e)) => return Err(e),
             Err(AttemptError::Retry(e)) => {
                 attempt += 1;
-                if attempt >= ATTEMPTS {
+                if attempt >= attempts {
                     return Err(e);
                 }
                 log_to_console(
                     app,
-                    &format!("[Forge] Загрузка installer не удалась ({e}), повтор {attempt}/{}", ATTEMPTS - 1),
+                    &format!("[Forge] Загрузка installer не удалась ({e}), повтор {attempt}/{}", attempts - 1),
                 );
                 tokio::time::sleep(retry_delay(attempt - 1)).await;
             }
@@ -348,9 +398,17 @@ pub(crate) async fn download_file_checked(
     let mut errors: Vec<String> = Vec::new();
     for (idx, candidate) in urls.iter().enumerate() {
         let is_last = idx + 1 == urls.len();
-        let attempts = if has_fallback && !is_last { retries.min(2) } else { retries };
+        let fail_fast = has_fallback && !is_last;
+        let attempts = if fail_fast { retries.min(2) } else { retries };
+        let fast_client;
+        let attempt_client = if fail_fast {
+            fast_client = http_client_fail_fast();
+            &fast_client
+        } else {
+            client
+        };
         match download_file_from(
-            client,
+            attempt_client,
             candidate,
             path,
             expected_sha1.clone(),

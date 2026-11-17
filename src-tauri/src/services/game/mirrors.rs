@@ -17,6 +17,7 @@ const REWRITES: &[(&str, &str)] = &[
     ("https://resources.download.minecraft.net", "/assets"),
     ("https://maven.minecraftforge.net", "/maven"),
     ("https://files.minecraftforge.net/maven", "/maven"),
+    ("https://forgemvn.lumintomc.ru", "/maven"),
     ("https://maven.neoforged.net/releases", "/maven"),
     ("https://maven.fabricmc.net", "/maven"),
     ("https://meta.fabricmc.net", "/fabric-meta"),
@@ -174,6 +175,10 @@ mod tests {
         assert_eq!(
             mirror_url("https://maven.neoforged.net/releases/net/neoforged/neoforge/x.jar").as_deref(),
             Some("https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/x.jar")
+        );
+        assert_eq!(
+            mirror_url("https://forgemvn.lumintomc.ru/net/minecraftforge/forge/maven-metadata.xml").as_deref(),
+            Some("https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml")
         );
         assert_eq!(
             mirror_url("http://launcher.mojang.com/v1/objects/x/client.jar").as_deref(),
