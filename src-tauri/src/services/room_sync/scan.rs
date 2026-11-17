@@ -46,19 +46,10 @@ pub struct InspectedFile {
     pub blocked: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AntivirusVerdict {
-    Clean,
-    Threat,
-    Unavailable,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InspectReport {
     pub files: Vec<InspectedFile>,
-    pub antivirus: AntivirusVerdict,
 }
 
 fn archive_issues(path: &Path, kind: SyncFileKind) -> Vec<FileIssue> {
@@ -124,59 +115,7 @@ pub(super) fn inspect_archives(archives: &[Archive]) -> InspectReport {
             }
         })
         .collect();
-    InspectReport {
-        files,
-        antivirus: AntivirusVerdict::Unavailable,
-    }
-}
-
-#[cfg(windows)]
-pub(super) async fn antivirus_scan(dir: &Path) -> AntivirusVerdict {
-    use std::time::Duration;
-
-    let Some(program_files) = std::env::var_os("ProgramFiles") else {
-        return AntivirusVerdict::Unavailable;
-    };
-    let scanner = PathBuf::from(program_files).join("Windows Defender").join("MpCmdRun.exe");
-    if !scanner.is_file() || !dir.is_dir() {
-        return AntivirusVerdict::Unavailable;
-    }
-    let dir = dir.to_path_buf();
-    let code = tokio::task::spawn_blocking(move || {
-        let mut cmd = std::process::Command::new(scanner);
-        cmd.args(["-Scan", "-ScanType", "3", "-DisableRemediation", "-File"])
-            .arg(&dir)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
-        crate::infra::process::hide_console(&mut cmd);
-        let mut child = cmd.spawn().ok()?;
-        let deadline = std::time::Instant::now() + Duration::from_secs(180);
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => return status.code(),
-                Ok(None) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(200));
-                }
-                _ => {
-                    let _ = child.kill();
-                    return None;
-                }
-            }
-        }
-    })
-    .await
-    .ok()
-    .flatten();
-    match code {
-        Some(0) => AntivirusVerdict::Clean,
-        Some(2) => AntivirusVerdict::Threat,
-        _ => AntivirusVerdict::Unavailable,
-    }
-}
-
-#[cfg(not(windows))]
-pub(super) async fn antivirus_scan(_dir: &Path) -> AntivirusVerdict {
-    AntivirusVerdict::Unavailable
+    InspectReport { files }
 }
 
 #[cfg(test)]

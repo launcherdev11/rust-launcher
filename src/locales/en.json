@@ -1878,11 +1878,6 @@
       "reviewHint": "Mods are looked up on Modrinth and CurseForge first. Files from the host go to a temporary folder and are checked before installation.",
       "download": "Download and check",
       "continue": "Continue",
-      "antivirus": {
-        "clean": "Windows Defender found no threats.",
-        "threat": "Windows Defender found a threat. The received files were deleted and installation was cancelled.",
-        "unavailable": "Antivirus scan is unavailable, the files were checked by the launcher only."
-      },
       "fromPlatforms": "From Modrinth and CurseForge: {{count}}, verified by hash",
       "fromHost": "Mods from the host that are not on any platform: {{count}}",
       "configsReceived": "Configs from the host: {{count}}",

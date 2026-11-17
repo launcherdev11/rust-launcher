@@ -592,16 +592,10 @@ fn staged_archives(stage_id: &str, paths: &[String]) -> Result<Vec<scan::Archive
 
 #[command]
 pub async fn room_sync_inspect(stage_id: String, paths: Vec<String>) -> Result<scan::InspectReport, String> {
-    let stage = stage_dir(&stage_id)?;
     let archives = staged_archives(&stage_id, &paths)?;
-    let mut report = tokio::task::spawn_blocking(move || scan::inspect_archives(&archives))
+    tokio::task::spawn_blocking(move || scan::inspect_archives(&archives))
         .await
-        .map_err(|e| e.to_string())?;
-    report.antivirus = scan::antivirus_scan(&stage).await;
-    if report.antivirus == scan::AntivirusVerdict::Threat {
-        let _ = std::fs::remove_dir_all(&stage);
-    }
-    Ok(report)
+        .map_err(|e| e.to_string())
 }
 
 fn move_into_place(from: &Path, to: &Path) -> Result<(), String> {

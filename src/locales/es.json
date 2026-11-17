@@ -1906,11 +1906,6 @@
       "reviewHint": "Primero se buscan los mods en Modrinth y CurseForge. Los archivos del anfitrión van a una carpeta temporal y se comprueban antes de instalarse.",
       "download": "Descargar y comprobar",
       "continue": "Continuar",
-      "antivirus": {
-        "clean": "Windows Defender no encontró amenazas.",
-        "threat": "Windows Defender encontró una amenaza. Los archivos recibidos se eliminaron y la instalación se canceló.",
-        "unavailable": "El análisis antivirus no está disponible, el launcher solo hizo sus propias comprobaciones."
-      },
       "fromPlatforms": "De Modrinth y CurseForge: {{count}}, verificados por hash",
       "fromHost": "Mods del anfitrión que no están en ninguna plataforma: {{count}}",
       "configsReceived": "Configs del anfitrión: {{count}}",

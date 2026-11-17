@@ -42,7 +42,6 @@ export type FileIssue = "invalid_archive" | "executable" | "native_code" | "no_m
 
 export type InspectReport = {
   files: { path: string; title?: string | null; issues: FileIssue[]; blocked: boolean }[];
-  antivirus: "clean" | "threat" | "unavailable";
 };
 
 export type SyncResult = {
@@ -396,7 +395,6 @@ export function useRoomSyncGuest(session: RoomPeerSession | null, profileId: str
         paths: fromHost.filter((f) => isArchivePath(f.path)).map((f) => f.path),
       });
       if (run !== runRef.current) return;
-      if (report.antivirus === "threat") stageRef.current = null;
       setState({ phase: "confirm", plan, report, fromPlatforms, fromHost, blockedByRelay, failed });
     } catch (e) {
       fail(run, e);

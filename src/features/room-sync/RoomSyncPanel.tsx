@@ -155,7 +155,6 @@ function ConfirmBody({
   const hostConfigs = ofKind(fromHost, "config").length;
   const hostAssets = ofKind(fromHost, "asset").length;
   const issuesByPath = new Map(report.files.map((f) => [f.path, f]));
-  const antivirusTone = report.antivirus === "clean" ? "ok" : report.antivirus === "threat" ? "warn" : "muted";
   const issueBadges = (path: string) =>
     (issuesByPath.get(path)?.issues ?? []).map((issue) => (
       <span key={issue} className={`shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] ${ISSUE_TONE[issue]}`}>
@@ -164,7 +163,6 @@ function ConfirmBody({
     ));
   return (
     <div className="flex flex-col gap-3">
-      <Line tone={antivirusTone}>{tt(`rooms.sync.antivirus.${report.antivirus}`)}</Line>
       {fromPlatforms.length > 0 ? (
         <Line>{tt("rooms.sync.fromPlatforms", { count: fromPlatforms.length })}</Line>
       ) : null}
@@ -279,7 +277,7 @@ export function RoomSyncModal({
       />
     );
     const needsTrust = state.fromHost.some((f) => f.kind === "mod" || f.kind === "script");
-    const blocked = state.report.antivirus === "threat" || state.report.files.some((f) => f.blocked);
+    const blocked = state.report.files.some((f) => f.blocked);
     const { plan } = state;
     const somethingToDo =
       state.fromPlatforms.length + state.fromHost.length + plan.enable.length > 0 ||

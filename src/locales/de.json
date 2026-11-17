@@ -1906,11 +1906,6 @@
       "reviewHint": "Mods werden zuerst auf Modrinth und CurseForge gesucht. Dateien vom Host landen in einem temporären Ordner und werden vor der Installation geprüft.",
       "download": "Laden und prüfen",
       "continue": "Weiter",
-      "antivirus": {
-        "clean": "Windows Defender hat keine Bedrohungen gefunden.",
-        "threat": "Windows Defender hat eine Bedrohung gefunden. Die empfangenen Dateien wurden gelöscht, die Installation abgebrochen.",
-        "unavailable": "Virenprüfung nicht verfügbar, die Dateien wurden nur vom Launcher geprüft."
-      },
       "fromPlatforms": "Von Modrinth und CurseForge: {{count}}, per Hash geprüft",
       "fromHost": "Mods vom Host, die auf keiner Plattform liegen: {{count}}",
       "configsReceived": "Configs vom Host: {{count}}",
