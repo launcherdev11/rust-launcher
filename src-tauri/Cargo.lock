@@ -2889,7 +2889,7 @@ dependencies = [
 
 [[package]]
 name = "mc16launcher"
-version = "3.3.6-beta.1"
+version = "3.3.6"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
