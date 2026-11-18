@@ -37,6 +37,10 @@ export async function getGameLanPort(): Promise<number | null> {
   return invoke<number | null>("lan_bridge_game_port");
 }
 
+export async function detectGameLanPort(): Promise<number | null> {
+  return invoke<number | null>("lan_bridge_detect_port");
+}
+
 export async function queryLanWorld(port: number): Promise<LanWorldInfo | null> {
   return invoke<LanWorldInfo | null>("lan_bridge_query_world", { port });
 }

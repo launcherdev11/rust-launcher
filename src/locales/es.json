@@ -2071,7 +2071,16 @@
       "launching": "Iniciando…",
       "joinFromRunningGame": "Copiar dirección",
       "joinUnavailable": "Podrás entrar cuando el anfitrión abra el mundo.",
-      "playersNow": "Ahora en el mundo: {{names}}"
+      "playersNow": "Ahora en el mundo: {{names}}",
+      "manualPortLabel": "Puerto del mundo manual",
+      "manualPortPlaceholder": "p. ej., 51234",
+      "manualPortApply": "Aplicar",
+      "manualPortReset": "Detectar automáticamente",
+      "manualPortHint": "Si el launcher no encuentra el puerto, escribe el número del chat del juego. Aparece al abrir el mundo en LAN.",
+      "manualPortActive": "Se usa el puerto {{port}} indicado manualmente.",
+      "manualPortApplied": "Puerto {{port}} conectado",
+      "manualPortNoAnswer": "Puerto {{port}} guardado, pero el juego no responde en él. Comprueba el número.",
+      "manualPortCleared": "El launcher vuelve a detectar el puerto"
     },
     "pingValue": "{{ms}} ms",
     "pingUnknown": "—",

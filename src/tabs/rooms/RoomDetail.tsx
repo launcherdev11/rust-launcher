@@ -69,6 +69,8 @@ type Props = {
   onReconnect: () => void;
   onLaunchGame?: () => void;
   onJoinWorld: () => void;
+  manualLanPort: number | null;
+  onSetManualLanPort: (port: number | null) => void;
   onSaveSettings: (input: UpdateRoomInput) => void;
   onWarning: (message: string) => void;
 };
@@ -104,6 +106,68 @@ function CopyRow({
       <button type="button" className="icon-btn" aria-label={copyLabel} title={copyLabel} onClick={onCopy}>
         <img src="/launcher-assets/copy.png" alt="" className="h-4 w-4 object-contain opacity-80" />
       </button>
+    </div>
+  );
+}
+
+function parsePort(raw: string): number | null {
+  if (!/^\d{1,5}$/.test(raw)) return null;
+  const port = Number(raw);
+  return port >= 1 && port <= 65535 ? port : null;
+}
+
+function ManualPortRow({
+  tt,
+  manualPort,
+  onApply,
+}: {
+  tt: ReturnType<typeof useT>;
+  manualPort: number | null;
+  onApply: (port: number | null) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const parsed = parsePort(draft);
+
+  const submit = () => {
+    if (parsed == null) return;
+    onApply(parsed);
+    setDraft("");
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-white/10 pt-4">
+      <label htmlFor="room-manual-port" className="ui-caption">
+        {tt("rooms.world.manualPortLabel")}
+      </label>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <TextField
+          id="room-manual-port"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={5}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.replace(/\D/g, ""))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+          className="min-w-0 flex-1 basis-40"
+          placeholder={manualPort != null ? String(manualPort) : tt("rooms.world.manualPortPlaceholder")}
+        />
+        <ActionButton size="sm" variant="secondary" disabled={parsed == null} onClick={submit}>
+          {tt("rooms.world.manualPortApply")}
+        </ActionButton>
+        {manualPort != null ? (
+          <ActionButton size="sm" variant="ghost" onClick={() => onApply(null)}>
+            {tt("rooms.world.manualPortReset")}
+          </ActionButton>
+        ) : null}
+      </div>
+      <p className="ui-meta">
+        {manualPort != null
+          ? tt("rooms.world.manualPortActive", { port: manualPort })
+          : tt("rooms.world.manualPortHint")}
+      </p>
     </div>
   );
 }
@@ -149,6 +213,8 @@ export function RoomDetail({
   onReconnect,
   onLaunchGame,
   onJoinWorld,
+  manualLanPort,
+  onSetManualLanPort,
   onSaveSettings,
   onWarning,
 }: Props) {
@@ -391,6 +457,10 @@ export function RoomDetail({
                 <span className={mcAuthOnline ? "text-emerald-300" : "text-warn-hi"}>{accountLabel}</span>
               </Fact>
             </dl>
+
+            {isOwner ? (
+              <ManualPortRow tt={tt} manualPort={manualLanPort} onApply={onSetManualLanPort} />
+            ) : null}
           </Panel>
 
           {syncPanel}

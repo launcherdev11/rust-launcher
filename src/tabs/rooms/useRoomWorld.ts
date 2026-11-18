@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   GAME_LAN_PORT_EVENT,
   attachLanTunnel,
+  detectGameLanPort,
   getGameLanPort,
   queryLanWorld,
   setHostLanPort,
@@ -17,6 +18,7 @@ import type { PeerLinkState } from "../../api/webrtc/signaling";
 
 const TICK_MS = 2_000;
 const WORLD_POLL_MS = 4_000;
+const PORT_DETECT_MS = 4_000;
 const WORLD_MISSES_BEFORE_UNREACHABLE = 3;
 const HOST_STATE_WAIT_MS = 6_000;
 const OUTDATED_PEER_CHECK_MS = 5_000;
@@ -93,6 +95,7 @@ export function useRoomWorld({
   sessions,
   peerLinks,
   expectedPeerIds,
+  gameRunning,
   onPeerOutdated,
 }: {
   room: Room | null;
@@ -100,6 +103,7 @@ export function useRoomWorld({
   sessions: Record<string, RoomPeerSession>;
   peerLinks: Record<string, PeerLinkState>;
   expectedPeerIds: string[];
+  gameRunning: boolean;
   onPeerOutdated: () => void;
 }) {
   const roomId = room?.id ?? null;
@@ -107,6 +111,7 @@ export function useRoomWorld({
   const isHost = Boolean(room) && hostId === userId;
 
   const [gameLanPort, setGameLanPort] = useState<number | null>(null);
+  const [manualLanPort, setManualLanPort] = useState<number | null>(null);
   const [worldInfo, setWorldInfo] = useState<LanWorldInfo | null>(null);
   const [worldReachable, setWorldReachable] = useState(true);
   const [peerPings, setPeerPings] = useState<Record<string, number>>({});
@@ -218,7 +223,12 @@ export function useRoomWorld({
     };
   }, [roomId, disposeTunnel]);
 
-  const sharedPort = isHost ? gameLanPort : null;
+  useEffect(() => {
+    setManualLanPort(null);
+  }, [roomId]);
+
+  const hostLanPort = manualLanPort ?? gameLanPort;
+  const sharedPort = isHost ? hostLanPort : null;
 
   useEffect(() => {
     void setHostLanPort(sharedPort).catch(() => {});
@@ -230,11 +240,38 @@ export function useRoomWorld({
     };
   }, []);
 
+  const needsPortDetection =
+    isHost && gameRunning && manualLanPort == null && (gameLanPort == null || !worldReachable);
+
+  useEffect(() => {
+    if (!needsPortDetection) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const detect = async () => {
+      const port = await detectGameLanPort().catch(() => undefined);
+      if (cancelled) return;
+      if (port !== undefined) setGameLanPort(port);
+      timer = window.setTimeout(() => void detect(), PORT_DETECT_MS);
+    };
+    void detect();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [needsPortDetection]);
+
+  const applyManualLanPort = useCallback(async (port: number | null): Promise<boolean> => {
+    setManualLanPort(port);
+    if (port == null) return true;
+    const info = await queryLanWorld(port).catch(() => null);
+    return info != null;
+  }, []);
+
   useEffect(() => {
     setWorldInfo(null);
     setWorldReachable(true);
-    if (!isHost || gameLanPort == null) return;
-    const port = gameLanPort;
+    if (!isHost || hostLanPort == null) return;
+    const port = hostLanPort;
     let cancelled = false;
     let misses = 0;
     let timer: number | null = null;
@@ -259,12 +296,12 @@ export function useRoomWorld({
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [gameLanPort, isHost]);
+  }, [hostLanPort, isHost]);
 
   const ownWorld = useMemo<RoomWorld | null>(() => {
-    if (!isHost || gameLanPort == null) return null;
+    if (!isHost || hostLanPort == null) return null;
     return {
-      port: gameLanPort,
+      port: hostLanPort,
       reachable: worldReachable,
       motd: worldInfo?.motd ?? null,
       version: worldInfo?.version ?? null,
@@ -272,7 +309,7 @@ export function useRoomWorld({
       playersMax: worldInfo?.playersMax ?? null,
       players: worldInfo?.players ?? [],
     };
-  }, [gameLanPort, isHost, worldInfo, worldReachable]);
+  }, [hostLanPort, isHost, worldInfo, worldReachable]);
 
   const ownWorldRef = useRef(ownWorld);
   ownWorldRef.current = ownWorld;
@@ -361,7 +398,9 @@ export function useRoomWorld({
       : "pending";
 
   return {
-    gameLanPort,
+    gameLanPort: hostLanPort,
+    manualLanPort,
+    applyManualLanPort,
     world: isHost ? ownWorld : hostState?.world ?? null,
     hostStateStatus,
     memberPings,

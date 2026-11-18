@@ -2043,7 +2043,16 @@
       "launching": "Starting…",
       "joinFromRunningGame": "Copy address",
       "joinUnavailable": "You can join once the host opens the world.",
-      "playersNow": "In the world now: {{names}}"
+      "playersNow": "In the world now: {{names}}",
+      "manualPortLabel": "Manual world port",
+      "manualPortPlaceholder": "e.g. 51234",
+      "manualPortApply": "Apply",
+      "manualPortReset": "Detect automatically",
+      "manualPortHint": "If the launcher can't find the port, enter the number from the game chat. It appears after you open the world to LAN.",
+      "manualPortActive": "Using manually set port {{port}}.",
+      "manualPortApplied": "Port {{port}} connected",
+      "manualPortNoAnswer": "Port {{port}} saved, but the game does not respond on it. Check the number.",
+      "manualPortCleared": "The launcher is detecting the port again"
     },
     "pingValue": "{{ms}} ms",
     "pingUnknown": "—",

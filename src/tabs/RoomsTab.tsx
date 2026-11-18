@@ -384,6 +384,8 @@ export function RoomsTab({
 
   const {
     gameLanPort,
+    manualLanPort,
+    applyManualLanPort,
     world,
     hostStateStatus,
     memberPings,
@@ -396,8 +398,20 @@ export function RoomsTab({
     sessions,
     peerLinks,
     expectedPeerIds,
+    gameRunning: gameStatus === "running",
     onPeerOutdated,
   });
+
+  const handleManualLanPort = async (port: number | null) => {
+    const reachable = await applyManualLanPort(port);
+    if (port == null) {
+      showNotification("info", tt("rooms.world.manualPortCleared"));
+    } else if (reachable) {
+      showNotification("success", tt("rooms.world.manualPortApplied", { port }));
+    } else {
+      showNotification("warning", tt("rooms.world.manualPortNoAnswer", { port }));
+    }
+  };
 
   const hostSharing = isOwner && gameLanPort != null;
   const syncProfileId = currentGame?.source === "profile" ? currentGame.profileId ?? null : null;
@@ -842,6 +856,8 @@ export function RoomsTab({
           }}
           onLaunchGame={onLaunchGame}
           onJoinWorld={() => void handleGuestJoinWorld()}
+          manualLanPort={manualLanPort}
+          onSetManualLanPort={(port) => void handleManualLanPort(port)}
           onSaveSettings={(input) => void handleSaveSettings(input)}
           onWarning={(message) => showNotification("warning", message)}
         />

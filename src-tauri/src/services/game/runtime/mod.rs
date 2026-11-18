@@ -3,10 +3,11 @@ mod env;
 mod jvm;
 mod launch_prep;
 mod lan_bridge;
+mod lan_discovery;
 mod session;
 
 pub use lan_bridge::{
-    lan_bridge_attach, lan_bridge_detach, lan_bridge_game_port, lan_bridge_query_world,
+    lan_bridge_attach, lan_bridge_detach, lan_bridge_detect_port, lan_bridge_game_port, lan_bridge_query_world,
     lan_bridge_set_flow, lan_bridge_set_host_port, lan_bridge_start_guest, lan_bridge_stop,
     lan_bridge_write,
 };

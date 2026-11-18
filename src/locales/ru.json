@@ -2043,7 +2043,16 @@
       "launching": "Запуск…",
       "joinFromRunningGame": "Скопировать адрес",
       "joinUnavailable": "Войти можно, когда хост откроет мир.",
-      "playersNow": "Сейчас в мире: {{names}}"
+      "playersNow": "Сейчас в мире: {{names}}",
+      "manualPortLabel": "Порт мира вручную",
+      "manualPortPlaceholder": "Например, 51234",
+      "manualPortApply": "Применить",
+      "manualPortReset": "Искать автоматически",
+      "manualPortHint": "Если лаунчер не нашёл порт сам, впишите номер из чата игры. Он появляется после открытия мира для сети.",
+      "manualPortActive": "Используется порт {{port}}, указанный вручную.",
+      "manualPortApplied": "Порт {{port}} подключён",
+      "manualPortNoAnswer": "Порт {{port}} сохранён, но игра на нём не отвечает. Проверьте номер.",
+      "manualPortCleared": "Лаунчер снова ищет порт сам"
     },
     "pingValue": "{{ms}} мс",
     "pingUnknown": "—",

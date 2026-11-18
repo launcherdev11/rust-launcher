@@ -1,6 +1,6 @@
 [package]
 name = "mc16launcher"
-version = "3.3.6"
+version = "3.3.7"
 description = "An optimized Minecraft launcher for creating modpacks, downloading mods directly, and launching the game with custom settings."
 authors = ["16steyy"]
 edition = "2021"
@@ -50,6 +50,7 @@ tauri-plugin-http = { version = "2", features = ["native-tls"] }
 windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dxgi",
+    "Win32_NetworkManagement_IpHelper",
     "Win32_Security",
     "Win32_Storage_EnhancedStorage",
     "Win32_Storage_FileSystem",

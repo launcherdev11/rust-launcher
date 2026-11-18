@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -11,6 +12,9 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, watch};
+
+use super::lan_discovery;
+use crate::services::game::state::GAME_PROCESS_PID;
 
 pub const EVENT_LAN_BRIDGE_STATUS: &str = "lan-bridge-status";
 pub const EVENT_GAME_LAN_PORT: &str = "game-lan-port";
@@ -451,6 +455,7 @@ async fn run_conn(
 
 const GAME_LAN_PORT_NONE: u32 = 0;
 const WORLD_QUERY_TIMEOUT: Duration = Duration::from_secs(3);
+const PORT_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 const MAX_STATUS_PACKET: usize = 4 * 1024 * 1024;
 const MAX_LISTED_PLAYERS: usize = 20;
 
@@ -466,8 +471,48 @@ fn is_log_prefix(head: &str) -> bool {
     !head.contains("[CHAT]") && (head.is_empty() || head.ends_with(": ") || head.ends_with(") "))
 }
 
+fn strip_ansi(line: &str) -> Cow<'_, str> {
+    if !line.contains('\u{1b}') {
+        return Cow::Borrowed(line);
+    }
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        if chars.peek() == Some(&'[') {
+            chars.next();
+            for next in chars.by_ref() {
+                if ('\u{40}'..='\u{7e}').contains(&next) {
+                    break;
+                }
+            }
+        }
+    }
+    Cow::Owned(out)
+}
+
+fn unwrap_cdata(line: &str) -> &str {
+    let Some(start) = line.find("<![CDATA[") else {
+        return line;
+    };
+    let inner = &line[start + "<![CDATA[".len()..];
+    inner.find("]]>").map_or(inner, |end| &inner[..end])
+}
+
+fn leading_port(text: &str) -> Option<u16> {
+    let digits = text.len() - text.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    if digits == 0 || text[digits..].starts_with(|c: char| c.is_alphanumeric()) {
+        return None;
+    }
+    text[..digits].parse::<u16>().ok().filter(|p| *p != 0)
+}
+
 fn lan_log_event(line: &str) -> Option<LanLogEvent> {
-    let line = line.trim_end();
+    let clean = strip_ansi(line);
+    let line = unwrap_cdata(clean.trim()).trim_end();
     if let Some(head) = line.strip_suffix("Stopping server") {
         return is_log_prefix(head).then_some(LanLogEvent::Closed);
     }
@@ -476,8 +521,7 @@ fn lan_log_event(line: &str) -> Option<LanLogEvent> {
         if !is_log_prefix(&line[..idx]) {
             continue;
         }
-        let port = line[idx + marker.len()..].parse::<u16>().ok().filter(|p| *p != 0)?;
-        return Some(LanLogEvent::Opened(port));
+        return leading_port(&line[idx + marker.len()..]).map(LanLogEvent::Opened);
     }
     None
 }
@@ -667,6 +711,57 @@ pub async fn lan_bridge_query_world(port: u16) -> Result<Option<LanWorldInfo>, S
         .await
         .ok()
         .flatten())
+}
+
+async fn answers_status(port: u16) -> bool {
+    tokio::time::timeout(PORT_PROBE_TIMEOUT, query_world(port))
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+async fn first_answering(mut ports: Vec<u16>, preferred: Option<u16>) -> Option<u16> {
+    ports.sort_unstable();
+    ports.dedup();
+    if let Some(pos) = preferred.and_then(|p| ports.iter().position(|x| *x == p)) {
+        ports.swap(0, pos);
+    }
+    let checks = ports
+        .into_iter()
+        .map(|port| async move { answers_status(port).await.then_some(port) });
+    futures_util::future::join_all(checks)
+        .await
+        .into_iter()
+        .flatten()
+        .next()
+}
+
+async fn detect_game_lan_port(current: Option<u16>) -> Option<u16> {
+    let pid = u32::try_from(GAME_PROCESS_PID.load(Ordering::SeqCst)).unwrap_or(0);
+    if pid == 0 {
+        return None;
+    }
+    let ports = tokio::task::spawn_blocking(move || lan_discovery::listening_ports(pid))
+        .await
+        .unwrap_or_default();
+    first_answering(ports, current).await
+}
+
+#[tauri::command]
+pub async fn lan_bridge_detect_port(app: AppHandle) -> Result<Option<u16>, String> {
+    let current = lan_bridge_game_port();
+    match detect_game_lan_port(current).await {
+        Some(port) => publish_game_lan_port(&app, Some(port)),
+        None => {
+            if let Some(port) = current {
+                if !answers_status(port).await {
+                    publish_game_lan_port(&app, None);
+                }
+            }
+        }
+    }
+    Ok(lan_bridge_game_port())
 }
 
 static TUNNELS: Lazy<Mutex<HashMap<String, Arc<Tunnel>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
@@ -903,6 +998,9 @@ mod tests {
             "[12:00:00] [Render thread/INFO] (Minecraft) Started serving on 51234",
             "[12:00:00] [Client thread/INFO]: Started on 51234",
             "Started on 51234\r",
+            "\u{1b}[32m[12:00:00] [Server thread/INFO] [minecraft/IntegratedServer]: Started serving on 51234\u{1b}[m",
+            "    <log4j:Message><![CDATA[Started serving on 51234]]></log4j:Message>",
+            "[12:00:00] [Server thread/INFO]: Started serving on 51234.",
         ] {
             assert_eq!(lan_log_event(line), Some(LanLogEvent::Opened(51234)), "{line}");
         }
@@ -921,6 +1019,7 @@ mod tests {
             "[12:00:00] [main/INFO]: Web server Started on 8080",
             "[12:00:00] [Render thread/INFO]: Started serving on 99999",
             "[12:00:00] [Render thread/INFO]: Started serving on 0",
+            "[12:00:00] [Render thread/INFO]: Started serving on 5123x",
         ] {
             assert_eq!(lan_log_event(line), None, "{line}");
         }
