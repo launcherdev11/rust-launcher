@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { playNotificationSound } from "../uiSounds";
 import { buildLauncherNewsUrls, fetchFirstAvailableMirror } from "../lib/remoteMirrors";
 import {
@@ -9,17 +9,73 @@ import {
   type BottomSocialNotification,
   type Notification,
   type NotificationIdentity,
+  type RemoteNewsPopupNotice,
   type RemoteNotificationsJsonItem,
 } from "../app/notifications";
 import type { Settings } from "../app/types";
+
+const NEWS_POPUP_SEEN_KEY = "mc16launcher:newsPopupSeen";
+
+function readSeenPopupFingerprints(): Set<string> {
+  try {
+    const raw = localStorage.getItem(NEWS_POPUP_SEEN_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((v): v is string => typeof v === "string" && v.length > 0));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSeenPopupFingerprints(seen: Set<string>) {
+  try {
+    localStorage.setItem(NEWS_POPUP_SEEN_KEY, JSON.stringify([...seen].slice(-40)));
+  } catch {
+  }
+}
+
+function popupFingerprint(image: string | undefined, msg: string): string {
+  return `${image ?? ""}\n${msg}`;
+}
+
+function extractPopupNotice(item: RemoteNotificationsJsonItem): RemoteNewsPopupNotice | null {
+  const image =
+    normalizeOptionalString(item.image) ?? normalizeOptionalString(item.Image);
+  const msg =
+    normalizeOptionalString(item.msg) ?? normalizeOptionalString(item.Msg) ?? "";
+  if (!image && !msg) return null;
+
+  const toastText =
+    normalizeOptionalString(getRemoteItemField(item, "text-msg", "textMsg")) ?? "";
+  if (toastText) return null;
+
+  return {
+    image,
+    msg,
+    fingerprint: popupFingerprint(image, msg),
+  };
+}
 
 export function useRemoteNotices(
   settings: Settings | null,
   pushNotification: (entry: NotificationIdentity) => { merged: boolean },
 ) {
   const [bottomSocialNotifications, setBottomSocialNotifications] = useState<BottomSocialNotification[]>([]);
+  const [newsPopupNotice, setNewsPopupNotice] = useState<RemoteNewsPopupNotice | null>(null);
   const didLoadedRemoteNotificationsRef = useRef(false);
   const didLoadedBottomSocialRef = useRef(false);
+
+  const dismissNewsPopupNotice = useCallback(() => {
+    setNewsPopupNotice((current) => {
+      if (current) {
+        const seen = readSeenPopupFingerprints();
+        seen.add(current.fingerprint);
+        writeSeenPopupFingerprints(seen);
+      }
+      return null;
+    });
+  }, []);
 
   useEffect(() => {
     if (!settings) return;
@@ -56,7 +112,7 @@ export function useRemoteNotices(
           }
         }
 
-        const normalized = items
+        const toastItems = items
           .map((item) => {
             const colorMsg = getRemoteItemField(item, "color-msg", "colorMsg");
             const iconMsg = getRemoteItemField(item, "icon-msg", "iconMsg");
@@ -66,7 +122,6 @@ export function useRemoteNotices(
             const icon = normalizeOptionalString(iconMsg);
             const text = normalizeOptionalString(textMsg) ?? "";
             return {
-              item,
               colorMsg: color,
               iconMsg: icon,
               textMsg: text,
@@ -74,11 +129,26 @@ export function useRemoteNotices(
           })
           .filter((x) => x.textMsg.length > 0);
 
+        const seenPopups = readSeenPopupFingerprints();
+        const popupItems = items
+          .map(extractPopupNotice)
+          .filter((x): x is RemoteNewsPopupNotice => Boolean(x))
+          .filter((x) => !seenPopups.has(x.fingerprint));
+
+        didLoadedRemoteNotificationsRef.current = true;
+
+        if (popupItems.length > 0) {
+          setNewsPopupNotice(popupItems[0]);
+        }
+
+        if (toastItems.length === 0) return;
+        if (!settings.notify_system_message) return;
+
         const system: Array<
           Pick<Notification, "colorMsg" | "iconMsg" | "message" | "kind">
         > = [];
 
-        for (const n of normalized) {
+        for (const n of toastItems) {
           const kindFromColor = resolveRemoteNotificationKindFromColorMsg(n.colorMsg);
           system.push({
             message: n.textMsg,
@@ -88,11 +158,6 @@ export function useRemoteNotices(
           });
         }
 
-        didLoadedRemoteNotificationsRef.current = true;
-
-        if (system.length === 0) return;
-        if (!settings.notify_system_message) return;
-
         if (settings.ui_sounds_enabled) {
           const hasNoisyKind = system.some((s) => s.kind === "info" || s.kind === "error");
           if (hasNoisyKind) playNotificationSound();
@@ -101,7 +166,6 @@ export function useRemoteNotices(
         for (const s of system) {
           pushNotification(s);
         }
-
       } catch (e) {
         if (controller.signal.aborted) return;
         console.error("Failed to load remote notifications:", e);
@@ -162,5 +226,10 @@ export function useRemoteNotices(
     }
   }, []);
 
-  return { bottomSocialNotifications, setBottomSocialNotifications };
+  return {
+    bottomSocialNotifications,
+    setBottomSocialNotifications,
+    newsPopupNotice,
+    dismissNewsPopupNotice,
+  };
 }

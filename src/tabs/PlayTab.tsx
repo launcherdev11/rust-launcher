@@ -4,10 +4,19 @@ import { CursorHint, useCursorHint } from "../components/CursorHint";
 import { GameConsolePanel } from "../components/GameConsolePanel";
 import { LoaderIcon } from "../components/loader_icon";
 import { ProfileInstanceIcon, ProfileCardIconBackdrop } from "../components/profile_instance_icon";
-import { InputClearButton, Spinner } from "../components/ui";
+import { BannerSkeleton, InputClearButton, Spinner } from "../components/ui";
 import { formatPlaytimeShort, useT, type Language } from "../i18n";
 import { useProfileIconSrc } from "../hooks/useProfileIconSrc";
 import { copyTextToClipboard } from "../lib/clipboard";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  bannerServerAddress,
+  fetchLauncherBanners,
+  isCarouselBanner,
+  readCachedLauncherBanners,
+  resolveBannerImageUrl,
+  type LauncherBannerData,
+} from "../lib/launcherBanners";
 
 export type PlayHomeProfile = {
   id: string;
@@ -99,7 +108,9 @@ type PlayTabProps = {
   language: Language;
   installedVersionIds: Set<string>;
   showSnapshots: boolean;
+  showLauncherBanners?: boolean;
   fillPane?: boolean;
+  onPlayServer?: (serverAddress: string) => void | Promise<void>;
   profiles?: PlayHomeProfile[];
   selectedProfileId?: string | null;
   onSelectProfile?: (profileId: string) => void;
@@ -153,7 +164,9 @@ export function PlayTab({
   language,
   installedVersionIds,
   showSnapshots,
+  showLauncherBanners = true,
   fillPane = false,
+  onPlayServer,
   profiles = [],
   selectedProfileId = null,
   onSelectProfile,
@@ -164,6 +177,10 @@ export function PlayTab({
   onOpenProfileSettings,
 }: PlayTabProps) {
   const tt = useT(language);
+  const [banners, setBanners] = useState<LauncherBannerData[]>([]);
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+  const [bannerLoading, setBannerLoading] = useState(true);
+  const [bannerError, setBannerError] = useState(false);
 
   const recentProfiles = useMemo(() => {
     return [...profiles]
@@ -183,6 +200,73 @@ export function PlayTab({
   const showModsButton = (selectedProfile?.loader ?? loader).toLowerCase() !== "vanilla";
   const dockIconSrc = useProfileIconSrc(selectedProfile?.id ?? "");
   const lockedHint = useCursorHint();
+
+  const currentBanner =
+    banners.length > 0 &&
+    activeBannerIndex >= 0 &&
+    activeBannerIndex < banners.length
+      ? banners[activeBannerIndex]
+      : null;
+  const bannerServerIp = currentBanner ? bannerServerAddress(currentBanner) : "";
+
+  useEffect(() => {
+    if (!showLauncherBanners) {
+      setBanners([]);
+      setBannerLoading(false);
+      setBannerError(false);
+      return;
+    }
+
+    const cached = readCachedLauncherBanners(300_000)?.filter(isCarouselBanner);
+    if (cached?.length) {
+      setBanners(cached);
+      setActiveBannerIndex(0);
+      setBannerLoading(false);
+    } else {
+      setBannerLoading(true);
+    }
+
+    const controller = new AbortController();
+
+    async function fetchBanner() {
+      try {
+        setBannerError(false);
+        const all = await fetchLauncherBanners(controller.signal);
+        const parsed = all.filter(isCarouselBanner);
+        setBanners(parsed);
+        setActiveBannerIndex(0);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        const aborted =
+          error instanceof DOMException && error.name === "AbortError";
+        if (aborted) return;
+        console.error(error);
+        if (!cached?.length) {
+          setBannerError(true);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setBannerLoading(false);
+        }
+      }
+    }
+
+    void fetchBanner();
+
+    return () => {
+      controller.abort();
+    };
+  }, [showLauncherBanners]);
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setActiveBannerIndex((prev) => (prev + 1) % banners.length);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [banners.length]);
 
   const consoleLinesRef = useRef(playConsoleLines);
   consoleLinesRef.current = playConsoleLines;
@@ -270,9 +354,13 @@ export function PlayTab({
     });
   }, [isVersionDropdownOpen, filteredVersions.length]);
 
+  const bannerClass = fillPane
+    ? "menu-banner menu-banner--compact mt-auto"
+    : "menu-banner mt-auto";
+
   const controlsClass = fillPane
     ? "relative mt-2 w-full shrink-0"
-    : "relative mt-auto w-full shrink-0 pt-3";
+    : "relative mt-3 w-full shrink-0";
 
   const homeEmpty = (
     <div
@@ -443,9 +531,86 @@ export function PlayTab({
     </div>
   );
 
+  const bannerBlock = showLauncherBanners ? (
+    <div className={bannerClass}>
+      {bannerLoading ? (
+        <BannerSkeleton />
+      ) : bannerError ? (
+        <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
+          <span className="text-sm font-medium tracking-wide text-red-300">
+            {tt("play.banner.loadFailedTitle")}
+          </span>
+          <span className="mt-1 text-xs text-white/60">
+            {tt("play.banner.loadFailedHint")}
+          </span>
+        </div>
+      ) : currentBanner ? (
+        <>
+          <img
+            key={currentBanner.imageUrl}
+            src={resolveBannerImageUrl(currentBanner.imageUrl)}
+            alt={currentBanner.title ?? tt("play.banner.defaultAlt")}
+            className="banner-fade absolute inset-0 h-full w-full object-cover object-center"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
+
+          <div className="menu-banner-content">
+            {currentBanner.title ? <h2>{currentBanner.title}</h2> : null}
+            {currentBanner.subtitle ? <p>{currentBanner.subtitle}</p> : null}
+            {(bannerServerIp || currentBanner.link) && (
+              <div className="menu-banner-actions">
+                {bannerServerIp && onPlayServer ? (
+                  <button
+                    type="button"
+                    disabled={isLaunching || isInstalling}
+                    onClick={() => void onPlayServer(bannerServerIp)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft ${primaryColorClasses} ${
+                      isLaunching || isInstalling
+                        ? "cursor-not-allowed opacity-60"
+                        : "interactive-press hover:opacity-90"
+                    }`}
+                  >
+                    {isLaunching ? <Spinner className="h-3.5 w-3.5" /> : null}
+                    {tt("play.banner.play")}
+                  </button>
+                ) : null}
+                {currentBanner.link ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const link = currentBanner.link?.trim();
+                      if (!link) return;
+                      void openUrl(link).catch((err) => {
+                        console.error("Failed to open banner link:", err);
+                      });
+                    }}
+                    className="inline-flex items-center rounded-xl border border-white/15 bg-ink-950/60 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-800"
+                  >
+                    {tt("play.banner.learnMore")}
+                    <span className="ml-1 text-[0.75rem]">↗</span>
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <span className="text-sm font-medium tracking-wide text-white/70">
+            {tt("play.banner.empty")}
+          </span>
+        </div>
+      )}
+    </div>
+  ) : (
+    <div className="mt-auto" aria-hidden="true" />
+  );
+
   const shell = (
     <>
       {profiles.length === 0 && onOpenModpackView ? homeEmpty : homeCards}
+
+      {bannerBlock}
 
       <div className={controlsClass}>
         <div className="dock" data-tour-id="tour-launch-controls">

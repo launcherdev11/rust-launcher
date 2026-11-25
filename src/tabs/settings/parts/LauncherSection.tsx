@@ -358,6 +358,7 @@ export function LauncherSection({ ctx }: Props) {
               "launcher.backgroundBlur",
               "launcher.backgroundAnimation",
               "launcher.disableAnimations",
+              "launcher.hideBanners",
             ) ||
               (seasonalThemeActive &&
                 showSetting("launcher.disableThematicDecorations"))) && (
@@ -603,6 +604,14 @@ export function LauncherSection({ ctx }: Props) {
                     label={tt("settings.launcher.disableAnimations.label")}
                     value={settings?.animations_disabled ?? false}
                     onChange={(v) => updateSettings({ animations_disabled: v })}
+                  />
+                )}
+                {showSetting("launcher.hideBanners") && (
+                  <SettingsSwitchRow
+                    label={tt("settings.launcher.hideBanners.label")}
+                    hint={tt("settings.launcher.hideBanners.hint")}
+                    value={!(settings?.show_launcher_banners ?? true)}
+                    onChange={(v) => updateSettings({ show_launcher_banners: !v })}
                   />
                 )}
                 {seasonalThemeActive && showSetting("launcher.disableThematicDecorations") && (

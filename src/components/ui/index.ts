@@ -8,6 +8,7 @@ export { Modal } from "./Modal";
 export { Panel } from "./Panel";
 export { PromptHost } from "./PromptHost";
 export {
+  BannerSkeleton,
   CatalogCardSkeleton,
   FriendRowSkeleton,
   RoomCardSkeleton,

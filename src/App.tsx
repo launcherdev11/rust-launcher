@@ -105,6 +105,9 @@ const HelpModal = lazy(() =>
 const UpdatePopupModal = lazy(() =>
   import("./components/UpdatePopupModal").then((m) => ({ default: m.UpdatePopupModal })),
 );
+const NewsPopupModal = lazy(() =>
+  import("./components/NewsPopupModal").then((m) => ({ default: m.NewsPopupModal })),
+);
 
 
 function App() {
@@ -491,10 +494,12 @@ function App() {
       tt,
     });
 
-  const { bottomSocialNotifications, setBottomSocialNotifications } = useRemoteNotices(
-    settings,
-    pushNotification,
-  );
+  const {
+    bottomSocialNotifications,
+    setBottomSocialNotifications,
+    newsPopupNotice,
+    dismissNewsPopupNotice,
+  } = useRemoteNotices(settings, pushNotification);
 
   const {
     updateStatus,
@@ -814,6 +819,7 @@ function App() {
                 language={language}
                 installedVersionIds={installedVersionIdsForDropdown}
                 showSnapshots={settings?.show_snapshots ?? false}
+                showLauncherBanners={settings?.show_launcher_banners !== false}
                 isConsoleDetached={isConsoleDetached}
                 onToggleConsoleDetached={toggleConsoleDetached}
                 profiles={profilesHydrated ? knownProfiles : []}
@@ -997,6 +1003,15 @@ function App() {
               void installUpdate();
             }}
           />
+          </Suspense>
+        )}
+        {newsPopupNotice && (
+          <Suspense fallback={null}>
+            <NewsPopupModal
+              language={language}
+              notice={newsPopupNotice}
+              onClose={dismissNewsPopupNotice}
+            />
           </Suspense>
         )}
 

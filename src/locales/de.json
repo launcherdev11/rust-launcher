@@ -420,6 +420,10 @@
       "disableAnimations": {
         "label": "Animationen deaktivieren:"
       },
+      "hideBanners": {
+        "label": "Werbebanner deaktivieren:",
+        "hint": "Blendet das Nachrichten- und Bannerkarussell auf dem Spielen-Tab aus."
+      },
       "backgroundAnimation": {
         "label": "Animierter Hintergrund:",
         "hint": "Langsame Bewegung der Farbverläufe im Hintergrund. Deaktivieren, wenn der Launcher die Grafikkarte stark belastet."
@@ -803,6 +807,15 @@
     }
   },
   "play": {
+    "banner": {
+      "loading": "Launcher-Neuigkeiten werden geladen...",
+      "loadFailedTitle": "Das Launcher-Banner konnte nicht geladen werden.",
+      "loadFailedHint": "Überprüfen Sie Ihre Internetverbindung oder Ihren Zugriff auf GitHub.",
+      "defaultAlt": "Launcher-Banner",
+      "learnMore": "Mehr erfahren",
+      "play": "Spielen",
+      "empty": "Launcher-Neuigkeiten und Spielebanner"
+    },
     "version": {
       "label": "Version",
       "loading": "Laden...",
@@ -2541,6 +2554,10 @@
     }
   },
   "app": {
+    "newsPopup": {
+      "title": "16Launcher-Neuigkeiten",
+      "kicker": "Nachricht vom Entwickler"
+    },
     "launchStage": {
       "version": "Version wird geprüft…",
       "libraries": "Bibliotheken werden geprüft…",

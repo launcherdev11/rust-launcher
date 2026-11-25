@@ -60,6 +60,9 @@ pub struct Settings {
     #[serde(default)]
     pub thematic_decorations_disabled: bool,
 
+    #[serde(default = "default_show_launcher_banners")]
+    pub show_launcher_banners: bool,
+
     #[serde(default = "default_interface_language")]
     pub interface_language: String,
 
@@ -128,6 +131,10 @@ pub fn default_discord_rpc_enabled() -> bool {
     true
 }
 
+pub fn default_show_launcher_banners() -> bool {
+    true
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -160,6 +167,7 @@ impl Default for Settings {
             animations_disabled: false,
             background_animation_disabled: false,
             thematic_decorations_disabled: false,
+            show_launcher_banners: true,
             interface_language: "ru".to_string(),
             background_accent_color: "#ffffff".to_string(),
             background_image_url: None,

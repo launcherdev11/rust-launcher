@@ -146,7 +146,18 @@ export type RemoteNotificationsJsonItem = {
   iconMsg?: string;
   textMsg?: string;
 
+  image?: string;
+  msg?: string;
+  Image?: string;
+  Msg?: string;
+
   type?: string;
+};
+
+export type RemoteNewsPopupNotice = {
+  image?: string;
+  msg: string;
+  fingerprint: string;
 };
 
 export type RemoteNotificationHyphenKey = "color-msg" | "icon-msg" | "text-msg";

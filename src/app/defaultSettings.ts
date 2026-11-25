@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animations_disabled: false,
   background_animation_disabled: false,
   thematic_decorations_disabled: false,
+  show_launcher_banners: true,
   background_accent_color: DEFAULT_ACCENT_COLOR,
   background_image_url: null,
   adaptive_accent_enabled: false,

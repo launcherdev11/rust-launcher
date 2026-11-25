@@ -402,6 +402,10 @@
         "hint": "Drag a tab (Play, Mods, Modpacks, Settings) to a window edge to open a second pane."
       },
       "disableAnimations": { "label": "Disable animations:" },
+      "hideBanners": {
+        "label": "Disable ad banner:",
+        "hint": "Hides the news and banner carousel on the Play tab."
+      },
       "backgroundAnimation": {
         "label": "Animated background:",
         "hint": "Slow movement of the coloured glow behind the interface. Turn off if the launcher feels heavy on your GPU."
@@ -775,6 +779,15 @@
     }
   },
   "play": {
+    "banner": {
+      "loading": "Loading launcher news...",
+      "loadFailedTitle": "Failed to load launcher banner.",
+      "loadFailedHint": "Check your internet connection or access to GitHub.",
+      "defaultAlt": "Launcher banner",
+      "learnMore": "Learn more",
+      "play": "Play",
+      "empty": "Launcher news and game banner"
+    },
     "version": {
       "label": "Version",
       "loading": "Loading...",
@@ -2513,6 +2526,10 @@
     }
   },
   "app": {
+    "newsPopup": {
+      "title": "16Launcher news",
+      "kicker": "Message from the developer"
+    },
     "launchStage": {
       "version": "Checking version…",
       "libraries": "Checking libraries…",

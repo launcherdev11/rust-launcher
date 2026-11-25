@@ -420,6 +420,10 @@
       "disableAnimations": {
         "label": "Desactivar animaciones:"
       },
+      "hideBanners": {
+        "label": "Desactivar banner publicitario:",
+        "hint": "Oculta el carrusel de noticias y banners en la pestaña Jugar."
+      },
       "backgroundAnimation": {
         "label": "Fondo animado:",
         "hint": "Movimiento lento de los destellos de color del fondo. Desactívalo si el launcher sobrecarga tu GPU."
@@ -803,6 +807,15 @@
     }
   },
   "play": {
+    "banner": {
+      "loading": "Cargando noticias del lanzador...",
+      "loadFailedTitle": "No se pudo cargar el banner del iniciador.",
+      "loadFailedHint": "Verifica tu conexión a Internet o acceso a GitHub.",
+      "defaultAlt": "Banner del lanzador",
+      "learnMore": "Más información",
+      "play": "Jugar",
+      "empty": "Banner de noticias y juegos del lanzador"
+    },
     "version": {
       "label": "Versión",
       "loading": "Cargando...",
@@ -2541,6 +2554,10 @@
     }
   },
   "app": {
+    "newsPopup": {
+      "title": "Noticias de 16Launcher",
+      "kicker": "Mensaje del desarrollador"
+    },
     "launchStage": {
       "version": "Comprobando la versión…",
       "libraries": "Comprobando bibliotecas…",

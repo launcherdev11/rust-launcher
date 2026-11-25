@@ -112,8 +112,7 @@ stats.setdefault("total", {"installs": 0, "updates": 0})
 stats.setdefault("versions", {})
 last_ts = stats["last_ts"]
 
-# Старые логи первыми, актуальный access.log последним.
-rotated = sorted(
+rotated = sёёorted(
     (p for p in glob.glob(log_base + ".*") if re.search(r"\.(\d+)(\.gz)?$", p)),
     key=lambda p: int(re.search(r"\.(\d+)(?:\.gz)?$", p).group(1)),
     reverse=True,

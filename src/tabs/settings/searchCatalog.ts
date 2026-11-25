@@ -27,6 +27,7 @@ export type SettingSearchId =
   | "launcher.autostart"
   | "launcher.splitView"
   | "launcher.disableAnimations"
+  | "launcher.hideBanners"
   | "launcher.backgroundAnimation"
   | "launcher.disableThematicDecorations"
   | "launcher.language"
@@ -222,6 +223,15 @@ export const SETTING_SEARCH_CATALOG: SettingSearchDef[] = [
     id: "launcher.disableAnimations",
     tab: "launcher",
     keys: ["settings.section.appearance", "settings.launcher.disableAnimations.label"],
+  },
+  {
+    id: "launcher.hideBanners",
+    tab: "launcher",
+    keys: [
+      "settings.section.appearance",
+      "settings.launcher.hideBanners.label",
+      "settings.launcher.hideBanners.hint",
+    ],
   },
   {
     id: "launcher.backgroundAnimation",
